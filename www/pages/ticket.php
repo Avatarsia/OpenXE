@@ -531,84 +531,154 @@ class Ticket {
 
     function add_messages_tpl($ticket_id, $messages, $showdrafts) {
 
+        // Reverse messages so newest appear at bottom
+        $messages = array_reverse($messages);
+
+        // Chat-Container Start
+        $html = '<div class="ticket-chat-container">';
+        $html .= '<div class="chat-messages-wrapper" id="chatMessagesWrapper">';
+
+        $lastDate = null;
+
         // Add Messages now
         foreach ($messages as $message) {
 
-            $message['betreff'] = strip_tags($message['betreff']); //+ #20230916 XSS
-
-            // Clear this first
-            $this->app->Tpl->Set('NACHRICHT_ANHANG',"");
+            $message['betreff'] = strip_tags($message['betreff'] ?? ''); //+ #20230916 XSS
 
             if (empty($message['betreff'])) {
                 $message['betreff'] = "...";
             }
 
-            // Xentral 20 compatibility
-            if ($message['textausgang'] != '') {
-              // Sent message
-
-              $this->app->Tpl->Set("NACHRICHT_BETREFF",'<a href="index.php?module=ticket&action=text_ausgang&mid='.$message['id'].'" target="_blank">'.htmlentities($message['betreff']).'</a>');
-              $this->app->Tpl->Set("NACHRICHT_ZEIT",$message['zeitausgang']);
-              $this->app->Tpl->Set("NACHRICHT_FLOAT","right");
-              $this->app->Tpl->Set("META_FLOAT","left");
-              $this->app->Tpl->Set("NACHRICHT_TEXT",$message['textausgang']);
-              $this->app->Tpl->Set("NACHRICHT_SENDER",htmlentities($message['bearbeiter']));
-              $this->app->Tpl->Set("NACHRICHT_RECIPIENTS",htmlentities($message['verfasser']." <".$message['mail'].">"));
-
-//              $this->app->Tpl->Set("NACHRICHT_TEXT",$message['textausgang']);
-              $this->app->Tpl->Set("NACHRICHT_TEXT",'<iframe class="ticket_text" src="index.php?module=ticket&action=text_ausgang&mid='.$message['id'].'"></iframe>');
-
-              $this->app->Tpl->Parse('MESSAGES', "ticket_nachricht.tpl");
+            // Skip drafts if not requested
+            if (!$showdrafts && $message['versendet'] == '1' && is_null($message['zeitausgang'])) {
+                continue;
             }
 
-            if ($message['versendet'] == '1' && empty($message['textausgang'])) { //  textausgang is always empty, except for old Xentral 20 tickets
+            // Direction & Alignment Logic (King-Mode: Customer Left / Team Right)
+            // Portal messages FROM customer = incoming (left)
+            // Team messages TO customer = outgoing (right)
+            // KEY: verfasser="Portal" means it's a TEAM message created in backend
+            $isOutgoing = (
+                $message['versendet'] == '1' || 
+                !empty($message['textausgang']) ||
+                ($message['verfasser'] ?? '') === 'Portal' ||
+                !empty($message['bearbeiter'])
+            );
+            $direction = $isOutgoing ? 'outgoing' : 'incoming';
+            $senderName = $isOutgoing ? ($message['bearbeiter'] ?: 'Team') : ($message['verfasser'] ?: 'Kunde');
+            $senderIcon = $isOutgoing ? '👤' : '📧';
+            
+            $rawTime = $isOutgoing ? ($message['zeitausgang'] ?: $message['zeit']) : $message['zeit'];
+            $messageTime = date('H:i', strtotime($rawTime));
+            $messageDate = date('Y-m-d', strtotime($rawTime));
 
-               // Sent message
+            // Date Separator
+            if ($lastDate !== $messageDate) {
+                $dateLabel = date('d.m.Y', strtotime($messageDate));
+                $today = date('Y-m-d');
+                $yesterday = date('Y-m-d', strtotime('-1 day'));
+                
+                if ($messageDate === $today) $dateLabel = 'Heute';
+                elseif ($messageDate === $yesterday) $dateLabel = 'Gestern';
+                
+                $html .= '<div class="chat-date-separator"><span>' . $dateLabel . '</span></div>';
+                $lastDate = $messageDate;
+            }
 
-                if (is_null($message['zeitausgang'])) {
-                    if (!$showdrafts) {
-                        continue;
-                    }
-                    $this->app->Tpl->Set("NACHRICHT_BETREFF",htmlentities($message['betreff']." (Entwurf)"));
+            // Build message HTML directly
+            $html .= '<div class="chat-bubble ' . $direction . '">';
+            $html .= '  <div class="bubble-avatar" title="' . htmlentities($senderName) . '">';
+            $html .= '    <span class="avatar-icon">' . $senderIcon . '</span>';
+            $html .= '  </div>';
+            $html .= '  <div class="bubble-content">';
+            $html .= '    <div class="bubble-header">';
+            $html .= '      <span class="bubble-sender">' . htmlentities($senderName) . '</span>';
+            $html .= '      <span class="bubble-time">' . $messageTime . '</span>';
+            $html .= '    </div>';
+            
+            // Subject/Betreff - Skip "Portal Nachricht" default
+            $displayBetreff = $message['betreff'];
+            if ($displayBetreff === 'Portal Nachricht') {
+                $displayBetreff = ''; // Skip default portal subject
+            }
+            
+            $betreffPrefix = (is_null($message['zeitausgang']) && $isOutgoing) ? " (Entwurf)" : "";
+            
+            if (!empty($displayBetreff)) {
+                if (!empty($message['textausgang'])) {
+                    $html .= '    <div class="bubble-subject">';
+                    $html .= '      <a href="index.php?module=ticket&action=text_ausgang&mid='.$message['id'].'" target="_blank">'.htmlentities($displayBetreff).'</a>';
+                    $html .= '    </div>';
                 } else {
-                  $this->app->Tpl->Set("NACHRICHT_BETREFF",'<a href="index.php?module=ticket&action=text&mid='.$message['id'].'&insecure=1" target="_blank">'.htmlentities($message['betreff']).'</a>');
+                    $html .= '    <div class="bubble-subject">';
+                    $html .= '      <a href="index.php?module=ticket&action=text&mid='.$message['id'].'&insecure=1" target="_blank">'.htmlentities($displayBetreff).$betreffPrefix.'</a>';
+                    $html .= '    </div>';
                 }
-                $this->app->Tpl->Set("NACHRICHT_SENDER",htmlentities($message['verfasser']." <".$message['mail_replyto'].">"));
-                $this->app->Tpl->Set("NACHRICHT_RECIPIENTS",htmlentities($message['mail']));
-                $this->app->Tpl->Set("NACHRICHT_CC_RECIPIENTS",htmlentities($message['mail_cc']));
-                $this->app->Tpl->Set("NACHRICHT_FLOAT","right");
-                $this->app->Tpl->Set("META_FLOAT","left");
-                $this->app->Tpl->Set("NACHRICHT_ZEIT",$message['zeitausgang']);
-                $this->app->Tpl->Set("NACHRICHT_NAME",htmlentities($message['verfasser']));
-            } else {
-
-                // Received message
-
-                $this->app->Tpl->Set("NACHRICHT_SENDER",htmlentities($message['verfasser']." <".$message['mail'].">"));
-
-                if ($message['mail_recipients'] != '') {
-                  $this->app->Tpl->Set("NACHRICHT_RECIPIENTS",htmlentities($message['mail_recipients']));
-                }
-                else {
-                  // Xentral 20 compatibility
-                  $this->app->Tpl->Set("NACHRICHT_RECIPIENTS",htmlentities($message['quelle']));
-                }
-                $this->app->Tpl->Set("NACHRICHT_CC_RECIPIENTS",htmlentities($message['mail_cc_recipients']));
-                $this->app->Tpl->Set("NACHRICHT_BETREFF",'<a href="index.php?module=ticket&action=text&mid='.$message['id'].'&insecure=1" target="_blank">'.htmlentities($message['betreff']).'</a>');
-                $this->app->Tpl->Set("NACHRICHT_FLOAT","left");
-                $this->app->Tpl->Set("META_FLOAT","right");
-                $this->app->Tpl->Set("NACHRICHT_ZEIT",$message['zeit']);
             }
 
-//            $this->app->Tpl->Set("NACHRICHT_TEXT",$message['text']);
-            $this->app->Tpl->Set("NACHRICHT_TEXT",'<iframe class="ticket_text" src="index.php?module=ticket&action=text&mid='.$message['id'].'"></iframe>');
+            // Message Text (iframe)
+            $html .= '    <div class="bubble-text">';
+            if (!empty($message['textausgang'])) {
+                $html .= '      <iframe class="ticket_text" src="index.php?module=ticket&action=text_ausgang&mid='.$message['id'].'"></iframe>';
+            } else {
+                $html .= '      <iframe class="ticket_text" src="index.php?module=ticket&action=text&mid='.$message['id'].'"></iframe>';
+            }
+            $html .= '    </div>';
 
+            // Attachments
+            ob_start();
+            $this->add_attachments_html($ticket_id, $message['id'], 'NACHRICHT_ANHANG', false);
+            $attachmentsHtml = $this->app->Tpl->Get('NACHRICHT_ANHANG');
+            $this->app->Tpl->Set('NACHRICHT_ANHANG', ''); // Clear for next iteration
+            ob_end_clean();
+            
+            if (!empty($attachmentsHtml)) {
+                $html .= '    <div class="bubble-attachments">' . $attachmentsHtml . '</div>';
+            }
 
-            $this->add_attachments_html($ticket_id,$message['id'],'NACHRICHT_ANHANG',false);
+            // CC Info
+            $cc = $isOutgoing ? ($message['mail_cc'] ?? '') : ($message['mail_cc_recipients'] ?? '');
+            if (!empty($cc)) {
+                $html .= '    <div class="bubble-cc">CC: ' . htmlentities($cc) . '</div>';
+            }
 
-            $this->app->Tpl->Parse('MESSAGES', "ticket_nachricht.tpl");
-
+            $html .= '  </div>'; // .bubble-content
+            $html .= '</div>'; // .chat-bubble
         }
+
+        // Chat-Container End + Floating Button
+        $html .= '</div>'; // .chat-messages-wrapper
+        $html .= '<button class="chat-scroll-bottom" id="chatScrollBtn" onclick="document.getElementById(\'chatMessagesWrapper\').scrollTop = document.getElementById(\'chatMessagesWrapper\').scrollHeight">↓</button>';
+        $html .= '</div>'; // .ticket-chat-container
+
+        // Inline JS for Scroll Visibility and iFrame resizing
+        $html .= '<script>
+            (function() {
+                var w = document.getElementById("chatMessagesWrapper");
+                var b = document.getElementById("chatScrollBtn");
+                if (w && b) {
+                    w.scrollTop = w.scrollHeight;
+                    w.onscroll = function() {
+                        if (w.scrollHeight - w.scrollTop > w.clientHeight + 100) b.classList.add("visible");
+                        else b.classList.remove("visible");
+                    };
+                }
+                
+                // iFrame Auto-Height
+                setInterval(function() {
+                    var frames = document.querySelectorAll(".ticket_text");
+                    frames.forEach(function(f) {
+                        try {
+                            var h = f.contentWindow.document.body.scrollHeight;
+                            if (h > 0 && Math.abs(f.offsetHeight - h) > 5) f.style.height = (h + 20) + "px"; // +20px padding
+                        } catch(e) {}
+                    });
+                }, 1000);
+            })();
+        </script>';
+
+        // Output the complete HTML to the MESSAGES placeholder
+        $this->app->Tpl->Set('MESSAGES', $html);
     }
 
     function ticket_text() {
@@ -1478,7 +1548,12 @@ class Ticket {
             $this->app->DB->Update("UPDATE angebot SET ".implode(', ', $updates)." WHERE id = ".$angebotId." LIMIT 1");
         }
 
-        $this->app->erp->TicketProtokoll($ticketId, 'Angebot angelegt (#'.$angebotId.')');
+        // Automatic Status Change for Portal
+        $this->portalSetCustomerStatus($ticketId, 'warten_kd', 'Angebot erstellt', null);
+        $this->portalLogStatus($ticketId, null, 'warten_kd', null, 'Angebot #' . $angebotId . ' erstellt', null);
+        $this->portalInsertPortalMessage($ticket, 'system', 0, 'Ein Angebot (#'.$angebotId.') wurde für Sie erstellt.', true);
+
+        $this->app->erp->TicketProtokoll($ticketId, 'Angebot angelegt (#'.$angebotId.') - Portal Status: Warten auf Kunde');
         header("Location: index.php?module=angebot&action=edit&id=$angebotId");
         $this->app->ExitXentral();
     }
@@ -2789,10 +2864,12 @@ class Ticket {
       $this->portalJsonResponse(['error' => 'session_invalid'], 401);
     }
     $messages = $this->app->DB->SelectArr(
-      "SELECT id, author_type, text, created_at
-       FROM ticket_portal_message
-       WHERE ticket_id = ".(int)$access['ticket_id']." AND is_public = 1
-       ORDER BY created_at ASC"
+      "SELECT m.id, m.author_type, m.text, m.created_at, 
+              REPLACE(COALESCE(NULLIF(m.source, ''), n.medium, 'portal'), 'telefon', 'phone') as source
+       FROM ticket_portal_message m
+       LEFT JOIN ticket_nachricht n ON n.id = m.mirrored_message_id
+       WHERE m.ticket_id = ".(int)$access['ticket_id']." AND m.is_public = 1
+       ORDER BY m.created_at ASC"
     );
     $this->portalJsonResponse(['messages' => $messages ?? []]);
   }
@@ -2940,15 +3017,15 @@ class Ticket {
     if (!$ticket) {
       $this->portalJsonResponse(['error' => 'ticket_not_found'], 404);
     }
-    $adresseId = (int)($ticket['adresse'] ?? 0);
-    if ($adresseId <= 0) {
+    $ticketKey = $this->app->DB->real_escape_string((string)($ticket['schluessel'] ?? ''));
+    if ($ticketKey === '') {
       $this->portalJsonResponse(['offers' => []]);
     }
     $offers = $this->app->DB->SelectArr(
       "SELECT id, belegnr, datum, gesamtsumme, waehrung, status
        FROM angebot
-       WHERE adresse = $adresseId
-         AND status = 'freigegeben'
+       WHERE anfrage = '$ticketKey'
+         AND status IN ('freigegeben', 'beauftragt')
        ORDER BY datum DESC, id DESC"
     );
     $this->portalJsonResponse(['offers' => $offers ?? []]);
@@ -3136,11 +3213,17 @@ class Ticket {
       );
       $this->portalSetCustomerStatus((int)$ticket['id'], 'angebot_bestaetigt', 'Angebot bestaetigt', null);
       $this->portalLogStatus((int)$ticket['id'], null, 'angebot_bestaetigt', null, 'Angebot bestaetigt', null);
+      
+      $this->portalInsertPortalMessage($ticket, 'system', 0, 'Angebot #'.($offer['belegnr'] ?? $record['angebot_id']).' wurde bestaetigt. Auftrag #'.$orderId.' wurde erstellt.', true);
+      
       $this->portalJsonResponse(['status' => 'confirmed', 'order_id' => (int)$orderId]);
     }
 
     $this->portalSetCustomerStatus((int)$ticket['id'], 'angebot_abgelehnt', 'Angebot abgelehnt', null);
     $this->portalLogStatus((int)$ticket['id'], null, 'angebot_abgelehnt', null, 'Angebot abgelehnt', null);
+    
+    $this->portalInsertPortalMessage($ticket, 'system', 0, 'Angebot #'.$record['angebot_id'].' wurde abgelehnt.', true);
+    
     $this->portalJsonResponse(['status' => 'declined']);
   }
 
@@ -3639,28 +3722,45 @@ class Ticket {
       $email = $this->portalNormalizeEmail($ticket['mailadresse'] ?? '');
     }
 
-    $errorDescription = '';
-    $ticketNumber = $this->app->DB->real_escape_string((string)$ticket['schluessel']);
-    $firstMessage = $this->app->DB->SelectRow(
-      "SELECT text, textausgang
-       FROM ticket_nachricht
-       WHERE ticket = '$ticketNumber'
-         AND (text <> '' OR textausgang <> '')
-         AND (versendet IS NULL OR versendet <> 1)
-       ORDER BY zeit ASC, id ASC
-       LIMIT 1"
+    // Message History
+    $messages = $this->app->DB->SelectArr(
+      "SELECT author_type, text, created_at, source
+       FROM ticket_portal_message
+       WHERE ticket_id = ".(int)$ticket['id']." AND is_public = 1
+       ORDER BY created_at ASC"
     );
-    if (!empty($firstMessage)) {
-      $errorDescription = trim((string)$firstMessage['text']);
-      if ($errorDescription === '') {
-        $errorDescription = trim((string)$firstMessage['textausgang']);
+    $messagesHtml = '';
+    if (!empty($messages)) {
+      foreach ($messages as $msg) {
+        $author = ($msg['author_type'] === 'customer') ? 'Kunde' : (($msg['author_type'] === 'system') ? 'System' : 'Team');
+        $date = date('d.m.Y H:i', strtotime($msg['created_at']));
+        $messagesHtml .= '<div class="message ' . $msg['author_type'] . '">';
+        $messagesHtml .= '<div class="meta"><strong>' . $author . '</strong> (' . $date . ')</div>';
+        $messagesHtml .= '<div class="text">' . nl2br(htmlentities($msg['text'])) . '</div>';
+        $messagesHtml .= '</div>';
       }
     }
-    if ($errorDescription === '') {
-      $errorDescription = $ticket['notiz'] ?? '';
-    }
-    if ($errorDescription === '') {
-      $errorDescription = $ticket['kommentar'] ?? '';
+
+    // Offers
+    $offers = $this->app->DB->SelectArr(
+      "SELECT belegnr, datum, gesamtsumme, waehrung, status
+       FROM angebot
+       WHERE anfrage = '".$this->app->DB->real_escape_string($ticket['schluessel'])."'
+         AND status IN ('freigegeben', 'beauftragt')
+       ORDER BY datum DESC"
+    );
+    $offersHtml = '';
+    if (!empty($offers)) {
+      $offersHtml .= '<table><tr><th>Belegnr</th><th>Datum</th><th>Summe</th><th>Status</th></tr>';
+      foreach ($offers as $offer) {
+        $offersHtml .= '<tr>';
+        $offersHtml .= '<td>' . htmlentities($offer['belegnr']) . '</td>';
+        $offersHtml .= '<td>' . date('d.m.Y', strtotime($offer['datum'])) . '</td>';
+        $offersHtml .= '<td>' . number_format($offer['gesamtsumme'], 2, ',', '.') . ' ' . $offer['waehrung'] . '</td>';
+        $offersHtml .= '<td>' . htmlentities($offer['status']) . '</td>';
+        $offersHtml .= '</tr>';
+      }
+      $offersHtml .= '</table>';
     }
 
     $ticketStaffUrl = $this->portalGetServerUrl().'/index.php?module=ticket&action=portal_staff&id='.(int)$ticket['id'];
@@ -3674,6 +3774,8 @@ class Ticket {
     $this->app->Tpl->Set('KUNDENADRESSE', nl2br(htmlentities(implode("\n", $addressLines))));
     $this->app->Tpl->Set('EMAIL', htmlentities((string)$email));
     $this->app->Tpl->Set('QR_HTML', $qrHtml);
+    $this->app->Tpl->Set('MESSAGES_HTML', $messagesHtml);
+    $this->app->Tpl->Set('OFFERS_HTML', $offersHtml);
     $this->app->Tpl->Set('STAFF_URL', htmlentities($ticketStaffUrl));
 
     $downloadUrl = '';
