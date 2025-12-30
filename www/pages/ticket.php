@@ -2844,11 +2844,34 @@ class Ticket {
       $statusLabel = $labels[$statusKey] ?? $statusKey;
       $updatedAt = null;
     }
+    
+    // Get customer address details
+    $customerName = '';
+    $customerStreet = '';
+    $customerZip = '';
+    $customerCity = '';
+    if (!empty($ticket['adresse'])) {
+      $addressId = (int)$ticket['adresse'];
+      $addressData = $this->app->DB->SelectRow(
+        "SELECT name, strasse, plz, ort FROM adresse WHERE id = $addressId LIMIT 1"
+      );
+      if ($addressData) {
+        $customerName = $addressData['name'] ?? '';
+        $customerStreet = $addressData['strasse'] ?? '';
+        $customerZip = $addressData['plz'] ?? '';
+        $customerCity = $addressData['ort'] ?? '';
+      }
+    }
+    
     $this->portalJsonResponse([
       'ticket_number' => $ticket['schluessel'],
       'status_key' => $statusKey,
       'status_label' => $statusLabel,
       'updated_at' => $updatedAt,
+      'customer_name' => $customerName,
+      'customer_street' => $customerStreet,
+      'customer_zip' => $customerZip,
+      'customer_city' => $customerCity,
     ]);
   }
 
@@ -3454,7 +3477,7 @@ class Ticket {
       }
       $path = $file->getPathname();
       $relative = substr($path, $pluginDirLength);
-      $zip->addFile($path, $relative);
+      $zip->addFile($path, 'openxe-ticket-portal/' . $relative);
     }
     $zip->close();
 
@@ -3797,7 +3820,24 @@ class Ticket {
     $this->app->Tpl->Output('ticket_portal_print.tpl');
     $this->app->ExitXentral();
   }
+
+  /**
+   * Helper function to recursively add directory to ZIP
+   */
+  private function addDirectoryToZip($zip, $dir, $zipPath) {
+    $iterator = new RecursiveDirectoryIterator($dir, RecursiveDirectoryIterator::SKIP_DOTS);
+    $files = new RecursiveIteratorIterator($iterator, RecursiveIteratorIterator::SELF_FIRST);
+
+    foreach ($files as $file) {
+      $filePath = $file->getRealPath();
+      $relativePath = $zipPath . '/' . substr($filePath, strlen($dir) + 1);
+      $relativePath = str_replace('\\', '/', $relativePath);
+
+      if ($file->isDir()) {
+        $zip->addEmptyDir($relativePath);
+      } else {
+        $zip->addFile($filePath, $relativePath);
+      }
+    }
+  }
 }
-
-
-
