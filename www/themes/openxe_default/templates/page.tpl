@@ -106,6 +106,8 @@ $(document).ready(function() {
 [MODULEJAVASCRIPTHEAD]
 [JAVASCRIPTMODULES]
 [MODULESTYLESHEET]
+<!-- Theme CSS Files -->
+[THEME_CSS]
   </head>
   <body class="[LAYOUTFIXMARKERCLASS]" data-module="[MODULE]" data-action="[ACTION]" data-version="[REVISION]">
   	[SIDEBAR]
