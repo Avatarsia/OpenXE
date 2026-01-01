@@ -2090,6 +2090,29 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
    */
   private function LoadUserTheme() {
     try {
+      // Check if theme tables exist (might not exist on fresh install)
+      $tablesExist = false;
+      try {
+        $this->DB->Select("SELECT 1 FROM theme_settings LIMIT 1");
+        $this->DB->Select("SELECT 1 FROM themes LIMIT 1");
+        $tablesExist = true;
+      } catch (Exception $e) {
+        // Tables don't exist yet, use default
+        $tablesExist = false;
+      }
+      
+      if (!$tablesExist) {
+        // Fallback to openxe_default if tables don't exist
+        if ($this->ValidateTheme('openxe_default')) {
+          return 'openxe_default';
+        }
+        // Ultimate fallback if openxe_default doesn't exist either
+        if ($this->ValidateTheme('new')) {
+          return 'new';
+        }
+        return 'openxe_default'; // Hope for the best
+      }
+      
       $userId = $this->User->GetID();
       
       // Check if user can change theme
@@ -2116,10 +2139,25 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
       }
       
       // Final fallback to openxe_default
+      if ($this->ValidateTheme('openxe_default')) {
+        return 'openxe_default';
+      }
+      
+      // Ultimate fallback if openxe_default doesn't exist
+      if ($this->ValidateTheme('new')) {
+        return 'new';
+      }
+      
       return 'openxe_default';
       
     } catch (Exception $e) {
-      // On any error, use safe default
+      // On any error, try openxe_default first, then 'new' as ultimate fallback
+      if ($this->ValidateTheme('openxe_default')) {
+        return 'openxe_default';
+      }
+      if ($this->ValidateTheme('new')) {
+        return 'new';
+      }
       return 'openxe_default';
     }
   }
@@ -2137,16 +2175,22 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
       return false;
     }
     
-    // Check if theme directory exists
+    // Check if theme directory exists - THIS IS CRITICAL
     $themePath = __DIR__ . '/themes/' . $themeName;
     if (!is_dir($themePath)) {
       return false;
     }
     
-    // Check if theme is enabled in database (optional check)
+    // Check if templates directory exists
+    $templatesPath = $themePath . '/templates/';
+    if (!is_dir($templatesPath)) {
+      return false;
+    }
+    
+    // Check if theme is enabled in database (optional check, only if table exists)
     try {
       $isEnabled = $this->DB->Select(
-        "SELECT is_enabled FROM themes WHERE name = " . $this->DB->escape($themeName) . " LIMIT 1"
+        "SELECT is_enabled FROM themes WHERE name = '" . $this->DB->real_escape_string($themeName) . "' LIMIT 1"
       );
       if ($isEnabled === '0' || $isEnabled === 0) {
         return false;
