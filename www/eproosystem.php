@@ -125,16 +125,29 @@ class erpooSystem extends Application
       // Load theme CSS files
       $themeName = $this->Conf->WFconf['defaulttheme'];
       $themeCssPath = __DIR__ . '/themes/' . $themeName . '/css/';
+      
+      // Debug: Log what we're looking for
+      error_log("Theme CSS Debug: Looking for CSS in: " . $themeCssPath);
+      error_log("Theme CSS Debug: Theme name: " . $themeName);
+      error_log("Theme CSS Debug: Dir exists: " . (is_dir($themeCssPath) ? 'YES' : 'NO'));
+      
       if (is_dir($themeCssPath)) {
         $cssFiles = glob($themeCssPath . '*.css');
+        error_log("Theme CSS Debug: Found " . count($cssFiles) . " CSS files");
+        
         $cssLinks = '';
         foreach ($cssFiles as $cssFile) {
           $cssUrl = 'themes/' . $themeName . '/css/' . basename($cssFile);
           $cssLinks .= '<link rel="stylesheet" href="' . htmlspecialchars($cssUrl) . '?v=' . filemtime($cssFile) . '">' . "\n";
+          error_log("Theme CSS Debug: Adding CSS file: " . $cssUrl);
         }
-        if (!empty($cssLinks)) {
-          $this->Tpl->Set('THEME_CSS', $cssLinks);
-        }
+        
+        // ALWAYS set the variable, even if empty, for debugging
+        $this->Tpl->Set('THEME_CSS', $cssLinks);
+        error_log("Theme CSS Debug: Set THEME_CSS variable with " . strlen($cssLinks) . " chars");
+      } else {
+        error_log("Theme CSS Debug: Directory not found!");
+        $this->Tpl->Set('THEME_CSS', '<!-- Theme CSS directory not found: ' . $themeCssPath . ' -->');
       }
 
       if(method_exists($this->erp, 'VersionsInfos')){
