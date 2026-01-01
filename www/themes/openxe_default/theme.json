@@ -1,0 +1,26 @@
+{
+    "name": "openxe_default",
+    "display_name": "OpenXE Default",
+    "description": "Standard light theme for OpenXE",
+    "author": "OpenXE Team",
+    "version": "1.0.0",
+    "preview": "preview.png",
+    "type": "light",
+    "colors": {
+        "primary": "#2196f3",
+        "secondary": "#64b5f6",
+        "background": "#ffffff",
+        "surface": "#f5f5f5",
+        "text": "#333333",
+        "text_secondary": "#666666",
+        "border": "#e0e0e0",
+        "success": "#4caf50",
+        "warning": "#ff9800",
+        "error": "#f44336"
+    },
+    "customizable": [
+        "primary",
+        "secondary"
+    ],
+    "requires_icon_inversion": false
+}

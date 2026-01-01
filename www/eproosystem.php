@@ -138,10 +138,11 @@ class erpooSystem extends Application
       $this->Tpl->Set('COMMONREADONLYINPUT', '');
       $this->Tpl->Set('COMMONREADONLYSELECT', '');
 
+
       // templates laden
 
-      //statisch überladen
-      $this->Conf->WFconf['defaulttheme'] = 'new';
+      // Dynamic theme loading: User override > Firma default > System default
+      $this->Conf->WFconf['defaulttheme'] = $this->LoadUserTheme();
 
       if(!empty($this->Conf->WFtestmode) && $this->Conf->WFtestmode == true)
         $this->Tpl->Set('BODYSTYLE', 'style=background-color:red');
@@ -2081,5 +2082,80 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
     }
     return $options;
   }
-}
 
+  /**
+   * Load user's theme with fallback hierarchy
+   * Priority: User override > Firma default > System default
+   * @return string Theme name
+   */
+  private function LoadUserTheme() {
+    try {
+      $userId = $this->User->GetID();
+      
+      // Check if user can change theme
+      $canChange = $this->DB->Select(
+        "SELECT can_change_theme FROM user WHERE id = " . (int)$userId . " LIMIT 1"
+      );
+      
+      // Get user theme override if allowed
+      if ($canChange && $userId > 0) {
+        $userTheme = $this->DB->Select(
+          "SELECT theme_name FROM theme_settings 
+           WHERE user_id = " . (int)$userId . " AND is_active = 1 LIMIT 1"
+        );
+        
+        if ($userTheme && $this->ValidateTheme($userTheme)) {
+          return $userTheme;
+        }
+      }
+      
+      // Fallback to firma default theme
+      $firmaTheme = $this->erp->Firmendaten('default_theme');
+      if ($firmaTheme && $this->ValidateTheme($firmaTheme)) {
+        return $firmaTheme;
+      }
+      
+      // Final fallback to openxe_default
+      return 'openxe_default';
+      
+    } catch (Exception $e) {
+      // On any error, use safe default
+      return 'openxe_default';
+    }
+  }
+
+  /**
+   * Validate that a theme exists and is enabled
+   * @param string $themeName Theme name to validate
+   * @return bool True if theme is valid
+   */
+  private function ValidateTheme($themeName) {
+    if (empty($themeName)) return false;
+    
+    // Security: Only allow alphanumeric and underscore
+    if (!preg_match('/^[a-z0-9_]+$/i', $themeName)) {
+      return false;
+    }
+    
+    // Check if theme directory exists
+    $themePath = __DIR__ . '/themes/' . $themeName;
+    if (!is_dir($themePath)) {
+      return false;
+    }
+    
+    // Check if theme is enabled in database (optional check)
+    try {
+      $isEnabled = $this->DB->Select(
+        "SELECT is_enabled FROM themes WHERE name = " . $this->DB->escape($themeName) . " LIMIT 1"
+      );
+      if ($isEnabled === '0' || $isEnabled === 0) {
+        return false;
+      }
+    } catch (Exception $e) {
+      // If table doesn't exist yet, just check directory
+      return true;
+    }
+    
+    return true;
+  }
+}
