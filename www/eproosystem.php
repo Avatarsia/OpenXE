@@ -113,6 +113,13 @@ class erpooSystem extends Application
         }
       }
       $this->erp->PrinterIcon();
+      
+      // **CRITICAL FIX**: Actually load the user's theme before loading templates and CSS
+      $userTheme = $this->LoadUserTheme();
+      if ($userTheme) {
+        $this->Conf->WFconf['defaulttheme'] = $userTheme;
+      }
+      
       $this->Tpl->ReadTemplatesFromPath(__DIR__ . '/widgets/templates/_gen/');
       $this->Tpl->ReadTemplatesFromPath(__DIR__ . '/widgets/templates/');
       $this->Tpl->ReadTemplatesFromPath(__DIR__ . '/themes/' . $this->Conf->WFconf['defaulttheme'] . '/templates/');
