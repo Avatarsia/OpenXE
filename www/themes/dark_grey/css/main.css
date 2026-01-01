@@ -1,0 +1,159 @@
+/* Dark Grey Theme - Grey-based Dark (#353535) */
+
+:root {
+    --color-primary: #90caf9;
+    --color-secondary: #a5d6a7;
+    --color-background: #353535;
+    --color-surface: #454545;
+    --color-text: #e8e8e8;
+    --color-text-secondary: #bcbcbc;
+    --color-border: #606060;
+    --color-success: #a5d6a7;
+    --color-warning: #ffcc80;
+    --color-error: #ef9a9a;
+}
+
+body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+}
+
+table {
+    background-color: var(--color-surface);
+    border-color: var(--color-border);
+}
+
+th {
+    background-color: #555555;
+    color: var(--color-text);
+    border-color: var(--color-border);
+}
+
+td {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border);
+}
+
+tr:hover td {
+    background-color: #555555;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="date"],
+textarea,
+select {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+button,
+input[type="button"],
+input[type="submit"],
+.button {
+    background-color: var(--color-primary);
+    color: #ffffff;
+    border: none;
+}
+
+button:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover,
+.button:hover {
+    background-color: #64b5f6;
+}
+
+a {
+    color: var(--color-primary);
+}
+
+a:hover {
+    color: var(--color-secondary);
+}
+
+.panel,
+.card,
+.box {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+#nav,
+.menu {
+    background-color: #555555;
+    border-color: var(--color-border);
+}
+
+#nav a,
+.menu a {
+    color: var(--color-text);
+}
+
+#nav a:hover,
+.menu a:hover {
+    background-color: var(--color-surface);
+    color: var(--color-primary);
+}
+
+.success {
+    background-color: #4a604a;
+    color: var(--color-success);
+    border-color: var(--color-success);
+}
+
+.error {
+    background-color: #604a4a;
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
+.warning {
+    background-color: #60554a;
+    color: var(--color-warning);
+    border-color: var(--color-warning);
+}
+
+.info {
+    background-color: #4a5560;
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--color-text);
+}
+
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #707070;
+}

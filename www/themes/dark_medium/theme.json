@@ -1,0 +1,26 @@
+{
+    "name": "dark_medium",
+    "display_name": "Dark Medium",
+    "description": "Medium contrast dark theme for comfortable viewing (#2d2d30)",
+    "author": "OpenXE Team",
+    "version": "1.0.0",
+    "preview": "preview.png",
+    "type": "dark",
+    "colors": {
+        "primary": "#64b5f6",
+        "secondary": "#90caf9",
+        "background": "#2d2d30",
+        "surface": "#3e3e42",
+        "text": "#d4d4d4",
+        "text_secondary": "#a8a8a8",
+        "border": "#555555",
+        "success": "#81c784",
+        "warning": "#ffb74d",
+        "error": "#e57373"
+    },
+    "customizable": [
+        "primary",
+        "secondary"
+    ],
+    "requires_icon_inversion": true
+}

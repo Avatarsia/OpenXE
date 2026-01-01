@@ -1,0 +1,149 @@
+/* Corporate Theme - Customizable Branding */
+
+:root {
+    --color-primary: #2196f3;
+    --color-secondary: #64b5f6;
+    --color-background: #ffffff;
+    --color-surface: #f5f5f5;
+    --color-text: #212121;
+    --color-text-secondary: #616161;
+    --color-border: #e0e0e0;
+    --color-success: #4caf50;
+    --color-warning: #ff9800;
+    --color-error: #f44336;
+}
+
+/* Can be overridden via custom CSS per firma */
+
+body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+}
+
+table {
+    background-color: var(--color-background);
+    border-color: var(--color-border);
+}
+
+th {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border);
+}
+
+td {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    border-color: var(--color-border);
+}
+
+tr:hover td {
+    background-color: var(--color-surface);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="date"],
+textarea,
+select {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+button,
+input[type="button"],
+input[type="submit"],
+.button {
+    background-color: var(--color-primary);
+    color: #ffffff;
+    border: none;
+}
+
+button:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover,
+.button:hover {
+    background-color: var(--color-secondary);
+}
+
+a {
+    color: var(--color-primary);
+}
+
+a:hover {
+    color: var(--color-secondary);
+}
+
+.panel,
+.card,
+.box {
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+#nav,
+.menu {
+    background-color: var(--color-secondary);
+    border-color: var(--color-border);
+}
+
+#nav a,
+.menu a {
+    color: #ffffff;
+}
+
+#nav a:hover,
+.menu a:hover {
+    background-color: var(--color-primary);
+    color: #ffffff;
+}
+
+.success {
+    background-color: #e8f5e9;
+    color: var(--color-success);
+    border-color: var(--color-success);
+}
+
+.error {
+    background-color: #ffebee;
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
+.warning {
+    background-color: #fff3e0;
+    color: var(--color-warning);
+    border-color: var(--color-warning);
+}
+
+.info {
+    background-color: #e3f2fd;
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--color-text);
+}
+
+/* Logo area - can be customized */
+.logo {
+    background-color: var(--color-primary);
+    color: #ffffff;
+}

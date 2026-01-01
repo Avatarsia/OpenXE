@@ -1,0 +1,26 @@
+{
+    "name": "dark_grey",
+    "display_name": "Dark Grey",
+    "description": "Grey-based dark theme with balanced contrast (#353535)",
+    "author": "OpenXE Team",
+    "version": "1.0.0",
+    "preview": "preview.png",
+    "type": "dark",
+    "colors": {
+        "primary": "#90caf9",
+        "secondary": "#a5d6a7",
+        "background": "#353535",
+        "surface": "#454545",
+        "text": "#e8e8e8",
+        "text_secondary": "#bcbcbc",
+        "border": "#606060",
+        "success": "#a5d6a7",
+        "warning": "#ffcc80",
+        "error": "#ef9a9a"
+    },
+    "customizable": [
+        "primary",
+        "secondary"
+    ],
+    "requires_icon_inversion": true
+}

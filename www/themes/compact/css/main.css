@@ -1,0 +1,180 @@
+/* Compact Theme - Space-saving with 90% scaling */
+
+:root {
+    --color-primary: #1976d2;
+    --color-secondary: #42a5f5;
+    --color-background: #ffffff;
+    --color-surface: #fafafa;
+    --color-text: #212121;
+    --color-text-secondary: #757575;
+    --color-border: #e0e0e0;
+    --color-success: #388e3c;
+    --color-warning: #f57c00;
+    --color-error: #d32f2f;
+    --scale: 0.9;
+}
+
+body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    font-size: calc(14px * var(--scale));
+    line-height: 1.4;
+}
+
+table {
+    background-color: var(--color-background);
+    border-color: var(--color-border);
+    font-size: calc(13px * var(--scale));
+}
+
+th {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border);
+    padding: calc(6px * var(--scale)) calc(8px * var(--scale));
+}
+
+td {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    border-color: var(--color-border);
+    padding: calc(4px * var(--scale)) calc(8px * var(--scale));
+}
+
+tr:hover td {
+    background-color: var(--color-surface);
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="date"],
+textarea,
+select {
+    background-color: var(--color-background);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+    font-size: calc(13px * var(--scale));
+    padding: calc(4px * var(--scale)) calc(8px * var(--scale));
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+button,
+input[type="button"],
+input[type="submit"],
+.button {
+    background-color: var(--color-primary);
+    color: #ffffff;
+    border: none;
+    padding: calc(6px * var(--scale)) calc(12px * var(--scale));
+    font-size: calc(13px * var(--scale));
+}
+
+button:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover,
+.button:hover {
+    background-color: #1565c0;
+}
+
+a {
+    color: var(--color-primary);
+}
+
+a:hover {
+    color: var(--color-secondary);
+}
+
+.panel,
+.card,
+.box {
+    background-color: var(--color-background);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+    padding: calc(10px * var(--scale));
+    margin: calc(8px * var(--scale)) 0;
+}
+
+#nav,
+.menu {
+    background-color: var(--color-surface);
+    border-color: var(--color-border);
+    font-size: calc(13px * var(--scale));
+    padding: calc(4px * var(--scale)) 0;
+}
+
+#nav a,
+.menu a {
+    color: var(--color-text);
+    padding: calc(6px * var(--scale)) calc(12px * var(--scale));
+}
+
+#nav a:hover,
+.menu a:hover {
+    background-color: var(--color-primary);
+    color: #ffffff;
+}
+
+.success {
+    background-color: #e8f5e9;
+    color: var(--color-success);
+    border-color: var(--color-success);
+    padding: calc(8px * var(--scale));
+}
+
+.error {
+    background-color: #ffebee;
+    color: var(--color-error);
+    border-color: var(--color-error);
+    padding: calc(8px * var(--scale));
+}
+
+.warning {
+    background-color: #fff3e0;
+    color: var(--color-warning);
+    border-color: var(--color-warning);
+    padding: calc(8px * var(--scale));
+}
+
+.info {
+    background-color: #e3f2fd;
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+    padding: calc(8px * var(--scale));
+}
+
+h1 {
+    font-size: calc(24px * var(--scale));
+    margin: calc(12px * var(--scale)) 0;
+}
+
+h2 {
+    font-size: calc(20px * var(--scale));
+    margin: calc(10px * var(--scale)) 0;
+}
+
+h3 {
+    font-size: calc(18px * var(--scale));
+    margin: calc(8px * var(--scale)) 0;
+}
+
+h4 {
+    font-size: calc(16px * var(--scale));
+    margin: calc(6px * var(--scale)) 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--color-text);
+}

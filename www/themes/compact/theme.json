@@ -1,0 +1,24 @@
+{
+    "name": "compact",
+    "display_name": "Compact",
+    "description": "Space-saving theme with smaller fonts and reduced padding",
+    "author": "OpenXE Team",
+    "version": "1.0.0",
+    "preview": "preview.png",
+    "type": "light",
+    "colors": {
+        "primary": "#1976d2",
+        "secondary": "#42a5f5",
+        "background": "#ffffff",
+        "surface": "#fafafa",
+        "text": "#212121",
+        "text_secondary": "#757575",
+        "border": "#e0e0e0",
+        "success": "#388e3c",
+        "warning": "#f57c00",
+        "error": "#d32f2f"
+    },
+    "scaling": 0.9,
+    "customizable": [],
+    "requires_icon_inversion": false
+}

@@ -1,0 +1,159 @@
+/* Dark Medium Theme - Medium Dark (#2d2d30) */
+
+:root {
+    --color-primary: #64b5f6;
+    --color-secondary: #90caf9;
+    --color-background: #2d2d30;
+    --color-surface: #3e3e42;
+    --color-text: #d4d4d4;
+    --color-text-secondary: #a8a8a8;
+    --color-border: #555555;
+    --color-success: #81c784;
+    --color-warning: #ffb74d;
+    --color-error: #e57373;
+}
+
+body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+}
+
+table {
+    background-color: var(--color-surface);
+    border-color: var(--color-border);
+}
+
+th {
+    background-color: #4a4a4e;
+    color: var(--color-text);
+    border-color: var(--color-border);
+}
+
+td {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border);
+}
+
+tr:hover td {
+    background-color: #4a4a4e;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="date"],
+textarea,
+select {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+button,
+input[type="button"],
+input[type="submit"],
+.button {
+    background-color: var(--color-primary);
+    color: #ffffff;
+    border: none;
+}
+
+button:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover,
+.button:hover {
+    background-color: #42a5f5;
+}
+
+a {
+    color: var(--color-primary);
+}
+
+a:hover {
+    color: var(--color-secondary);
+}
+
+.panel,
+.card,
+.box {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+#nav,
+.menu {
+    background-color: #4a4a4e;
+    border-color: var(--color-border);
+}
+
+#nav a,
+.menu a {
+    color: var(--color-text);
+}
+
+#nav a:hover,
+.menu a:hover {
+    background-color: var(--color-surface);
+    color: var(--color-primary);
+}
+
+.success {
+    background-color: #3d5c3d;
+    color: var(--color-success);
+    border-color: var(--color-success);
+}
+
+.error {
+    background-color: #5c3d3d;
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
+.warning {
+    background-color: #5c4e3d;
+    color: var(--color-warning);
+    border-color: var(--color-warning);
+}
+
+.info {
+    background-color: #3d4e5c;
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--color-text);
+}
+
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #666666;
+}

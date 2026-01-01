@@ -1,0 +1,178 @@
+/* Dark Deep Theme - Very Dark (#1e1e1e) */
+
+:root {
+    --color-primary: #42a5f5;
+    --color-secondary: #64b5f6;
+    --color-background: #1e1e1e;
+    --color-surface: #252526;
+    --color-text: #e0e0e0;
+    --color-text-secondary: #b0b0b0;
+    --color-border: #3e3e42;
+    --color-success: #66bb6a;
+    --color-warning: #ffa726;
+    --color-error: #ef5350;
+}
+
+body {
+    background-color: var(--color-background);
+    color: var(--color-text);
+}
+
+/* Tables */
+table {
+    background-color: var(--color-surface);
+    border-color: var(--color-border);
+}
+
+th {
+    background-color: #2d2d30;
+    color: var(--color-text);
+    border-color: var(--color-border);
+}
+
+td {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border-color: var(--color-border);
+}
+
+tr:hover td {
+    background-color: #2d2d30;
+}
+
+/* Forms */
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="date"],
+textarea,
+select {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border: 1px solid var(--color-border);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--color-primary);
+    outline: none;
+}
+
+/* Buttons */
+button,
+input[type="button"],
+input[type="submit"],
+.button {
+    background-color: var(--color-primary);
+    color: #ffffff;
+    border: none;
+}
+
+button:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover,
+.button:hover {
+    background-color: #1976d2;
+}
+
+/* Links */
+a {
+    color: var(--color-primary);
+}
+
+a:hover {
+    color: var(--color-secondary);
+}
+
+/* Panels & Cards */
+.panel,
+.card,
+.box {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+    color: var(--color-text);
+}
+
+/* Navigation */
+#nav,
+.menu {
+    background-color: #2d2d30;
+    border-color: var(--color-border);
+}
+
+#nav a,
+.menu a {
+    color: var(--color-text);
+}
+
+#nav a:hover,
+.menu a:hover {
+    background-color: var(--color-surface);
+    color: var(--color-primary);
+}
+
+/* Alerts */
+.success {
+    background-color: #2e5c2e;
+    color: var(--color-success);
+    border-color: var(--color-success);
+}
+
+.error {
+    background-color: #5c2e2e;
+    color: var(--color-error);
+    border-color: var(--color-error);
+}
+
+.warning {
+    background-color: #5c4e2e;
+    color: var(--color-warning);
+    border-color: var(--color-warning);
+}
+
+.info {
+    background-color: #2e3e5c;
+    color: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+/* Headers */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    color: var(--color-text);
+}
+
+/* Scrollbars (Webkit) */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--color-background);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #555555;
+}
+
+/* Modal Dialogs */
+.modal {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-border);
+}
+
+.modal-overlay {
+    background-color: rgba(0, 0, 0, 0.7);
+}
