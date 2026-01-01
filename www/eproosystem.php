@@ -127,26 +127,37 @@ class erpooSystem extends Application
       $themeCssPath = __DIR__ . '/themes/' . $themeName . '/css/';
       
       // Debug: Log what we're looking for
-      error_log("Theme CSS Debug: Looking for CSS in: " . $themeCssPath);
-      error_log("Theme CSS Debug: Theme name: " . $themeName);
-      error_log("Theme CSS Debug: Dir exists: " . (is_dir($themeCssPath) ? 'YES' : 'NO'));
+      $this->erp->LogFile('Theme CSS Loading', [
+        'looking_for' => $themeCssPath,
+        'theme_name' => $themeName,
+        'dir_exists' => is_dir($themeCssPath) ? 'YES' : 'NO'
+      ], 'themes', 'css_load');
       
       if (is_dir($themeCssPath)) {
         $cssFiles = glob($themeCssPath . '*.css');
-        error_log("Theme CSS Debug: Found " . count($cssFiles) . " CSS files");
+        
+        $this->erp->LogFile('Theme CSS Files Found', [
+          'count' => count($cssFiles),
+          'files' => array_map('basename', $cssFiles)
+        ], 'themes', 'css_load');
         
         $cssLinks = '';
         foreach ($cssFiles as $cssFile) {
           $cssUrl = 'themes/' . $themeName . '/css/' . basename($cssFile);
           $cssLinks .= '<link rel="stylesheet" href="' . htmlspecialchars($cssUrl) . '?v=' . filemtime($cssFile) . '">' . "\n";
-          error_log("Theme CSS Debug: Adding CSS file: " . $cssUrl);
         }
         
         // ALWAYS set the variable, even if empty, for debugging
         $this->Tpl->Set('THEME_CSS', $cssLinks);
-        error_log("Theme CSS Debug: Set THEME_CSS variable with " . strlen($cssLinks) . " chars");
+        
+        $this->erp->LogFile('Theme CSS Variable Set', [
+          'length' => strlen($cssLinks),
+          'content' => substr($cssLinks, 0, 200) . '...'
+        ], 'themes', 'css_load');
       } else {
-        error_log("Theme CSS Debug: Directory not found!");
+        $this->erp->LogFile('Theme CSS Directory Not Found', [
+          'path' => $themeCssPath
+        ], 'themes', 'css_error');
         $this->Tpl->Set('THEME_CSS', '<!-- Theme CSS directory not found: ' . $themeCssPath . ' -->');
       }
 
