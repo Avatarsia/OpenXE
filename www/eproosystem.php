@@ -2221,22 +2221,28 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
    * @return bool True if theme is valid
    */
   private function ValidateTheme($themeName) {
-    if (empty($themeName)) return false;
+    if (empty($themeName)) {
+      $this->erp->LogFile('ValidateTheme: Empty name', [], 'themes', 'validate_debug');
+      return false;
+    }
     
     // Security: Only allow alphanumeric and underscore
     if (!preg_match('/^[a-z0-9_]+$/i', $themeName)) {
+      $this->erp->LogFile('ValidateTheme: Invalid characters', ['name' => $themeName], 'themes', 'validate_debug');
       return false;
     }
     
     // Check if theme directory exists - THIS IS CRITICAL
     $themePath = __DIR__ . '/themes/' . $themeName;
     if (!is_dir($themePath)) {
+      $this->erp->LogFile('ValidateTheme: Directory not found', ['name' => $themeName, 'path' => $themePath], 'themes', 'validate_debug');
       return false;
     }
     
     // Check if templates directory exists
     $templatesPath = $themePath . '/templates/';
     if (!is_dir($templatesPath)) {
+      $this->erp->LogFile('ValidateTheme: Templates directory not found', ['name' => $themeName, 'path' => $templatesPath], 'themes', 'validate_debug');
       return false;
     }
     
@@ -2246,13 +2252,16 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
         "SELECT is_enabled FROM themes WHERE name = '" . $this->DB->real_escape_string($themeName) . "' LIMIT 1"
       );
       if ($isEnabled === '0' || $isEnabled === 0) {
+        $this->erp->LogFile('ValidateTheme: Theme disabled in DB', ['name' => $themeName], 'themes', 'validate_debug');
         return false;
       }
     } catch (Exception $e) {
       // If table doesn't exist yet, just check directory
+      $this->erp->LogFile('ValidateTheme: DB check skipped (table missing)', ['name' => $themeName], 'themes', 'validate_debug');
       return true;
     }
     
+    $this->erp->LogFile('ValidateTheme: PASSED', ['name' => $themeName], 'themes', 'validate_result');
     return true;
   }
 }
