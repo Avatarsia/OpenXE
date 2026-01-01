@@ -1,0 +1,26 @@
+{
+    "name": "dark_deep",
+    "display_name": "Dark Deep",
+    "description": "Very dark theme optimized for low-light environments (#1e1e1e)",
+    "author": "OpenXE Team",
+    "version": "1.0.0",
+    "preview": "preview.png",
+    "type": "dark",
+    "colors": {
+        "primary": "#42a5f5",
+        "secondary": "#64b5f6",
+        "background": "#1e1e1e",
+        "surface": "#252526",
+        "text": "#e0e0e0",
+        "text_secondary": "#b0b0b0",
+        "border": "#3e3e42",
+        "success": "#66bb6a",
+        "warning": "#ffa726",
+        "error": "#ef5350"
+    },
+    "customizable": [
+        "primary",
+        "secondary"
+    ],
+    "requires_icon_inversion": true
+}

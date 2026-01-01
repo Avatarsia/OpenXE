@@ -1,0 +1,23 @@
+{
+    "name": "high_contrast",
+    "display_name": "High Contrast",
+    "description": "High contrast theme for accessibility (WCAG AAA compliant)",
+    "author": "OpenXE Team",
+    "version": "1.0.0",
+    "preview": "preview.png",
+    "type": "accessibility",
+    "colors": {
+        "primary": "#0066cc",
+        "secondary": "#0080ff",
+        "background": "#ffffff",
+        "surface": "#f0f0f0",
+        "text": "#000000",
+        "text_secondary": "#333333",
+        "border": "#000000",
+        "success": "#008000",
+        "warning": "#ff8800",
+        "error": "#cc0000"
+    },
+    "customizable": [],
+    "requires_icon_inversion": false
+}
