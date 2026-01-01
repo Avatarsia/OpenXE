@@ -9,6 +9,9 @@ class Themes {
     
     public function __construct(&$app, $intern = false) {
         $this->app = &$app;
+        
+        // Auto-install theme system on first use
+        $this->checkAndInstall();
     }
     
     /**
@@ -311,6 +314,100 @@ class Themes {
                    class="button button-ghost">Testen</a>
             </div>
         </div>';
+    }
+    
+    /**
+     * Check if theme system is installed, if not, install it automatically
+     */
+    private function checkAndInstall() {
+        try {
+            // Check if theme tables exist
+            $result = $this->app->DB->Select("SELECT 1 FROM themes LIMIT 1");
+            // Tables exist, no need to install
+            return;
+        } catch (Exception $e) {
+            // Tables don't exist, install them
+            $this->installThemeSystem();
+        }
+    }
+    
+    /**
+     * Install theme system tables and data
+     */
+    private function installThemeSystem() {
+        try {
+            // Create theme_settings table
+            $this->app->DB->Query("
+                CREATE TABLE IF NOT EXISTS `theme_settings` (
+                  `id` INT AUTO_INCREMENT PRIMARY KEY,
+                  `user_id` INT DEFAULT NULL,
+                  `firma_id` INT DEFAULT 1,
+                  `theme_name` VARCHAR(100) NOT NULL,
+                  `custom_css` TEXT DEFAULT NULL,
+                  `is_active` TINYINT(1) DEFAULT 1,
+                  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                  UNIQUE KEY `user_theme` (`user_id`, `firma_id`),
+                  KEY `user_id` (`user_id`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Theme preferences for users and firms'
+            ");
+            
+            // Create themes table
+            $this->app->DB->Query("
+                CREATE TABLE IF NOT EXISTS `themes` (
+                  `id` INT AUTO_INCREMENT PRIMARY KEY,
+                  `name` VARCHAR(100) UNIQUE NOT NULL COMMENT 'Internal theme name',
+                  `display_name` VARCHAR(200) NOT NULL COMMENT 'Display name',
+                  `description` TEXT COMMENT 'Theme description',
+                  `author` VARCHAR(100) DEFAULT 'OpenXE Team',
+                  `version` VARCHAR(20) DEFAULT '1.0.0',
+                  `preview_image` VARCHAR(255) COMMENT 'Preview screenshot path',
+                  `is_system` TINYINT(1) DEFAULT 0 COMMENT '1 = system theme',
+                  `is_enabled` TINYINT(1) DEFAULT 1 COMMENT '1 = enabled',
+                  `config_json` TEXT COMMENT 'Theme configuration as JSON',
+                  `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Theme metadata'
+            ");
+            
+            // Insert default themes
+            $this->app->DB->Query("
+                INSERT IGNORE INTO `themes` (`name`, `display_name`, `description`, `is_system`, `is_enabled`) VALUES
+                ('openxe_default', 'OpenXE Default', 'Standard light theme', 1, 1),
+                ('dark_deep', 'Dark Deep', 'Very dark theme (#1e1e1e)', 1, 1),
+                ('dark_medium', 'Dark Medium', 'Medium dark theme (#2d2d30)', 1, 1),
+                ('dark_grey', 'Dark Grey', 'Grey-based dark theme (#353535)', 1, 1),
+                ('high_contrast', 'High Contrast', 'Accessibility-optimized high contrast theme', 1, 1),
+                ('compact', 'Compact', 'Space-saving theme with smaller fonts', 1, 1),
+                ('corporate', 'Corporate', 'Customizable corporate branding theme', 1, 1)
+            ");
+            
+            // Add columns to user table (if not exists)
+            try {
+                $this->app->DB->Query("ALTER TABLE `user` ADD COLUMN `can_change_theme` TINYINT(1) DEFAULT 1 AFTER `activ`");
+            } catch (Exception $e) {
+                // Column might already exist, ignore
+            }
+            
+            // Add columns to firmendaten table (if not exists)
+            try {
+                $this->app->DB->Query("ALTER TABLE `firmendaten` ADD COLUMN `default_theme` VARCHAR(100) DEFAULT 'openxe_default' AFTER `name`");
+            } catch (Exception $e) {
+                // Column might already exist, ignore
+            }
+            
+            try {
+                $this->app->DB->Query("ALTER TABLE `firmendaten` ADD COLUMN `allow_user_themes` TINYINT(1) DEFAULT 1 AFTER `default_theme`");
+            } catch (Exception $e) {
+                // Column might already exist, ignore
+            }
+            
+            // Log successful installation
+            $this->app->erp->LogFile('Theme system auto-installed successfully', [], 'themes', 'install');
+            
+        } catch (Exception $e) {
+            // Log error but don't crash
+            $this->app->erp->LogFile('Theme system installation failed', ['error' => $e->getMessage()], 'themes', 'install_error');
+        }
     }
     
     /**
