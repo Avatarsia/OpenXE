@@ -126,7 +126,10 @@ class Themes {
         }
         
         $this->app->erp->LogFile($msg, ['theme' => $themeName, 'scope' => $scope], 'themes', 'activated');
-        header('Location: index.php?module=themes&action=list&msg=' . urlencode($msg));
+        
+        // Force reload to apply theme immediately
+        echo '<script>window.location.href = "index.php?module=themes&action=list&msg=' . urlencode($msg) . '";</script>';
+        echo '<meta http-equiv="refresh" content="0;url=index.php?module=themes&action=list&msg=' . urlencode($msg) . '">';
         exit;
     }
     
