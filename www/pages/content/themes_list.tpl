@@ -154,8 +154,17 @@
 </style>
 
 <div class="theme-header">
-    <h1>Theme Verwaltung <span class="current-theme-badge">Aktuell: [CURRENT_THEME]</span></h1>
-    <p>Wählen Sie ein Theme für Ihr OpenXE System</p>
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h1>Theme Verwaltung <span class="current-theme-badge">Aktuell: [CURRENT_THEME]</span></h1>
+            <p>Wählen Sie ein Theme für Ihr OpenXE System</p>
+        </div>
+        <div>
+            <a href="index.php?module=themes&action=upload" class="button button-primary" style="padding: 12px 24px; text-decoration: none; display: inline-block;">
+                📤 Theme hochladen
+            </a>
+        </div>
+    </div>
 </div>
 
 <div class="theme-grid">

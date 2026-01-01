@@ -144,6 +144,77 @@ class Themes {
         exit;
     }
     
+    /**
+     * Upload theme ZIP file
+     */
+    public function upload() {
+        // Check permissions
+        if (!$this->app->erp->RechteVorhanden('themes', 'upload')) {
+            header('Location: index.php?module=themes&action=list&msg=' . urlencode('Keine Berechtigung'));
+            exit;
+        }
+        
+        // Process upload
+        if (isset($_FILES['theme_zip']) && $_FILES['theme_zip']['error'] === UPLOAD_ERR_OK) {
+            $tmpPath = $_FILES['theme_zip']['tmp_name'];
+            
+            // Load validator
+            require_once(__DIR__ . '/../lib/class.theme_validator.php');
+            $validator = new ThemeValidator($this->app);
+            
+            // Validate ZIP
+            $result = $validator->validate($tmpPath);
+            
+            if (!$result['valid']) {
+                header('Location: index.php?module=themes&action=list&msg=' . urlencode('Upload fehlgeschlagen: ' . $result['error']));
+                exit;
+            }
+            
+            // Extract ZIP to themes directory
+            $themeName = $result['theme_name'];
+            $targetDir = __DIR__ . '/../themes/' . $themeName;
+            
+            // Check if theme already exists
+            if (is_dir($targetDir)) {
+                header('Location: index.php?module=themes&action=list&msg=' . urlencode('Theme existiert bereits: ' . $themeName));
+                exit;
+            }
+            
+            // Extract
+            $zip = new ZipArchive();
+            if ($zip->open($tmpPath) === TRUE) {
+                $zip->extractTo(__DIR__ . '/../themes/');
+                $zip->close();
+                
+                // Add to database
+                $themeJsonPath = $targetDir . '/theme.json';
+                if (file_exists($themeJsonPath)) {
+                    $themeData = json_decode(file_get_contents($themeJsonPath), true);
+                    
+                    $this->app->DB->Insert(
+                        "INSERT INTO themes (name, display_name, description, author, version, is_system, is_enabled) 
+                         VALUES (
+                             '" . $this->app->DB->real_escape_string($themeName) . "',
+                             '" . $this->app->DB->real_escape_string($themeData['display_name'] ?? $themeName) . "',
+                             '" . $this->app->DB->real_escape_string($themeData['description'] ?? '') . "',
+                             '" . $this->app->DB->real_escape_string($themeData['author'] ?? 'Unknown') . "',
+                             '" . $this->app->DB->real_escape_string($themeData['version'] ?? '1.0.0') . "',
+                             0,
+                             1
+                         )"
+                    );
+                }
+                
+                $this->app->erp->LogFile('Theme uploaded', ['theme' => $themeName], 'themes', 'upload');
+                header('Location: index.php?module=themes&action=list&msg=' . urlencode('Theme erfolgreich hochgeladen: ' . $themeName));
+                exit;
+            }
+        }
+        
+        // Show upload form
+        $this->app->Tpl->Parse('PAGE', 'theme_upload.tpl');
+    }
+    
     // ==================== HELPER FUNCTIONS ====================
     
     /**
