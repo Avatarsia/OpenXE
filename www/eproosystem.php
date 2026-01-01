@@ -2138,9 +2138,11 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
       } catch (Exception $e) {
         // Tables don't exist yet, use default
         $tablesExist = false;
+        $this->erp->LogFile('LoadUserTheme: Tables check failed', ['error' => $e->getMessage()], 'themes', 'load_debug');
       }
       
       if (!$tablesExist) {
+        $this->erp->LogFile('LoadUserTheme: Tables do not exist', [], 'themes', 'load_debug');
         // Fallback to openxe_default if tables don't exist
         if ($this->ValidateTheme('openxe_default')) {
           return 'openxe_default';
@@ -2153,11 +2155,14 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
       }
       
       $userId = $this->User->GetID();
+      $this->erp->LogFile('LoadUserTheme: Got user ID', ['user_id' => $userId], 'themes', 'load_debug');
       
       // Check if user can change theme
       $canChange = $this->DB->Select(
         "SELECT can_change_theme FROM user WHERE id = " . (int)$userId . " LIMIT 1"
       );
+      
+      $this->erp->LogFile('LoadUserTheme: Can change check', ['can_change' => $canChange, 'user_id' => $userId], 'themes', 'load_debug');
       
       // Get user theme override if allowed
       if ($canChange && $userId > 0) {
@@ -2166,30 +2171,39 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
            WHERE user_id = " . (int)$userId . " AND is_active = 1 LIMIT 1"
         );
         
+        $this->erp->LogFile('LoadUserTheme: User theme query result', ['user_theme' => $userTheme], 'themes', 'load_debug');
+        
         if ($userTheme && $this->ValidateTheme($userTheme)) {
+          $this->erp->LogFile('LoadUserTheme: Returning USER theme', ['theme' => $userTheme], 'themes', 'load_result');
           return $userTheme;
         }
       }
       
       // Fallback to firma default theme
       $firmaTheme = $this->erp->Firmendaten('default_theme');
+      $this->erp->LogFile('LoadUserTheme: Firma theme', ['firma_theme' => $firmaTheme], 'themes', 'load_debug');
+      
       if ($firmaTheme && $this->ValidateTheme($firmaTheme)) {
+        $this->erp->LogFile('LoadUserTheme: Returning FIRMA theme', ['theme' => $firmaTheme], 'themes', 'load_result');
         return $firmaTheme;
       }
       
       // Final fallback to openxe_default
       if ($this->ValidateTheme('openxe_default')) {
+        $this->erp->LogFile('LoadUserTheme: Returning OPENXE_DEFAULT', [], 'themes', 'load_result');
         return 'openxe_default';
       }
       
       // Ultimate fallback if openxe_default doesn't exist
       if ($this->ValidateTheme('new')) {
+        $this->erp->LogFile('LoadUserTheme: Returning NEW (last resort)', [], 'themes', 'load_result');
         return 'new';
       }
       
       return 'openxe_default';
       
     } catch (Exception $e) {
+      $this->erp->LogFile('LoadUserTheme: EXCEPTION', ['error' => $e->getMessage()], 'themes', 'load_error');
       // On any error, try openxe_default first, then 'new' as ultimate fallback
       if ($this->ValidateTheme('openxe_default')) {
         return 'openxe_default';
