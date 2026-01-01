@@ -12,6 +12,17 @@ class Themes {
         
         // Auto-install theme system on first use
         $this->checkAndInstall();
+        
+        // Default action if none specified
+        if (empty($_GET['action']) || $_GET['action'] == '') {
+            $_GET['action'] = 'list';
+        }
+        
+        // Debug: Log constructor call
+        $this->app->erp->LogFile('Themes module loaded', [
+            'action' => $_GET['action'] ?? 'none',
+            'user_id' => $this->app->User->GetID()
+        ], 'themes', 'module_load');
     }
     
     /**
