@@ -10,19 +10,27 @@ class Themes {
     public function __construct(&$app, $intern = false) {
         $this->app = &$app;
         
+        if ($intern) return;
+        
         // Auto-install theme system on first use
         $this->checkAndInstall();
         
-        // Default action if none specified
-        if (empty($_GET['action']) || $_GET['action'] == '') {
-            $_GET['action'] = 'list';
-        }
+        // Initialize OpenXE action handler system
+        $this->app->ActionHandlerInit($this);
         
-        // Debug: Log constructor call
-        $this->app->erp->LogFile('Themes module loaded', [
-            'action' => $_GET['action'] ?? 'none',
-            'user_id' => $this->app->User->GetID()
-        ], 'themes', 'module_load');
+        // Register action handlers
+        $this->app->ActionHandler("list", "list");
+        $this->app->ActionHandler("activate", "activate");
+        $this->app->ActionHandler("preview", "preview");
+        $this->app->ActionHandler("test", "test");
+        $this->app->ActionHandler("endtest", "endtest");
+        $this->app->ActionHandler("upload", "upload");
+        
+        // Set default action
+        $this->app->DefaultActionHandler("list");
+        
+        // Listen for actions
+        $this->app->ActionHandlerListen($app);
     }
     
     /**
