@@ -121,6 +121,21 @@ class erpooSystem extends Application
       if(is_dir(__DIR__ . '/lib/versandarten/content')) {
         $this->Tpl->ReadTemplatesFromPath(__DIR__ . '/lib/versandarten/content/');
       }
+      
+      // Load theme CSS files
+      $themeName = $this->Conf->WFconf['defaulttheme'];
+      $themeCssPath = __DIR__ . '/themes/' . $themeName . '/css/';
+      if (is_dir($themeCssPath)) {
+        $cssFiles = glob($themeCssPath . '*.css');
+        $cssLinks = '';
+        foreach ($cssFiles as $cssFile) {
+          $cssUrl = 'themes/' . $themeName . '/css/' . basename($cssFile);
+          $cssLinks .= '<link rel="stylesheet" href="' . htmlspecialchars($cssUrl) . '?v=' . filemtime($cssFile) . '">' . "\n";
+        }
+        if (!empty($cssLinks)) {
+          $this->Tpl->Set('THEME_CSS', $cssLinks);
+        }
+      }
 
       if(method_exists($this->erp, 'VersionsInfos')){
         $ver = $this->erp->VersionsInfos();
