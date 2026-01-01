@@ -24,6 +24,13 @@ class Themes {
         $themes = $this->getAvailableThemes();
         $currentTheme = $this->getCurrentUserTheme();
         
+        // Debug: Log what we found
+        $this->app->erp->LogFile('Theme list loaded', [
+            'theme_count' => count($themes),
+            'current_theme' => $currentTheme,
+            'themes' => array_column($themes, 'name')
+        ], 'themes', 'debug');
+        
         // Prepare theme grid data
         $themeGrid = '';
         foreach ($themes as $theme) {
