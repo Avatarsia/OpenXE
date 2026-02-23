@@ -1,0 +1,58 @@
+# EditorConfig — OpenXE
+# https://editorconfig.org
+
+root = true
+
+# Alle Dateien
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+# PHP
+[*.php]
+indent_size = 4
+
+# JavaScript
+[*.js]
+indent_size = 2
+
+# CSS
+[*.css]
+indent_size = 2
+
+# JSON
+[*.json]
+indent_size = 2
+
+# YAML
+[*.{yml,yaml}]
+indent_size = 2
+
+# Markdown
+[*.md]
+trim_trailing_whitespace = false
+indent_size = 2
+
+# SQL
+[*.sql]
+indent_size = 2
+
+# Composer
+[composer.json]
+indent_size = 4
+
+# Shell Scripts
+[*.sh]
+end_of_line = lf
+
+# Windows Batch
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# Template Files
+[*.tpl]
+indent_size = 4
