@@ -21,7 +21,14 @@
 3. **Commit** incomplete work with `WIP: ` prefix, completed work with conventional commit
 4. **Update** `.ai/changelog/CHANGELOG.md` if any task was completed
 
+### After EVERY terminal command:
+1. **Read the full output** — including warnings, deprecations, and hints (not just exit code)
+2. **If error/unexpected result:** Analyze root cause before retrying. Do NOT blindly repeat the same command.
+3. **If new insight:** Add a Do or Don't to `.ai/best-practices/terminal-learnings.md` under "Gelernte Lektionen"
+4. **Always verify** the intended effect actually happened (e.g. `git log -1` after commit, `php -l` after edit)
+
 > Full protocol details: [.ai/handover/HANDOVER_PROTOCOL.md](.ai/handover/HANDOVER_PROTOCOL.md)
+> Terminal Do's & Don'ts: [.ai/best-practices/terminal-learnings.md](.ai/best-practices/terminal-learnings.md)
 
 ## Project Overview
 

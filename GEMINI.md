@@ -22,7 +22,14 @@
 3. **Committe** unfertigen Code mit `WIP: `-Prefix
 4. **Aktualisiere** `.ai/changelog/CHANGELOG.md` bei abgeschlossenen Aufgaben
 
+### Nach JEDEM Terminal-Befehl:
+1. **Vollständigen Output lesen** — inkl. Warnungen, Deprecations und Hinweisen (nicht nur Exit-Code)
+2. **Bei Fehler/unerwartetem Ergebnis:** Ursache analysieren, NICHT blind den gleichen Befehl wiederholen
+3. **Bei neuer Erkenntnis:** Do oder Don't in `.ai/best-practices/terminal-learnings.md` unter "Gelernte Lektionen" ergänzen
+4. **Immer verifizieren**, dass der beabsichtigte Effekt eingetreten ist (z.B. `git log -1` nach Commit, `php -l` nach Edit)
+
 > Vollständiges Protokoll: [.ai/handover/HANDOVER_PROTOCOL.md](.ai/handover/HANDOVER_PROTOCOL.md)
+> Terminal Do's & Don'ts: [.ai/best-practices/terminal-learnings.md](.ai/best-practices/terminal-learnings.md)
 
 ## Verweis
 
