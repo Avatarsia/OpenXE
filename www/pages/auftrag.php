@@ -986,7 +986,7 @@ class Auftrag extends GenAuftrag
     $belegnr = '';
     $abweichendebezeichnung = 0;
     if($id > 0) {
-      $abArr = $this->app->DB->SelectRow("SELECT b.belegnr, a.name,b.abweichendebezeichnung  FROM auftrag b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id='$id' LIMIT 1");
+      $abArr = $this->app->DatabaseService->selectRow('SELECT b.belegnr, a.name, b.abweichendebezeichnung FROM auftrag b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id = ? LIMIT 1', [$id]);
       if(!empty($abArr)) {
         $name = $abArr['name'];
         $belegnr = $abArr['belegnr'];
@@ -1243,7 +1243,7 @@ class Auftrag extends GenAuftrag
   function AuftragUpdateVerband()
   {
     $id=$this->app->Secure->GetGET("id");
-    $adresse = $this->app->DB->Select("SELECT adresse FROM auftrag WHERE id='$id' LIMIT 1");
+    $adresse = $this->app->DatabaseService->selectValue('SELECT adresse FROM auftrag WHERE id = ? LIMIT 1', [$id]);
     $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Die Verbandsinformation wurde neu geladen!</div>  ");
     $this->app->Location->execute("index.php?module=auftrag&action=edit&id=$id&msg=$msg");
   }       
@@ -1252,7 +1252,7 @@ class Auftrag extends GenAuftrag
   {
 
     $id=$this->app->Secure->GetGET("id");
-    $this->app->DB->Update("UPDATE auftrag SET rabatt='',rabatt1='',rabatt2='',rabatt3='',rabatt4='',rabatt5='',realrabatt='' WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->update("UPDATE auftrag SET rabatt='',rabatt1='',rabatt2='',rabatt3='',rabatt4='',rabatt5='',realrabatt='' WHERE id = ? LIMIT 1", [$id]);
     $msg = $this->app->erp->base64_url_encode("<div class=\"warning\">Die Rabatte wurden entfernt!</div>  ");
     $this->app->Location->execute('index.php?module=auftrag&action=edit&id='.$id.'&msg='.$msg);
   }       
@@ -1260,7 +1260,7 @@ class Auftrag extends GenAuftrag
   function AuftragShopexport()
   {
     $id=$this->app->Secure->GetGET('id');
-    $shop=$this->app->DB->Select("SELECT shop FROM auftrag WHERE id='$id' LIMIT 1");
+    $shop=$this->app->DatabaseService->selectValue('SELECT shop FROM auftrag WHERE id = ? LIMIT 1', [$id]);
     $this->app->remote->RemoteUpdateAuftrag($shop,$id);
     $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Versandstatus an Shop &uuml;bertragen</div>  ");
     $this->app->Location->execute('index.php?module=auftrag&action=edit&id='.$id.'&msg='.$msg);
@@ -1278,8 +1278,8 @@ class Auftrag extends GenAuftrag
   {
 
     $id = $this->app->Secure->GetGET('id');
-    $this->app->DB->Update("UPDATE auftrag SET zuarchivieren='1' WHERE id='$id'");
-    $this->app->DB->Update("UPDATE auftrag SET schreibschutz='0' WHERE id='$id'");
+    $this->app->DatabaseService->update("UPDATE auftrag SET zuarchivieren='1' WHERE id = ?", [$id]);
+    $this->app->DatabaseService->update("UPDATE auftrag SET schreibschutz='0' WHERE id = ?", [$id]);
     $this->app->erp->AuftragProtokoll($id,"Schreibschutz entfernt");
     $this->app->Location->execute('index.php?module=auftrag&action=edit&id='.$id);
   }
@@ -1312,7 +1312,7 @@ class Auftrag extends GenAuftrag
 
   function AuftragLiveTabelleZeit($parsetarget="")
   {
-    $id = $this->app->Secure->GetGET("id");
+    $id = (int)$this->app->Secure->GetGET("id");
 
     $table = new EasyTable($this->app);
 
@@ -1320,7 +1320,7 @@ class Auftrag extends GenAuftrag
               z.aufgabe as aufgabe, a.name as name, DATE_FORMAT(z.von,'%d.%m.%y %H:%i') as von, DATE_FORMAT(z.bis,'%d.%m.%y %H:%i') as bis,
               CONCAT(LPAD(HOUR(TIMEDIFF(bis, von)),2,'0'),':',LPAD(MINUTE(TIMEDIFF(bis, von)),2,'0')) AS dauer
 
-                FROM zeiterfassung z LEFT JOIN adresse a ON a.id=z.adresse WHERE z.auftrag='$id' order by z.von";
+                FROM zeiterfassung z LEFT JOIN adresse a ON a.id=z.adresse WHERE z.auftrag=$id order by z.von";
                 //,if(z.abrechnen,if(z.abgerechnet!=1 AND z.abrechnen='1','offen','abgerechnet'),'abgeschlossen') as status
 
     $table->Query($sql);

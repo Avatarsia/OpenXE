@@ -264,14 +264,15 @@ class Ajax {
       }
 
       // Label-Gruppen anlegen
-      $labelGroupId = $this->app->DB->Select(
-        "SELECT lg.id FROM label_group AS lg WHERE lg.group_table = '{$referenceTable}'"
+      $labelGroupId = $this->app->DatabaseService->selectValue(
+        "SELECT lg.id FROM label_group AS lg WHERE lg.group_table = ?",
+        [$referenceTable]
       );
       if (empty($labelGroupId)) {
         $groupTitle = ucwords($referenceTable);
-        $this->app->DB->Insert(
-          "INSERT INTO label_group (id, group_table, title, created_at) 
-               VALUES (NULL, '{$referenceTable}', '{$groupTitle}', CURRENT_TIMESTAMP)"
+        $this->app->DatabaseService->insert(
+          "INSERT INTO label_group (id, group_table, title, created_at) VALUES (NULL, ?, ?, CURRENT_TIMESTAMP)",
+          [$referenceTable, $groupTitle]
         );
       }
 
