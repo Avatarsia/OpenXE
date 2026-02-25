@@ -440,17 +440,29 @@ class Ajax {
 
       $ersteller = $this->app->DB->real_escape_string($this->app->User->GetName());
 
-      $geschuetzt = $this->app->DB->Select("SELECT geschuetzt FROM datei WHERE id = '".$id."'");
+      $geschuetzt = $this->app->DatabaseService->selectValue(
+        'SELECT geschuetzt FROM datei WHERE id = ?',
+        [$id]
+      );
 
-      $datei = $this->app->DB->SelectArr("SELECT d.id, s.id as sid FROM datei d LEFT JOIN datei_stichwoerter s ON d.id=s.datei LEFT JOIN datei_version v ON v.datei=d.id WHERE s.objekt LIKE '$objekt' AND s.parameter='$parameter' AND d.geloescht=0 AND d.id = '$id' LIMIT 1");
+      $datei = $this->app->DatabaseService->select(
+        'SELECT d.id, s.id as sid FROM datei d LEFT JOIN datei_stichwoerter s ON d.id=s.datei LEFT JOIN datei_version v ON v.datei=d.id WHERE s.objekt LIKE ? AND s.parameter=? AND d.geloescht=0 AND d.id = ? LIMIT 1',
+        [$objekt, $parameter, $id]
+      );
       if($datei && !$geschuetzt)
       {
         $sid = $datei[0]['sid'];
         if($subjekt && $sid)
         {
-          $this->app->DB->Update("UPDATE datei_stichwoerter SET subjekt = '".$this->app->DB->real_escape_string($subjekt)."' WHERE id = '$sid' LIMIT 1");
+          $this->app->DatabaseService->execute(
+            'UPDATE datei_stichwoerter SET subjekt = ? WHERE id = ? LIMIT 1',
+            [$subjekt, $sid]
+          );
         }
-        $this->app->DB->Update("UPDATE datei SET titel = '$titel', beschreibung = '$beschreibung' WHERE id = '$id' LIMIT 1");
+        $this->app->DatabaseService->execute(
+          'UPDATE datei SET titel = ?, beschreibung = ? WHERE id = ? LIMIT 1',
+          [$titel, $beschreibung, $id]
+        );
         if(!empty($_FILES['datei']) && $_FILES['datei']['tmp_name']!='')
         {
           $dateiname = $_FILES['datei']['name'];
@@ -825,7 +837,7 @@ class Ajax {
     if($this->app->erp->RechteVorhanden('welcome','unlock') &&
       ($salt = $this->app->Secure->GetGET('salt')))
     {
-      $this->app->DB->Delete("DELETE from module_lock where salt = '".$salt."'");
+      $this->app->DatabaseService->execute('DELETE FROM module_lock WHERE salt = ?', [$salt]);
     }
     $this->app->erp->ExitWawi();
   }
@@ -965,11 +977,11 @@ class Ajax {
 
     if(is_numeric($term))
     {
-      $rechnung = $this->app->DB->SelectArr("SELECT id,belegnr,soll,ist FROM rechnung WHERE belegnr='$term'");
-      $gutschrift = $this->app->DB->SelectArr("SELECT id,belegnr,soll,ist FROM gutschrift WHERE belegnr='$term'");
-      $auftrag = $this->app->DB->SelectArr("SELECT id,belegnr FROM auftrag WHERE belegnr='$term'");
-      $internet = $this->app->DB->SelectArr("SELECT id,belegnr FROM auftrag WHERE internet='$term'");
-      $kunde = $this->app->DB->SelectArr("SELECT id,name FROM adresse WHERE kundennummer='$term'");
+      $rechnung = $this->app->DatabaseService->select('SELECT id,belegnr,soll,ist FROM rechnung WHERE belegnr=?', [$term]);
+      $gutschrift = $this->app->DatabaseService->select('SELECT id,belegnr,soll,ist FROM gutschrift WHERE belegnr=?', [$term]);
+      $auftrag = $this->app->DatabaseService->select('SELECT id,belegnr FROM auftrag WHERE belegnr=?', [$term]);
+      $internet = $this->app->DatabaseService->select('SELECT id,belegnr FROM auftrag WHERE internet=?', [$term]);
+      $kunde = $this->app->DatabaseService->select('SELECT id,name FROM adresse WHERE kundennummer=?', [$term]);
     }
     if(!empty($rechnung) && is_array($rechnung))
     {
@@ -1023,18 +1035,18 @@ class Ajax {
 
     //name	abteilung		unterabteilung	land	strasse		ort		plz
 
-    $values = $this->app->DB->SelectArr("SELECT * FROM adresse WHERE id='$id' LIMIT 1");
+    $values = $this->app->DatabaseService->selectRow('SELECT * FROM adresse WHERE id=? LIMIT 1', [(int)$id]);
     if(!empty($values)){
-      foreach ($values[0] as $key => $value) {
-        $values[0][$key] = $this->app->erp->ReadyForPDF($value);
+      foreach ($values as $key => $value) {
+        $values[$key] = $this->app->erp->ReadyForPDF($value);
       }
 
-      echo $this->app->erp->ClearDataBeforeOutput($values[0]['name'] . '#*#' . $values[0]['abteilung'] . '#*#' . $values[0]['unterabteilung'] . '#*#' . $values[0]['land'] . '#*#' . $values[0]['strasse'] . '#*#' . $values[0]['ort'] . '#*#' . $values[0]['plz'] . '#*#' . $values[0]['adresszusatz'] . '#*#' . $values[0]['ansprechpartner'] . '#*#' . $values[0]['titel'] . '#*#' . $values[0]['id'] .
-        '#*#' . $values[0]['email'] .
-        '#*#' . $values[0]['telefon'] .
-        '#*#' . $values[0]['telfax'] .
-        '#*#' . $values[0]['anschreiben'] .
-        '#*#' . $values[0]['gln']
+      echo $this->app->erp->ClearDataBeforeOutput($values['name'] . '#*#' . $values['abteilung'] . '#*#' . $values['unterabteilung'] . '#*#' . $values['land'] . '#*#' . $values['strasse'] . '#*#' . $values['ort'] . '#*#' . $values['plz'] . '#*#' . $values['adresszusatz'] . '#*#' . $values['ansprechpartner'] . '#*#' . $values['titel'] . '#*#' . $values['id'] .
+        '#*#' . $values['email'] .
+        '#*#' . $values['telefon'] .
+        '#*#' . $values['telfax'] .
+        '#*#' . $values['anschreiben'] .
+        '#*#' . $values['gln']
       );
     }
     $this->app->erp->ExitWawi();
@@ -1051,18 +1063,18 @@ class Ajax {
 
     //name	abteilung		unterabteilung	land	strasse		ort		plz
 
-    $values = $this->app->DB->SelectArr("SELECT * FROM adresse WHERE id='$id' LIMIT 1");
+    $values = $this->app->DatabaseService->selectRow('SELECT * FROM adresse WHERE id=? LIMIT 1', [(int)$id]);
     if(!empty($values)){
-      foreach ($values[0] as $key => $value) {
+      foreach ($values as $key => $value) {
         if($key !== 'zollinformationen') {
-          $values[0][$key] = $this->app->erp->ReadyForPDF($value);
+          $values[$key] = $this->app->erp->ReadyForPDF($value);
         }
       }
-      echo $this->app->erp->ClearDataBeforeOutput($values[0]['name'] . '#*#' . $values[0]['abteilung'] . '#*#' . $values[0]['unterabteilung'] . '#*#' . $values[0]['land'] . '#*#' . $values[0]['strasse'] . '#*#' . $values[0]['ort'] . '#*#' . $values[0]['plz'] . '#*#' . $values[0]['adresszusatz'] . '#*#' . $values[0]['ansprechpartner'] . '#*#' . $values[0]['titel'] . '#*#' . base64_encode($values[0]['zollinformationen']) . '#*#');
+      echo $this->app->erp->ClearDataBeforeOutput($values['name'] . '#*#' . $values['abteilung'] . '#*#' . $values['unterabteilung'] . '#*#' . $values['land'] . '#*#' . $values['strasse'] . '#*#' . $values['ort'] . '#*#' . $values['plz'] . '#*#' . $values['adresszusatz'] . '#*#' . $values['ansprechpartner'] . '#*#' . $values['titel'] . '#*#' . base64_encode($values['zollinformationen']) . '#*#');
     }
     $this->app->erp->ExitWawi();
   }
-  
+
   public function AjaxLieferadresse()
   {
     $id = $this->app->Secure->GetGET('id');	
@@ -1073,12 +1085,12 @@ class Ajax {
 
     //name	abteilung		unterabteilung	land	strasse		ort		plz
 
-    $values = $this->app->DB->SelectArr("SELECT * FROM lieferadressen WHERE id='$id' LIMIT 1");
+    $values = $this->app->DatabaseService->selectRow('SELECT * FROM lieferadressen WHERE id=? LIMIT 1', [(int)$id]);
     if(!empty($values)){
-      foreach ($values[0] as $key => $value) {
-        $values[0][$key] = $this->app->erp->ReadyForPDF($value);
+      foreach ($values as $key => $value) {
+        $values[$key] = $this->app->erp->ReadyForPDF($value);
       }
-      echo $this->app->erp->ClearDataBeforeOutput($values[0]['name'] . '#*#' . $values[0]['abteilung'] . '#*#' . $values[0]['unterabteilung'] . '#*#' . $values[0]['land'] . '#*#' . $values[0]['strasse'] . '#*#' . $values[0]['ort'] . '#*#' . $values[0]['plz'] . '#*#' . $values[0]['adresszusatz'] . '#*#' . $values[0]['ansprechpartner'] . '#*#' . $values[0]['id'] . '#*#' . $values[0]['gln'] . '#*#' . $values[0]['ustid'] . '#*#' . $values[0]['ust_befreit'] . '#*#' . $values[0]['lieferbedingung']. '#*#' . $values[0]['email']);
+      echo $this->app->erp->ClearDataBeforeOutput($values['name'] . '#*#' . $values['abteilung'] . '#*#' . $values['unterabteilung'] . '#*#' . $values['land'] . '#*#' . $values['strasse'] . '#*#' . $values['ort'] . '#*#' . $values['plz'] . '#*#' . $values['adresszusatz'] . '#*#' . $values['ansprechpartner'] . '#*#' . $values['id'] . '#*#' . $values['gln'] . '#*#' . $values['ustid'] . '#*#' . $values['ust_befreit'] . '#*#' . $values['lieferbedingung']. '#*#' . $values['email']);
     }
     $this->app->erp->ExitWawi();
 
@@ -1093,13 +1105,13 @@ class Ajax {
     {
       $this->app->erp->ExitWawi();
     }
-    $values = $this->app->DB->SelectArr("SELECT * FROM ansprechpartner WHERE id='$id' LIMIT 1");
-    if(!empty($values[0])){
-      foreach ($values[0] as $key => $value) {
-        $values[0][$key] = $this->app->erp->ReadyForPDF($value);
+    $values = $this->app->DatabaseService->selectRow('SELECT * FROM ansprechpartner WHERE id=? LIMIT 1', [(int)$id]);
+    if(!empty($values)){
+      foreach ($values as $key => $value) {
+        $values[$key] = $this->app->erp->ReadyForPDF($value);
       }
-      echo $this->app->erp->ClearDataBeforeOutput($values[0]['name'] . '#*#' . $values[0]['email'] . '#*#' . $values[0]['telefon'] . '#*#' . $values[0]['telefax'] . '#*#' . $values[0]['abteilung'] . '#*#' . $values[0]['unterabteilung'] .
-        '#*#' . $values[0]['land'] . '#*#' . $values[0]['strasse'] . '#*#' . $values[0]['plz'] . '#*#' . $values[0]['ort'] . '#*#' . $values[0]['adresszusatz'] . '#*#' . $values[0]['typ'] . '#*#' . $values[0]['anschreiben'] . '#*#' . $values[0]['titel'] . '#*#' . $values[0]['id']);
+      echo $this->app->erp->ClearDataBeforeOutput($values['name'] . '#*#' . $values['email'] . '#*#' . $values['telefon'] . '#*#' . $values['telefax'] . '#*#' . $values['abteilung'] . '#*#' . $values['unterabteilung'] .
+        '#*#' . $values['land'] . '#*#' . $values['strasse'] . '#*#' . $values['plz'] . '#*#' . $values['ort'] . '#*#' . $values['adresszusatz'] . '#*#' . $values['typ'] . '#*#' . $values['anschreiben'] . '#*#' . $values['titel'] . '#*#' . $values['id']);
     }
     $this->app->erp->ExitWawi();
   }
@@ -1218,10 +1230,16 @@ class Ajax {
     $filter_projekt = 0;
     if($raction === 'edit' && $rid && in_array($rmodule, $pruefemodule))
     {
-      $projekt = $this->app->DB->Select("SELECT projekt FROM $rmodule WHERE id = '$rid' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue(
+        'SELECT projekt FROM `' . $this->app->DatabaseService->validateIdentifier($rmodule) . '` WHERE id = ? LIMIT 1',
+        [$rid]
+      );
       if($projekt)
       {
-        $eigenernummernkreis = $this->app->DB->Select("SELECT eigenernummernkreis FROM projekt WHERE id = '$projekt' LIMIT 1");
+        $eigenernummernkreis = $this->app->DatabaseService->selectValue(
+          'SELECT eigenernummernkreis FROM projekt WHERE id = ? LIMIT 1',
+          [(int)$projekt]
+        );
         //if($eigenernummernkreis)
         $filter_projekt = $projekt;
       }
@@ -3066,16 +3084,25 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $projectStorage = !empty($projectRow['projektlager'])?$checkprojekt:0;
         $smodule = $this->app->Secure->GetGET('smodule');	
         $sid = $this->app->Secure->GetGET('sid');
-        $document = $this->app->DB->SelectRow(sprintf('SELECT * FROM `%s` WHERE `id` = %d', $smodule, $sid));
+        $document = $this->app->DatabaseService->selectRow(
+          'SELECT * FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE `id` = ?',
+          [(int)$sid]
+        );
 
         $adresse = $document['adresse'];// $this->app->DB->Select("SELECT adresse FROM $smodule WHERE id='$sid' LIMIT 1");
         $waehrung = $document['waehrung'];//$this->app->DB->Select("SELECT waehrung FROM $smodule WHERE id='$sid' LIMIT 1");
-        
+
         $anzeigebrutto = false;
         if($smodule == 'auftrag' || $smodule == 'rechnung' || $smodule == 'gutschrift' || $smodule == 'angebot' || $smodule == 'proformarechnung')
         {
-          $_anrede = $this->app->DB->Select("SELECT typ FROM $smodule WHERE id = '$sid' LIMIT 1");
-          $_projekt = $this->app->DB->Select("SELECT projekt FROM $smodule WHERE id = '$sid' LIMIT 1");
+          $_anrede = $this->app->DatabaseService->selectValue(
+            'SELECT typ FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id = ? LIMIT 1',
+            [(int)$sid]
+          );
+          $_projekt = $this->app->DatabaseService->selectValue(
+            'SELECT projekt FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id = ? LIMIT 1',
+            [(int)$sid]
+          );
           $funktion = ucfirst($smodule).'MitUmsatzeuer';
           if($this->app->erp->AnzeigePositionenBrutto($_anrede, $smodule, $_projekt, $adresse,$sid) && $this->app->erp->$funktion($sid))
           {
@@ -3141,7 +3168,10 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
 	if ($module != "") {
 		if ($this->app->DB->Select("SHOW COLUMNS FROM `$module` LIKE 'realrabatt'")) {
-		        $rabatt = $this->app->DB->Select("SELECT realrabatt FROM $smodule WHERE id='$sid' LIMIT 1");
+		        $rabatt = $this->app->DatabaseService->selectValue(
+		          'SELECT realrabatt FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id=? LIMIT 1',
+		          [(int)$sid]
+		        );
 		}
 	}
         $sql_erweiterung = '';
@@ -3252,10 +3282,10 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
                   $umsatzsteuer = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id = '".$arr[$i]['id']."' LIMIT 1");
                   if($umsatzsteuer == 'ermaessigt')
                   {
-                    $vkarr[$vi]['preis'] = round($vkarr[$vi]['preis']* (1+ (float)$this->app->DB->Select("SELECT steuersatz_ermaessigt FROM $smodule WHERE id = '$sid' LIMIT 1")/100),8);
+                    $vkarr[$vi]['preis'] = round($vkarr[$vi]['preis']* (1+ (float)$this->app->DatabaseService->selectValue('SELECT steuersatz_ermaessigt FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id = ? LIMIT 1', [(int)$sid])/100),8);
                   }elseif($umsatzsteuer != 'befreit')
                   {
-                    $vkarr[$vi]['preis'] = round($vkarr[$vi]['preis'] * (1+ (float)$this->app->DB->Select("SELECT steuersatz_normal FROM $smodule WHERE id = '$sid' LIMIT 1")/100),8);
+                    $vkarr[$vi]['preis'] = round($vkarr[$vi]['preis'] * (1+ (float)$this->app->DatabaseService->selectValue('SELECT steuersatz_normal FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id = ? LIMIT 1', [(int)$sid])/100),8);
                   }
                 }
                 
@@ -3299,7 +3329,10 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $smodule = $this->app->Secure->GetGET('smodule');
         $sid = $this->app->Secure->GetGET('sid');
 
-        $waehrung = $this->app->DB->Select("SELECT `waehrung` FROM `{$smodule}` WHERE `id`='{$sid}' LIMIT 1");
+        $waehrung = $this->app->DatabaseService->selectValue(
+          'SELECT `waehrung` FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE `id`=? LIMIT 1',
+          [(int)$sid]
+        );
 
         $felder = [
             'a.nummer',

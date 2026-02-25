@@ -1108,7 +1108,7 @@ class Auftrag extends GenAuftrag
   function AuftragArchivierePDF()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id = '$id' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue('SELECT projekt FROM auftrag WHERE id = ? LIMIT 1', [$id]);
     $this->app->erp->BriefpapierHintergrunddisable = !$this->app->erp->BriefpapierHintergrunddisable;
     if(class_exists('AuftragPDFCustom'))
     {
@@ -1130,7 +1130,7 @@ class Auftrag extends GenAuftrag
     $Brief->GetAuftrag($id);
     $tmpfile = $Brief->displayTMP();
     $Brief->ArchiviereDocument(1);
-    $this->app->DB->Update("UPDATE auftrag SET schreibschutz='1' WHERE id='$id'");
+    $this->app->DatabaseService->execute('UPDATE auftrag SET schreibschutz = 1 WHERE id = ?', [$id]);
     unlink($tmpfile);
     $this->app->Location->execute('index.php?module=auftrag&action=edit&id='.$id);
   }
@@ -1336,7 +1336,7 @@ class Auftrag extends GenAuftrag
   function AuftragLiveTabelle()
   {
     $id = $this->app->Secure->GetGET("id");
-    $status = $this->app->DB->Select("SELECT status FROM auftrag WHERE id='$id' LIMIT 1");
+    $status = $this->app->DatabaseService->selectValue('SELECT status FROM auftrag WHERE id = ? LIMIT 1', [(int)$id]);
 
     $table = new EasyTable($this->app);
 
@@ -1427,7 +1427,7 @@ class Auftrag extends GenAuftrag
       $kreditlimit .= "<option value=\"kreditlimit\">Kreditlimit f&uuml;r diesen Auftrag freigeben</option>";
     }
 
-    $checkifrgexists = $this->app->DB->Select("SELECT id FROM rechnung WHERE auftragid='$id' LIMIT 1");
+    $checkifrgexists = $this->app->DatabaseService->selectValue('SELECT id FROM rechnung WHERE auftragid = ? LIMIT 1', [(int)$id]);
 
     if($status !== 'storniert') {
       $storno = '<option value="storno">Auftrag stornieren</option>';
@@ -1448,7 +1448,7 @@ class Auftrag extends GenAuftrag
     else if($status!="storniert")
       $storno = "<option value=\"storno\">Auftrag stornieren</option>";*/
 
-    $kommissionierart = $this->app->DB->Select("SELECT kommissionierverfahren FROM projekt WHERE id='$projekt' LIMIT 1");   
+    $kommissionierart = $this->app->DatabaseService->selectValue('SELECT kommissionierverfahren FROM projekt WHERE id = ? LIMIT 1', [(int)$projekt]);
     //$art = $this->app->DB->Select("SELECT art FROM auftrag WHERE id='$id' LIMIT 1");
     $alleartikelreservieren = '';
 
@@ -1704,7 +1704,7 @@ class Auftrag extends GenAuftrag
   function AuftragPDFfromArchiv()
   {
     $id = $this->app->Secure->GetGET("id");
-    $archiv = $this->app->DB->Select("SELECT table_id from pdfarchiv where id = '$id' LIMIT 1");
+    $archiv = $this->app->DatabaseService->selectValue('SELECT table_id FROM pdfarchiv WHERE id = ? LIMIT 1', [(int)$id]);
     if($archiv)
     {
       $projekt = $this->app->DB->Select("SELECT projekt from auftrag where id = '".(int)$archiv."'");
@@ -2020,7 +2020,7 @@ class Auftrag extends GenAuftrag
     }else{
       $gebuchtezeit = str_replace(".", ",", round($gebuchtezeit,2));
     }
-    $summebrutto = $this->app->DB->Select("SELECT gesamtsumme FROM auftrag WHERE id='$id' LIMIT 1");
+    $summebrutto = $this->app->DatabaseService->selectValue('SELECT gesamtsumme FROM auftrag WHERE id = ? LIMIT 1', [(int)$id]);
 
     // Deckungsbeitrag
     if (!$this->app->erp->RechteVorhanden('auftrag','einkaufspreise')) {
@@ -2520,12 +2520,12 @@ class Auftrag extends GenAuftrag
       if(!$standardlager)
       {
         if (!$standardlager) {
-          $projektbevorzugteslager = $this->app->DB->Select("SELECT standardlager FROM projekt WHERE id = '".$auftragArr[0]['projekt']."' LIMIT 1");
+          $projektbevorzugteslager = $this->app->DatabaseService->selectValue('SELECT standardlager FROM projekt WHERE id = ? LIMIT 1', [(int)$auftragArr[0]['projekt']]);
           if ($projektbevorzugteslager) {
               $standardlager = $projektbevorzugteslager;
           }
         } else {
-          $projektlager = $this->app->DB->Select("SELECT projektlager FROM projekt WHERE id = '".$auftragArr[0]['projekt']."' LIMIT 1");
+          $projektlager = $this->app->DatabaseService->selectValue('SELECT projektlager FROM projekt WHERE id = ? LIMIT 1', [(int)$auftragArr[0]['projekt']]);
           if($projektlager){
             $projektlager = $auftragArr[0]['projekt'];
           }
@@ -2533,7 +2533,7 @@ class Auftrag extends GenAuftrag
       }
       $standardlagertext = '';
       if($standardlager){
-        $standardlagertext = $this->app->DB->Select("SELECT bezeichnung FROM lager WHERE id = '$standardlager' LIMIT 1");
+        $standardlagertext = $this->app->DatabaseService->selectValue('SELECT bezeichnung FROM lager WHERE id = ? LIMIT 1', [(int)$standardlager]);
       }
       
       $hookjoins = '';
@@ -3264,7 +3264,7 @@ class Auftrag extends GenAuftrag
       );
     }
 
-    $vorkasse_ok = $this->app->DB->Select("SELECT vorkasse_ok FROM auftrag WHERE id='$id' LIMIT 1");
+    $vorkasse_ok = $this->app->DatabaseService->selectValue('SELECT vorkasse_ok FROM auftrag WHERE id = ? LIMIT 1', [(int)$id]);
     $zahlungsweise = $auftragArr[0]['zahlungsweise'];
     if($vorkasse_ok==1){
       if($zahlungsweise==='vorkasse' || $zahlungsweise==='paypal' || $zahlungsweise==='kreditkarte') {
@@ -3364,7 +3364,7 @@ class Auftrag extends GenAuftrag
     );
     $tmp->DisplayNew('PROTOKOLL',"Protokoll","noAction");
 
-    $produktionsId = $this->app->DB->Select("SELECT id FROM produktion WHERE auftragid = '$id' LIMIT 1");
+    $produktionsId = $this->app->DatabaseService->selectValue('SELECT id FROM produktion WHERE auftragid = ? LIMIT 1', [(int)$id]);
     if($produktionsId > 0){
       $this->app->Tpl->Set(
         'VORPRODUKTIONPROTOKOLL',
@@ -3437,7 +3437,7 @@ class Auftrag extends GenAuftrag
         .($schreibschutz?' readonly ':' onchange="saveinternebemerkung_'.$id.'('.$id.');" ').'>'
         .str_replace(
           '"','&quot;',
-          $this->app->DB->Select("SELECT internebemerkung FROM auftrag WHERE id = '$id'")
+          $this->app->DatabaseService->selectValue('SELECT internebemerkung FROM auftrag WHERE id = ?', [(int)$id])
         )
         .'</textarea>
       </div>
@@ -3483,7 +3483,8 @@ class Auftrag extends GenAuftrag
 
   function AuftragRechnungsLieferadresse($auftragid)
   {
-    $data = $this->app->DB->SelectArr("SELECT * FROM auftrag WHERE id='$auftragid' LIMIT 1");
+    $data = $this->app->DatabaseService->select('SELECT * FROM auftrag WHERE id = ? LIMIT 1', [(int)$auftragid]);
+    $data = empty($data) ? [] : $data;
 
     foreach($data[0] as $key=>$value)
     {
@@ -3498,10 +3499,10 @@ class Auftrag extends GenAuftrag
 
     // wenn abweichende rechnungsadresse bei kunden aktiv ist dann diese verwenden
 
-    $abweichende = $this->app->DB->Select("SELECT abweichende_rechnungsadresse FROM adresse WHERE id='".$data[0]['adresse']."' LIMIT 1");
-    if($abweichende=="1") 
+    $abweichende = $this->app->DatabaseService->selectValue('SELECT abweichende_rechnungsadresse FROM adresse WHERE id = ? LIMIT 1', [(int)$data[0]['adresse']]);
+    if($abweichende=="1")
     {
-      $adresse_data = $this->app->DB->SelectArr("SELECT * FROM adresse WHERE id='".$data[0]['adresse']."' LIMIT 1");
+      $adresse_data = $this->app->DatabaseService->select('SELECT * FROM adresse WHERE id = ? LIMIT 1', [(int)$data[0]['adresse']]);
 
       foreach($adresse_data[0] as $key=>$value)
       {
@@ -3654,7 +3655,7 @@ class Auftrag extends GenAuftrag
     $anzahl_artikel = $this->app->DB->Select("SELECT id FROM auftrag_position WHERE auftrag=$id LIMIT 1");
     if($anzahl_artikel <= 0)
     {
-      $belegnr = $this->app->DB->Select("SELECT if(belegnr = '','ENTWURF',belegnr) FROM auftrag WHERE id = '$id' LIMIT 1");
+      $belegnr = $this->app->DatabaseService->selectValue("SELECT if(belegnr = '','ENTWURF',belegnr) FROM auftrag WHERE id = ? LIMIT 1", [(int)$id]);
       $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Der Auftrag $belegnr kann nicht weitergefuehrt werden, da keine Artikel gebucht sind!</div>  ");
       $this->app->Location->execute('index.php?module=auftrag&action=edit&id='.$id.'&msg='.$msg);
     }
@@ -3672,7 +3673,7 @@ class Auftrag extends GenAuftrag
     $justStorage = $this->app->Secure->GetPOST('just_strorage');
     $this->app->User->SetParameter('proforma_just_storage', (int)$justStorage);
     $id = $this->app->Secure->GetPOST('elementid');
-    $status = $this->app->DB->Select("SELECT status FROM auftrag WHERE id=$id");
+    $status = $this->app->DatabaseService->selectValue('SELECT status FROM auftrag WHERE id = ?', [(int)$id]);
     if($status!=='angelegt') {
       /** @var Proformarechnung $obj */
       $obj = $this->app->loadModule('proformarechnung');
@@ -3882,7 +3883,7 @@ class Auftrag extends GenAuftrag
   {
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
-      $this->app->DB->Update("UPDATE auftrag SET kreditlimit_freigabe='1' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->execute('UPDATE auftrag SET kreditlimit_freigabe = 1 WHERE id = ? LIMIT 1', [(int)$id]);
 
       $this->app->erp->AuftragProtokoll($id, 'Kreditlimit manuell freigegeben');
 

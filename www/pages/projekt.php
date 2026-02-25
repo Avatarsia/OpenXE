@@ -748,8 +748,8 @@ class Projekt extends GenProjekt {
   {
     $id = (int)$this->app->Secure->GetGET('id');
 
-    $aufgabe = $this->app->erp->CreateAufgabe(0,"");
-    $this->app->DB->Update("UPDATE aufgabe SET projekt='$id' WHERE id='$aufgabe'");
+    $aufgabe = (int)$this->app->erp->CreateAufgabe(0,"");
+    $this->app->DatabaseService->execute("UPDATE aufgabe SET projekt = ? WHERE id = ?", [$id, $aufgabe]);
     $this->app->Location->execute('index.php?module=aufgaben&action=edit&id='.$aufgabe);
   }
 
@@ -781,11 +781,11 @@ class Projekt extends GenProjekt {
   function ProjektMitgliederDelete()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $projekt = (int)$this->app->DB->Select("SELECT projekt FROM adresse_rolle WHERE id = '$id' LIMIT 1");
-    $adresse = (int)$this->app->DB->Select("SELECT adresse FROM adresse_rolle WHERE id = '$id' LIMIT 1");
+    $projekt = (int)$this->app->DatabaseService->selectValue("SELECT projekt FROM adresse_rolle WHERE id = ? LIMIT 1", [$id]);
+    $adresse = (int)$this->app->DatabaseService->selectValue("SELECT adresse FROM adresse_rolle WHERE id = ? LIMIT 1", [$id]);
     if($projekt && $adresse && $this->app->erp->UserProjektRecht($projekt))
     {
-      $this->app->DB->Update("UPDATE adresse_rolle SET bis = DATE_SUB(curdate(),INTERVAL 1 DAY) WHERE objekt like 'Projekt' AND id = '$id' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE adresse_rolle SET bis = DATE_SUB(curdate(), INTERVAL 1 DAY) WHERE objekt LIKE 'Projekt' AND id = ? LIMIT 1", [$id]);
     }
     $this->app->Location->execute('index.php?module=projekt&action=mitglieder&id='.$projekt);
   }
@@ -809,13 +809,13 @@ class Projekt extends GenProjekt {
       $rollen = array('Kunde','Mitarbeiter','Mitglied','Lieferant');//'Projektleiter','Lieferant','Externer Mitarbeiter');
       if($adresse && in_array($rolle, $rollen))
       {
-        $check = $this->app->DB->Select("SELECT id FROM adresse_rolle WHERE adresse = '$adresse' AND projekt = '$id' AND objekt like 'Projekt' AND subjekt LIKE '$rolle' LIMIT 1");
+        $check = (int)$this->app->DatabaseService->selectValue("SELECT id FROM adresse_rolle WHERE adresse = ? AND projekt = ? AND objekt LIKE 'Projekt' AND subjekt LIKE ? LIMIT 1", [$adresse, $id, $rolle]);
         if($check)
         {
-          $this->app->DB->Update("UPDATE adresse_rolle SET von = curdate() WHERE id = '$check' AND von > curdate() LIMIT 1");
-          $this->app->DB->Update("UPDATE adresse_rolle SET bis = '0000-00-00' WHERE id = '$check' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE adresse_rolle SET von = curdate() WHERE id = ? AND von > curdate() LIMIT 1", [$check]);
+          $this->app->DatabaseService->execute("UPDATE adresse_rolle SET bis = '0000-00-00' WHERE id = ? LIMIT 1", [$check]);
         }else{
-          $this->app->DB->Insert("INSERT INTO adresse_rolle (adresse, objekt, subjekt, projekt, praedikat, von, bis, parameter) VALUES ('$adresse','Projekt','$rolle','$id','von',now(),'0000-00-00','$id')");
+          $this->app->DatabaseService->execute("INSERT INTO adresse_rolle (adresse, objekt, subjekt, projekt, praedikat, von, bis, parameter) VALUES (?, 'Projekt', ?, ?, 'von', now(), '0000-00-00', ?)", [$adresse, $rolle, $id, $id]);
         }
         $this->app->Tpl->Add('MESSAGE','<div class="info">Rolle '.$rolle.' angelegt</div>');
       }
@@ -1168,14 +1168,13 @@ class Projekt extends GenProjekt {
 
   function ProjektDelnumber()
   {
-    $id = $this->app->Secure->GetGET("id");
+    $id = (int)$this->app->Secure->GetGET("id");
     $nummer = $this->app->Secure->GetGET("nummer");
     $cmd = $this->app->Secure->GetGET("cmd");
-    $projekt = $this->app->DB->SelectArr("SELECT * from projekt where id = '$id' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectRow("SELECT * FROM projekt WHERE id = ? LIMIT 1", [$id]);
     if($projekt)
     {
-      $projekt = reset($projekt);
-      if(isset($projekt['next_'.$cmd]))$this->app->DB->Update("UPDATE projekt set ".'next_'.$cmd."='' where id = '$id'");
+      if(isset($projekt['next_'.$cmd])) $this->app->DatabaseService->execute("UPDATE projekt SET `next_{$cmd}` = '' WHERE id = ? LIMIT 1", [$id]);
 
     }
     $this->app->Location->execute('index.php?module=projekt&action=edit&id='.$id.'#tabs-4');
@@ -1441,10 +1440,10 @@ class Projekt extends GenProjekt {
   function ProjektDelete()
   {
     $ref = $_SERVER['HTTP_REFERER'];
-    $id = $this->app->Secure->GetGET('id');
-    if(is_numeric($id) && $id > 0) {
-      $this->app->DB->Delete("DELETE FROM projekt WHERE id='$id' LIMIT 1");
-      $this->app->DB->Delete("DELETE FROM geschaeftsbrief_vorlagen WHERE projekt='$id'");
+    $id = (int)$this->app->Secure->GetGET('id');
+    if($id > 0) {
+      $this->app->DatabaseService->execute("DELETE FROM projekt WHERE id = ? LIMIT 1", [$id]);
+      $this->app->DatabaseService->execute("DELETE FROM geschaeftsbrief_vorlagen WHERE projekt = ?", [$id]);
     }
     $this->app->Location->execute($ref);
   }
@@ -1901,7 +1900,7 @@ class Projekt extends GenProjekt {
 
       $kundennummer = strstr($kunde,' ',true);
       $mitarbeiternummer = strstr($verantwortlicher,' ',true);
-      $kundeid = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer!='' AND kundennummer='$kundennummer' AND geloescht!=1 LIMIT 1");
+      $kundeid = (int)$this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer != '' AND kundennummer = ? AND geloescht != 1 LIMIT 1", [$kundennummer]);
       $verantwortlicherid = $mitarbeiternummer;//$this->app->DB->Select("SELECT id FROM adresse WHERE mitarbeiternummer!='' AND mitarbeiternummer='$mitarbeiternummer' AND geloescht!=1 LIMIT 1");
 
       $allowed = "/[^a-zA-Z0-9._-]/";
@@ -1911,7 +1910,7 @@ class Projekt extends GenProjekt {
       $error = false;
 
       // pruefe ob es die Abzuerung schon gibt
-      $checkprojekt = $this->app->DB->Select("SELECT COUNT(id) FROM projekt WHERE abkuerzung='".$this->app->Secure->POST["abkuerzung"]."' AND abkuerzung!='' AND id!='$id' "); 
+      $checkprojekt = (int)$this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM projekt WHERE abkuerzung = ? AND abkuerzung != '' AND id != ?", [$this->app->Secure->POST["abkuerzung"], $id]);
       if($checkprojekt > 0)
       {
         $checkprojekt++;
@@ -1930,7 +1929,7 @@ class Projekt extends GenProjekt {
       }
 
       $this->app->FormHandler->FormUpdateDatabase("projekt",$id);
-      $this->app->DB->Update("UPDATE projekt SET kunde='$kundeid', verantwortlicher='$verantwortlicherid', uebergeordnetes_projekt='$uebergeordnetes_projekt' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE projekt SET kunde = ?, verantwortlicher = ?, uebergeordnetes_projekt = ? WHERE id = ? LIMIT 1", [$kundeid, $verantwortlicherid, $uebergeordnetes_projekt, $id]);
       if($msg!="")
       {
         header("Location: index.php?module=projekt&action=uebersicht&id=$id&msg=$msg");
@@ -2547,7 +2546,7 @@ class Projekt extends GenProjekt {
     }
     $checkabkuerzung = 0;
     if($typ !== 'fortlaufend') {
-      $checkabkuerzung = $this->app->DB->Select("SELECT `id` FROM `projekt` WHERE `abkuerzung` = '$abkuerzung' LIMIT 1");
+      $checkabkuerzung = (int)$this->app->DatabaseService->selectValue("SELECT `id` FROM `projekt` WHERE `abkuerzung` = ? LIMIT 1", [$abkuerzung]);
     }
     if($checkabkuerzung > 0 && $this->app->Secure->GetPOST('typ')==='manuell') {
       $error[] = 'Abkürzung schon vorhanden. Bitte eine andere wählen.';
@@ -2758,7 +2757,7 @@ class Projekt extends GenProjekt {
     // pruefe ob es abkuerzung schon gibt
 
     if($isSaveForm) {
-      $checkabkuerzung = $this->app->DB->Select("SELECT p.id FROM `projekt` AS `p` WHERE p.abkuerzung = '$abkuerzung' LIMIT 1");
+      $checkabkuerzung = (int)$this->app->DatabaseService->selectValue("SELECT p.id FROM `projekt` AS `p` WHERE p.abkuerzung = ? LIMIT 1", [$abkuerzung]);
 
       if($checkabkuerzung > 0 && $this->app->Secure->GetPOST('typ')==='manuell'){
         $error[] = 'Abkürzung schon vorhanden. Bitte eine andere wählen.';
@@ -2874,22 +2873,30 @@ class Projekt extends GenProjekt {
     if($id > 0) {
       $check = $this->app->erp->CopyProjekt($id);
       if($check > 0){
-        $this->app->DB->Update(
-          "UPDATE `projekt` 
-          SET 
-            `name` = '" . $data['name'] . "',
-            `abkuerzung` = '" . $data['abkuerzung'] . "',
-            `kunde` = '" . $data['kunde'] . "',
-            `verantwortlicher` = '" . $data['verantwortlicher'] . "',
-            `uebergeordnetes_projekt` = '" . $data['uebergeordnetes_projekt'] . "',            
-            `beschreibung` = '" . $data['beschreibung'] . "',
-            `status` = '" . $data['status'] . "' 
-          WHERE `id` = '$check' 
-          LIMIT 1"
+        $this->app->DatabaseService->execute(
+          "UPDATE `projekt`
+          SET
+            `name` = ?,
+            `abkuerzung` = ?,
+            `kunde` = ?,
+            `verantwortlicher` = ?,
+            `beschreibung` = ?,
+            `status` = ?
+          WHERE `id` = ?
+          LIMIT 1",
+          [
+            $data['name'],
+            $data['abkuerzung'],
+            $data['kunde'],
+            $data['verantwortlicher'],
+            $data['beschreibung'],
+            $data['status'],
+            $check,
+          ]
         );
         $this->addUserToProjectToUserAddressRole($check);
         if($this->app->erp->Firmendaten('projektoeffentlich')) {
-          $this->app->DB->Update("UPDATE projekt SET oeffentlich = 1 WHERE id = '$check' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE projekt SET oeffentlich = 1 WHERE id = ? LIMIT 1", [(int)$check]);
         }
       }
     }
@@ -3101,17 +3108,17 @@ class Projekt extends GenProjekt {
   function ProjektArbeitspaketEditPopup()
   {
     //$frame = $this->app->Secure->GetGET("frame");
-    $id = $this->app->Secure->GetGET("id");
-    $sid = $this->app->Secure->GetGET("sid");
+    $id = (int)$this->app->Secure->GetGET("id");
+    $sid = (int)$this->app->Secure->GetGET("sid");
     $this->app->Tpl->Set('OPENDISABLE',"<!--");
     $this->app->Tpl->Set('CLOSEDISABLE',"-->");
 
 
-    $sid = $this->app->DB->Select("SELECT projekt FROM arbeitspaket WHERE id='$id' LIMIT 1");
+    $sid = (int)$this->app->DatabaseService->selectValue("SELECT projekt FROM arbeitspaket WHERE id = ? LIMIT 1", [$id]);
     //    $this->ProjektMenu($sid);
 
-    $abk= $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='$sid' LIMIT 1");
-    $name= $this->app->DB->Select("SELECT name FROM projekt WHERE id='$sid' LIMIT 1");
+    $abk = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = ? LIMIT 1", [$sid]);
+    $name = $this->app->DatabaseService->selectValue("SELECT name FROM projekt WHERE id = ? LIMIT 1", [$sid]);
 
 
 
@@ -3138,10 +3145,10 @@ class Projekt extends GenProjekt {
   function ProjektArbeitspaketDisable()
   {
     //   $this->ArtikelMenu();
-    $id = $this->app->Secure->GetGET("id");
+    $id = (int)$this->app->Secure->GetGET("id");
 
-    $sid = $this->app->DB->Select("SELECT projekt FROM arbeitspaket WHERE id='$id' LIMIT 1");
-    $this->app->DB->Update("UPDATE arbeitspaket SET abgenommen=1,abgenommen_von='".$this->app->User->GetID()."' WHERE id='$id' LIMIT 1");
+    $sid = (int)$this->app->DatabaseService->selectValue("SELECT projekt FROM arbeitspaket WHERE id = ? LIMIT 1", [$id]);
+    $this->app->DatabaseService->execute("UPDATE arbeitspaket SET abgenommen = 1, abgenommen_von = ? WHERE id = ? LIMIT 1", [(int)$this->app->User->GetID(), $id]);
     header("Location: index.php?module=projekt&action=arbeitspaket&id=".$sid);
     exit;
 
@@ -3163,8 +3170,8 @@ class Projekt extends GenProjekt {
   function ProjektArbeitspaketDelete()
   {
     //    $this->ArtikelMenu();
-    $id = $this->app->Secure->GetGET("id");
-    $sid = $this->app->DB->Select("SELECT projekt FROM arbeitspaket WHERE id='$id' LIMIT 1");
+    $id = (int)$this->app->Secure->GetGET("id");
+    $sid = (int)$this->app->DatabaseService->selectValue("SELECT projekt FROM arbeitspaket WHERE id = ? LIMIT 1", [$id]);
     $this->DeleteArbeitspaket($id);
     header("Location: index.php?module=projekt&action=arbeitspaket&id=".$sid);
     exit;
@@ -3173,13 +3180,13 @@ class Projekt extends GenProjekt {
 
   function ProjektArbeitspaketCopy()
   {
-    $id = $this->app->Secure->GetGET("id");
+    $id = (int)$this->app->Secure->GetGET("id");
 
-    $id = $this->app->DB->MysqlCopyRow("arbeitspaket","id",$id);
-    $this->app->DB->Update("UPDATE arbeitspaket SET geloescht='0', abgenommen='0', abgenommen_von='0', abgenommen_bemerkung='' WHERE id='$id' LIMIT 1");
+    $id = (int)$this->app->DB->MysqlCopyRow("arbeitspaket","id",$id);
+    $this->app->DatabaseService->execute("UPDATE arbeitspaket SET geloescht = 0, abgenommen = 0, abgenommen_von = 0, abgenommen_bemerkung = '' WHERE id = ? LIMIT 1", [$id]);
 
     //$this->app->DB->Update("UPDATE einkaufspreise SET geloescht='1' WHERE id='$id' LIMIT 1");
-    $sid = $this->app->DB->Select("SELECT projekt FROM arbeitspaket WHERE id='$id' LIMIT 1");
+    $sid = (int)$this->app->DatabaseService->selectValue("SELECT projekt FROM arbeitspaket WHERE id = ? LIMIT 1", [$id]);
     header("Location: index.php?module=projekt&action=arbeitspaket&id=".$sid);
     exit;
   }
@@ -3222,36 +3229,42 @@ class Projekt extends GenProjekt {
 
       $adresse = trim($adresse);
       $rest = explode(" ",$adresse);
-      $rest = $rest[0];
-      $adresse =  $this->app->DB->Select("SELECT id FROM adresse WHERE id='$rest' AND geloescht=0 LIMIT 1");
+      $rest = (int)$rest[0];
+      $adresse = (int)$this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE id = ? AND geloescht = 0 LIMIT 1", [$rest]);
 
       $adresseintern = trim($adresseintern);
       $rest = explode(" ",$adresseintern);
-      $rest = $rest[0];
-      $adresseintern =  $this->app->DB->Select("SELECT id FROM adresse WHERE id='$rest' AND geloescht=0 LIMIT 1");
+      $rest = (int)$rest[0];
+      $adresseintern = (int)$this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE id = ? AND geloescht = 0 LIMIT 1", [$rest]);
 
       $projekt = trim($projekt);
-      $projekt =  $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='$projekt' AND abkuerzung!='' LIMIT 1");
+      $projekt = (int)$this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = ? AND abkuerzung != '' LIMIT 1", [$projekt]);
       if($mode=="new") {
-        $this->app->DB->Insert("INSERT INTO kalender_event (ort,bezeichnung,beschreibung, von, bis, allDay, color, public,adresse,adresseintern,angelegtvon,erinnerung,projekt,typ)
-            VALUES ('$ort','$titel', '$beschreibung','$von_datum', '$bis_datum', '$allday', '$color', '$public','$adresse','$adresseintern','".$this->app->User->GetAdresse()."','$erinnerung','$projekt','meilenstein')");
+        $this->app->DatabaseService->execute(
+          "INSERT INTO kalender_event (ort, bezeichnung, beschreibung, von, bis, allDay, color, public, adresse, adresseintern, angelegtvon, erinnerung, projekt, typ)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'meilenstein')",
+          [$ort, $titel, $beschreibung, $von_datum, $bis_datum, $allday, $color, $public, $adresse, $adresseintern, (int)$this->app->User->GetAdresse(), $erinnerung, $projekt]
+        );
         $event = $this->app->DB->GetInsertID();
 
         $calendarActionType = 'added';
         $this->app->erp->RunHook('kalender_event_hook', 2, $event, $calendarActionType);
       }elseif($mode == "edit")
       {
-        
-        $check = $this->app->DB->Select("SELECT id FROM kalender_event WHERE  id='$eventid' AND projekt = '$id' AND typ = 'meilenstein' LIMIT 1");
+        $eventid = (int)$eventid;
+        $check = (int)$this->app->DatabaseService->selectValue("SELECT id FROM kalender_event WHERE id = ? AND projekt = ? AND typ = 'meilenstein' LIMIT 1", [$eventid, $id]);
         if($check)
         {
-          $this->app->DB->Update("UPDATE kalender_event SET ort='$ort',bezeichnung='$titel', beschreibung='$beschreibung',von='$von_datum', bis='$bis_datum',
-              allDay='$allday', color='$color', public='$public',adresse='$adresse',adresseintern='$adresseintern',erinnerung='$erinnerung' WHERE id='$eventid' LIMIT 1");
+          $this->app->DatabaseService->execute(
+            "UPDATE kalender_event SET ort = ?, bezeichnung = ?, beschreibung = ?, von = ?, bis = ?,
+              allDay = ?, color = ?, public = ?, adresse = ?, adresseintern = ?, erinnerung = ? WHERE id = ? LIMIT 1",
+            [$ort, $titel, $beschreibung, $von_datum, $bis_datum, $allday, $color, $public, $adresse, $adresseintern, $erinnerung, $eventid]
+          );
 
           $calendarActionType = 'modified';
           $this->app->erp->RunHook('kalender_event_hook', 2, $eventid, $calendarActionType);
 
-          $this->app->DB->Delete("DELETE FROM kalender_user WHERE event='$eventid'");
+          $this->app->DatabaseService->execute("DELETE FROM kalender_user WHERE event = ?", [$eventid]);
           $event = $eventid;
         }else{
           $mode = "";
@@ -3265,7 +3278,7 @@ class Projekt extends GenProjekt {
       // Schreibe Personen
       if(is_numeric($event) && is_array($personen) && (!empty($personen)?count($personen):0) && $mode!="delete" && $mode != "") {
         for($p=0;$p<(!empty($personen)?count($personen):0);$p++)
-          $this->app->DB->Insert("INSERT INTO kalender_user (event, userid) VALUES ('$event', '{$personen[$p]}')");
+          $this->app->DatabaseService->execute("INSERT INTO kalender_user (event, userid) VALUES (?, ?)", [(int)$event, (int)$personen[$p]]);
       }
     }
     
@@ -3411,7 +3424,7 @@ class Projekt extends GenProjekt {
   function ProjektEdit()
   {
     $this->ProjektMenu();
-    $id = $this->app->Secure->GetGET("id");
+    $id = (int)$this->app->Secure->GetGET("id");
 
     $cmd = $this->app->Secure->GetPOST("cmd");
     $mode = $this->app->Secure->GetPOST("mode");
@@ -3432,12 +3445,12 @@ class Projekt extends GenProjekt {
     $this->app->Secure->POST["abkuerzung"]=substr(strtoupper($this->app->Secure->POST["abkuerzung"]),0,20);
 
 
-    $abkuerzung = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='$id' LIMIT 1");
+    $abkuerzung = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = ? LIMIT 1", [$id]);
     if($abkuerzung=="")
     {
       $tmp_abkuerzung = $this->app->DB->Select("SELECT MAX(abkuerzung) FROM projekt");
       $tmp_abkuerzung = $this->app->erp->CalcNextNummer($tmp_abkuerzung);
-      $this->app->DB->Update("UPDATE projekt SET abkuerzung='$tmp_abkuerzung' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE projekt SET abkuerzung = ? WHERE id = ? LIMIT 1", [$tmp_abkuerzung, $id]);
     }
 
     parent::ProjektEdit();
@@ -3634,8 +3647,10 @@ class Projekt extends GenProjekt {
   function ProjektBriefPreview($type = '', $id = '', $json = true) {
     if(!$type)$type = $this->app->Secure->GetGET('type');
     if(!$id)$id = $this->app->Secure->GetGET('id');
+    $id = (int)$id;
 
     $query = '';
+    $queryParams = [];
     if ($type) {
       switch ($type) {
         case 'dokumente':
@@ -3648,8 +3663,9 @@ class Projekt extends GenProjekt {
               FROM
               dokumente
               WHERE
-              id = ' . $id . '
+              id = ?
               ';
+          $queryParams[] = $id;
           break;
         case 'dokumente_send':
           $query .= '
@@ -3661,8 +3677,9 @@ class Projekt extends GenProjekt {
               FROM
               dokumente_send
               WHERE
-              id = ' . $id . '
+              id = ?
               ';
+          $queryParams[] = $id;
           break;
         case 'wiedervorlage':
           $query .= '
@@ -3677,8 +3694,9 @@ class Projekt extends GenProjekt {
               FROM
               wiedervorlage
               WHERE
-              id = ' . $id . '
+              id = ?
               ';
+          $queryParams[] = $id;
           break;
         case 'kalender':
           $query .= '
@@ -3696,14 +3714,15 @@ class Projekt extends GenProjekt {
               FROM
               kalender_event
               WHERE
-              id = ' . $id . '
+              id = ?
               ';
+          $queryParams[] = $id;
           break;
       }
 
     }
 
-    $res = $this->app->DB->SelectArr($query);
+    $res = !empty($query) ? $this->app->DatabaseService->select($query, $queryParams) : [];
     if ($res) {
       $res = reset($res);
       /*
@@ -3724,10 +3743,10 @@ class Projekt extends GenProjekt {
       //$ausg = "<h2>".$res['datum'].' '.$res['betreff']."</h2>".nl2br($res['content']);
       if($res['content']=="") $res['content']="Kein Inhalt vorhanden";
 
-      if($this->app->DB->Select("SELECT COUNT(id) FROM datei_stichwoerter ds WHERE ds.subjekt='anhang' AND ds.objekt='dokument' AND ds.parameter='$id'") > 0 && $this->app->erp->RechteVorhanden("dateien","send"))
+      if((int)$this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM datei_stichwoerter ds WHERE ds.subjekt = 'anhang' AND ds.objekt = 'dokument' AND ds.parameter = ?", [$id]) > 0 && $this->app->erp->RechteVorhanden("dateien","send"))
       {
         $table = new EasyTable($this->app);
-        $table->Query("SELECT d.titel,ds.id FROM datei_stichwoerter ds LEFT JOIN datei d ON d.id=ds.datei WHERE ds.subjekt='anhang' AND ds.objekt='dokument' AND ds.parameter='$id' ORDER by ds.sort");
+        $table->Query("SELECT d.titel,ds.id FROM datei_stichwoerter ds LEFT JOIN datei d ON d.id=ds.datei WHERE ds.subjekt='anhang' AND ds.objekt='dokument' AND ds.parameter='" . (int)$id . "' ORDER by ds.sort");
         $res['content'] .= $table->DisplayNew('return',"<a href=\"index.php?module=dateien&action=send&id=%value%\"><img src=\"./themes/new/images/download.svg\"></a>");
       }
 
