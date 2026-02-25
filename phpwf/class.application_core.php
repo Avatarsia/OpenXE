@@ -39,6 +39,7 @@ use Xentral\Core\LegacyConfig\ConfigLoader;
  * @property Location $Location
  * @property DatabaseUpgrade $DatabaseUpgrade
  * @property DB $DB
+ * @property \Xentral\Services\DatabaseService $DatabaseService
  */
 #[AllowDynamicProperties]
 class ApplicationCore
@@ -165,6 +166,10 @@ class ApplicationCore
     if ($value === 'DB') {
       $this->DB = new DB($this->Conf->WFdbhost, $this->Conf->WFdbname, $this->Conf->WFdbuser, $this->Conf->WFdbpass, $this, $this->Conf->WFdbport);
       return $this->DB;
+    }
+    if ($value === 'DatabaseService') {
+      $this->DatabaseService = new \Xentral\Services\DatabaseService($this->DB);
+      return $this->DatabaseService;
     }
   }
 

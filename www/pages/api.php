@@ -3485,13 +3485,17 @@ XML;
     $typen = $this->getTabellen();
     $belege = $this->getBelege();
     if(in_array($typ, $typen)) {
-      $elemente = $this->app->DB->SelectArr(
-        "SELECT t.*, m.id_ext ".($typ==='bestellung'?",adr.kundennummerlieferant":'')." 
-        FROM `$typ` AS `t` ".($typ=='bestellung'?" 
-        LEFT JOIN `adresse` AS `adr` ON t.adresse = adr.id ":"")." 
-        LEFT JOIN `api_mapping` AS `m` ON m.api = '".$this->api_id."' AND m.tabelle = '$typ' AND m.id_int = t.id 
-        WHERE t.id = '".($id)."' 
-        LIMIT 1"
+      // [SECURITY] Table name validated via in_array($typ, $typen) whitelist above; id and api_id use ? params
+      $this->app->DatabaseService->validateIdentifier($typ);
+      $bestellungJoin = $typ === 'bestellung' ? ',adr.kundennummerlieferant' : '';
+      $bestellungLeftJoin = $typ === 'bestellung' ? ' LEFT JOIN `adresse` AS `adr` ON t.adresse = adr.id ' : '';
+      $elemente = $this->app->DatabaseService->select(
+        "SELECT t.*, m.id_ext {$bestellungJoin}
+        FROM `{$typ}` AS `t` {$bestellungLeftJoin}
+        LEFT JOIN `api_mapping` AS `m` ON m.api = ? AND m.tabelle = ? AND m.id_int = t.id
+        WHERE t.id = ?
+        LIMIT 1",
+        [$this->api_id, $typ, (int)$id]
       );
       if($elemente) {
         $this->AddToXMLObj($xml, $typ,$typ.'_list', $elemente, $n, $erg);
@@ -3499,10 +3503,18 @@ XML;
     }
     elseif(in_array($typ, $belege)) {
       $typposition = $typ.'_position';
-      $elemente = $this->app->DB->SelectArr("SELECT t.*, m.id_ext FROM $typ t LEFT JOIN api_mapping m ON m.api = '".$this->api_id."' AND m.tabelle = '$typ' AND m.id_int = t.id WHERE t.id = '".($id)."' LIMIT 1");
+      // [SECURITY] Table name validated via in_array($typ, $belege) whitelist above; values use ? params
+      $this->app->DatabaseService->validateIdentifier($typ);
+      $elemente = $this->app->DatabaseService->select(
+        "SELECT t.*, m.id_ext FROM `{$typ}` t LEFT JOIN api_mapping m ON m.api = ? AND m.tabelle = ? AND m.id_int = t.id WHERE t.id = ? LIMIT 1",
+        [$this->api_id, $typ, (int)$id]
+      );
 
       if($elemente) {
-        $elemente[0]['anzahluebertragungen'] = 1+(int)$this->app->DB->Select("SELECT anzahl_uebertragen FROM api_request WHERE uebertragung_account = '".$this->uebertragung_account."' and typ = '$typ' AND parameter1 = '$id' LIMIT 1");
+        $elemente[0]['anzahluebertragungen'] = 1+(int)$this->app->DatabaseService->selectValue(
+          "SELECT anzahl_uebertragen FROM api_request WHERE uebertragung_account = ? AND typ = ? AND parameter1 = ? LIMIT 1",
+          [(int)$this->uebertragung_account, $typ, (int)$id]
+        );
         if(isset($parameter['pdf']) && $parameter['pdf'] == 1) {
           $file = $this->GetPDF($typ, $id);
           if(!empty($file)) {
@@ -3731,7 +3743,11 @@ XML;
       }
     }
     elseif($typ === 'versand') {
-      $elemente = $this->app->DB->SelectArr("SELECT t.*, m.id_ext FROM $typ t LEFT JOIN api_mapping m ON m.api = '".$this->api_id."' AND m.tabelle = '$typ' AND m.id_int = t.id WHERE t.id = '".($id)."' LIMIT 1");
+      // [SECURITY] $typ is a literal string 'versand' in this branch; values use ? params
+      $elemente = $this->app->DatabaseService->select(
+        "SELECT t.*, m.id_ext FROM `versand` t LEFT JOIN api_mapping m ON m.api = ? AND m.tabelle = ? AND m.id_int = t.id WHERE t.id = ? LIMIT 1",
+        [$this->api_id, 'versand', (int)$id]
+      );
       if($elemente) {
         $auftragid = $this->app->DB->Select("SELECT auftragid FROM lieferschein WHERE id = '".$elemente[0]['lieferschein']."' LIMIT 1");
         if($auftragid) {
@@ -4225,14 +4241,10 @@ XML;
       $id_ext = (string)$xml->id_ext;
     }
     if($id_ext != '') {
-      $id = (int)$this->app->DB->Select(
-        sprintf(
-          "SELECT id_int 
-          FROM api_mapping 
-          WHERE api = %d AND api != 0 AND tabelle = '%s' AND id_ext = '%s' AND id_int > 0 
-          LIMIT 1",
-          $this->api_id, $typ, $this->app->DB->real_escape_string($id_ext)
-        )
+      // [SECURITY] $id_ext is user-supplied XML data; use ? param to prevent injection
+      $id = (int)$this->app->DatabaseService->selectValue(
+        "SELECT id_int FROM api_mapping WHERE api = ? AND api != 0 AND tabelle = ? AND id_ext = ? AND id_int > 0 LIMIT 1",
+        [(int)$this->api_id, $typ, $id_ext]
       );
       if($id) {
         return $id;
@@ -4240,7 +4252,9 @@ XML;
     }
     if(isset($xml->id) && $typ !== 'artikel' && $typ !== 'auftrag' && $typ !== 'bestellung' && $typ !== 'versand'){
       if(in_array($typ, ['lieferschein', 'retoure','rechnung','gutschrift'])) {
-        $id = (int)$this->app->DB->Select(sprintf('SELECT `id` FROM `%s` WHERE `id` = %d LIMIT 1', $typ, (int)$xml->id));
+        // [SECURITY] $typ validated via in_array whitelist above
+        $this->app->DatabaseService->validateIdentifier($typ);
+        $id = (int)$this->app->DatabaseService->selectValue("SELECT `id` FROM `{$typ}` WHERE `id` = ? LIMIT 1", [(int)$xml->id]);
       }
       else{
         $id = (int)$xml->id;
@@ -4403,7 +4417,12 @@ XML;
       case 'gutschrift':
       case 'angebot':
         if(isset($xml->belegnr) && (string)$xml->belegnr != ''){
-          $id = $this->app->DB->Select("SELECT id FROM $typ WHERE belegnr = '".$this->app->DB->real_escape_string((string)$xml->belegnr)."' LIMIT 1");
+          // [SECURITY] $typ is a known literal string from the switch case; belegnr from XML uses ? param
+          $this->app->DatabaseService->validateIdentifier($typ);
+          $id = $this->app->DatabaseService->selectValue(
+            "SELECT id FROM `{$typ}` WHERE belegnr = ? LIMIT 1",
+            [(string)$xml->belegnr]
+          );
         }
         if(!$id && ($typ === 'lieferschein' || $typ === 'retoure'))
         {
@@ -4431,7 +4450,13 @@ XML;
       case 'angebot_position':
         $_ptyp = str_replace('_position','',$typ);
         if(isset($xml->$_ptyp) && isset($xml->sort)) {
-          $id = $this->app->DB->Select("SELECT id FROM $typ WHERE $_ptyp = '".(int)$xml->$_ptyp."' AND sort = '".(int)$xml->sort."' AND $_ptyp != '0' AND sort != '0' LIMIT 1");
+          // [SECURITY] $typ and $_ptyp are derived from a switch-case whitelist; int-cast XML values
+          $this->app->DatabaseService->validateIdentifier($typ);
+          $this->app->DatabaseService->validateIdentifier($_ptyp);
+          $id = $this->app->DatabaseService->selectValue(
+            "SELECT id FROM `{$typ}` WHERE `{$_ptyp}` = ? AND sort = ? AND `{$_ptyp}` != 0 AND sort != 0 LIMIT 1",
+            [(int)$xml->$_ptyp, (int)$xml->sort]
+          );
           if($id){
             return $id;
           }
@@ -4573,9 +4598,15 @@ XML;
     switch($typ) {
       case 'auftrag':
       case 'angebot':
-        if(!$this->app->DB->Select("SELECT auftrageingang FROM uebertragungen_account WHERE id = '".$uebertragungen_account."' LIMIT 1"))
-        {
-          if(!$this->app->DB->Select("SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = '$uebertragungen_account' AND datei = '".$this->datei_id."' AND status = 'notallowed' AND doctype = '$typ' AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR)  LIMIT 1")){
+        // [SECURITY] $uebertragungen_account and $this->datei_id use ? params; $typ is a switch-case literal
+        if(!$this->app->DatabaseService->selectValue(
+          "SELECT auftrageingang FROM uebertragungen_account WHERE id = ? LIMIT 1",
+          [(int)$uebertragungen_account]
+        )) {
+          if(!$this->app->DatabaseService->selectValue(
+            "SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = ? AND datei = ? AND status = 'notallowed' AND doctype = ? AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR) LIMIT 1",
+            [(int)$uebertragungen_account, (int)$this->datei_id, $typ]
+          )) {
             $obj->AddUbertragungMonitorLog($uebertragungen_account, $this->datei_id, 0, 'not_allowed', ucfirst($typ).'-Eingang ist nicht aktiviert', '', '', '', $typ);
           }
           return false;
@@ -4583,18 +4614,30 @@ XML;
         break;
       case 'bestellung':
       case 'produktion':
-        if(!$this->app->DB->Select("SELECT bestellungeingang FROM uebertragungen_account WHERE id = '".$uebertragungen_account."'  LIMIT 1"))
-        {
-          if(!$this->app->DB->Select("SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = '$uebertragungen_account' AND datei = '".$this->datei_id."' AND status = 'notallowed' AND doctype = '$typ' AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR)  LIMIT 1")){
+        // [SECURITY] $uebertragungen_account and $this->datei_id use ? params; $typ is a switch-case literal
+        if(!$this->app->DatabaseService->selectValue(
+          "SELECT bestellungeingang FROM uebertragungen_account WHERE id = ? LIMIT 1",
+          [(int)$uebertragungen_account]
+        )) {
+          if(!$this->app->DatabaseService->selectValue(
+            "SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = ? AND datei = ? AND status = 'notallowed' AND doctype = ? AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR) LIMIT 1",
+            [(int)$uebertragungen_account, (int)$this->datei_id, $typ]
+          )) {
             $obj->AddUbertragungMonitorLog($uebertragungen_account, $this->datei_id, 0, 'not_allowed', ucfirst($typ).'-Eingang ist nicht aktiviert', '', '', '', $typ);
           }
           return false;
         }
         break;
       case 'lieferschein':
-        if(!$this->app->DB->Select("SELECT trackingeingang FROM uebertragungen_account WHERE id = '".$uebertragungen_account."'  LIMIT 1"))
-        {
-          if(!$this->app->DB->Select("SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = '$uebertragungen_account' AND datei = '".$this->datei_id."' AND status = 'notallowed' AND doctype = '$typ' AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR)  LIMIT 1")){
+        // [SECURITY] $uebertragungen_account and $this->datei_id use ? params; $typ is a switch-case literal
+        if(!$this->app->DatabaseService->selectValue(
+          "SELECT trackingeingang FROM uebertragungen_account WHERE id = ? LIMIT 1",
+          [(int)$uebertragungen_account]
+        )) {
+          if(!$this->app->DatabaseService->selectValue(
+            "SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = ? AND datei = ? AND status = 'notallowed' AND doctype = ? AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR) LIMIT 1",
+            [(int)$uebertragungen_account, (int)$this->datei_id, $typ]
+          )) {
             $obj->AddUbertragungMonitorLog($uebertragungen_account, $this->datei_id, 0, 'not_allowed', 'Tracking-Eingang ist nicht aktiviert', '', '', '', $typ);
           }
           return false;
@@ -6213,7 +6256,12 @@ XML;
       $projekt = $transferAccount['projekt'];
       $createArticleIfNotEmpty = !empty($transferAccount['createarticleifnotexists']);
       $markAsStorageArticle = !empty($transferAccount['createarticleasstoragearticle']);
-      if(!$this->app->DB->Select("SELECT id FROM $typ WHERE shopextid = '".$this->app->DB->real_escape_string(empty($xml->extid)?'':$xml->extid)."' AND projekt = '$projekt' AND shopextid <> ''")
+      // [SECURITY] $typ validated via whitelist in calling context; shopextid and projekt use ? params
+      $this->app->DatabaseService->validateIdentifier($typ);
+      if(!$this->app->DatabaseService->selectValue(
+        "SELECT id FROM `{$typ}` WHERE shopextid = ? AND projekt = ? AND shopextid <> ''",
+        [empty($xml->extid) ? '' : (string)$xml->extid, (int)$projekt]
+      )
         && (!isset($xml->belegnr) || strtoupper($xml->belegnr) == 'NEW' || strtoupper($xml->belegnr) == 'NEU' || !$this->GetFromExtID($typ, $xml->belegnr)))
       {
         $auftragarr = [];
@@ -6560,7 +6608,11 @@ XML;
               if($adresse) {
                 $createname = 'Create'.ucfirst($typ);
                 $auftrag = $this->app->erp->$createname();
-                $belegnr = (string)$this->app->DB->Select("SELECT `belegnr` FROM `$typ` WHERE `id` = '$auftrag' LIMIT 1");
+                // [SECURITY] $typ validated by validateIdentifier call above in this method; $auftrag is int
+                $belegnr = (string)$this->app->DatabaseService->selectValue(
+                  "SELECT `belegnr` FROM `{$typ}` WHERE `id` = ? LIMIT 1",
+                  [(int)$auftrag]
+                );
                 if($belegnr === '' || $belegnr === '0'){
                   $belegnr = $this->app->erp->GetNextNummer($typ,$projekt,$auftrag);
                 }
@@ -6570,11 +6622,10 @@ XML;
                 $standardwertename = 'Load'.ucfirst($typ).'Standardwerte';
                 $this->app->erp->$standardwertename($auftrag, $adresse);
                 if($typ === 'angebot' || $typ === 'auftrag'){
-                  $this->app->DB->Update(
-                    "UPDATE `$typ` 
-                    SET `shopextid` = '" . $this->app->DB->real_escape_string(empty($xml->extid) ? '' : $xml->extid) . "'
-                    WHERE `id` = '$auftrag' 
-                    LIMIT 1"
+                  // [SECURITY] $typ is a literal from the if-condition; shopextid and $auftrag use ? params
+                  $this->app->DatabaseService->execute(
+                    "UPDATE `{$typ}` SET `shopextid` = ? WHERE `id` = ? LIMIT 1",
+                    [empty($xml->extid) ? '' : (string)$xml->extid, (int)$auftrag]
                   );
                 }
                 $auftragarr['belegnr'] = $belegnr;
@@ -6915,14 +6966,22 @@ XML;
         //}
       }else
       {
-        if($this->app->DB->Select("SELECT id FROM $typ WHERE shopextid = '".$this->app->DB->real_escape_string((empty($xml->extid))?'':$xml->extid)."' AND projekt = '$projekt' AND shopextid <> ''"))
+        // [SECURITY] $typ validated earlier in method; shopextid and projekt use ? params
+        if($this->app->DatabaseService->selectValue(
+          "SELECT id FROM `{$typ}` WHERE shopextid = ? AND projekt = ? AND shopextid <> ''",
+          [empty($xml->extid) ? '' : (string)$xml->extid, (int)$projekt]
+        ))
         {
           $element1 = 'Shopextid: '.$xml->extid;
           $obj->AddUbertragungMonitorLog($uebertragungen_account, $this->datei_id, 0, $typ.'_error', ucfirst($typ).' existiert bereits', $this->app->DB->real_escape_string((string)$element1), '', '', $typ, $id);
         }elseif($this->GetFromExtID($typ, $xml->belegnr)){
           if(!empty($obj)){
             $__id = $this->GetFromExtID($typ, $xml->belegnr);
-            $__auftrag = $this->app->DB->Select("SELECT belegnr FROM $typ WHERE id = '$__id' LIMIT 1");
+            // [SECURITY] $typ validated earlier in method; $__id is an int from GetFromExtID()
+            $__auftrag = $this->app->DatabaseService->selectValue(
+              "SELECT belegnr FROM `{$typ}` WHERE id = ? LIMIT 1",
+              [(int)$__id]
+            );
             $element1 = "Belegnr: " . $__auftrag;
             $obj->AddUbertragungMonitorLog($uebertragungen_account, $this->datei_id, 0, $typ . '_error', ucfirst($typ) . ' existiert bereits', $this->app->DB->real_escape_string((string)$element1), '', '', $typ, $id);
           }
@@ -8889,20 +8948,17 @@ XML;
       }
       $adresse = 0;
       if(!empty($xmldata['lieferantennummer'])){
-        $adresse = $this->app->DB->Select(
-          sprintf(
-            "SELECT id FROM adresse WHERE lieferantennummer='%s' AND lieferantennummer <> '' AND IFNULL(geloescht,0) = 0  LIMIT 1",
-            $xmldata['lieferantennummer']
-          )
+        // [SECURITY] $xmldata['lieferantennummer'] is user-supplied XML data; use ? param
+        $adresse = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM adresse WHERE lieferantennummer = ? AND lieferantennummer <> '' AND IFNULL(geloescht,0) = 0 LIMIT 1",
+          [$xmldata['lieferantennummer']]
         );
       }
       if(!$adresse && !empty($xmldata['kundennummerlieferant'])) {
-        $adresse = $this->app->DB->Select(
-          sprintf(
-            "SELECT id FROM adresse 
-          WHERE kundennummer='%s' AND lieferantennummer <> '' AND IFNULL(geloescht,0) = 0  LIMIT 1",
-            $xmldata['kundennummerlieferant']
-          )
+        // [SECURITY] $xmldata['kundennummerlieferant'] is user-supplied XML data; use ? param
+        $adresse = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM adresse WHERE kundennummer = ? AND lieferantennummer <> '' AND IFNULL(geloescht,0) = 0 LIMIT 1",
+          [$xmldata['kundennummerlieferant']]
         );
       }
 
@@ -8910,7 +8966,11 @@ XML;
       if(strtoupper($xmldata['kundennummer']) === 'NEW' || strtoupper($xmldata['kundennummer']) === 'NEU' || $xmldata['kundennummer'] == '' || !isset($xmldata['kundennummer'])){
         $xmldata['kundennummer'] = $this->ApiAdresseCreate(true);
       }
-      $adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='".$xmldata['kundennummer']."' AND kundennummer <> '' LIMIT 1");
+      // [SECURITY] $xmldata['kundennummer'] is user-supplied XML data; use ? param
+      $adresse = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM adresse WHERE kundennummer = ? AND kundennummer <> '' LIMIT 1",
+        [$xmldata['kundennummer']]
+      );
     }
 
     // anlegen der adresse
@@ -8962,7 +9022,12 @@ XML;
         break;
     }
 
-    $xmldata['belegnr'] = (string)$this->app->DB->Select("SELECT belegnr FROM $doctype WHERE id = '$id' LIMIT 1");
+    // [SECURITY] $doctype is whitelisted by in_array check above; $id is int; XML data values use ? params
+    $this->app->DatabaseService->validateIdentifier($doctype);
+    $xmldata['belegnr'] = (string)$this->app->DatabaseService->selectValue(
+      "SELECT belegnr FROM `{$doctype}` WHERE id = ? LIMIT 1",
+      [(int)$id]
+    );
     if($xmldata['belegnr'] === '' || $xmldata['belegnr'] === '0'){$xmldata['belegnr'] = $this->app->erp->GetNextNummer($doctype,$xmldata['projekt'],$id);}
     if($doctype === 'bestellung')
     {
@@ -8971,30 +9036,37 @@ XML;
       $xmldata['lieferantkdrnummer'] = $xmldata['kundennummer'];
     }
     if($doctype==='auftrag'){
-      $this->app->DB->Update("UPDATE $doctype SET lieferantkdrnummer='" . $xmldata['lieferantkdrnummer'] . "' WHERE id='" . $id . "' LIMIT 1");
+      $this->app->DatabaseService->execute(
+        "UPDATE `{$doctype}` SET lieferantkdrnummer = ? WHERE id = ? LIMIT 1",
+        [$xmldata['lieferantkdrnummer'], (int)$id]
+      );
     }
     if($doctype === 'bestellung')
     {
       if(!empty($xmldata['lieferantennummer'])){
-        $this->app->DB->Update("UPDATE $doctype SET lieferantennummer='" . $xmldata['lieferantennummer'] . "' WHERE id='" . $id . "' LIMIT 1");
+        $this->app->DatabaseService->execute(
+          "UPDATE `{$doctype}` SET lieferantennummer = ? WHERE id = ? LIMIT 1",
+          [$xmldata['lieferantennummer'], (int)$id]
+        );
       }
     }else{
-      $this->app->DB->Update("UPDATE $doctype SET kundennummer='" . $xmldata['kundennummer'] . "' WHERE id='" . $id . "' LIMIT 1");
+      $this->app->DatabaseService->execute(
+        "UPDATE `{$doctype}` SET kundennummer = ? WHERE id = ? LIMIT 1",
+        [$xmldata['kundennummer'], (int)$id]
+      );
     }
 
     if($xmldata['shopextid']=='' || $xmldata['shopextid']==0){
       $xmldata['shopextid'] = 1;
     }
     if($xmldata['projekt']==''){
-      $xmldata['projekt'] = $this->app->DB->Select(
-        sprintf(
-          'SELECT pr.abkuerzung 
-          FROM `%s` AS b
-          INNER JOIN adresse AS adr ON b.adresse = adr.id
-          INNER JOIN projekt AS pr ON adr.projekt = pr.id AND pr.geloescht <> 1
-          WHERE b.id = %d',
-          $doctype, $id
-        )
+      $xmldata['projekt'] = $this->app->DatabaseService->selectValue(
+        "SELECT pr.abkuerzung
+        FROM `{$doctype}` AS b
+        INNER JOIN adresse AS adr ON b.adresse = adr.id
+        INNER JOIN projekt AS pr ON adr.projekt = pr.id AND pr.geloescht <> 1
+        WHERE b.id = ?",
+        [(int)$id]
       );
       if($xmldata['projekt']=='' && $doctype === 'auftrag') {
         $xmldata['projekt'] = $this->app->DB->Select(
@@ -9017,11 +9089,18 @@ XML;
       }
     }
 
-    $this->app->DB->Update("UPDATE $doctype SET belegnr='".$xmldata['belegnr']."' WHERE id='".$id."' LIMIT 1");
+    // [SECURITY] $doctype validated above in this method; $id is int; xmldata values use ? params
+    $this->app->DatabaseService->execute(
+      "UPDATE `{$doctype}` SET belegnr = ? WHERE id = ? LIMIT 1",
+      [$xmldata['belegnr'], (int)$id]
+    );
     if(!isset($xmldata['status'])){
       $xmldata['status'] = 'freigegeben';
     }
-    $this->app->DB->Update("UPDATE $doctype SET status='freigegeben' WHERE id='".$id."' AND (status = 'angelegt' OR status = '') LIMIT 1");
+    $this->app->DatabaseService->execute(
+      "UPDATE `{$doctype}` SET status = 'freigegeben' WHERE id = ? AND (status = 'angelegt' OR status = '') LIMIT 1",
+      [(int)$id]
+    );
     $this->ApiBelegEdit(true,$id, $doctype, $xmldata);
     if($intern){
       return $id;
@@ -9197,11 +9276,11 @@ XML;
           return 5;
         }
       }
-      $projectId = $this->app->DB->Select(
-        sprintf(
-          'SELECT projekt FROM `%s` WHERE id = %d LIMIT 1',
-          $doctype, $id
-        )
+      // [SECURITY] $doctype is always a hardcoded literal from callers; validate and use ? for $id
+      $this->app->DatabaseService->validateIdentifier($doctype);
+      $projectId = $this->app->DatabaseService->selectValue(
+        "SELECT projekt FROM `{$doctype}` WHERE id = ? LIMIT 1",
+        [(int)$id]
       );
       $this->app->erp->BriefpapierHintergrunddisable = !$this->app->erp->BriefpapierHintergrunddisable;
       $class = ucfirst($doctype).'PDFCustom';
@@ -9236,7 +9315,8 @@ XML;
       $pdf->$method($id);
       $tmpfile = $pdf->displayTMP();
       $pdf->ArchiviereDocument(1);
-      $this->app->DB->Update(sprintf('UPDATE `%s` SET schreibschutz=1 WHERE id=%d', $doctype, $id));
+      // [SECURITY] $doctype validated above; $id use ? param
+      $this->app->DatabaseService->execute("UPDATE `{$doctype}` SET schreibschutz = 1 WHERE id = ?", [(int)$id]);
       unlink($tmpfile);
       if(!$intern){
         $this->XMLResponse(1, '<id>'.$id.'</id>');
