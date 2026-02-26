@@ -287,7 +287,7 @@ class Welcome
     foreach($user as $vu)
     {
       $u = $vu['id'];
-      $eigenlinks = $this->app->DB->Select("SELECT uk.`value` FROM `userkonfiguration` uk WHERE `name` = 'welcome_links_eigen' AND `user` = '$u'  LIMIT 1");
+      $eigenlinks = $this->app->DatabaseService->selectValue("SELECT uk.`value` FROM `userkonfiguration` uk WHERE `name` = 'welcome_links_eigen' AND `user` = ? LIMIT 1", [(int)$u]);
       $index = 1;
       $check2 = null;
       $check3 = null;
@@ -295,7 +295,7 @@ class Welcome
       {
         for($i = 1; $i <= 8; $i++)
         {
-          $link = $this->app->DB->SelectRow("SELECT uk.`value`, uk.id FROM `userkonfiguration` uk WHERE `name` = 'welcome_linklink".$i."' AND `user` = '$u'  LIMIT 1");
+          $link = $this->app->DatabaseService->selectRow("SELECT uk.`value`, uk.id FROM `userkonfiguration` uk WHERE `name` = ? AND `user` = ? LIMIT 1", ['welcome_linklink'.$i, (int)$u]);
           if(empty($link)) {
             $link = array('id'=>0, 'link'=>'');
           }
@@ -309,39 +309,39 @@ class Welcome
             if($index == $i)$index++;
           }else{
             $check2 = $link['id'];
-            $check3 = $this->app->DB->Select("SELECT uk.id FROM `userkonfiguration` uk WHERE `name` = 'welcome_linkname".$i."' AND `user` = '$u'  LIMIT 1");
+            $check3 = $this->app->DatabaseService->selectValue("SELECT uk.id FROM `userkonfiguration` uk WHERE `name` = ? AND `user` = ? LIMIT 1", ['welcome_linkname'.$i, (int)$u]);
             break;
           }
         }
       }else{
-        $check = $this->app->DB->Select("SELECT id FROM `userkonfiguration` uk WHERE `name` = 'welcome_links_eigen' AND `user` = '$u'  LIMIT 1");
+        $check = $this->app->DatabaseService->selectValue("SELECT id FROM `userkonfiguration` uk WHERE `name` = 'welcome_links_eigen' AND `user` = ? LIMIT 1", [(int)$u]);
         if($check)
         {
-          $this->app->DB->Update("UPDATE `userkonfiguration` SET `value` = '1' WHERE id = '$check' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE `userkonfiguration` SET `value` = '1' WHERE id = ? LIMIT 1", [(int)$check]);
         }else{
-          $this->app->DB->Insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES ('$u', '1', 'welcome_links_eigen')");
+          $this->app->DatabaseService->insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES (?, '1', 'welcome_links_eigen')", [(int)$u]);
         }
-        if(!$this->app->DB->Select("SELECT id FROM `userkonfiguration` WHERE `user` = '$u' AND `name` LIKE 'welcome\_linklink_%'"))
+        if(!$this->app->DatabaseService->selectValue("SELECT id FROM `userkonfiguration` WHERE `user` = ? AND `name` LIKE 'welcome\\_linklink_%'", [(int)$u]))
         {
           $index = 2;
-          $this->app->DB->Insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES ('$u', 'index.php?module=welcome&action=settings', 'welcome_linklink1')");
-          $this->app->DB->Insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES ('$u', 'Eigene Einstellungen', 'welcome_linkname1')");
+          $this->app->DatabaseService->insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES (?, 'index.php?module=welcome&action=settings', 'welcome_linklink1')", [(int)$u]);
+          $this->app->DatabaseService->insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES (?, 'Eigene Einstellungen', 'welcome_linkname1')", [(int)$u]);
         }
       }
       if($index <= 8)
       {
         if($check2)
         {
-          $this->app->DB->Update("UPDATE `userkonfiguration` SET `value` = '".$this->app->DB->real_escape_string($url)."' WHERE id = '$check2' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE `userkonfiguration` SET `value` = ? WHERE id = ? LIMIT 1", [$url, (int)$check2]);
         }else
         {
-          $this->app->DB->Insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES ('$u', '".$this->app->DB->real_escape_string($url)."', 'welcome_linklink".$index."')");
+          $this->app->DatabaseService->insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES (?, ?, ?)", [(int)$u, $url, 'welcome_linklink'.$index]);
         }
         if($check3)
         {
-          $this->app->DB->Update("UPDATE `userkonfiguration` SET `value` = '".$this->app->DB->real_escape_string($bezeichnung)."' WHERE id = '$check3' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE `userkonfiguration` SET `value` = ? WHERE id = ? LIMIT 1", [$bezeichnung, (int)$check3]);
         }else{
-          $this->app->DB->Insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES ('$u', '".$this->app->DB->real_escape_string($bezeichnung)."', 'welcome_linkname".$index."')");
+          $this->app->DatabaseService->insert("INSERT INTO `userkonfiguration` (`user`, `value`, `name`) VALUES (?, ?, ?)", [(int)$u, $bezeichnung, 'welcome_linkname'.$index]);
         }
       }
     }
@@ -552,20 +552,18 @@ class Welcome
     }
 
     echo 'OK';
-    $this->app->DB->Delete("DELETE FROM `adapterbox_log` WHERE `ip`='$ip' OR `seriennummer`='$serial'");
-    $this->app->DB->Insert("INSERT INTO `adapterbox_log` (`id`,`datum`,`ip`,`meldung`,`seriennummer`,`device`)
-        VALUES ('',NOW(),'$ip','Adapterbox connected ($device)','$serial','device')");
+    $this->app->DatabaseService->delete("DELETE FROM `adapterbox_log` WHERE `ip` = ? OR `seriennummer` = ?", [$ip, $serial]);
+    $this->app->DatabaseService->insert("INSERT INTO `adapterbox_log` (`id`,`datum`,`ip`,`meldung`,`seriennummer`,`device`) VALUES ('',NOW(),?,?,?,?)", [$ip, 'Adapterbox connected ('.$device.')', $serial, 'device']);
 
     // check if there is an adapterbox
 
     if($device==='zebra'
       && ($this->app->DB->Select("SELECT COUNT(`id`) FROM `drucker` WHERE `art`=2 AND `anbindung`='adapterbox'")
       ) <= 0 ) {
-      $this->app->DB->Insert(
-        "INSERT INTO `drucker` (`id`,`art`,`anbindung`,`adapterboxseriennummer`,`bezeichnung`,`name`,`aktiv`,`firma`)
-          VALUES ('','2','adapterbox','$serial','Zebra','Etikettendrucker',1,1)"
+      $tmpid = $this->app->DatabaseService->insert(
+        "INSERT INTO `drucker` (`id`,`art`,`anbindung`,`adapterboxseriennummer`,`bezeichnung`,`name`,`aktiv`,`firma`) VALUES ('','2','adapterbox',?,'Zebra','Etikettendrucker',1,1)",
+        [$serial]
       );
-      $tmpid = $this->app->DB->GetInsertID();
 
       $this->app->erp->FirmendatenSet("standardetikettendrucker",$tmpid);
     }
@@ -581,16 +579,16 @@ class Welcome
     if($this->app->erp->Firmendaten('deviceenable')=='1')
     {
       $job = base64_encode(json_encode(array('label'=>base64_encode($xml),'amount'=>$anzahl)));//."<amount>".$anzahl."</amount>");
-      $this->app->DB->Insert(
-        "INSERT INTO `device_jobs` (`id`,`zeitstempel`,`deviceidsource`,`deviceiddest`,`job`,`art`) 
-        VALUES ('',NOW(),'000000000','$serial','$job','labelprinter')"
+      $this->app->DatabaseService->insert(
+        "INSERT INTO `device_jobs` (`id`,`zeitstempel`,`deviceidsource`,`deviceiddest`,`job`,`art`) VALUES ('',NOW(),'000000000',?,?,'labelprinter')",
+        [$serial, $job]
       );
     }	
 
 
     // update ip
     if($ip!=''){
-      $this->app->DB->Update("UPDATE `drucker` SET `adapterboxip`='$ip' WHERE `adapterboxseriennummer`='$serial' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE `drucker` SET `adapterboxip` = ? WHERE `adapterboxseriennummer` = ? LIMIT 1", [$ip, $serial]);
     }
 
     $this->app->erp->ExitWawi();
@@ -773,12 +771,12 @@ class Welcome
 
     $this->app->Tpl->Set('USERNAME',$this->app->User->GetName());
 
-    $tmp = $this->app->DB->SelectArr("SELECT * FROM aufgabe WHERE (adresse='".$this->app->User->GetAdresse()."' OR (initiator='".$this->app->User->GetAdresse()."' AND adresse<=0)) AND startseite='1' AND (status='offen' or status='') AND ((intervall_tage > 0 AND abgabe_bis <=NOW()) OR intervall_tage <=0) ORDER by prio DESC");
+    $tmp = $this->app->DatabaseService->select("SELECT * FROM aufgabe WHERE (adresse = ? OR (initiator = ? AND adresse <= 0)) AND startseite = '1' AND (status = 'offen' OR status = '') AND ((intervall_tage > 0 AND abgabe_bis <= NOW()) OR intervall_tage <= 0) ORDER BY prio DESC", [(int)$this->app->User->GetAdresse(), (int)$this->app->User->GetAdresse()]);
     //TODOFORUSER
     $ctmp = !empty($tmp)?count($tmp):0;
     for($i=0;$i<$ctmp;$i++)
     {
-      $name = $this->app->DB->Select("SELECT name FROM adresse WHERE id='".$tmp[$i]['initiator']."' LIMIT 1");
+      $name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = ? LIMIT 1", [(int)$tmp[$i]['initiator']]);
       $high="";
       if($tmp[$i]['initiator']!=$tmp[$i]['adresse']) {
         $additional = "<br><font style=\"font-size:8pt\">von ".$name."</font>";
@@ -806,7 +804,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       $this->app->Tpl->Add('TODOFORUSER', '<tr><td><center><i>{|Keine Aufgaben f&uuml;r die Startseite|}</i></center></td></tr>');
     }
 
-    $tmp = $this->app->DB->SelectArr("SELECT * FROM aufgabe WHERE initiator='".$this->app->User->GetAdresse()."' AND adresse!='".$this->app->User->GetAdresse()."' AND adresse > 0 AND startseite='1' AND status='offen' AND ((intervall_tage > 0 AND abgabe_bis <=NOW()) OR intervall_tage <=0) ORDER by prio DESC");
+    $tmp = $this->app->DatabaseService->select("SELECT * FROM aufgabe WHERE initiator = ? AND adresse != ? AND adresse > 0 AND startseite = '1' AND status = 'offen' AND ((intervall_tage > 0 AND abgabe_bis <= NOW()) OR intervall_tage <= 0) ORDER BY prio DESC", [(int)$this->app->User->GetAdresse(), (int)$this->app->User->GetAdresse()]);
     $ctmp = !empty($tmp)?count($tmp):0;
 
     if($ctmp > 0){
@@ -816,7 +814,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
     for($i=0;$i<$ctmp;$i++)
     {
-      $name = $this->app->DB->Select("SELECT name FROM adresse WHERE id='".$tmp[$i]['adresse']."' LIMIT 1");
+      $name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = ? LIMIT 1", [(int)$tmp[$i]['adresse']]);
       $high='';
       if($tmp[$i]['prio']=='1') {
         $class='noteit_highprio';
@@ -1127,14 +1125,13 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     if($name!='')
     {
       $personen = $this->app->Secure->GetPOST('personen');
-      $this->app->DB->Insert("INSERT INTO pinwand (id,name,user) VALUES ('','$name','$user')");
-      $pinwand = $this->app->DB->GetInsertID();
+      $pinwand = $this->app->DatabaseService->insert("INSERT INTO pinwand (id,name,user) VALUES ('',?,?)", [$name, (int)$user]);
       $cpersonen = !empty($personen)?count($personen):0;
       for($i=0;$i<=$cpersonen;$i++)
       {
         if($personen[$i] > 0)
         {
-          $this->app->DB->Insert("INSERT INTO pinwand_user (pinwand,user) VALUES ('$pinwand','".$personen[$i]."')");
+          $this->app->DatabaseService->insert("INSERT INTO pinwand_user (pinwand,user) VALUES (?,?)", [(int)$pinwand, (int)$personen[$i]]);
         }
       }
 
@@ -1161,11 +1158,11 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
       $aufgabe =  str_replace('\r\n',' ',$aufgabe);
 
-      $max_z = $this->app->DB->Select("SELECT MAX(note_z) FROM aufgabe WHERE adresse='".$this->app->User->GetAdresse()."' ");
+      $max_z = $this->app->DatabaseService->selectValue("SELECT MAX(note_z) FROM aufgabe WHERE adresse = ?", [(int)$this->app->User->GetAdresse()]);
       $new = true;
       if($aufgabeid)
       {
-        $cuid = $this->app->DB->Select("SELECT id FROM aufgabe WHERE adresse = '".$this->app->User->GetAdresse()."' AND id = ".$aufgabeid." LIMIT 1");
+        $cuid = $this->app->DatabaseService->selectValue("SELECT id FROM aufgabe WHERE adresse = ? AND id = ? LIMIT 1", [(int)$this->app->User->GetAdresse(), $aufgabeid]);
         if($cuid)
         {
           $new = false;
@@ -1190,16 +1187,9 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       $xy = $this->getCoordsForNewTask($id);
       $note_x = $xy['note_x'];
       $note_y = $xy['note_y'];
-      $this->app->DB->Update(
-        "UPDATE aufgabe 
-          SET pinwand='1',
-              pinwand_id='$pinwand', 
-              note_color='$color', 
-              note_z='$max_z',
-              note_x='".$note_x."',
-              note_y='".$note_y."',
-              beschreibung='$beschreibung' 
-          WHERE id='$id' LIMIT 1"
+      $this->app->DatabaseService->update(
+        "UPDATE aufgabe SET pinwand = '1', pinwand_id = ?, note_color = ?, note_z = ?, note_x = ?, note_y = ?, beschreibung = ? WHERE id = ? LIMIT 1",
+        [(int)$pinwand, $color, $max_z, $note_x, $note_y, $beschreibung, (int)$id]
       );
 
       $this->app->Tpl->Set('PAGE', "<script>
@@ -1238,7 +1228,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     $id = $this->app->Secure->GetGET('id');
     $pinwand = $this->app->Secure->GetGET('pinwand');
     if($id > 0){
-      $this->app->DB->Update("DELETE FROM aufgabe WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM aufgabe WHERE id = ? LIMIT 1", [(int)$id]);
     }
     header('Location: index.php?module=welcome&action=pinwand&pinwand='.$pinwand);
     exit;
@@ -1262,7 +1252,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       $x = $this->app->Secure->GetGET('x');
       $y = $this->app->Secure->GetGET('y');
       $z = $this->app->Secure->GetGET('z');
-      $this->app->DB->Update("UPDATE aufgabe SET note_x='$x',note_y='$y',note_z='$z' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE aufgabe SET note_x = ?, note_y = ?, note_z = ? WHERE id = ? LIMIT 1", [$x, $y, $z, (int)$id]);
     }
     exit;
   }
@@ -1282,8 +1272,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
         {
           $w = $this->app->Secure->GetGET('w');
           $h = $this->app->Secure->GetGET('h');
-          $this->app->DB->Update("UPDATE aufgabe SET note_w='".$this->app->DB->real_escape_string($w)."',
-          note_h='".$this->app->DB->real_escape_string($h)."' WHERE id='$id' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE aufgabe SET note_w = ?, note_h = ? WHERE id = ? LIMIT 1", [$w, $h, (int)$id]);
           $result['status']=1;
         } else {
           $result['status']=0;
@@ -1295,8 +1284,8 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       case 'get':
         $id = $this->app->Secure->GetPOST('id');
         $result['id']=$id;
-        $result['beschreibung']=$this->app->DB->Select("SELECT beschreibung FROM aufgabe WHERE id='$id' LIMIT 1");
-        $result['note_color']=$this->app->DB->Select("SELECT note_color FROM aufgabe WHERE id='$id' LIMIT 1");
+        $result['beschreibung']=$this->app->DatabaseService->selectValue("SELECT beschreibung FROM aufgabe WHERE id = ? LIMIT 1", [(int)$id]);
+        $result['note_color']=$this->app->DatabaseService->selectValue("SELECT note_color FROM aufgabe WHERE id = ? LIMIT 1", [(int)$id]);
         $result['status']=1;
         $result['statusText']='';
         echo json_encode($result);
@@ -1312,29 +1301,21 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
         }
         if($id > 0)
         {
-          $this->app->DB->Update("UPDATE aufgabe SET beschreibung='".$this->app->DB->real_escape_string($beschreibung)."',
-          note_color='".$this->app->DB->real_escape_string($note_color)."' WHERE id='$id' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE aufgabe SET beschreibung = ?, note_color = ? WHERE id = ? LIMIT 1", [$beschreibung, $note_color, (int)$id]);
           $result['note_color']=$note_color;
           $result['beschreibung']=$beschreibung;
           $result['status']=1;
         } else {
           $aufgabe = strip_tags(str_replace('<', ' <', $beschreibung));
           $aufgabe = trim(str_replace('  ', ' ', $aufgabe));
-          $max_z = $this->app->DB->Select("SELECT MAX(note_z) FROM aufgabe WHERE adresse='".$this->app->User->GetAdresse()."'");
+          $max_z = $this->app->DatabaseService->selectValue("SELECT MAX(note_z) FROM aufgabe WHERE adresse = ?", [(int)$this->app->User->GetAdresse()]);
           $id = $this->app->erp->CreateAufgabe($this->app->User->GetAdresse(),$aufgabe);
           $xy = $this->getCoordsForNewTask($id);
           $note_x = $xy['note_x'];
           $note_y = $xy['note_y'];
-          $this->app->DB->Update(
-            "UPDATE aufgabe 
-            SET note_color='".$this->app->DB->real_escape_string($note_color)."',
-                beschreibung='".$this->app->DB->real_escape_string($beschreibung)."', 
-                note_z='".$max_z."',
-                note_x='".$note_x."',
-                note_y='".$note_y."',
-                pinwand='1',
-                pinwand_id='".$pinwand."' 
-            WHERE id='$id' LIMIT 1"
+          $this->app->DatabaseService->update(
+            "UPDATE aufgabe SET note_color = ?, beschreibung = ?, note_z = ?, note_x = ?, note_y = ?, pinwand = '1', pinwand_id = ? WHERE id = ? LIMIT 1",
+            [$note_color, $beschreibung, $max_z, $note_x, $note_y, (int)$pinwand, (int)$id]
           );
 
           $result['note_color']=$note_color;
@@ -1350,20 +1331,20 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
     if($pinwand <=0)
     {
-      $tmp = $this->app->DB->SelectArr("SELECT * FROM aufgabe WHERE adresse='".$this->app->User->GetAdresse()."' AND pinwand='1' AND pinwand_id='0' AND status='offen'");
+      $tmp = $this->app->DatabaseService->select("SELECT * FROM aufgabe WHERE adresse = ? AND pinwand = '1' AND pinwand_id = '0' AND status = 'offen'", [(int)$this->app->User->GetAdresse()]);
     } else {
       $erlaubt = true;
       if($this->app->User->GetType() != 'admin')
       {
-        $check = $this->app->DB->Select("SELECT id FROM pinwand WHERE id = '$pinwand' AND `user` = '".$this->app->User->GetID()."'");
-        if(!$check && !$this->app->DB->Select("SELECT id FROM pinwand_user WHERE pinwand = '$pinwand' AND `user` = '".$this->app->User->GetID()."' LIMIT 1"))
+        $check = $this->app->DatabaseService->selectValue("SELECT id FROM pinwand WHERE id = ? AND `user` = ?", [(int)$pinwand, (int)$this->app->User->GetID()]);
+        if(!$check && !$this->app->DatabaseService->selectValue("SELECT id FROM pinwand_user WHERE pinwand = ? AND `user` = ? LIMIT 1", [(int)$pinwand, (int)$this->app->User->GetID()]))
         {
           $erlaubt = false;
         }
       }
       if($erlaubt)
       {
-        $tmp = $this->app->DB->SelectArr("SELECT * FROM aufgabe WHERE pinwand='1' AND pinwand_id='$pinwand' AND status='offen'");
+        $tmp = $this->app->DatabaseService->select("SELECT * FROM aufgabe WHERE pinwand = '1' AND pinwand_id = ? AND status = 'offen'", [(int)$pinwand]);
       }
     }  
     $ctmp = !empty($tmp)?count($tmp):0;

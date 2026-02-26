@@ -163,19 +163,16 @@ class Produktion {
 
                 break;
             case "produktion_position_source_list":
-                $id = $app->Secure->GetGET('id');
+                $id = (int)$app->Secure->GetGET('id');
 
-                $sql = "SELECT standardlager FROM produktion WHERE id=$id";
-           	    $standardlager = $app->DB->SelectArr($sql)[0]['standardlager'];
+                $standardlager = (int)$app->DatabaseService->selectValue("SELECT standardlager FROM produktion WHERE id=?", [$id]);
 
                 $allowed['produktion_position_list'] = array('list');
 
-            	$sql = "SELECT menge FROM produktion_position pp WHERE produktion=$id AND stuecklistestufe=1";
-        	    $produktionsmenge = $app->DB->SelectArr($sql)[0]['menge'];
+                $produktionsmenge = (float)$app->DatabaseService->selectValue("SELECT menge FROM produktion_position pp WHERE produktion=? AND stuecklistestufe=1", [$id]);
 
                 // Get status to control UI element menu availability
-                $sql = "SELECT p.status from produktion p WHERE p.id = $id";
-                $result = $app->DB->SelectArr($sql)[0];
+                $result = $app->DatabaseService->selectRow("SELECT p.status from produktion p WHERE p.id = ?", [$id]);
                 $status = $result['status'];
 
                 if (in_array($status,array('angelegt','freigegeben'))) {
@@ -246,11 +243,9 @@ class Produktion {
             case "produktion_source_list": // Aggregated per artikel
                 $id = $app->Secure->GetGET('id');
 
-            	$sql = "SELECT menge FROM produktion_position pp WHERE produktion=$id AND stuecklistestufe=1";
-        	    $produktionsmenge = $app->DB->SelectArr($sql)[0]['menge'];
-
-                $sql = "SELECT standardlager FROM produktion WHERE id=$id";
-           	    $standardlager = $app->DB->SelectArr($sql)[0]['standardlager'];
+                $id = (int)$app->Secure->GetGET('id');
+                $produktionsmenge = (float)$app->DatabaseService->selectValue("SELECT menge FROM produktion_position pp WHERE produktion=? AND stuecklistestufe=1", [$id]);
+                $standardlager = (int)$app->DatabaseService->selectValue("SELECT standardlager FROM produktion WHERE id=?", [$id]);
 
                 $allowed['produktion_position_list'] = array('list');
                 $heading = array('','Nummer', 'Artikel', 'Projekt','Planmenge pro St&uuml;ck', 'Lager alle (verf&uuml;gbar)' ,'Lager (verf&uuml;gbar)', 'Reserviert','Planmenge', 'Verbraucht','');
@@ -341,12 +336,11 @@ class Produktion {
 
         // Check if storno possible -> No partial production yet
 
-	    $geliefert_menge = $this->app->DB->SelectArr("SELECT SUM(geliefert_menge) as menge FROM produktion_position pp WHERE pp.produktion = $id")[0]['menge'];
+        $geliefert_menge = $this->app->DatabaseService->selectValue("SELECT SUM(geliefert_menge) FROM produktion_position pp WHERE pp.produktion = ?", [$id]);
 
         if ($geliefert_menge == 0) {
 
-            $sql = "UPDATE produktion SET status='storniert' WHERE id = '$id'";
-            $this->app->DB->Update($sql);
+            $this->app->DatabaseService->update("UPDATE produktion SET status='storniert' WHERE id = ?", [$id]);
             $this->app->Tpl->Set('MESSAGE', "<div class=\"info\">Der Eintrag wurde storniert.</div>");
         } else {
             $this->app->Tpl->Set('MESSAGE', "<div class=\"error\">Der Eintrag kann nicht storniert werden, da bereits Buchungen vorhanden sind.</div>");
@@ -379,8 +373,7 @@ class Produktion {
         $input = $this->GetInput();
         $msg = $this->app->erp->base64_url_decode($this->app->Secure->GetGET('msg'));
 
-        $sql = "SELECT status, belegnr, projekt, standardlager FROM produktion WHERE id = '$id'";
-        $from_db = $this->app->DB->SelectArr($sql)[0];
+        $from_db = $this->app->DatabaseService->selectRow("SELECT status, belegnr, projekt, standardlager FROM produktion WHERE id = ?", [(int)$id]);
         $global_status = $from_db['status'];
         $global_produktionsnummer = $from_db['belegnr'];
         $global_projekt = $from_db['projekt'];
@@ -466,8 +459,7 @@ class Produktion {
 
                     // Check
                     // Parse positions
-                	$sql = "SELECT artikel FROM produktion_position pp WHERE produktion=$id AND stuecklistestufe=1";
-            	    $produktionsartikel = $this->app->DB->SelectArr($sql);
+                    $produktionsartikel = $this->app->DatabaseService->select("SELECT artikel FROM produktion_position pp WHERE produktion=? AND stuecklistestufe=1", [(int)$id]);
 
                     if (!empty($produktionsartikel)) {
                         $msg .= "<div class=\"success\">Bereits geplant.</div>";
@@ -504,7 +496,7 @@ class Produktion {
                         $position_values[] = '('.implode(",",$value).',\'\')';
                     }
 
-                    $sql = "INSERT INTO produktion_position (produktion, artikel, menge, stuecklistestufe, projekt) VALUES ( $id, $artikel_planen_id, $artikel_planen_menge, 1, '$global_projekt'), ".implode(',',$position_values);
+                    $sql = "INSERT INTO produktion_position (produktion, artikel, menge, stuecklistestufe, projekt) VALUES ( ".(int)$id.", ".(int)$artikel_planen_id.", ".(float)$artikel_planen_menge.", 1, '".$this->app->DB->real_escape_string($global_projekt)."'), ".implode(',',$position_values);
                     $this->app->DB->Update($sql);
 
                     $msg .= "<div class=\"success\">Planung angelegt.</div>";
@@ -529,8 +521,7 @@ class Produktion {
                         break;
                     }
 
-              	    $sql = "SELECT pp.id, pp.artikel, a.name_de, a.nummer, pp.menge as menge, pp.geliefert_menge as geliefert_menge FROM produktion_position pp INNER JOIN artikel a ON a.id = pp.artikel WHERE pp.produktion=$id AND pp.stuecklistestufe=0";
-            	    $materialbedarf = $this->app->DB->SelectArr($sql);
+                                $materialbedarf = $this->app->DatabaseService->select("SELECT pp.id, pp.artikel, a.name_de, a.nummer, pp.menge as menge, pp.geliefert_menge as geliefert_menge FROM produktion_position pp INNER JOIN artikel a ON a.id = pp.artikel WHERE pp.produktion=? AND pp.stuecklistestufe=0", [(int)$id]);
 
                     // Try to reserve material
                     $reservierung_durchgefuehrt = false;
@@ -556,8 +547,7 @@ class Produktion {
 
                     // Check quanitites
                     // Parse positions
-                	$sql = "SELECT artikel, menge, geliefert_menge FROM produktion_position pp WHERE produktion=$id AND stuecklistestufe=1";
-            	    $produktionsartikel_position = $this->app->DB->SelectArr($sql)[0];
+                    $produktionsartikel_position = $this->app->DatabaseService->selectRow("SELECT artikel, menge, geliefert_menge FROM produktion_position pp WHERE produktion=? AND stuecklistestufe=1", [(int)$id]);
 
                     if (empty($produktionsartikel_position)) {
                         $msg .= "<div class=\"error\">Keine Planung vorhanden.</div>";
@@ -590,11 +580,9 @@ class Produktion {
                         break;
                     }
 
-                    $sql = "UPDATE produktion SET status = 'gestartet' WHERE id=$id";
-                    $this->app->DB->Update($sql);
+                    $this->app->DatabaseService->update("UPDATE produktion SET status = 'gestartet' WHERE id=?", [(int)$id]);
 
-                	  $sql = "SELECT pp.id, pp.artikel, pp.menge, pp.geliefert_menge, pp.stuecklistestufe, a.lagerartikel FROM produktion_position pp INNER JOIN artikel a ON a.id = pp.artikel WHERE pp.produktion=$id";
-            	     $material = $this->app->DB->SelectArr($sql);
+                    $material = $this->app->DatabaseService->select("SELECT pp.id, pp.artikel, pp.menge, pp.geliefert_menge, pp.stuecklistestufe, a.lagerartikel FROM produktion_position pp INNER JOIN artikel a ON a.id = pp.artikel WHERE pp.produktion=?", [(int)$id]);
 
                     foreach ($material as $material_position) {
 
@@ -614,9 +602,7 @@ class Produktion {
                         }
 
                         // Update position
-                        $sql = "UPDATE produktion_position SET geliefert_menge = geliefert_menge + $menge_artikel_auslagern WHERE id = ".$material_position['id'];
-
-                        $this->app->DB->Update($sql);
+                        $this->app->DatabaseService->update("UPDATE produktion_position SET geliefert_menge = geliefert_menge + ? WHERE id = ?", [(float)$menge_artikel_auslagern, (int)$material_position['id']]);
                     }
 
                     if ($error) {
@@ -655,16 +641,14 @@ class Produktion {
                     } else {
 
                     }
-                    $sql = "SELECT kurzbezeichnung FROM lager_platz WHERE id = $ziellager";
-                    $lagername = $this->app->DB->SelectArr($sql)[0]['kurzbezeichnung'];
+                    $lagername = $this->app->DatabaseService->selectValue("SELECT kurzbezeichnung FROM lager_platz WHERE id = ?", [(int)$ziellager]);
 
                     // ERPAPI
                     //   function LagerEinlagern($artikel,$menge,$regal,$projekt,$grund="",$importer="",$paketannahme="",$doctype = "", $doctypeid = 0, $vpeid = 0, $permanenteinventur = 0, $adresse = 0)
                     $this->app->erp->LagerEinlagern($produktionsartikel_position['artikel'],$menge_produzieren,$ziellager,$global_projekt,"Produktion $global_produktionsnummer");
                     // No error handling in LagerEinlagern...
 
-                    $sql = "UPDATE produktion SET mengeerfolgreich = mengeerfolgreich + $menge_produzieren, mengeausschuss = mengeausschuss + $menge_ausschuss WHERE id = $id";
-                    $this->app->DB->Update($sql);
+                    $this->app->DatabaseService->update("UPDATE produktion SET mengeerfolgreich = mengeerfolgreich + ?, mengeausschuss = mengeausschuss + ? WHERE id = ?", [(float)$menge_produzieren, (float)$menge_ausschuss, (int)$id]);
 
                     if ($menge_produzieren > 0) {
                         $lagertext = ", eingelagert in $lagername";
@@ -691,21 +675,18 @@ class Produktion {
                         break;
                     }
 
-                    $sql = "SELECT * from produktion WHERE id = $id";
-            	    $produktion_alt = $this->app->DB->SelectArr($sql)[0];
+                    $produktion_alt = $this->app->DatabaseService->selectRow("SELECT * from produktion WHERE id = ?", [(int)$id]);
 
                     // Part production of part production -> select parent
                     $hauptproduktion_id = $produktion_alt['teilproduktionvon'];
                     if ($hauptproduktion_id != 0) {
-                        $sql = "SELECT belegnr FROM produktion WHERE id = $hauptproduktion_id";
-                        $hauptproduktion_belegnr = $this->app->DB->SelectArr($sql)[0]['belegnr'];
+                        $hauptproduktion_belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM produktion WHERE id = ?", [(int)$hauptproduktion_id]);
                     } else {
                         $hauptproduktion_id = $produktion_alt['id'];
                         $hauptproduktion_belegnr = $produktion_alt['belegnr'];
                     }
 
-                    $sql = "SELECT MAX(teilproduktionnummer) as tpn FROM produktion WHERE teilproduktionvon = $hauptproduktion_id";
-                    $teilproduktionnummer = $this->app->DB->SelectArr($sql)[0]['tpn'];
+                    $teilproduktionnummer = $this->app->DatabaseService->selectValue("SELECT MAX(teilproduktionnummer) as tpn FROM produktion WHERE teilproduktionvon = ?", [(int)$hauptproduktion_id]);
                     if (empty($teilproduktionnummer) || $teilproduktionnummer == 0) {
                         $teilproduktionnummer = '1';
                     } else {
@@ -748,8 +729,7 @@ class Produktion {
                     $produktion_neu_id = $this->app->DB->GetInsertID();
 
                     // Now add the positions
-                    $sql = "SELECT * FROM produktion_position WHERE produktion = $id";
-                    $positionen = $this->app->DB->SelectArr($sql);
+                    $positionen = $this->app->DatabaseService->select("SELECT * FROM produktion_position WHERE produktion = ?", [(int)$id]);
 
                     foreach ($positionen as $position) {
 
@@ -793,7 +773,7 @@ class Produktion {
                             $fix = ", ";
                         }
 
-                        $sql = "UPDATE produktion_position SET $update WHERE id = $pos_id";
+                        $sql = "UPDATE produktion_position SET $update WHERE id = ".(int)$pos_id;
                         $this->app->DB->Update($sql);
 
                         // Free surplus reservations
@@ -811,14 +791,12 @@ class Produktion {
                 case 'leeren':
 
                     if ($global_status == 'angelegt' || $global_status == 'freigegeben') {
-                        $sql = "SELECT id, artikel, menge, geliefert_menge FROM produktion_position pp WHERE produktion=$id AND stuecklistestufe=0";
-                	    $material = $this->app->DB->SelectArr($sql);
+                        $material = $this->app->DatabaseService->select("SELECT id, artikel, menge, geliefert_menge FROM produktion_position pp WHERE produktion=? AND stuecklistestufe=0", [(int)$id]);
                         foreach ($material as $material_position) {
                             // Remove reservation
                             $result = $this->ArtikelReservieren($material_position['artikel'],$global_standardlager,0,0,'produktion',$id,$material_position['id'],"Produktion $global_produktionsnummer");
                         }
-                        $sql = "DELETE FROM produktion_position WHERE produktion = $id";
-                        $this->app->DB->Update($sql);
+                        $this->app->DatabaseService->delete("DELETE FROM produktion_position WHERE produktion = ?", [(int)$id]);
                         $msg .= "<div class=\"warning\">Planung geleert.</div>";
                     } else {
                         $msg .= "<div class=\"error\">Planung kann nicht geleert werden.</div>";
@@ -851,11 +829,9 @@ class Produktion {
 
                 break;
                 case 'abschliessen':
-                    $sql = "UPDATE produktion SET status = 'abgeschlossen' WHERE id=$id";
-                    $this->app->DB->Update($sql);
+                    $this->app->DatabaseService->update("UPDATE produktion SET status = 'abgeschlossen' WHERE id=?", [(int)$id]);
 
-                	$sql = "SELECT id, artikel, menge, geliefert_menge FROM produktion_position pp WHERE produktion=$id AND stuecklistestufe=0";
-            	    $material = $this->app->DB->SelectArr($sql);
+                    $material = $this->app->DatabaseService->select("SELECT id, artikel, menge, geliefert_menge FROM produktion_position pp WHERE produktion=? AND stuecklistestufe=0", [(int)$id]);
 
                     foreach ($material as $material_position) {
                         // Remove reservation
@@ -870,8 +846,7 @@ class Produktion {
                     $menge_drucken = $this->app->Secure->GetPOST('menge_produzieren');
 
                     if ($menge_drucken) {
-                        $sql = "SELECT artikel FROM produktion_position pp WHERE produktion=$id AND stuecklistestufe=1";
-                	    $produktionsartikel_position = $this->app->DB->SelectArr($sql)[0];
+                        $produktionsartikel_position = $this->app->DatabaseService->selectRow("SELECT artikel FROM produktion_position pp WHERE produktion=? AND stuecklistestufe=1", [(int)$id]);
                         $produktionsartikel_id = $produktionsartikel_position['artikel'];
 
                         $sql = "SELECT al.* FROM article_label al INNER JOIN artikel a ON a.id = al.article_id WHERE type = 'produktion' AND al.article_id = ".$produktionsartikel_id;
@@ -1055,9 +1030,9 @@ class Produktion {
                 p.unterseriennummern_erfassen,
                 p.datumproduktionende,
                 p.standardlager,
-                p.id FROM produktion p"." WHERE id=$id";	
+                p.id FROM produktion p WHERE id=?";
 
-        $produktion_from_db = $this->app->DB->SelectArr($sql)[0];
+        $produktion_from_db = $this->app->DatabaseService->selectRow($sql, [(int)$id]);
 
         foreach ($produktion_from_db as $key => $value) {
             $this->app->Tpl->Set(strtoupper($key), $value);
@@ -1069,9 +1044,8 @@ class Produktion {
 
         $this->StatusBerechnen((int)$id);
 
-    	$sql = "SELECT " . $this->app->YUI->IconsSQL_produktion('p') . " AS `icons` FROM produktion p WHERE id=$id";
-	    $icons = $this->app->DB->SelectArr($sql);
-        $this->app->Tpl->Add('STATUSICONS',  $icons[0]['icons']);
+        $icons = $this->app->DatabaseService->selectRow("SELECT " . $this->app->YUI->IconsSQL_produktion('p') . " AS `icons` FROM produktion p WHERE id=?", [(int)$id]);
+        $this->app->Tpl->Add('STATUSICONS', $icons['icons']);
 
         if ($produktion_from_db['teilproduktionvon'] != 0) {
             $sql = "SELECT belegnr FROM produktion WHERE id = ".$produktion_from_db['teilproduktionvon'];
@@ -1079,8 +1053,7 @@ class Produktion {
             $this->app->Tpl->Set('TEILPRODUKTIONINFO',"Teilproduktion von ".$hauptproduktion_belegnr);
         }
 
-        $sql = "SELECT belegnr FROM produktion WHERE teilproduktionvon = $id";
-	    $teilproduktionen = $this->app->DB->SelectArr($sql);
+        $teilproduktionen = $this->app->DatabaseService->select("SELECT belegnr FROM produktion WHERE teilproduktionvon = ?", [(int)$id]);
 
         if (!empty($teilproduktionen)) {
             $this->app->Tpl->Set('TEILPRODUKTIONINFO',"Zu dieser Produktion geh&ouml;ren die Teilproduktionen: ".implode(', ',array_column($teilproduktionen,'belegnr')));
@@ -1140,8 +1113,7 @@ class Produktion {
         */
 
         // Reparse positions
-    	$sql = "SELECT id,artikel, menge, geliefert_menge FROM produktion_position pp WHERE produktion=$id AND stuecklistestufe=1";
-        $produktionsartikel_position = $this->app->DB->SelectArr($sql)[0];
+        $produktionsartikel_position = $this->app->DatabaseService->selectRow("SELECT id,artikel, menge, geliefert_menge FROM produktion_position pp WHERE produktion=? AND stuecklistestufe=1", [(int)$id]);
 
         // Not planned
         if (empty($produktionsartikel_position)) {
@@ -1184,10 +1156,7 @@ class Produktion {
             $sql = "SELECT al.* FROM article_label al INNER JOIN artikel a ON a.id = al.article_id WHERE type = 'produktion'";
 
 
-            $sql = "SELECT artikel FROM produktion_position pp WHERE produktion=$id AND stuecklistestufe=1";
-
-            $sql = "SELECT al.* FROM article_label al INNER JOIN artikel a ON a.id = al.article_id WHERE type = 'produktion' AND al.article_id = ".$produktionsartikel_id;
-            $produktionsetiketten = $this->app->DB->SelectArr($sql);
+            $produktionsetiketten = $this->app->DatabaseService->select("SELECT al.* FROM article_label al INNER JOIN artikel a ON a.id = al.article_id WHERE type = 'produktion' AND al.article_id = ?", [(int)$produktionsartikel_id]);
         }
 
         if (empty($produktionsetiketten)) {
@@ -1329,19 +1298,21 @@ class Produktion {
 
         $menge_moeglich = PHP_INT_MAX;
 
-  	    $sql = "SELECT pp.id, artikel, SUM(menge) as menge, geliefert_menge FROM produktion_position pp INNER JOIN artikel a ON pp.artikel = a.id WHERE pp.produktion=$produktion_id AND pp.stuecklistestufe=0 AND a.lagerartikel != 0 GROUP BY artikel";
-	    $materialbedarf_gesamt = $this->app->DB->SelectArr($sql);
+        $materialbedarf_gesamt = $this->app->DatabaseService->select(
+          "SELECT pp.id, artikel, SUM(menge) as menge, geliefert_menge FROM produktion_position pp INNER JOIN artikel a ON pp.artikel = a.id WHERE pp.produktion=? AND pp.stuecklistestufe=0 AND a.lagerartikel != 0 GROUP BY artikel",
+          [$produktion_id]
+        );
 
-  	    $sql = "SELECT id, artikel, SUM(menge) as menge, geliefert_menge as geliefert_menge FROM produktion_position pp WHERE produktion=$produktion_id AND stuecklistestufe=1 GROUP BY artikel";
-        $result =  $this->app->DB->SelectArr($sql)[0];
-	    $menge_plan_gesamt = $result['menge'];
+        $menge_plan_gesamt = (float)$this->app->DatabaseService->selectValue(
+          "SELECT SUM(menge) FROM produktion_position pp WHERE produktion=? AND stuecklistestufe=1",
+          [$produktion_id]
+        );
 
         if ($menge_plan_gesamt == 0) {
             return(0);
         }
 
-  	    $sql = "SELECT SUM(mengeerfolgreich) as menge FROM produktion WHERE id=$produktion_id";
-        $result =  $this->app->DB->SelectArr($sql)[0];
+        $menge_geliefert_gesamt = (float)$this->app->DatabaseService->selectValue("SELECT SUM(mengeerfolgreich) FROM produktion WHERE id=?", [$produktion_id]);
 	    $menge_geliefert_gesamt = $result['menge'];
 
         foreach ($materialbedarf_gesamt as $materialbedarf_artikel) {
@@ -1351,20 +1322,23 @@ class Produktion {
             $menge_plan_artikel = $materialbedarf_artikel['menge'];
             $menge_geliefert = $materialbedarf_artikel['menge_geliefert'];
 
-            $sql = "SELECT SUM(menge) as menge FROM lager_reserviert r WHERE lager_platz=$lager AND artikel = $artikel AND r.objekt = 'produktion' AND r.parameter = $produktion_id";
-    	    $menge_reserviert_diese = $this->app->DB->SelectArr($sql)[0]['menge'];
+            $menge_reserviert_diese = (float)$this->app->DatabaseService->selectValue(
+              "SELECT SUM(menge) FROM lager_reserviert r WHERE lager_platz=? AND artikel = ? AND r.objekt = 'produktion' AND r.parameter = ?",
+              [(int)$lager, $artikel, $produktion_id]
+            );
 
             if ($only_reservations) {
                 $menge_verfuegbar = $menge_reserviert_diese;
             } else {
-                $sql = "SELECT SUM(menge) as menge FROM lager_platz_inhalt WHERE lager_platz=$lager AND artikel = $artikel";
-        	    $menge_lager = $this->app->DB->SelectArr($sql)[0]['menge'];
+                $menge_lager = (float)$this->app->DatabaseService->selectValue(
+                  "SELECT SUM(menge) FROM lager_platz_inhalt WHERE lager_platz=? AND artikel = ?",
+                  [(int)$lager, $artikel]
+                );
 
-                $sql = "SELECT SUM(menge) as menge FROM lager_reserviert r WHERE lager_platz=$lager AND artikel = $artikel";
-    	        $menge_reserviert_lager = $this->app->DB->SelectArr($sql)[0]['menge'];
-
-                $sql = "SELECT SUM(menge) as menge FROM lager_reserviert r WHERE artikel = $artikel";
-        	    $menge_reserviert_gesamt = $this->app->DB->SelectArr($sql)[0]['menge'];
+                $menge_reserviert_lager = (float)$this->app->DatabaseService->selectValue(
+                  "SELECT SUM(menge) FROM lager_reserviert r WHERE lager_platz=? AND artikel = ?",
+                  [(int)$lager, $artikel]
+                );
 
                 $menge_verfuegbar = $menge_lager-$menge_reserviert_lager+$menge_reserviert_diese;
             }
@@ -1397,20 +1371,26 @@ class Produktion {
             return 0;
         }
 
-    	$sql = "SELECT menge FROM lager_reserviert WHERE objekt='$objekt' AND parameter = $objekt_id AND artikel = $artikel AND lager_platz = $lager AND posid = $position_id";
-        $menge_reserviert_diese = $this->app->DB->SelectArr($sql)[0]['menge'];
+        $menge_reserviert_diese = (float)$this->app->DatabaseService->selectValue(
+          "SELECT menge FROM lager_reserviert WHERE objekt=? AND parameter = ? AND artikel = ? AND lager_platz = ? AND posid = ?",
+          [$objekt, $objekt_id, $artikel, (int)$lager, $position_id]
+        );
         if ($menge_reserviert_diese == null) {
             $menge_reserviert_diese = 0;
         }
 
-        $sql = "SELECT menge FROM lager_reserviert WHERE artikel = $artikel AND lager_platz = $lager";
-        $menge_reserviert_lager_platz = $this->app->DB->SelectArr($sql)[0]['menge'];
+        $menge_reserviert_lager_platz = (float)$this->app->DatabaseService->selectValue(
+          "SELECT menge FROM lager_reserviert WHERE artikel = ? AND lager_platz = ?",
+          [$artikel, (int)$lager]
+        );
         if ($menge_reserviert_lager_platz == null) {
             $menge_reserviert_lager_platz = 0;
         }
-    	
-    	$sql = "SELECT menge FROM lager_platz_inhalt WHERE artikel = $artikel AND lager_platz = $lager";
-        $menge_lager = $this->app->DB->SelectArr($sql)[0]['menge'];
+
+        $menge_lager = (float)$this->app->DatabaseService->selectValue(
+          "SELECT menge FROM lager_platz_inhalt WHERE artikel = ? AND lager_platz = ?",
+          [$artikel, (int)$lager]
+        );
         if ($menge_lager == null) {
             $menge_lager = 0;
         }
@@ -1424,8 +1404,10 @@ class Produktion {
         }
 
         if (($menge_reservieren == 0) && ($menge_reservieren_limit <= 0)) {
-            $sql = "DELETE FROM lager_reserviert WHERE objekt = '$objekt' AND parameter = $objekt_id AND artikel = $artikel AND posid = $position_id";
-            $this->app->DB->Update($sql);
+            $this->app->DatabaseService->delete(
+              "DELETE FROM lager_reserviert WHERE objekt = ? AND parameter = ? AND artikel = ? AND posid = ?",
+              [$objekt, $objekt_id, $artikel, $position_id]
+            );
             return(0);
         }
 
@@ -1446,23 +1428,19 @@ class Produktion {
                 if ($menge_reservieren > $menge_lager_reservierbar) {
                     $menge_reservieren = $menge_lager_reservierbar; // Take all that is there
                 }
-                $sql = "UPDATE lager_reserviert SET menge = $menge_reservieren WHERE objekt = '$objekt' AND parameter = $objekt_id AND artikel = $artikel AND posid = $position_id";
-                $this->app->DB->Update($sql);
+                $this->app->DatabaseService->update(
+                  "UPDATE lager_reserviert SET menge = ? WHERE objekt = ? AND parameter = ? AND artikel = ? AND posid = ?",
+                  [(float)$menge_reservieren, $objekt, $objekt_id, $artikel, $position_id]
+                );
             } else {
                 // Create new entry
                 if ($menge_reservieren > $menge_lager_reservierbar) {
                     $menge_reservieren = $menge_lager_reservierbar; // Take all that is there
                 }
-                $sql = "INSERT INTO lager_reserviert (menge,objekt,parameter,artikel,posid,lager_platz,grund) VALUES (".
-                        $menge_reservieren.",".
-                        "'$objekt',".
-                        $objekt_id.",".
-                        $artikel.",".
-                        $position_id.",".
-                        $lager.",".
-                        "'$text'".
-                        ")";
-                $this->app->DB->Update($sql);
+                $this->app->DatabaseService->insert(
+                  "INSERT INTO lager_reserviert (menge, objekt, parameter, artikel, posid, lager_platz, grund) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                  [(float)$menge_reservieren, $objekt, $objekt_id, $artikel, $position_id, (int)$lager, $text]
+                );
             }
         } else {
             $menge_reservieren = 0;
@@ -1482,8 +1460,10 @@ class Produktion {
 
         $fortschritt = $this->MengeFortschritt($produktion_id,$lager);
 
-        $sql = "SELECT menge,geliefert_menge FROM produktion_position WHERE produktion = $produktion_id AND stuecklistestufe = 1";
-        $produktionsmengen_alt = $this->app->DB->SelectArr($sql)[0];
+        $produktionsmengen_alt = $this->app->DatabaseService->selectRow(
+          "SELECT menge,geliefert_menge FROM produktion_position WHERE produktion = ? AND stuecklistestufe = 1",
+          [$produktion_id]
+        );
 
         if (empty($produktionsmengen_alt)) {
             return(-1);
@@ -1492,18 +1472,15 @@ class Produktion {
             return(-1);
         }
 
-        $sql = "SELECT * from produktion WHERE id = $produktion_id";
-        $produktion_alt = $this->app->DB->SelectArr($sql)[0];
+        $produktion_alt = $this->app->DatabaseService->selectRow("SELECT * from produktion WHERE id = ?", [$produktion_id]);
 
         // Process positions
-        $sql = "SELECT * FROM produktion_position WHERE produktion = $produktion_id";
-        $positionen = $this->app->DB->SelectArr($sql);
+        $positionen = $this->app->DatabaseService->select("SELECT * FROM produktion_position WHERE produktion = ?", [$produktion_id]);
 
         foreach ($positionen as $position) {
             $menge_pro_stueck = $position['menge']/$produktionsmengen_alt['menge'];
             $position_menge_neu = $menge_neu*$menge_pro_stueck;
-            $sql = "UPDATE produktion_position SET menge=".$position_menge_neu." WHERE id =".$position['id'];
-            $this->app->DB->Update($sql);
+            $this->app->DatabaseService->update("UPDATE produktion_position SET menge=? WHERE id =?", [(float)$position_menge_neu, (int)$position['id']]);
 
             // Free surplus reservations
             $restreservierung = $menge_pro_stueck * ($menge_neu+$fortschritt['ausschuss']-$fortschritt['produziert']);
@@ -1530,19 +1507,22 @@ class Produktion {
         $result = array();
 
         if ($lager <= 0) {
-            $sql = "SELECT standardlager FROM produktion WHERE id = $produktion_id";
-            $lager = $this->app->DB->SelectArr($sql)[0]['standardlager'];
+            $lager = (int)$this->app->DatabaseService->selectValue("SELECT standardlager FROM produktion WHERE id = ?", [$produktion_id]);
         }
 
-        $sql = "SELECT menge as geplant, geliefert_menge as produziert FROM produktion_position WHERE produktion = $produktion_id AND stuecklistestufe = 1";
-        $position_values = $this->app->DB->SelectArr($sql)[0];
+        $position_values = $this->app->DatabaseService->selectRow(
+          "SELECT menge as geplant, geliefert_menge as produziert FROM produktion_position WHERE produktion = ? AND stuecklistestufe = 1",
+          [$produktion_id]
+        );
 
         if (empty($position_values)) {
             return($result);
         }
 
-        $sql = "SELECT mengeerfolgreich as erfolgreich, mengeausschuss as ausschuss FROM produktion WHERE id = $produktion_id";
-        $produktion_values = $this->app->DB->SelectArr($sql)[0];
+        $produktion_values = $this->app->DatabaseService->selectRow(
+          "SELECT mengeerfolgreich as erfolgreich, mengeausschuss as ausschuss FROM produktion WHERE id = ?",
+          [$produktion_id]
+        );
 
         if (empty($produktion_values)) {
             return($result);
@@ -1571,14 +1551,16 @@ class Produktion {
     // id = 0 for all open ones
     function StatusBerechnen(int $produktion_id) {
 
-        $where = "WHERE status IN ('freigegeben','gestartet') ";
-
         if ($produktion_id > 0) {
-            $where .= "AND id = $produktion_id";
+            $produktionen = $this->app->DatabaseService->select(
+              "SELECT id, lager_ok, reserviert_ok, auslagern_ok, einlagern_ok, zeit_ok, versand_ok FROM produktion WHERE status IN ('freigegeben','gestartet') AND id = ?",
+              [$produktion_id]
+            );
+        } else {
+            $produktionen = $this->app->DatabaseService->select(
+              "SELECT id, lager_ok, reserviert_ok, auslagern_ok, einlagern_ok, zeit_ok, versand_ok FROM produktion WHERE status IN ('freigegeben','gestartet')"
+            );
         }
-
-        $sql = "SELECT id, lager_ok, reserviert_ok, auslagern_ok, einlagern_ok, zeit_ok, versand_ok FROM produktion ".$where;
-        $produktionen = $this->app->DB->SelectArr($sql);
 
         foreach ($produktionen as $produktion) {
 
@@ -1642,7 +1624,7 @@ class Produktion {
                 $fix = ", ";
             }
 
-            $sql = "UPDATE produktion SET $update WHERE id = $produktion_id";
+            $sql = "UPDATE produktion SET $update WHERE id = ".(int)$produktion_id;
             $this->app->DB->Update($sql);
         }
     }
@@ -1665,8 +1647,7 @@ class Produktion {
             $menge_abteilen = $fortschritt['geplant'];
         }
 
-        $sql = "SELECT * from produktion WHERE id = $produktion_id";
-	    $produktion_alt = $this->app->DB->SelectArr($sql)[0];
+        $produktion_alt = $this->app->DatabaseService->selectRow("SELECT * from produktion WHERE id = ?", [(int)$produktion_id]);
 
         if (empty($produktion_alt)) {
             return (-3);
@@ -1713,8 +1694,7 @@ class Produktion {
         $produktion_neu_id = $this->app->DB->GetInsertID();
 
         // Now add the positions
-        $sql = "SELECT * FROM produktion_position WHERE produktion = $produktion_id";
-        $positionen = $this->app->DB->SelectArr($sql);
+        $positionen = $this->app->DatabaseService->select("SELECT * FROM produktion_position WHERE produktion = ?", [(int)$produktion_id]);
 
         foreach ($positionen as $position) {
 
@@ -1746,14 +1726,16 @@ class Produktion {
         Write something into the log
     */
     function ProtokollSchreiben(int $produktion_id, string $text) {
-        $sql = "INSERT INTO produktion_protokoll (produktion, zeit, bearbeiter, grund) VALUES ($produktion_id, NOW(), '".$this->app->DB->real_escape_string($this->app->User->GetName())."','".$this->app->DB->real_escape_string($text)."')";
-        $this->app->DB->Insert($sql);
+        $this->app->DatabaseService->insert(
+          "INSERT INTO produktion_protokoll (produktion, zeit, bearbeiter, grund) VALUES (?, NOW(), ?, ?)",
+          [$produktion_id, $this->app->User->GetName(), $text]
+        );
     }
 
     function ProtokollTabelleErzeugen($produktion_id, $parsetarget)
     {
         $tmp = new EasyTable($this->app);
-        $tmp->Query("SELECT zeit,bearbeiter,grund FROM produktion_protokoll WHERE produktion='$produktion_id' ORDER by zeit DESC");
+        $tmp->Query("SELECT zeit,bearbeiter,grund FROM produktion_protokoll WHERE produktion=".(int)$produktion_id." ORDER by zeit DESC");
         $tmp->DisplayNew($parsetarget,'Protokoll','noAction');
     }
 

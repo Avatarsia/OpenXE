@@ -179,16 +179,16 @@ class Supportapp Extends GenSupportapp {
         $count = "SELECT count(id) FROM supportapp_gruppen WHERE $where";
         break;
       case 'supportapp_zeiterfassung':
-        $kundennr = $app->DB->real_escape_string($app->Secure->GetGET('kdnr'));
-        $kundenid = $app->DB->real_escape_string($app->Secure->GetGET('id'));
+        $kundennr = $app->Secure->GetGET('kdnr');
+        $kundenid = $app->Secure->GetGET('id');
 
         if($kundennr != ''){
-          $kundenname = $app->DB->Select("SELECT name FROM adresse WHERE kundennummer = '".$kundennr."'");
-          $kundenid = $app->DB->Select("SELECT id FROM adresse WHERE kundennummer = '".$kundennr."'");
+          $kundenname = $app->DatabaseService->selectValue("SELECT name FROM adresse WHERE kundennummer = ?", [$kundennr]);
+          $kundenid = $app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = ?", [$kundennr]);
         }else{
           if($kundenid != ''){
-            $kundenname = $app->DB->Select("SELECT name FROM adresse WHERE id = '".$kundenid."'");
-            $kundennr = $app->DB->Select("SELECT kundennummer FROM adresse WHERE id = '".$kundenid."'");
+            $kundenname = $app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = ?", [(int)$kundenid]);
+            $kundennr = $app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id = ?", [(int)$kundenid]);
           }
         }
 
@@ -455,11 +455,11 @@ class Supportapp Extends GenSupportapp {
       case 'artikelhinzufuegen':
         $typ = $this->app->Secure->GetGET('typ');
         $artikeltmp = explode(" ", $this->app->Secure->GetGET('artikel'));
-        $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer ='".$artikeltmp[0]."' LIMIT 1");
+        $artikelid = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = ? LIMIT 1", [$artikeltmp[0]]);
         $antwort = 0;
         if($artikelid > 0){
-          if(!$this->app->DB->Select("SELECT id FROM supportapp_artikel WHERE artikel='$artikelid' AND typ='$typ'")){
-            $this->app->DB->Insert("INSERT INTO supportapp_artikel (artikel, typ) VALUES ('$artikelid','$typ')");
+          if(!$this->app->DatabaseService->selectValue("SELECT id FROM supportapp_artikel WHERE artikel = ? AND typ = ?", [(int)$artikelid, $typ])){
+            $this->app->DatabaseService->insert("INSERT INTO supportapp_artikel (artikel, typ) VALUES (?,?)", [(int)$artikelid, $typ]);
             $antwort = 1;
           }
         }
@@ -469,7 +469,7 @@ class Supportapp Extends GenSupportapp {
         break;
       case 'deleteartikel':
         $id = $this->app->Secure->GetGET('id');
-        $this->app->DB->Delete("DELETE FROM supportapp_artikel WHERE id='$id'");
+        $this->app->DatabaseService->delete("DELETE FROM supportapp_artikel WHERE id = ?", [(int)$id]);
         echo json_encode(1);
         exit;
         break;
@@ -478,30 +478,30 @@ class Supportapp Extends GenSupportapp {
         $bezeichnung = $this->app->Secure->GetPOST('bezeichnung');
         $taetigkeit = $this->app->Secure->GetPOST('taetigkeit');
         $beschreibung = $this->app->Secure->GetPOST('beschreibung');
-        if($this->app->DB->Select("SELECT id FROM supportapp_vorlagen WHERE bezeichnung = '$bezeichnung' LIMIT 1")){
+        if($this->app->DatabaseService->selectValue("SELECT id FROM supportapp_vorlagen WHERE bezeichnung = ? LIMIT 1", [$bezeichnung])){
           $antwort = 'Eine Vorlage mit dieser Bezeichnung existiert bereits.';
         }
 
         if($antwort == ''){
           $antwort = "success";
           if($id == '0'){
-            $this->app->DB->Insert("INSERT INTO supportapp_vorlagen (bezeichnung, taetigkeit, beschreibung) VALUES ('$bezeichnung','$taetigkeit','$beschreibung')");
+            $this->app->DatabaseService->insert("INSERT INTO supportapp_vorlagen (bezeichnung, taetigkeit, beschreibung) VALUES (?,?,?)", [$bezeichnung, $taetigkeit, $beschreibung]);
           }else{
-            $this->app->DB->Update("UPDATE supportapp_vorlagen SET taetigkeit = '$taetigkeit', bezeichnung = '$bezeichnung', beschreibung = '$beschreibung' WHERE id = $id");
+            $this->app->DatabaseService->update("UPDATE supportapp_vorlagen SET taetigkeit = ?, bezeichnung = ?, beschreibung = ? WHERE id = ?", [$taetigkeit, $bezeichnung, $beschreibung, (int)$id]);
           }
         }
         echo json_encode($antwort);
         exit;
         break;
       case 'delete':
-        $id = $this->app->DB->real_escape_string($this->app->Secure->GetGET('id'));
-        $this->app->DB->Delete("DELETE FROM supportapp_vorlagen WHERE id = '$id'");
+        $id = $this->app->Secure->GetGET('id');
+        $this->app->DatabaseService->delete("DELETE FROM supportapp_vorlagen WHERE id = ?", [(int)$id]);
         echo json_encode('success');
         exit;
         break;
       case 'editvorlage':
-        $id = $this->app->DB->real_escape_string($this->app->Secure->GetGET('id'));
-        $result = $this->app->DB->SelectArr("SELECT * FROM supportapp_vorlagen WHERE id = '$id'");
+        $id = $this->app->Secure->GetGET('id');
+        $result = $this->app->DatabaseService->select("SELECT * FROM supportapp_vorlagen WHERE id = ?", [(int)$id]);
         $result = reset($result);
         echo json_encode($result);
         exit;
@@ -517,14 +517,14 @@ class Supportapp Extends GenSupportapp {
       $kundenzahl = (!empty($kunden)?count($kunden):0);
       for ($h=0; $h < (!empty($kunden)?count($kunden):0); $h++) {
         $kundenid = $kunden[$h]['adresse'];
-        $gruppenzumhinzufuegen= $this->app->DB->SelectArr("SELECT ap.id, was.gruppe FROM auftrag_position ap JOIN auftrag a ON ap.auftrag = a.id LEFT JOIN supportapp_gruppen wag ON ap.artikel = wag.artikel LEFT JOIN supportapp_schritte was ON wag.id = was.gruppe LEFT JOIN supportapp_auftrag_check wac ON wac.schritt = was.id WHERE a.adresse = '$kundenid' AND a.status <> 'storniert' AND a.belegnr <> '' AND wag.aktiv = 1 AND was.aktiv = 1 GROUP BY ap.id, was.id");
+        $gruppenzumhinzufuegen= $this->app->DatabaseService->select("SELECT ap.id, was.gruppe FROM auftrag_position ap JOIN auftrag a ON ap.auftrag = a.id LEFT JOIN supportapp_gruppen wag ON ap.artikel = wag.artikel LEFT JOIN supportapp_schritte was ON wag.id = was.gruppe LEFT JOIN supportapp_auftrag_check wac ON wac.schritt = was.id WHERE a.adresse = ? AND a.status <> 'storniert' AND a.belegnr <> '' AND wag.aktiv = 1 AND was.aktiv = 1 GROUP BY ap.id, was.id", [(int)$kundenid]);
         for ($i=0; $i < (!empty($gruppenzumhinzufuegen)?count($gruppenzumhinzufuegen):0); $i++) {
-          $einzelschritte = $this->app->DB->SelectArr("SELECT * FROM supportapp_schritte WHERE aktiv = 1 AND gruppe = ".$gruppenzumhinzufuegen[$i]['gruppe']);
+          $einzelschritte = $this->app->DatabaseService->select("SELECT * FROM supportapp_schritte WHERE aktiv = 1 AND gruppe = ?", [(int)$gruppenzumhinzufuegen[$i]['gruppe']]);
           for ($j=0; $j < (!empty($einzelschritte)?count($einzelschritte):0); $j++) {
-            $vorhanden = $this->app->DB->Select("SELECT id FROM supportapp_auftrag_check WHERE auftragposition = '".$gruppenzumhinzufuegen[$i]['id']."' AND gruppe = '".$gruppenzumhinzufuegen[$i]['gruppe']."' AND adresse = '$kundenid' AND schritt = '".$einzelschritte[$j]['id']."' LIMIT 1");
+            $vorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM supportapp_auftrag_check WHERE auftragposition = ? AND gruppe = ? AND adresse = ? AND schritt = ? LIMIT 1", [(int)$gruppenzumhinzufuegen[$i]['id'], (int)$gruppenzumhinzufuegen[$i]['gruppe'], (int)$kundenid, (int)$einzelschritte[$j]['id']]);
             if($vorhanden == ''){
               $schrittzahl += 1;
-              $this->app->DB->Insert("INSERT INTO supportapp_auftrag_check (adresse, gruppe, schritt, auftragposition, status) VALUES ('$kundenid','".$gruppenzumhinzufuegen[$i]['gruppe']."','".$einzelschritte[$j]['id']."','".$gruppenzumhinzufuegen[$i]['id']."','0')");
+              $this->app->DatabaseService->insert("INSERT INTO supportapp_auftrag_check (adresse, gruppe, schritt, auftragposition, status) VALUES (?,?,?,?,'0')", [(int)$kundenid, (int)$gruppenzumhinzufuegen[$i]['gruppe'], (int)$einzelschritte[$j]['id'], (int)$gruppenzumhinzufuegen[$i]['id']]);
             }
           }
         }
@@ -682,17 +682,17 @@ class Supportapp Extends GenSupportapp {
         $kundennummer = $kundetmp[0];
         $mitarbeiternummer = $mitarbeitertmp[0];
 
-        $kundenid = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer ='$kundennummer' LIMIT 1");
-        $mitarbeiterid = $this->app->DB->Select("SELECT id FROM adresse WHERE mitarbeiternummer = '$mitarbeiternummer' LIMIT 1");
+        $kundenid = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = ? LIMIT 1", [$kundennummer]);
+        $mitarbeiterid = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE mitarbeiternummer = ? LIMIT 1", [$mitarbeiternummer]);
 
 	if (gettype($startdatum) !== 'DateTimeInterface') {
 		$startdatum = new DateTime('now');	
 	}
 
         if($einrichtungid > 0){
-          $this->app->DB->Update("UPDATE supportapp SET adresse='$kundenid',mitarbeiter='$mitarbeiterid',startdatum='".date_format($startdatum, 'Y-m-d')."',zeitgeplant='$zeitgeplant', intervall='$intervall', version='$version',bemerkung='$bemerkung',status='$status',phase='$phase' WHERE id='$einrichtungid'");
+          $this->app->DatabaseService->update("UPDATE supportapp SET adresse = ?, mitarbeiter = ?, startdatum = ?, zeitgeplant = ?, intervall = ?, version = ?, bemerkung = ?, status = ?, phase = ? WHERE id = ?", [(int)$kundenid, (int)$mitarbeiterid, date_format($startdatum, 'Y-m-d'), $zeitgeplant, $intervall, $version, $bemerkung, $status, $phase, (int)$einrichtungid]);
         }else{
-          $this->app->DB->Insert("INSERT INTO supportapp (adresse, mitarbeiter, startdatum, zeitgeplant, intervall, version, bemerkung, status, phase) VALUES ('$kundenid','$mitarbeiterid','".date_format($startdatum, 'Y-m-d')."','$zeitgeplant','$intervall','$version','$bemerkung','$status','$phase')");
+          $this->app->DatabaseService->insert("INSERT INTO supportapp (adresse, mitarbeiter, startdatum, zeitgeplant, intervall, version, bemerkung, status, phase) VALUES (?,?,?,?,?,?,?,?,?)", [(int)$kundenid, (int)$mitarbeiterid, date_format($startdatum, 'Y-m-d'), $zeitgeplant, $intervall, $version, $bemerkung, $status, $phase]);
         }
         echo json_encode("success");
         exit;
@@ -700,7 +700,7 @@ class Supportapp Extends GenSupportapp {
       case 'geteinrichtung':
         $einrichtungid = $this->app->Secure->GetGET('id');
 
-        $einrichtung = reset($this->app->DB->SelectArr("SELECT s.id AS id, CONCAT(a1.kundennummer,' ',a1.name) AS kunde, CONCAT(a2.mitarbeiternummer,' ',a2.name) AS mitarbeiter, DATE_FORMAT(s.startdatum,'%d.%m.%Y') AS startdatum, s.zeitgeplant, s.version, s.intervall, s.status, s.phase, s.bemerkung FROM supportapp s LEFT JOIN adresse a1 ON s.adresse = a1.id LEFT JOIN adresse a2 ON s.mitarbeiter = a2.id WHERE s.id = '$einrichtungid'"));
+        $einrichtung = $this->app->DatabaseService->selectRow("SELECT s.id AS id, CONCAT(a1.kundennummer,' ',a1.name) AS kunde, CONCAT(a2.mitarbeiternummer,' ',a2.name) AS mitarbeiter, DATE_FORMAT(s.startdatum,'%d.%m.%Y') AS startdatum, s.zeitgeplant, s.version, s.intervall, s.status, s.phase, s.bemerkung FROM supportapp s LEFT JOIN adresse a1 ON s.adresse = a1.id LEFT JOIN adresse a2 ON s.mitarbeiter = a2.id WHERE s.id = ?", [(int)$einrichtungid]);
         echo json_encode($einrichtung);
         exit;
         break;
@@ -761,14 +761,14 @@ class Supportapp Extends GenSupportapp {
         $gs = explode("_",$this->app->DB->real_escape_string($this->app->Secure->GetPOST('gs')));
         $checked = $this->app->DB->real_escape_string($this->app->Secure->GetPOST('checked'));
 
-        $schrittname = $this->app->DB->Select("SELECT bezeichnung FROM supportapp_schritte WHERE id = '".$gs[2]."'");
+        $schrittname = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM supportapp_schritte WHERE id = ?", [(int)$gs[2]]);
         $this->supportapplogbucheintrag($adressid, $this->app->User->GetAdresse(), $schrittname." geändert zu ".($checked=='1'?'erledigt':'nicht erledigt'));
 
-        $vorhanden = $this->app->DB->Select("SELECT id FROM supportapp_auftrag_check WHERE adresse='".$adressid."' AND schritt='".$gs[2]."' AND auftragposition = '".$gs[3]."'");
+        $vorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM supportapp_auftrag_check WHERE adresse = ? AND schritt = ? AND auftragposition = ?", [(int)$adressid, (int)$gs[2], (int)$gs[3]]);
         if($vorhanden){
-          $this->app->DB->Update("UPDATE supportapp_auftrag_check set status = '$checked' WHERE adresse='".$adressid."' AND schritt='".$gs[2]."' AND auftragposition = '".$gs[3]."'");
+          $this->app->DatabaseService->update("UPDATE supportapp_auftrag_check SET status = ? WHERE adresse = ? AND schritt = ? AND auftragposition = ?", [$checked, (int)$adressid, (int)$gs[2], (int)$gs[3]]);
         }else{
-          $this->app->DB->Insert("INSERT INTO supportapp_auftrag_check (adresse, gruppe, schritt, auftragposition, status) VALUES ('$adressid','".$gs[1]."','".$gs[2]."','".$gs[3]."', '$checked')");
+          $this->app->DatabaseService->insert("INSERT INTO supportapp_auftrag_check (adresse, gruppe, schritt, auftragposition, status) VALUES (?,?,?,?,?)", [(int)$adressid, (int)$gs[1], (int)$gs[2], (int)$gs[3], $checked]);
         }
 
         echo json_encode("success");
@@ -777,7 +777,7 @@ class Supportapp Extends GenSupportapp {
       case 'goto':
         $kundennr = $this->app->DB->real_escape_string($this->app->Secure->GetGET('kdnr'));
         $kundendaten = explode(" ", $kundennr);
-        $id = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer = '".$kundendaten[0]."'");
+        $id = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = ?", [$kundendaten[0]]);
         echo json_encode($id);
         exit;
         break;
@@ -799,7 +799,7 @@ class Supportapp Extends GenSupportapp {
         $kundenid = $this->app->DB->real_escape_string($this->app->Secure->GetGET('id'));
         $startstop = unserialize($this->app->User->GetParameter("supportapp_startstop"));
         $zeit = $startstop[$kundenid]['zeit'];
-        $projektid = $this->app->DB->Select("SELECT CONCAT(p.abkuerzung,' ',p.name) FROM projekt p LEFT JOIN adresse a ON p.id = a.projekt WHERE a.id = '$kundenid'");
+        $projektid = $this->app->DatabaseService->selectValue("SELECT CONCAT(p.abkuerzung,' ',p.name) FROM projekt p LEFT JOIN adresse a ON p.id = a.projekt WHERE a.id = ?", [(int)$kundenid]);
 
         $antwort = array('zeit' => $zeit,
                          'adresse' => $kundenid,
@@ -810,7 +810,7 @@ class Supportapp Extends GenSupportapp {
       case 'save': 
         $kundenid = $this->app->DB->real_escape_string($this->app->Secure->GetGET('id'));
         $bearbeiternummer = $this->app->DB->real_escape_string($this->app->Secure->GetGET('bearbeiter'));
-        $bearbeiteradresse = $this->app->DB->Select("SELECT id FROM adresse WHERE mitarbeiternummer = '".$bearbeiternummer."'");
+        $bearbeiteradresse = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE mitarbeiternummer = ?", [$bearbeiternummer]);
 
         if($bearbeiteradresse == '' || $bearbeiteradresse == 0 || !is_numeric($bearbeiteradresse)){
           $bearbeiteradresse = $this->app->User->GetAdresse();
@@ -822,7 +822,7 @@ class Supportapp Extends GenSupportapp {
         $details = $this->app->Secure->GetPOST('details');
         $projekt = $this->app->Secure->GetPOST('projekt');
         $projekt = explode(" ", $projekt);
-        $projektid = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung = '".$projekt[0]."'");
+        $projektid = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = ?", [$projekt[0]]);
         if($projektid == '') $projektid = 0;
 
         $von = DateTime::createFromFormat('d.m.Y H:i', $von);
@@ -830,8 +830,10 @@ class Supportapp Extends GenSupportapp {
         $von = $von->format("Y-m-d H:i:s");
         $bis = $bis->format("Y-m-d H:i:s");
 
-        $erfolg = $this->app->DB->Insert("INSERT INTO zeiterfassung (art, adresse, von, bis, aufgabe, beschreibung, arbeitspaket, buchungsart, kostenstelle, projekt, abgerechnet, logdatei, status, gps, arbeitsnachweispositionid, adresse_abrechnung, abrechnen, ist_abgerechnet, gebucht_von_user, ort, abrechnung_dokument, dokumentid, verrechnungsart, arbeitsnachweis, internerkommentar, aufgabe_id, auftrag, auftragpositionid, produktion,stundensatz, arbeitsanweisung, serviceauftrag) 
-          VALUES ('Arbeit', '$bearbeiteradresse', '$von', '$bis', '$taetigkeit', '$details', '0', 'manuell', '', '$projektid', '0', NOW(), 'offen', '', '0', '$kundenid', '0', '0', '$bearbeiteradresse', '', '', '0', '', '0', '', '0', '0', '0', '0', '0', '0', '1')");
+        $erfolg = $this->app->DatabaseService->insert(
+          "INSERT INTO zeiterfassung (art, adresse, von, bis, aufgabe, beschreibung, arbeitspaket, buchungsart, kostenstelle, projekt, abgerechnet, logdatei, status, gps, arbeitsnachweispositionid, adresse_abrechnung, abrechnen, ist_abgerechnet, gebucht_von_user, ort, abrechnung_dokument, dokumentid, verrechnungsart, arbeitsnachweis, internerkommentar, aufgabe_id, auftrag, auftragpositionid, produktion, stundensatz, arbeitsanweisung, serviceauftrag) VALUES ('Arbeit',?,?,?,?,'0','0','manuell','',?,'0',NOW(),'offen','','0',?,'0','0',?,'','','0','','0','','0','0','0','0','0','0','1')",
+          [(int)$bearbeiteradresse, $von, $bis, $taetigkeit, (int)$projektid, (int)$kundenid, (int)$bearbeiteradresse]
+        );
 
         $startstop = unserialize($this->app->User->GetParameter("supportapp_startstop"));
         $startstop[$kundenid]['status'] = '0';
@@ -859,13 +861,13 @@ class Supportapp Extends GenSupportapp {
       case 'notiz':
         $id = $this->app->DB->real_escape_string($this->app->Secure->GetGET('id'));
         $sonstiges = $this->app->DB->real_escape_string($this->app->Secure->GetPOST('notiz'));
-        $this->app->DB->Update("UPDATE adresse SET sonstiges = '$sonstiges' WHERE id = '$id'");
+        $this->app->DatabaseService->update("UPDATE adresse SET sonstiges = ? WHERE id = ?", [$sonstiges, (int)$id]);
         echo json_encode("success");
         exit;
         break;
       case 'getmail':
         $empfanengerid = $this->app->DB->real_escape_string($this->app->Secure->GetGET('id'));
-        $betreff = $this->app->DB->Select("SELECT kundennummer FROM adresse WHERE id = '".$empfanengerid."'")." - ".$this->app->DB->Select("SELECT name FROM adresse WHERE id = '".$empfanengerid."'");
+        $betreff = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id = ?", [(int)$empfanengerid])." - ".$this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = ?", [(int)$empfanengerid]);
 
 
         $antwort = array(
@@ -903,7 +905,7 @@ class Supportapp Extends GenSupportapp {
         break;
       case 'holevorlage':
         $vorlageid = $this->app->DB->real_escape_string($this->app->Secure->GetGET('id'));
-        $daten = $this->app->DB->SelectArr("SELECT taetigkeit, beschreibung FROM supportapp_vorlagen WHERE id = '$vorlageid'");
+        $daten = $this->app->DatabaseService->select("SELECT taetigkeit, beschreibung FROM supportapp_vorlagen WHERE id = ?", [(int)$vorlageid]);
         $daten = reset($daten);
         echo json_encode($daten);
         exit;
@@ -917,18 +919,18 @@ class Supportapp Extends GenSupportapp {
     $kundenid = $this->app->DB->real_escape_string($this->app->Secure->GetGET('id'));
     $this->app->erp->Headlines('','Auftrag');
     if($kundennr != ''){
-      $kundenname = $this->app->DB->Select("SELECT name FROM adresse WHERE kundennummer = '".$kundennr."'");
-      $kundenid = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer = '".$kundennr."'");
+      $kundenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE kundennummer = ?", [$kundennr]);
+      $kundenid = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = ?", [$kundennr]);
     }else{
       if($kundenid != ''){
-        $kundenname = $this->app->DB->Select("SELECT name FROM adresse WHERE id = '".$kundenid."'");
-        $kundennr = $this->app->DB->Select("SELECT kundennummer FROM adresse WHERE id = '".$kundenid."'");
+        $kundenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = ?", [(int)$kundenid]);
+        $kundennr = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id = ?", [(int)$kundenid]);
         $this->app->erp->Headlines('','','<a href="index.php?module=adresse&action=edit&id='.$kundenid.'" target="_blank">'.$kundennr.' '.$kundenname.'</a>');
       }
     }
 
-    $nameduser = $this->app->DB->Select("SELECT freifeld5 FROM adresse WHERE id = '".$kundenid."'");
-    $sperrvermerk = trim($this->app->DB->Select("SELECT freifeld6 FROM adresse WHERE id = '".$kundenid."'"));
+    $nameduser = $this->app->DatabaseService->selectValue("SELECT freifeld5 FROM adresse WHERE id = ?", [(int)$kundenid]);
+    $sperrvermerk = trim($this->app->DatabaseService->selectValue("SELECT freifeld6 FROM adresse WHERE id = ?", [(int)$kundenid]));
     //$telefonsupport = trim($this->app->DB->Select("SELECT freifeld7 FROM adresse WHERE id = '".$kundenid."'"));
     //$techniksupport = trim($this->app->DB->Select("SELECT freifeld8 FROM adresse WHERE id = '".$kundenid."'"));
 
@@ -955,34 +957,34 @@ class Supportapp Extends GenSupportapp {
 	    }
 	}
 
-    $telefonsupport = $this->app->DB->Select("SELECT id FROM abrechnungsartikel  WHERE artikel in (".implode(', ', $artikektelefonarr).")  AND artikel <> 0 AND (enddatum IS NULL OR enddatum >= CURDATE()) AND adresse = '$kundenid' LIMIT 1");
+    $telefonsupport = $this->app->DatabaseService->selectValue("SELECT id FROM abrechnungsartikel WHERE artikel IN (".implode(', ', $artikektelefonarr).") AND artikel <> 0 AND (enddatum IS NULL OR enddatum >= CURDATE()) AND adresse = ? LIMIT 1", [(int)$kundenid]);
 
-    $techniksupport = $this->app->DB->Select("SELECT id FROM abrechnungsartikel  WHERE artikel in (".implode(', ', $artikektechnikerarr).") AND artikel <> 0 AND (enddatum IS NULL OR enddatum >= CURDATE()) AND adresse = '$kundenid' LIMIT 1");
+    $techniksupport = $this->app->DatabaseService->selectValue("SELECT id FROM abrechnungsartikel WHERE artikel IN (".implode(', ', $artikektechnikerarr).") AND artikel <> 0 AND (enddatum IS NULL OR enddatum >= CURDATE()) AND adresse = ? LIMIT 1", [(int)$kundenid]);
 
-    $supportvertrag = $this->app->DB->Select("SELECT id FROM abrechnungsartikel  WHERE artikel in (".implode(', ', $artikekenterprisearr).") AND artikel <> 0 AND (enddatum IS NULL OR enddatum >= CURDATE()) AND adresse = '$kundenid' LIMIT 1");
+    $supportvertrag = $this->app->DatabaseService->selectValue("SELECT id FROM abrechnungsartikel WHERE artikel IN (".implode(', ', $artikekenterprisearr).") AND artikel <> 0 AND (enddatum IS NULL OR enddatum >= CURDATE()) AND adresse = ? LIMIT 1", [(int)$kundenid]);
 
-    $supportvertrag2 = $this->app->DB->Select("SELECT rp.id FROM rechnung_position rp LEFT JOIN rechnung r ON rp.rechnung = r.id WHERE artikel in (".implode(', ', $artikekenterprisearr).") AND artikel <> 0 AND adresse = '$kundenid' AND r.datum >= (now() - INTERVAL 1 YEAR)");
+    $supportvertrag2 = $this->app->DatabaseService->selectValue("SELECT rp.id FROM rechnung_position rp LEFT JOIN rechnung r ON rp.rechnung = r.id WHERE artikel IN (".implode(', ', $artikekenterprisearr).") AND artikel <> 0 AND adresse = ? AND r.datum >= (now() - INTERVAL 1 YEAR)", [(int)$kundenid]);
 
 
-    $rechnungenbezahlt = trim($this->app->DB->Select("SELECT freifeld9 FROM adresse WHERE id = '".$kundenid."'"));
-    $pluspaketamlaufen = $this->app->DB->Select("SELECT COUNT(w.id) FROM supportapp w LEFT JOIN adresse ma ON ma.id=w.mitarbeiter LEFT JOIN adresse ku ON ku.id=w.adresse  WHERE  w.status='gestartet' AND adresse = '".$kundenid."'");
+    $rechnungenbezahlt = trim($this->app->DatabaseService->selectValue("SELECT freifeld9 FROM adresse WHERE id = ?", [(int)$kundenid]));
+    $pluspaketamlaufen = $this->app->DatabaseService->selectValue("SELECT COUNT(w.id) FROM supportapp w LEFT JOIN adresse ma ON ma.id = w.mitarbeiter LEFT JOIN adresse ku ON ku.id = w.adresse WHERE w.status = 'gestartet' AND adresse = ?", [(int)$kundenid]);
 
     if($pluspaketamlaufen) $telefonsupport = $pluspaketamlaufen; // Wenn Kunde Pluspaket hat ist Telefonsupport auch automatisch dabei
 
-    $sonstiges = $this->app->DB->Select("SELECT sonstiges FROM adresse WHERE id = '".$kundenid."'");
+    $sonstiges = $this->app->DatabaseService->selectValue("SELECT sonstiges FROM adresse WHERE id = ?", [(int)$kundenid]);
 
 
     if($kundenid != ''){
-      $gruppenzumhinzufuegen= $this->app->DB->SelectArr("SELECT ap.id, was.gruppe FROM auftrag_position ap JOIN auftrag a ON ap.auftrag = a.id LEFT JOIN supportapp_gruppen wag ON ap.artikel = wag.artikel LEFT JOIN supportapp_schritte was ON wag.id = was.gruppe LEFT JOIN supportapp_auftrag_check wac ON wac.auftragposition = ap.id WHERE a.adresse = '$kundenid' AND a.status <> 'storniert' AND a.belegnr <> '' AND wag.aktiv = 1 AND was.aktiv = 1 AND ISNULL(wac.id) GROUP BY ap.id");
+      $gruppenzumhinzufuegen= $this->app->DatabaseService->select("SELECT ap.id, was.gruppe FROM auftrag_position ap JOIN auftrag a ON ap.auftrag = a.id LEFT JOIN supportapp_gruppen wag ON ap.artikel = wag.artikel LEFT JOIN supportapp_schritte was ON wag.id = was.gruppe LEFT JOIN supportapp_auftrag_check wac ON wac.auftragposition = ap.id WHERE a.adresse = ? AND a.status <> 'storniert' AND a.belegnr <> '' AND wag.aktiv = 1 AND was.aktiv = 1 AND ISNULL(wac.id) GROUP BY ap.id", [(int)$kundenid]);
 
 	if (!is_null($gruppezumhinzufuegen)) {
 
 	      for ($i=0; $i < (!empty($gruppenzumhinzufuegen)?count($gruppenzumhinzufuegen):0); $i++) {
-	        $einzelschritte = $this->app->DB->Select("SELECT * FROM supportapp_schritte WHERE aktiv = 1 AND gruppe = ".$gruppenzumhinzufuegen[$i]['gruppe']);
+	        $einzelschritte = $this->app->DatabaseService->select("SELECT * FROM supportapp_schritte WHERE aktiv = 1 AND gruppe = ?", [(int)$gruppenzumhinzufuegen[$i]['gruppe']]);
 	        for ($j=0; $j < (!empty($einzelschritte)?count($einzelschritte):0); $j++) {
-	          $vorhanden = $this->app->DB->Select("SELECT id FROM supportapp_auftrag_check WHERE auftragposition = '".$gruppenzumhinzufuegen[$i]['id']."' AND gruppe = '".$gruppenzumhinzufuegen[$i]['gruppe']."' AND adresse = '$kundenid' AND schritt = '".$einzelschritte[$j]['id']."' LIMIT 1");
+	          $vorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM supportapp_auftrag_check WHERE auftragposition = ? AND gruppe = ? AND adresse = ? AND schritt = ? LIMIT 1", [(int)$gruppenzumhinzufuegen[$i]['id'], (int)$gruppenzumhinzufuegen[$i]['gruppe'], (int)$kundenid, (int)$einzelschritte[$j]['id']]);
 	          if($vorhanden == ''){
-	            $this->app->DB->Insert("INSERT INTO supportapp_auftrag_check (adresse, gruppe, schritt, auftragposition, status) VALUES ('$kundenid','".$gruppenzumhinzufuegen[$i]['gruppe']."','".$einzelschritte[$j]['id']."','".$gruppenzumhinzufuegen[$i]['id']."','0')");
+	            $this->app->DatabaseService->insert("INSERT INTO supportapp_auftrag_check (adresse, gruppe, schritt, auftragposition, status) VALUES (?,?,?,?,'0')", [(int)$kundenid, (int)$gruppenzumhinzufuegen[$i]['gruppe'], (int)$einzelschritte[$j]['id'], (int)$gruppenzumhinzufuegen[$i]['id']]);
 	          }
 	        }
 	      }
@@ -1016,7 +1018,7 @@ class Supportapp Extends GenSupportapp {
         <td>Preis</td>
         <td>Rabatt</td>
       </tr>';
-    $modules = $this->app->DB->SelectArr("SELECT DATE_FORMAT(a.datum,'%d.%m.%Y') AS datum, ar.nummer, ap.bezeichnung, ".$this->app->erp->FormatMenge("ap.menge")." AS menge, ".$this->app->erp->FormatPreis("ap.preis",2)." AS preis, ".$this->app->erp->FormatPreis("ap.rabatt",2)." AS rabatt FROM auftrag a LEFT JOIN auftrag_position ap ON a.id = ap.auftrag LEFT JOIN artikel ar ON ar.id = ap.artikel WHERE a.status <> 'angelegt' AND a.status <> 'storniert' AND a.adresse = '$kundenid'");
+    $modules = $this->app->DatabaseService->select("SELECT DATE_FORMAT(a.datum,'%d.%m.%Y') AS datum, ar.nummer, ap.bezeichnung, ".$this->app->erp->FormatMenge("ap.menge")." AS menge, ".$this->app->erp->FormatPreis("ap.preis",2)." AS preis, ".$this->app->erp->FormatPreis("ap.rabatt",2)." AS rabatt FROM auftrag a LEFT JOIN auftrag_position ap ON a.id = ap.auftrag LEFT JOIN artikel ar ON ar.id = ap.artikel WHERE a.status <> 'angelegt' AND a.status <> 'storniert' AND a.adresse = ?", [(int)$kundenid]);
 
 	if (!is_null($modules)) {
 
@@ -1046,7 +1048,7 @@ class Supportapp Extends GenSupportapp {
       </tr>';
     $steuersatznormal = 1+$this->app->erp->GetStandardSteuersatzNormal()/100;
     $steuersatzermaessigt = 1+$this->app->erp->GetStandardSteuersatzErmaessigt()/100;
-    $beleges = $this->app->DB->SelectArr("SELECT 'Angebot' AS art,a.belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') AS datum, ".$this->app->erp->FormatPreis("IF(ISNULL(SUM(ap.preis)),0,SUM(ap.preis*ap.menge*IF(ap.umsatzsteuer = 'normal',$steuersatznormal,$steuersatzermaessigt)))",2)." AS summe, a.status, CONCAT('<a href=\"index.php?module=angebot&action=pdf&id=',a.id,'\"><img src=\"themes/new/images/pdf.svg\" border=\"0\"></a>') AS pdf FROM angebot a LEFT JOIN angebot_position ap ON a.id = ap.angebot WHERE adresse = '$kundenid' GROUP BY a.id UNION SELECT 'Auftrag' AS art,a.belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') AS datum, ".$this->app->erp->FormatPreis("IF(ISNULL(SUM(ap.preis)),0,SUM(ap.preis*ap.menge*IF(ap.umsatzsteuer = 'normal',$steuersatznormal,$steuersatzermaessigt)))",2)." AS summe, a.status, CONCAT('<a href=\"index.php?module=auftrag&action=pdf&id=',a.id,'\"><img src=\"themes/new/images/pdf.svg\" border=\"0\"></a>') AS pdf FROM auftrag a LEFT JOIN auftrag_position ap ON a.id = ap.auftrag WHERE adresse = '$kundenid' GROUP BY a.id");
+    $beleges = $this->app->DatabaseService->select("SELECT 'Angebot' AS art,a.belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') AS datum, ".$this->app->erp->FormatPreis("IF(ISNULL(SUM(ap.preis)),0,SUM(ap.preis*ap.menge*IF(ap.umsatzsteuer = 'normal',$steuersatznormal,$steuersatzermaessigt)))",2)." AS summe, a.status, CONCAT('<a href=\"index.php?module=angebot&action=pdf&id=',a.id,'\"><img src=\"themes/new/images/pdf.svg\" border=\"0\"></a>') AS pdf FROM angebot a LEFT JOIN angebot_position ap ON a.id = ap.angebot WHERE adresse = ? GROUP BY a.id UNION SELECT 'Auftrag' AS art,a.belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') AS datum, ".$this->app->erp->FormatPreis("IF(ISNULL(SUM(ap.preis)),0,SUM(ap.preis*ap.menge*IF(ap.umsatzsteuer = 'normal',$steuersatznormal,$steuersatzermaessigt)))",2)." AS summe, a.status, CONCAT('<a href=\"index.php?module=auftrag&action=pdf&id=',a.id,'\"><img src=\"themes/new/images/pdf.svg\" border=\"0\"></a>') AS pdf FROM auftrag a LEFT JOIN auftrag_position ap ON a.id = ap.auftrag WHERE adresse = ? GROUP BY a.id", [(int)$kundenid, (int)$kundenid]);
 
 	if (!is_null($beleges)) {
 
