@@ -1012,8 +1012,8 @@ INNER JOIN shopexport s ON
     $kundengruppeBezeichnungAusShop = $this->app->Secure->GetPOST('kundengruppeshop');
     $projektAbkuerzung = $this->app->Secure->GetPOST('projekt');
     $projekt = $this->app->DatabaseService->selectValue(
-      "SELECT id FROM projekt WHERE abkuerzung = ? AND abkuerzung <> '' AND ifnull(geloescht,0) = 0 LIMIT 1",
-      [$projektAbkuerzung]
+      "SELECT id FROM projekt WHERE abkuerzung = :abkuerzung AND abkuerzung <> '' AND ifnull(geloescht,0) = 0 LIMIT 1",
+      ['abkuerzung' => $projektAbkuerzung]
     );
     if(!$projekt){
       $projekt = '0';
@@ -1029,8 +1029,8 @@ INNER JOIN shopexport s ON
     }
 
     $eintragBereitsvorhanden = $this->app->DatabaseService->selectValue(
-      "SELECT id FROM shopexport_kundengruppen WHERE projekt=? AND shopid=? AND gruppeid=? AND extgruppename=? AND id<>? LIMIT 1",
-      [$projekt, $shopId, $kundengruppeIdAusXentral, $kundengruppeBezeichnungAusShop, $id]
+      "SELECT id FROM shopexport_kundengruppen WHERE projekt=:projekt AND shopid=:shopid AND gruppeid=:gruppeid AND extgruppename=:extgruppename AND id<>:id LIMIT 1",
+      ['projekt' => $projekt, 'shopid' => $shopId, 'gruppeid' => $kundengruppeIdAusXentral, 'extgruppename' => $kundengruppeBezeichnungAusShop, 'id' => $id]
     );
     if($eintragBereitsvorhanden){
       $antwort['status'] = 0;
@@ -1041,14 +1041,14 @@ INNER JOIN shopexport s ON
       $bearbeiter = $this->app->User->GetName();
       if($id){
         $this->app->DatabaseService->update(
-          "UPDATE shopexport_kundengruppen SET type=?,gruppeid=?,extgruppename=?, aktiv=?, apply_to_new_customers=?,projekt=?, updated=NOW(),updatedby=? WHERE id=?",
-          [$rolle, $kundengruppeIdAusXentral, $kundengruppeBezeichnungAusShop, $aktiv, $neukundenzuweisen, $projekt, $bearbeiter, $id]
+          "UPDATE shopexport_kundengruppen SET type=:type,gruppeid=:gruppeid,extgruppename=:extgruppename, aktiv=:aktiv, apply_to_new_customers=:apply_to_new_customers,projekt=:projekt, updated=NOW(),updatedby=:updatedby WHERE id=:id",
+          ['type' => $rolle, 'gruppeid' => $kundengruppeIdAusXentral, 'extgruppename' => $kundengruppeBezeichnungAusShop, 'aktiv' => $aktiv, 'apply_to_new_customers' => $neukundenzuweisen, 'projekt' => $projekt, 'updatedby' => $bearbeiter, 'id' => $id]
         );
       }else{
         $aktiv = '1';
         $this->app->DatabaseService->insert(
-          "INSERT INTO shopexport_kundengruppen (shopid, gruppeid, extgruppename, aktiv, apply_to_new_customers, type, projekt, updated, updatedby) VALUES (?,?,?,?,?,?,?,NOW(),?)",
-          [$shopId, $kundengruppeIdAusXentral, $kundengruppeBezeichnungAusShop, $aktiv, $neukundenzuweisen, $rolle, $projekt, $bearbeiter]
+          "INSERT INTO shopexport_kundengruppen (shopid, gruppeid, extgruppename, aktiv, apply_to_new_customers, type, projekt, updated, updatedby) VALUES (:shopid, :gruppeid, :extgruppename, :aktiv, :apply_to_new_customers, :type, :projekt, NOW(), :updatedby)",
+          ['shopid' => $shopId, 'gruppeid' => $kundengruppeIdAusXentral, 'extgruppename' => $kundengruppeBezeichnungAusShop, 'aktiv' => $aktiv, 'apply_to_new_customers' => $neukundenzuweisen, 'type' => $rolle, 'projekt' => $projekt, 'updatedby' => $bearbeiter]
         );
       }
     }
@@ -1067,8 +1067,8 @@ INNER JOIN shopexport s ON
     $projekt = explode(' ',$this->app->Secure->GetPOST('projekt'));
     $projekt = reset($projekt);
     $projekt = $this->app->DatabaseService->selectValue(
-      "SELECT id FROM projekt WHERE abkuerzung = ? AND abkuerzung <> '' AND ifnull(geloescht,0) = 0 LIMIT 1",
-      [$projekt]
+      "SELECT id FROM projekt WHERE abkuerzung = :abkuerzung AND abkuerzung <> '' AND ifnull(geloescht,0) = 0 LIMIT 1",
+      ['abkuerzung' => $projekt]
     );
     /*$aktiv = $this->app->Secure->GetPOST('aktiv');
     if($aktiv!="1")
@@ -1080,13 +1080,13 @@ INNER JOIN shopexport s ON
 
     if ($shop) {
       $insid = $this->app->DatabaseService->insert(
-        "INSERT INTO shopexport_sprachen (id,shop,land,projekt, aktiv, sprache) VALUES ('',?,?,?,?,?)",
-        [$shop, $land, $projekt, $aktiv, $sprache]
+        "INSERT INTO shopexport_sprachen (id,shop,land,projekt, aktiv, sprache) VALUES ('', :shop, :land, :projekt, :aktiv, :sprache)",
+        ['shop' => $shop, 'land' => $land, 'projekt' => $projekt, 'aktiv' => $aktiv, 'sprache' => $sprache]
       );
       $bearbeiter = $this->app->User->GetName();
       $this->app->DatabaseService->update(
-        "UPDATE shopexport_sprachen SET updatedby = ? WHERE id = ? LIMIT 1",
-        [$bearbeiter, $insid]
+        "UPDATE shopexport_sprachen SET updatedby = :updatedby WHERE id = :id LIMIT 1",
+        ['updatedby' => $bearbeiter, 'id' => $insid]
       );
     }
 

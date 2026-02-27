@@ -79,7 +79,7 @@ class Angebot extends GenAngebot
 
     if($nummer==''){
       if($id > 0){
-        $adresse = $this->app->DatabaseService->selectValue("SELECT a.name FROM angebot b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id=? LIMIT 1", [(int)$id]);
+        $adresse = $this->app->DatabaseService->selectValue("SELECT a.name FROM angebot b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id=:id LIMIT 1", ['id' => (int)$id]);
       }else{
         $adresse = '';
       }
@@ -88,7 +88,7 @@ class Angebot extends GenAngebot
       $adresse = $nummer;
     }
     if($id > 0){
-      $nummer = $this->app->DatabaseService->selectValue("SELECT b.belegnr FROM angebot b WHERE b.id=? LIMIT 1", [(int)$id]);
+      $nummer = $this->app->DatabaseService->selectValue("SELECT b.belegnr FROM angebot b WHERE b.id=:id LIMIT 1", ['id' => (int)$id]);
     }else{
       $nummer = '';
     }
@@ -97,7 +97,7 @@ class Angebot extends GenAngebot
     $this->app->Tpl->Set('UEBERSCHRIFT',"Angebot:&nbsp;".$adresse." (".$nummer.")");
     $this->app->Tpl->Set('FARBE',"[FARBE2]");
 
-    $angebotersatz = $this->app->DatabaseService->selectValue("SELECT abweichendebezeichnung FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $angebotersatz = $this->app->DatabaseService->selectValue("SELECT abweichendebezeichnung FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     if($angebotersatz)
       $this->app->Tpl->Set('BEZEICHNUNGTITEL',($this->app->erp->Beschriftung("bezeichnungangebotersatz")?$this->app->erp->Beschriftung("bezeichnungangebotersatz"):$this->app->erp->Beschriftung("dokument_angebot")));
     else
@@ -127,8 +127,8 @@ class Angebot extends GenAngebot
 
     $angebotId = $detailQuery->getItemIdentifier();
     $angebot = $this->app->DatabaseService->selectRow(
-      "SELECT a.id, a.belegnr, a.datum FROM `angebot` AS `a` WHERE a.id = ? LIMIT 1",
-      [(int)$angebotId]
+      "SELECT a.id, a.belegnr, a.datum FROM `angebot` AS `a` WHERE a.id = :id LIMIT 1",
+      ['id' => (int)$angebotId]
     );
     if (empty($angebot)) {
       return;
@@ -149,16 +149,16 @@ class Angebot extends GenAngebot
   {
     $id = (int)$this->app->Secure->GetGET("id");
 
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
     if($status==='storniert')
     {
-      $this->app->DatabaseService->update("UPDATE angebot SET status='freigegeben' WHERE id=? LIMIT 1", [(int)$id]);
+      $this->app->DatabaseService->update("UPDATE angebot SET status='freigegeben' WHERE id=:id LIMIT 1", ['id' => (int)$id]);
       $this->app->erp->AngebotProtokoll($id,"Angebot Storno rückgängig");
 
-      $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='0' WHERE module='angebot' AND parameter=? AND parameter > 0", [(int)$id]);
+      $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='0' WHERE module='angebot' AND parameter=:id AND parameter > 0", ['id' => (int)$id]);
 
       $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Angebot \"$name\" ($belegnr) wurde wieder freigegeben!</div>  ");
     } else {
@@ -188,12 +188,12 @@ class Angebot extends GenAngebot
 
     $hauptid = $id;
 
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
     if($status!=='angelegt') {
       $timeout = 0;
       while($timeout <= 100) {
-        $checkkopievon = $this->app->DatabaseService->selectValue("SELECT kopievon FROM angebot WHERE id=? LIMIT 1", [(int)$hauptid]);
+        $checkkopievon = $this->app->DatabaseService->selectValue("SELECT kopievon FROM angebot WHERE id=:hauptid LIMIT 1", ['hauptid' => (int)$hauptid]);
         if($checkkopievon > 0){
           $hauptid = $checkkopievon;
         }
@@ -204,12 +204,12 @@ class Angebot extends GenAngebot
       }
 
       $neuesangebot = $this->app->erp->CopyAngebot($id);
-      $altebelegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=? LIMIT 1", [(int)$hauptid]);
-      $anzahl_kopievon = $this->app->DatabaseService->selectValue("SELECT COUNT(id)+1 FROM angebot WHERE kopievon=? AND kopievon > 0", [(int)$hauptid]);
+      $altebelegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=:hauptid LIMIT 1", ['hauptid' => (int)$hauptid]);
+      $anzahl_kopievon = $this->app->DatabaseService->selectValue("SELECT COUNT(id)+1 FROM angebot WHERE kopievon=:hauptid AND kopievon > 0", ['hauptid' => (int)$hauptid]);
 
       $this->app->DatabaseService->update(
-        "UPDATE angebot SET belegnr=?, status='freigegeben', kopievon=?, kopienummer=? WHERE id=? LIMIT 1",
-        ["{$altebelegnr}-{$anzahl_kopievon}", (int)$hauptid, (int)$anzahl_kopievon, (int)$neuesangebot]
+        "UPDATE angebot SET belegnr=:belegnr, status='freigegeben', kopievon=:hauptid, kopienummer=:kopienummer WHERE id=:neuesangebot LIMIT 1",
+        ['belegnr' => "{$altebelegnr}-{$anzahl_kopievon}", 'hauptid' => (int)$hauptid, 'kopienummer' => (int)$anzahl_kopievon, 'neuesangebot' => (int)$neuesangebot]
       );
 
       $this->app->erp->AngebotNeuberechnen($id);
@@ -222,7 +222,7 @@ class Angebot extends GenAngebot
   function AngebotArchivierePDF()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $projektbriefpapier = $this->app->DatabaseService->selectValue("SELECT projekt FROM angebot WHERE id = ? LIMIT 1", [(int)$id]);
+    $projektbriefpapier = $this->app->DatabaseService->selectValue("SELECT projekt FROM angebot WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if(class_exists('AngebotPDFCustom')) {
       $Brief = new AngebotPDFCustom($this->app,$projektbriefpapier);
     }
@@ -232,7 +232,7 @@ class Angebot extends GenAngebot
     $Brief->GetAngebot($id);
     $tmpfile = $Brief->displayTMP();
     $Brief->ArchiviereDocument(1);
-    $this->app->DatabaseService->update("UPDATE angebot SET schreibschutz='1' WHERE id=?", [(int)$id]);
+    $this->app->DatabaseService->update("UPDATE angebot SET schreibschutz='1' WHERE id=:id", ['id' => (int)$id]);
     @unlink($tmpfile);
     $this->app->Location->execute('index.php?module=angebot&action=edit&id='.$id);
   }
@@ -250,7 +250,7 @@ class Angebot extends GenAngebot
   public function AngebotDeleteRabatte()
   {
     $id=$this->app->Secure->GetGET('id');
-    $this->app->DatabaseService->update("UPDATE angebot SET rabatt='',rabatt1='',rabatt2='',rabatt3='',rabatt4='',rabatt5='',realrabatt='' WHERE id=? LIMIT 1", [(int)$id]);
+    $this->app->DatabaseService->update("UPDATE angebot SET rabatt='',rabatt1='',rabatt2='',rabatt3='',rabatt4='',rabatt5='',realrabatt='' WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     $msg = $this->app->erp->base64_url_encode("<div class=\"warning\">Die Rabatte wurden entfernt!</div>  ");
     $this->app->Location->execute("index.php?module=angebot&action=edit&id=$id&msg=$msg");
   } 
@@ -264,8 +264,8 @@ class Angebot extends GenAngebot
   {
 
     $id = $this->app->Secure->GetGET("id");
-    $this->app->DatabaseService->update("UPDATE angebot SET zuarchivieren='1' WHERE id=?", [(int)$id]);
-    $this->app->DatabaseService->update("UPDATE angebot SET schreibschutz='0' WHERE id=?", [(int)$id]);
+    $this->app->DatabaseService->update("UPDATE angebot SET zuarchivieren='1' WHERE id=:id", ['id' => (int)$id]);
+    $this->app->DatabaseService->update("UPDATE angebot SET schreibschutz='0' WHERE id=:id", ['id' => (int)$id]);
     $this->app->erp->AngebotProtokoll($id,"Schreibschutz entfernt");
     $this->app->Location->execute("index.php?module=angebot&action=edit&id=$id");
   }
@@ -313,8 +313,8 @@ class Angebot extends GenAngebot
         $this->app->Tpl->Set('DBHIDDEN','hidden');
     } else {
         $positionen = $this->app->DatabaseService->select(
-          "SELECT umsatz_netto_gesamt, artikel, menge, einkaufspreis FROM `angebot_position` WHERE `angebot` = ?",
-          [(int)$id]
+          "SELECT umsatz_netto_gesamt, artikel, menge, einkaufspreis FROM `angebot_position` WHERE `angebot` = :angebot",
+          ['angebot' => (int)$id]
         );
 
         $umsatz_gesamt = 0;
@@ -345,10 +345,10 @@ class Angebot extends GenAngebot
     }
 
 
-    $auftragArr = $this->app->DatabaseService->select("SELECT * FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $kundennummer = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id=? LIMIT 1", [(int)$auftragArr[0]['adresse']]);
-    $projekt = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id=? LIMIT 1", [(int)$auftragArr[0]['projekt']]);
-    $kundenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=? LIMIT 1", [(int)$auftragArr[0]['adresse']]);
+    $auftragArr = $this->app->DatabaseService->select("SELECT * FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $kundennummer = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id=:adresse LIMIT 1", ['adresse' => (int)$auftragArr[0]['adresse']]);
+    $projekt = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id=:projekt LIMIT 1", ['projekt' => (int)$auftragArr[0]['projekt']]);
+    $kundenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:adresse LIMIT 1", ['adresse' => (int)$auftragArr[0]['adresse']]);
     $this->app->Tpl->Set('KUNDE',"<a href=\"index.php?module=adresse&action=edit&id=".$auftragArr[0]['adresse']."\" target=\"_blank\">".$kundennummer."</a> ".$kundenname);
 
     if($this->app->erp->RechteVorhanden('projekt','dashboard')){
@@ -362,7 +362,7 @@ class Angebot extends GenAngebot
     $this->app->Tpl->Set('STATUS',$auftragArr[0]['status']);
     $this->app->Tpl->Set('ANFRAGE',$auftragArr[0]['anfrage']);
 
-    $betrag = $this->app->DatabaseService->selectValue("SELECT gesamtsumme FROM angebot WHERE id = ?", [(int)$id]);
+    $betrag = $this->app->DatabaseService->selectValue("SELECT gesamtsumme FROM angebot WHERE id = :id", ['id' => (int)$id]);
     $this->app->Tpl->Set('GESAMTSUMME',number_format($betrag,"2",",","."));
 
     if($auftragArr[0]['ust_befreit']==0)
@@ -385,8 +385,8 @@ class Angebot extends GenAngebot
             '\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Lieferschein bearbeiten\" border=\"0\" target=\"_blank\"></a>'
             ) as auftrag
       FROM auftrag AS l
-      WHERE l.angebotid=?",
-      [(int)$id]
+      WHERE l.angebotid=:angebotid",
+      ['angebotid' => (int)$id]
     );
 
     /*$auftragid = $this->app->DB->Select("SELECT l.id
@@ -408,8 +408,8 @@ class Angebot extends GenAngebot
 
     // CRM
     $dokumente = $id <= 0?null: $this->app->DatabaseService->select(
-      "SELECT betreff,text FROM dokumente_send WHERE dokument='angebot' AND parameter=?",
-      [(int)$id]
+      "SELECT betreff,text FROM dokumente_send WHERE dokument='angebot' AND parameter=:parameter",
+      ['parameter' => (int)$id]
     );
     if(!empty($dokumente))
     {
@@ -422,7 +422,7 @@ class Angebot extends GenAngebot
 
     // ARTIKEL
 
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
     $table = new EasyTable($this->app);
 
@@ -547,7 +547,7 @@ class Angebot extends GenAngebot
 
   function AngebotRechnungsLieferadresse($angebotid)
   { 
-    $data = $this->app->DatabaseService->select("SELECT * FROM angebot WHERE id=? LIMIT 1", [(int)$angebotid]);
+    $data = $this->app->DatabaseService->select("SELECT * FROM angebot WHERE id=:angebotid LIMIT 1", ['angebotid' => (int)$angebotid]);
 
     foreach($data[0] as $key=>$value)
     {
@@ -560,10 +560,10 @@ class Angebot extends GenAngebot
 
     // wenn abweichende rechnungsadresse bei kunden aktiv ist dann diese verwenden
 
-    $abweichende = $this->app->DatabaseService->selectValue("SELECT abweichende_rechnungsadresse FROM adresse WHERE id=? LIMIT 1", [(int)$data[0]['adresse']]);
+    $abweichende = $this->app->DatabaseService->selectValue("SELECT abweichende_rechnungsadresse FROM adresse WHERE id=:adresse LIMIT 1", ['adresse' => (int)$data[0]['adresse']]);
     if($abweichende=="1")
     {
-      $adresse_data = $this->app->DatabaseService->select("SELECT * FROM adresse WHERE id=? LIMIT 1", [(int)$data[0]['adresse']]);
+      $adresse_data = $this->app->DatabaseService->select("SELECT * FROM adresse WHERE id=:adresse LIMIT 1", ['adresse' => (int)$data[0]['adresse']]);
 
       foreach($adresse_data[0] as $key=>$value)
       {
@@ -621,11 +621,11 @@ class Angebot extends GenAngebot
       $this->app->Location->execute('index.php?module=angebot&action=abschicken&id='.$id);
     }
 
-    $check = $this->app->DatabaseService->selectValue("SELECT b.belegnr FROM angebot b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id=? LIMIT 1", [(int)$id]);
+    $check = $this->app->DatabaseService->selectValue("SELECT b.belegnr FROM angebot b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id=:id LIMIT 1", ['id' => (int)$id]);
 
     if($allowedFrm && ($freigabe==$id)) {
-      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-      $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+      $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
       if($belegnr=="" || $belegnr=="0")
       {
         $this->app->erp->BelegFreigabe("angebot",$id);
@@ -643,9 +643,9 @@ class Angebot extends GenAngebot
     }
 
     if($showDefault){
-      $name = $this->app->DatabaseService->selectValue("SELECT a.name FROM angebot b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id=? LIMIT 1", [(int)$id]);
-      $summe = $this->app->DatabaseService->selectValue("SELECT gesamtsumme FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-      $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM angebot_position WHERE angebot=? LIMIT 1", [(int)$id]);
+      $name = $this->app->DatabaseService->selectValue("SELECT a.name FROM angebot b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id=:id LIMIT 1", ['id' => (int)$id]);
+      $summe = $this->app->DatabaseService->selectValue("SELECT gesamtsumme FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+      $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM angebot_position WHERE angebot=:angebot LIMIT 1", ['angebot' => (int)$id]);
 
       $summe = $this->app->erp->EUR($summe);
 
@@ -678,17 +678,17 @@ class Angebot extends GenAngebot
   function AngebotZertifikate()
   {
     $id = $this->app->Secure->GetGET("id");
-    $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM angebot WHERE id = ? LIMIT 1", [(int)$id]);
+    $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM angebot WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($adresse)
     {
       $zertifikate = $this->app->DatabaseService->select(
         "SELECT ds.datei
         FROM datei_stichwoerter ds
         INNER JOIN datei_stichwoerter ds2 ON ds.datei = ds2.datei AND ds2.objekt = 'Artikel'
-        INNER JOIN angebot_position ap ON ap.artikel = ds2.parameter AND ap.angebot = ?
-        WHERE ds.objekt = 'Adressen' AND ds.parameter = ?
+        INNER JOIN angebot_position ap ON ap.artikel = ds2.parameter AND ap.angebot = :angebot
+        WHERE ds.objekt = 'Adressen' AND ds.parameter = :parameter
         GROUP BY ds.datei",
-        [(int)$id, (int)$adresse]
+        ['angebot' => (int)$id, 'parameter' => (int)$adresse]
       );
       if($zertifikate)
       {
@@ -706,7 +706,7 @@ class Angebot extends GenAngebot
   function AngebotLiveTabelle()
   {
     $id = $this->app->Secure->GetGET("id");
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
     $table = new EasyTable($this->app);
 
@@ -732,7 +732,7 @@ class Angebot extends GenAngebot
   {
     $id = $this->app->Secure->GetGET("id");
 
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=?", [(int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id", ['id' => (int)$id]);
 
     if($status!="angelegt")
     {
@@ -740,7 +740,7 @@ class Angebot extends GenAngebot
       $this->app->erp->AngebotProtokoll($id,"Angebot als Auftrag weitergeführt");
 
       // offene wiedervorlage als abgeschlossen
-      $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='1' WHERE module='angebot' AND parameter=?", [(int)$id]);
+      $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='1' WHERE module='angebot' AND parameter=:id", ['id' => (int)$id]);
       header("Location: index.php?module=auftrag&action=edit&id=$newid");
     } else {
       $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Das Angebot befindet sich noch im Entwurfsmodus und kann daher nicht als Auftrag weiterführt werden!</div>");
@@ -757,7 +757,7 @@ class Angebot extends GenAngebot
     $justStorage = $this->app->Secure->GetPOST('just_strorage');
     $this->app->User->SetParameter('proforma_just_storage', (int)$justStorage);
     $id = $this->app->Secure->GetPOST('elementid');
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=?", [(int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id", ['id' => (int)$id]);
     if($status!=='angelegt') {
       /** @var Proformarechnung $obj */
       $obj = $this->app->loadModule('proformarechnung');
@@ -799,14 +799,14 @@ class Angebot extends GenAngebot
   {
     $id = (int)$this->app->Secure->GetGET("id");
 
-    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
-    $this->app->DatabaseService->update("UPDATE angebot SET status='abgelehnt' WHERE id=? LIMIT 1", [(int)$id]);
+    $this->app->DatabaseService->update("UPDATE angebot SET status='abgelehnt' WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     $this->app->erp->AngebotProtokoll($id,"Angebot abgelehnt");
 
-    $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='1' WHERE module='angebot' AND parameter=? AND parameter > 0", [(int)$id]);
+    $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='1' WHERE module='angebot' AND parameter=:id AND parameter > 0", ['id' => (int)$id]);
 
     $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Das Angebot \"$name\" ($belegnr) wurde abgelehnt!</div>");                                                                                                 
     header("Location: index.php?module=angebot&action=list&msg=$msg#tabs-1");
@@ -817,14 +817,14 @@ class Angebot extends GenAngebot
   {
     $id = (int)$this->app->Secure->GetGET("id");
 
-    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
-    $this->app->DatabaseService->update("UPDATE angebot SET status='beauftragt' WHERE id=? LIMIT 1", [(int)$id]);
+    $this->app->DatabaseService->update("UPDATE angebot SET status='beauftragt' WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     $this->app->erp->AngebotProtokoll($id,"Angebot als beauftragt markiert");
 
-    $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='1' WHERE module='angebot' AND parameter=? AND parameter > 0", [(int)$id]);
+    $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='1' WHERE module='angebot' AND parameter=:id AND parameter > 0", ['id' => (int)$id]);
 
     $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Das Angebot \"$name\" ($belegnr) wurde als beauftragt markiert!</div>");                                                                                                 
     header("Location: index.php?module=angebot&action=list&msg=$msg#tabs-1");
@@ -837,9 +837,9 @@ class Angebot extends GenAngebot
   {
     $id = $this->app->Secure->GetGET("id");
 
-    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
     if($belegnr=="0" || $belegnr=="")
     {
@@ -875,9 +875,9 @@ class Angebot extends GenAngebot
     }
 
     else {
-      $this->app->DatabaseService->update("UPDATE angebot SET status='storniert' WHERE id=? LIMIT 1", [(int)$id]);
+      $this->app->DatabaseService->update("UPDATE angebot SET status='storniert' WHERE id=:id LIMIT 1", ['id' => (int)$id]);
       $this->app->erp->AngebotProtokoll($id,"Angebot storniert");
-      $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='0' WHERE module='angebot' AND parameter=? AND parameter > 0", [(int)$id]);
+      $this->app->DatabaseService->update("UPDATE wiedervorlage SET abgeschlossen='0' WHERE module='angebot' AND parameter=:id AND parameter > 0", ['id' => (int)$id]);
       $msg = $this->app->erp->base64_url_encode("<div class=\"warning\">Das Angebot \"$name\" ($belegnr) wurde storniert!</div>");
     }
     //$msg = $this->app->erp->base64_url_encode("<div class=\"error\">Angebot \"$name\" ($belegnr) kann nicht storniert werden, da es bereits versendet wurde!</div>");
@@ -905,8 +905,8 @@ class Angebot extends GenAngebot
     $id = $this->app->Secure->GetGET("id");
     $this->app->erp->AngebotNeuberechnen($id);
 
-    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $schreibschutz = $this->app->DatabaseService->selectValue("SELECT schreibschutz FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $schreibschutz = $this->app->DatabaseService->selectValue("SELECT schreibschutz FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     $frame = $this->app->Secure->GetGET('frame');
     if($frame != '') {
       $file = urlencode("../../../../index.php?module=angebot&action=inlinepdf&id=$id");
@@ -958,8 +958,8 @@ class Angebot extends GenAngebot
   {
     $id = $this->app->Secure->GetGET("id");
 
-    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
-    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $name = $this->app->DatabaseService->selectValue("SELECT name FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
     if($belegnr=="0" || $belegnr=="") $belegnr ="(Entwurf)";
     //    $this->app->Tpl->Set(KURZUEBERSCHRIFT,"Angebot $belegnr");
@@ -967,7 +967,7 @@ class Angebot extends GenAngebot
     $this->app->erp->AngebotNeuberechnen($id);
 
     // status bestell
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     if ($status=="angelegt")
     {
       $this->app->erp->MenuEintrag("index.php?module=angebot&action=freigabe&id=$id","Freigabe");
@@ -1007,7 +1007,7 @@ class Angebot extends GenAngebot
     $this->AngebotMenu();
     if($id)
     {
-      $wiedervorlage = $this->app->DatabaseService->select("SELECT * from wiedervorlage WHERE module = 'angebot' AND parameter = ?", [(int)$id]);
+      $wiedervorlage = $this->app->DatabaseService->select("SELECT * from wiedervorlage WHERE module = 'angebot' AND parameter = :parameter", ['parameter' => (int)$id]);
       if($wiedervorlage)
       {
         $wiedervorlage = reset($wiedervorlage);
@@ -1042,12 +1042,12 @@ class Angebot extends GenAngebot
         $stages = $tmp[0];
 
 
-        $adresse_mitarbeiter = (int)$this->app->DatabaseService->selectValue("SELECT id from adresse where mitarbeiternummer = ? AND mitarbeiternummer!='' LIMIT 1", [$adresse_mitarbeiter]);
-        $adresse = (int)$this->app->DatabaseService->selectValue("SELECT id from adresse where kundennummer = ? AND kundennummer!='' LIMIT 1", [$adresse]);
-        $bearbeiter = (int)$this->app->DatabaseService->selectValue("SELECT id from adresse where mitarbeiternummer = ? AND mitarbeiternummer!='' LIMIT 1", [$bearbeiter]);
+        $adresse_mitarbeiter = (int)$this->app->DatabaseService->selectValue("SELECT id from adresse where mitarbeiternummer = :mitarbeiternummer AND mitarbeiternummer!='' LIMIT 1", ['mitarbeiternummer' => $adresse_mitarbeiter]);
+        $adresse = (int)$this->app->DatabaseService->selectValue("SELECT id from adresse where kundennummer = :kundennummer AND kundennummer!='' LIMIT 1", ['kundennummer' => $adresse]);
+        $bearbeiter = (int)$this->app->DatabaseService->selectValue("SELECT id from adresse where mitarbeiternummer = :mitarbeiternummer AND mitarbeiternummer!='' LIMIT 1", ['mitarbeiternummer' => $bearbeiter]);
         $abgeschlossen = $this->app->Secure->GetPOST('abgeschlossen');
 
-        $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM angebot WHERE id = ? LIMIT 1", [(int)$id]);
+        $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM angebot WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
         if($adresse_mitarbeiter<=0)$adresse_mitarbeiter=0;
         if($adresse<=0)$adresse=0;
@@ -1061,26 +1061,30 @@ class Angebot extends GenAngebot
           {
             if($this->app->DatabaseService->update(
               "UPDATE wiedervorlage SET
-              datum_angelegt = ?,
-              zeit_angelegt = ?,
-              datum_erinnerung = ?,
-              zeit_erinnerung = ?,
-              bezeichnung = ?,
-              beschreibung = ?,
-              abgeschlossen = ?,
-              bearbeiter = ?,
-              adresse = ?,
-              betrag = ?,
-              chance = ?,
-              stages = ?,
-              adresse_mitarbeiter = ?,
-              projekt = ?
-              WHERE module = 'angebot' AND parameter = ?",
+              datum_angelegt = :datum_angelegt,
+              zeit_angelegt = :zeit_angelegt,
+              datum_erinnerung = :datum_erinnerung,
+              zeit_erinnerung = :zeit_erinnerung,
+              bezeichnung = :bezeichnung,
+              beschreibung = :beschreibung,
+              abgeschlossen = :abgeschlossen,
+              bearbeiter = :bearbeiter,
+              adresse = :adresse,
+              betrag = :betrag,
+              chance = :chance,
+              stages = :stages,
+              adresse_mitarbeiter = :adresse_mitarbeiter,
+              projekt = :projekt
+              WHERE module = 'angebot' AND parameter = :id",
               [
-                $datum_angelegt, $zeit_angelegt, $datum_erinnerung, $zeit_erinnerung,
-                $bezeichnung, $beschreibung, ($abgeschlossen?1:0),
-                (int)$bearbeiter, (int)$adresse, $betrag, $chance, (int)$stages,
-                (int)$adresse_mitarbeiter, (int)$projekt, (int)$id
+                'datum_angelegt' => $datum_angelegt, 'zeit_angelegt' => $zeit_angelegt,
+                'datum_erinnerung' => $datum_erinnerung, 'zeit_erinnerung' => $zeit_erinnerung,
+                'bezeichnung' => $bezeichnung, 'beschreibung' => $beschreibung,
+                'abgeschlossen' => ($abgeschlossen?1:0),
+                'bearbeiter' => (int)$bearbeiter, 'adresse' => (int)$adresse,
+                'betrag' => $betrag, 'chance' => $chance, 'stages' => (int)$stages,
+                'adresse_mitarbeiter' => (int)$adresse_mitarbeiter, 'projekt' => (int)$projekt,
+                'id' => (int)$id
               ]
             ) !== false)
             {
@@ -1093,12 +1097,15 @@ class Angebot extends GenAngebot
             if($this->app->DatabaseService->insert(
               "INSERT INTO wiedervorlage
               (datum_angelegt, zeit_angelegt, datum_erinnerung, zeit_erinnerung, bezeichnung, beschreibung, abgeschlossen, bearbeiter, adresse_mitarbeiter, module, parameter, adresse, stages, chance, betrag, projekt)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'angebot', ?, ?, ?, ?, ?, ?)",
+              VALUES (:datum_angelegt, :zeit_angelegt, :datum_erinnerung, :zeit_erinnerung, :bezeichnung, :beschreibung, :abgeschlossen, :bearbeiter, :adresse_mitarbeiter, 'angebot', :parameter, :adresse, :stages, :chance, :betrag, :projekt)",
               [
-                $datum_angelegt, $zeit_angelegt, $datum_erinnerung, $zeit_erinnerung,
-                $bezeichnung, $beschreibung, ($abgeschlossen?1:0),
-                (int)$bearbeiter, (int)$adresse_mitarbeiter,
-                (int)$id, (int)$adresse, (int)$stages, $chance, $betrag, (int)$projekt
+                'datum_angelegt' => $datum_angelegt, 'zeit_angelegt' => $zeit_angelegt,
+                'datum_erinnerung' => $datum_erinnerung, 'zeit_erinnerung' => $zeit_erinnerung,
+                'bezeichnung' => $bezeichnung, 'beschreibung' => $beschreibung,
+                'abgeschlossen' => ($abgeschlossen?1:0),
+                'bearbeiter' => (int)$bearbeiter, 'adresse_mitarbeiter' => (int)$adresse_mitarbeiter,
+                'parameter' => (int)$id, 'adresse' => (int)$adresse, 'stages' => (int)$stages,
+                'chance' => $chance, 'betrag' => $betrag, 'projekt' => (int)$projekt
               ]
             ) > 0)
             {
@@ -1125,7 +1132,7 @@ class Angebot extends GenAngebot
         $adresse = $this->app->DB->Select("SELECT adresse from angebot where id = ".(int)$id);
         $abgeschlossen = $this->app->Secure->GetPOST('abgeschlossen');
       }
-      $wiedervorlage = $this->app->DatabaseService->select("SELECT * from wiedervorlage WHERE module = 'angebot' AND parameter = ?", [(int)$id]);
+      $wiedervorlage = $this->app->DatabaseService->select("SELECT * from wiedervorlage WHERE module = 'angebot' AND parameter = :parameter", ['parameter' => (int)$id]);
       if((!empty($wiedervorlage)?count($wiedervorlage):0)> 0)
       {
         $wiedervorlage = reset($wiedervorlage);
@@ -1144,7 +1151,7 @@ class Angebot extends GenAngebot
         $chance = $wiedervorlage['chance'];
       }
       else{
-          $betrag = $this->app->DatabaseService->selectValue("SELECT gesamtsumme FROM angebot WHERE id = ?", [(int)$id]);
+          $betrag = $this->app->DatabaseService->selectValue("SELECT gesamtsumme FROM angebot WHERE id = :id", ['id' => (int)$id]);
       }
 
 
@@ -1172,7 +1179,7 @@ class Angebot extends GenAngebot
       $this->app->Tpl->Set('BESCHREIBUNG',$beschreibung);
       $this->app->Tpl->Set('ADRESSE_MITARBEITER',$mitarbeiternummer.' '.$mitarbeitername);
       $this->app->Tpl->Set('ADRESSE',$kundennummer.' '.$kundenname);
-      $this->app->Tpl->Set('STAGES',$this->app->DatabaseService->selectValue("SELECT CONCAT(id,' ',kurzbezeichnung,' (',name,')') FROM wiedervorlage_stages WHERE id=? LIMIT 1", [(int)$stages]));
+      $this->app->Tpl->Set('STAGES',$this->app->DatabaseService->selectValue("SELECT CONCAT(id,' ',kurzbezeichnung,' (',name,')') FROM wiedervorlage_stages WHERE id=:id LIMIT 1", ['id' => (int)$stages]));
       $this->app->Tpl->Set('BEARBEITER',$bearbeiternummer.' '.$bearbeitername);
       $this->app->Tpl->Set('ABGESCHLOSSEN',$abgeschlossen?' checked="checked" ':'');
       $this->app->Tpl->Set('BETRAG',number_format($betrag,"2",",","."));
@@ -1271,7 +1278,7 @@ class Angebot extends GenAngebot
 
     $id = $this->app->Secure->GetGET('id');
 
-    $artikel= $this->app->DatabaseService->selectValue("SELECT artikel FROM angebot_position WHERE id=? LIMIT 1", [(int)$id]);
+    $artikel= $this->app->DatabaseService->selectValue("SELECT artikel FROM angebot_position WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
     // nach page inhalt des dialogs ausgeben
     $filename = 'widgets/widget.angebot_position_custom.php';
@@ -1283,7 +1290,7 @@ class Angebot extends GenAngebot
       $widget = new WidgetAngebot_position($this->app,'PAGE');
     }
 
-    $sid= $this->app->DatabaseService->selectValue("SELECT angebot FROM angebot_position WHERE id=? LIMIT 1", [(int)$id]);
+    $sid= $this->app->DatabaseService->selectValue("SELECT angebot FROM angebot_position WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     $widget->form->SpecialActionAfterExecute('close_refresh',
         "index.php?module=angebot&action=positionen&id=$sid");
     $widget->Edit();
@@ -1295,29 +1302,29 @@ class Angebot extends GenAngebot
   function AngebotIconMenu($id,$prefix='')
   { 
 
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=? LIMIT 1", [(int)$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM angebot WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     $freigabe = '';
     if($status==='angelegt'){
       $freigabe = "<option value=\"freigabe\">Angebot freigeben</option>";
     }
-    
+
     $zertifikatoption = '';
     $zertifikatcase = '';
     $proformarechnungoption = '';
     $proformarechnungcase = '';
     if($this->app->erp->RechteVorhanden('zertifikatgenerator','list'))
     {
-      $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM angebot WHERE id = ? LIMIT 1", [(int)$id]);
+      $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM angebot WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       if($adresse)
       {
         $zertifikate = $this->app->DatabaseService->selectValue(
           "SELECT ds.datei
           FROM datei_stichwoerter ds
           INNER JOIN datei_stichwoerter ds2 ON ds.datei = ds2.datei AND ds2.objekt = 'Artikel'
-          INNER JOIN angebot_position ap ON ap.artikel = ds2.parameter AND ap.angebot = ?
-          WHERE ds.objekt = 'Adressen' AND ds.parameter = ?
+          INNER JOIN angebot_position ap ON ap.artikel = ds2.parameter AND ap.angebot = :angebot
+          WHERE ds.objekt = 'Adressen' AND ds.parameter = :parameter
           GROUP BY ds.datei LIMIT 1",
-          [(int)$id, (int)$adresse]
+          ['angebot' => (int)$id, 'parameter' => (int)$adresse]
         );
         if($zertifikate)
         {
