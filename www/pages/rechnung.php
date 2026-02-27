@@ -92,7 +92,7 @@ class Rechnung extends GenRechnung
 
     if($nummer==''){
       if($id > 0){
-        $adresse = $this->app->DatabaseService->selectValue('SELECT a.name FROM rechnung b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id=? LIMIT 1', [$id]);
+        $adresse = $this->app->DatabaseService->selectValue('SELECT a.name FROM rechnung b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id=:id LIMIT 1', ['id' => $id]);
       }else{
         $adresse = '';
       }
@@ -101,7 +101,7 @@ class Rechnung extends GenRechnung
       $adresse = $nummer;
     }
     if($id > 0){
-      $nummer = $this->app->DatabaseService->selectValue('SELECT b.belegnr FROM rechnung b WHERE b.id=? LIMIT 1', [$id]);
+      $nummer = $this->app->DatabaseService->selectValue('SELECT b.belegnr FROM rechnung b WHERE b.id=:id LIMIT 1', ['id' => $id]);
     }else{
       $nummer = '';
     }
@@ -265,7 +265,7 @@ class Rechnung extends GenRechnung
   function RechnungUpdateVerband()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $adresse = $this->app->DatabaseService->selectValue('SELECT adresse FROM rechnung WHERE id=? LIMIT 1', [$id]);
+    $adresse = $this->app->DatabaseService->selectValue('SELECT adresse FROM rechnung WHERE id=:id LIMIT 1', ['id' => $id]);
     $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Die Verbandsinformation wurde neu geladen!</div>  ");
     $this->app->Location->execute("index.php?module=rechnung&action=edit&id=$id&msg=$msg");
   }
@@ -274,7 +274,7 @@ class Rechnung extends GenRechnung
   {
 
     $id = (int)$this->app->Secure->GetGET('id');
-    $this->app->DatabaseService->execute('UPDATE rechnung SET zahlungsstatus=\'offen\',dta_datei=0 WHERE id=? LIMIT 1', [$id]);
+    $this->app->DatabaseService->execute('UPDATE rechnung SET zahlungsstatus=\'offen\',dta_datei=0 WHERE id=:id LIMIT 1', ['id' => $id]);
     $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Die Rechnung kann nochmal eingezogen werden!</div>  ");
     $this->app->Location->execute("index.php?module=rechnung&action=edit&id=$id&msg=$msg");
   }
@@ -291,7 +291,7 @@ class Rechnung extends GenRechnung
   {
 
     $id = (int)$this->app->Secure->GetGET('id');
-    $this->app->DatabaseService->execute('UPDATE rechnung SET rabatt=\'\',rabatt1=\'\',rabatt2=\'\',rabatt3=\'\',rabatt4=\'\',rabatt5=\'\',realrabatt=\'\' WHERE id=? LIMIT 1', [$id]);
+    $this->app->DatabaseService->execute('UPDATE rechnung SET rabatt=\'\',rabatt1=\'\',rabatt2=\'\',rabatt3=\'\',rabatt4=\'\',rabatt5=\'\',realrabatt=\'\' WHERE id=:id LIMIT 1', ['id' => $id]);
     $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Die Rabatte wurden entfernt!</div>  ");
     $this->app->Location->execute("index.php?module=rechnung&action=edit&id=$id&msg=$msg");
   }
@@ -333,8 +333,8 @@ class Rechnung extends GenRechnung
     $this->app->erp->RechnungProtokoll($id,'Rechnung Stornierung rückgängig gemacht');
 
     $this->app->DatabaseService->execute(
-      "UPDATE rechnung SET status='freigegeben',zahlungsstatus='offen',schreibschutz=0,bezahlt_am = NULL, mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Rechnung Stornierung rückgängig gemacht ".date('d.m.Y')."') WHERE id=?",
-      [$id]
+      "UPDATE rechnung SET status='freigegeben',zahlungsstatus='offen',schreibschutz=0,bezahlt_am = NULL, mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Rechnung Stornierung rückgängig gemacht ".date('d.m.Y')."') WHERE id=:id",
+      ['id' => $id]
     );
 
     $this->app->Location->execute("index.php?module=rechnung&action=edit&id=$id");
@@ -1048,8 +1048,8 @@ class Rechnung extends GenRechnung
 
         //rechnung auf bezahlt markieren + soll auf ist
         $this->app->DatabaseService->execute(
-          'UPDATE rechnung SET zahlungsstatus=\'abgebucht\' WHERE id=? AND firma=? LIMIT 1',
-          [(int)$rechnung[$i], (int)$this->app->User->GetFirma()]
+          'UPDATE rechnung SET zahlungsstatus=\'abgebucht\' WHERE id=:rechnungId AND firma=:firma LIMIT 1',
+          ['rechnungId' => (int)$rechnung[$i], 'firma' => (int)$this->app->User->GetFirma()]
         );
       }
     }
@@ -1090,7 +1090,7 @@ class Rechnung extends GenRechnung
   {
     $id = (int)$this->app->Secure->GetGET('id');
 
-    $status = $this->app->DatabaseService->selectValue('SELECT status FROM rechnung WHERE id=? LIMIT 1', [$id]);
+    $status = $this->app->DatabaseService->selectValue('SELECT status FROM rechnung WHERE id=:id LIMIT 1', ['id' => $id]);
     if($status==='angelegt')
     {
       $msg = $this->app->erp->base64_url_encode("<div class=\"warning\">Die Rechnung ist noch nicht freigegeben und kann daher nicht storniert werden!</div>");
@@ -1101,8 +1101,8 @@ class Rechnung extends GenRechnung
 
     // pruefe obes schon eine gutschrift fuer diese rechnung gibt
     $anzahlgutschriften = $this->app->DatabaseService->selectValue(
-      'SELECT COUNT(id) FROM gutschrift WHERE rechnungid=? AND rechnungid!=0 AND rechnungid!=\'\'',
-      [$id]
+      'SELECT COUNT(id) FROM gutschrift WHERE rechnungid=:rechnungId AND rechnungid!=0 AND rechnungid!=\'\'',
+      ['rechnungId' => $id]
     );
 
     if($anzahlgutschriften>1){
@@ -1903,8 +1903,8 @@ class Rechnung extends GenRechnung
     $zahlungsweise = strtolower($zahlungsweise);
 
     $zahlungsweisenmodule = $this->app->DatabaseService->select(
-      'SELECT id, modul, verhalten FROM zahlungsweisen WHERE type = ? AND (projekt = ? OR projekt = 0) ORDER BY (projekt = ?) DESC LIMIT 1',
-      [$zahlungsweise, $projekt, $projekt]
+      'SELECT id, modul, verhalten FROM zahlungsweisen WHERE type = :zahlungsweise AND (projekt = :projekt OR projekt = 0) ORDER BY (projekt = :projektOrder) DESC LIMIT 1',
+      ['zahlungsweise' => $zahlungsweise, 'projekt' => $projekt, 'projektOrder' => $projekt]
     );
 
     $this->app->Tpl->Set('RECHNUNG','none');
@@ -1982,8 +1982,8 @@ class Rechnung extends GenRechnung
     if($speichern!='' && $this->app->erp->RechteVorhanden('rechnung','belegnredit')) {
         $nummer_neu = $this->app->Secure->GetPOST('belegnredit');
         
-        if(!$this->app->DatabaseService->selectValue('SELECT id FROM rechnung WHERE belegnr = ?', [$nummer_neu])) {
-            $this->app->DatabaseService->execute('UPDATE rechnung SET belegnr = ? WHERE id = ?', [$nummer_neu, $id]);
+        if(!$this->app->DatabaseService->selectValue('SELECT id FROM rechnung WHERE belegnr = :belegnr', ['belegnr' => $nummer_neu])) {
+            $this->app->DatabaseService->execute('UPDATE rechnung SET belegnr = :belegnr WHERE id = :id', ['belegnr' => $nummer_neu, 'id' => $id]);
         }
     }
 
@@ -2018,8 +2018,8 @@ class Rechnung extends GenRechnung
 /*      if($mahnwesenfestsetzen=='1')
       {*/
         $this->app->DatabaseService->execute(
-          'UPDATE rechnung SET mahnwesen_internebemerkung=?, zahlungsstatus=?, versendet_mahnwesen=?, mahnwesen_gesperrt=?, mahnwesen_datum=?, mahnwesenfestsetzen=?, internebemerkung=? WHERE id=? LIMIT 1',
-          [$mahnwesen_internebemerkung, $zahlungsstatus, $versendet, $mahnwesen_gesperrt, $mahnwesen_datum, $mahnwesenfestsetzen, $internebemerkung, $id]
+          'UPDATE rechnung SET mahnwesen_internebemerkung=:mahnwesenInternebemerkung, zahlungsstatus=:zahlungsstatus, versendet_mahnwesen=:versendet, mahnwesen_gesperrt=:mahnwesenGesperrt, mahnwesen_datum=:mahnwesenDatum, mahnwesenfestsetzen=:mahnwesenfestsetzen, internebemerkung=:internebemerkung WHERE id=:id LIMIT 1',
+          ['mahnwesenInternebemerkung' => $mahnwesen_internebemerkung, 'zahlungsstatus' => $zahlungsstatus, 'versendet' => $versendet, 'mahnwesenGesperrt' => $mahnwesen_gesperrt, 'mahnwesenDatum' => $mahnwesen_datum, 'mahnwesenfestsetzen' => $mahnwesenfestsetzen, 'internebemerkung' => $internebemerkung, 'id' => $id]
         );
 /*      } else {
         $this->app->DB->Update("UPDATE rechnung SET mahnwesen='$mahnwesen', mahnwesenfestsetzen='$mahnwesenfestsetzen', mahnwesen_internebemerkung='$mahnwesen_internebemerkung', mahnwesen_gesperrt='$mahnwesen_gesperrt',mahnwesen_datum='$mahnwesen_datum' WHERE id='$id' LIMIT 1");
@@ -2052,8 +2052,8 @@ class Rechnung extends GenRechnung
                 $bezahlt_am = date('Y-m-d');
             }
             $kontoauszug = $this->app->DatabaseService->insert(
-              'INSERT INTO kontoauszuege (konto, buchung, importdatum, buchungstext, soll, waehrung, bearbeiter) VALUES (?, ?, ?, ?, ?, \'EUR\', ?)',
-              [$rechnung_schnelleingabe_konto, $bezahlt_am, date('Y-m-d'), 'Rechnung '.$nummer.' Schnelleingabe', $zahlbetrag, $this->app->User->GetName()]
+              'INSERT INTO kontoauszuege (konto, buchung, importdatum, buchungstext, soll, waehrung, bearbeiter) VALUES (:konto, :buchung, :importdatum, :buchungstext, :soll, \'EUR\', :bearbeiter)',
+              ['konto' => $rechnung_schnelleingabe_konto, 'buchung' => $bezahlt_am, 'importdatum' => date('Y-m-d'), 'buchungstext' => 'Rechnung '.$nummer.' Schnelleingabe', 'soll' => $zahlbetrag, 'bearbeiter' => $this->app->User->GetName()]
             );
             $this->app->erp->fibu_buchungen_buchen("kontoauszuege",$kontoauszug, "rechnung", $id, -$zahlbetrag, 'EUR', $bezahlt_am, "Rechnung ".$nummer." Schnelleingabe");
             $this->rechnung_zahlstatus_berechnen($id);
@@ -2063,7 +2063,7 @@ class Rechnung extends GenRechnung
     }
 
     if($status=='')
-      $this->app->DatabaseService->execute('UPDATE rechnung SET status=\'angelegt\' WHERE id=? LIMIT 1', [$id]);
+      $this->app->DatabaseService->execute('UPDATE rechnung SET status=\'angelegt\' WHERE id=:id LIMIT 1', ['id' => $id]);
 
     if($schreibschutz != '1'){
       if($this->app->erp->Firmendaten('schnellanlegen') == '1'){
@@ -2083,7 +2083,7 @@ class Rechnung extends GenRechnung
       $kundennummer = $this->app->erp->FirstTillSpace($tmp);
 
       //$name = substr($tmp,6);
-      $filter_projekt = $this->app->DatabaseService->selectValue('SELECT projekt FROM rechnung WHERE id = ? LIMIT 1', [$id]);
+      $filter_projekt = $this->app->DatabaseService->selectValue('SELECT projekt FROM rechnung WHERE id = :id LIMIT 1', ['id' => $id]);
       //if($filter_projekt)$filter_projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE id= '$filter_projekt' and eigenernummernkreis = 1 LIMIT 1");
       $adresse =  $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='".$this->app->DB->real_escape_string($kundennummer)."' AND geloescht=0 ".$this->app->erp->ProjektRechte("projekt", true, 'vertrieb')." ORDER by ".($filter_projekt?" projekt = '".intval($filter_projekt)."' DESC, ":"")." projekt LIMIT 1");
 

@@ -3492,10 +3492,10 @@ XML;
       $elemente = $this->app->DatabaseService->select(
         "SELECT t.*, m.id_ext {$bestellungJoin}
         FROM `{$typ}` AS `t` {$bestellungLeftJoin}
-        LEFT JOIN `api_mapping` AS `m` ON m.api = ? AND m.tabelle = ? AND m.id_int = t.id
-        WHERE t.id = ?
+        LEFT JOIN `api_mapping` AS `m` ON m.api = :apiId AND m.tabelle = :tabelle AND m.id_int = t.id
+        WHERE t.id = :id
         LIMIT 1",
-        [$this->api_id, $typ, (int)$id]
+        ['apiId' => $this->api_id, 'tabelle' => $typ, 'id' => (int)$id]
       );
       if($elemente) {
         $this->AddToXMLObj($xml, $typ,$typ.'_list', $elemente, $n, $erg);
@@ -3506,14 +3506,14 @@ XML;
       // [SECURITY] Table name validated via in_array($typ, $belege) whitelist above; values use ? params
       $this->app->DatabaseService->validateIdentifier($typ);
       $elemente = $this->app->DatabaseService->select(
-        "SELECT t.*, m.id_ext FROM `{$typ}` t LEFT JOIN api_mapping m ON m.api = ? AND m.tabelle = ? AND m.id_int = t.id WHERE t.id = ? LIMIT 1",
-        [$this->api_id, $typ, (int)$id]
+        "SELECT t.*, m.id_ext FROM `{$typ}` t LEFT JOIN api_mapping m ON m.api = :apiId AND m.tabelle = :tabelle AND m.id_int = t.id WHERE t.id = :id LIMIT 1",
+        ['apiId' => $this->api_id, 'tabelle' => $typ, 'id' => (int)$id]
       );
 
       if($elemente) {
         $elemente[0]['anzahluebertragungen'] = 1+(int)$this->app->DatabaseService->selectValue(
-          "SELECT anzahl_uebertragen FROM api_request WHERE uebertragung_account = ? AND typ = ? AND parameter1 = ? LIMIT 1",
-          [(int)$this->uebertragung_account, $typ, (int)$id]
+          "SELECT anzahl_uebertragen FROM api_request WHERE uebertragung_account = :uebertragungAccount AND typ = :typ AND parameter1 = :parameter1 LIMIT 1",
+          ['uebertragungAccount' => (int)$this->uebertragung_account, 'typ' => $typ, 'parameter1' => (int)$id]
         );
         if(isset($parameter['pdf']) && $parameter['pdf'] == 1) {
           $file = $this->GetPDF($typ, $id);
@@ -3745,8 +3745,8 @@ XML;
     elseif($typ === 'versand') {
       // [SECURITY] $typ is a literal string 'versand' in this branch; values use ? params
       $elemente = $this->app->DatabaseService->select(
-        "SELECT t.*, m.id_ext FROM `versand` t LEFT JOIN api_mapping m ON m.api = ? AND m.tabelle = ? AND m.id_int = t.id WHERE t.id = ? LIMIT 1",
-        [$this->api_id, 'versand', (int)$id]
+        "SELECT t.*, m.id_ext FROM `versand` t LEFT JOIN api_mapping m ON m.api = :apiId AND m.tabelle = :tabelle AND m.id_int = t.id WHERE t.id = :id LIMIT 1",
+        ['apiId' => $this->api_id, 'tabelle' => 'versand', 'id' => (int)$id]
       );
       if($elemente) {
         $auftragid = $this->app->DB->Select("SELECT auftragid FROM lieferschein WHERE id = '".$elemente[0]['lieferschein']."' LIMIT 1");
@@ -4243,8 +4243,8 @@ XML;
     if($id_ext != '') {
       // [SECURITY] $id_ext is user-supplied XML data; use ? param to prevent injection
       $id = (int)$this->app->DatabaseService->selectValue(
-        "SELECT id_int FROM api_mapping WHERE api = ? AND api != 0 AND tabelle = ? AND id_ext = ? AND id_int > 0 LIMIT 1",
-        [(int)$this->api_id, $typ, $id_ext]
+        "SELECT id_int FROM api_mapping WHERE api = :apiId AND api != 0 AND tabelle = :tabelle AND id_ext = :idExt AND id_int > 0 LIMIT 1",
+        ['apiId' => (int)$this->api_id, 'tabelle' => $typ, 'idExt' => $id_ext]
       );
       if($id) {
         return $id;
@@ -4254,7 +4254,7 @@ XML;
       if(in_array($typ, ['lieferschein', 'retoure','rechnung','gutschrift'])) {
         // [SECURITY] $typ validated via in_array whitelist above
         $this->app->DatabaseService->validateIdentifier($typ);
-        $id = (int)$this->app->DatabaseService->selectValue("SELECT `id` FROM `{$typ}` WHERE `id` = ? LIMIT 1", [(int)$xml->id]);
+        $id = (int)$this->app->DatabaseService->selectValue("SELECT `id` FROM `{$typ}` WHERE `id` = :id LIMIT 1", ['id' => (int)$xml->id]);
       }
       else{
         $id = (int)$xml->id;
@@ -4420,8 +4420,8 @@ XML;
           // [SECURITY] $typ is a known literal string from the switch case; belegnr from XML uses ? param
           $this->app->DatabaseService->validateIdentifier($typ);
           $id = $this->app->DatabaseService->selectValue(
-            "SELECT id FROM `{$typ}` WHERE belegnr = ? LIMIT 1",
-            [(string)$xml->belegnr]
+            "SELECT id FROM `{$typ}` WHERE belegnr = :belegnr LIMIT 1",
+            ['belegnr' => (string)$xml->belegnr]
           );
         }
         if(!$id && ($typ === 'lieferschein' || $typ === 'retoure'))
@@ -4454,8 +4454,8 @@ XML;
           $this->app->DatabaseService->validateIdentifier($typ);
           $this->app->DatabaseService->validateIdentifier($_ptyp);
           $id = $this->app->DatabaseService->selectValue(
-            "SELECT id FROM `{$typ}` WHERE `{$_ptyp}` = ? AND sort = ? AND `{$_ptyp}` != 0 AND sort != 0 LIMIT 1",
-            [(int)$xml->$_ptyp, (int)$xml->sort]
+            "SELECT id FROM `{$typ}` WHERE `{$_ptyp}` = :ptyp AND sort = :sort AND `{$_ptyp}` != 0 AND sort != 0 LIMIT 1",
+            ['ptyp' => (int)$xml->$_ptyp, 'sort' => (int)$xml->sort]
           );
           if($id){
             return $id;
@@ -4598,14 +4598,14 @@ XML;
     switch($typ) {
       case 'auftrag':
       case 'angebot':
-        // [SECURITY] $uebertragungen_account and $this->datei_id use ? params; $typ is a switch-case literal
+        // [SECURITY] $uebertragungen_account and $this->datei_id use :param params; $typ is a switch-case literal
         if(!$this->app->DatabaseService->selectValue(
-          "SELECT auftrageingang FROM uebertragungen_account WHERE id = ? LIMIT 1",
-          [(int)$uebertragungen_account]
+          "SELECT auftrageingang FROM uebertragungen_account WHERE id = :uebertragungAccount LIMIT 1",
+          ['uebertragungAccount' => (int)$uebertragungen_account]
         )) {
           if(!$this->app->DatabaseService->selectValue(
-            "SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = ? AND datei = ? AND status = 'notallowed' AND doctype = ? AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR) LIMIT 1",
-            [(int)$uebertragungen_account, (int)$this->datei_id, $typ]
+            "SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = :uebertragungAccount AND datei = :dateiId AND status = 'notallowed' AND doctype = :doctype AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR) LIMIT 1",
+            ['uebertragungAccount' => (int)$uebertragungen_account, 'dateiId' => (int)$this->datei_id, 'doctype' => $typ]
           )) {
             $obj->AddUbertragungMonitorLog($uebertragungen_account, $this->datei_id, 0, 'not_allowed', ucfirst($typ).'-Eingang ist nicht aktiviert', '', '', '', $typ);
           }
@@ -4614,14 +4614,14 @@ XML;
         break;
       case 'bestellung':
       case 'produktion':
-        // [SECURITY] $uebertragungen_account and $this->datei_id use ? params; $typ is a switch-case literal
+        // [SECURITY] $uebertragungen_account and $this->datei_id use :param params; $typ is a switch-case literal
         if(!$this->app->DatabaseService->selectValue(
-          "SELECT bestellungeingang FROM uebertragungen_account WHERE id = ? LIMIT 1",
-          [(int)$uebertragungen_account]
+          "SELECT bestellungeingang FROM uebertragungen_account WHERE id = :uebertragungAccount LIMIT 1",
+          ['uebertragungAccount' => (int)$uebertragungen_account]
         )) {
           if(!$this->app->DatabaseService->selectValue(
-            "SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = ? AND datei = ? AND status = 'notallowed' AND doctype = ? AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR) LIMIT 1",
-            [(int)$uebertragungen_account, (int)$this->datei_id, $typ]
+            "SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = :uebertragungAccount AND datei = :dateiId AND status = 'notallowed' AND doctype = :doctype AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR) LIMIT 1",
+            ['uebertragungAccount' => (int)$uebertragungen_account, 'dateiId' => (int)$this->datei_id, 'doctype' => $typ]
           )) {
             $obj->AddUbertragungMonitorLog($uebertragungen_account, $this->datei_id, 0, 'not_allowed', ucfirst($typ).'-Eingang ist nicht aktiviert', '', '', '', $typ);
           }
@@ -4629,14 +4629,14 @@ XML;
         }
         break;
       case 'lieferschein':
-        // [SECURITY] $uebertragungen_account and $this->datei_id use ? params; $typ is a switch-case literal
+        // [SECURITY] $uebertragungen_account and $this->datei_id use :param params; $typ is a switch-case literal
         if(!$this->app->DatabaseService->selectValue(
-          "SELECT trackingeingang FROM uebertragungen_account WHERE id = ? LIMIT 1",
-          [(int)$uebertragungen_account]
+          "SELECT trackingeingang FROM uebertragungen_account WHERE id = :uebertragungAccount LIMIT 1",
+          ['uebertragungAccount' => (int)$uebertragungen_account]
         )) {
           if(!$this->app->DatabaseService->selectValue(
-            "SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = ? AND datei = ? AND status = 'notallowed' AND doctype = ? AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR) LIMIT 1",
-            [(int)$uebertragungen_account, (int)$this->datei_id, $typ]
+            "SELECT id FROM `uebertragungen_monitor` WHERE uebertragungen_account = :uebertragungAccount AND datei = :dateiId AND status = 'notallowed' AND doctype = :doctype AND zeitstempel > DATE_SUB(now(), INTERVAL 1 HOUR) LIMIT 1",
+            ['uebertragungAccount' => (int)$uebertragungen_account, 'dateiId' => (int)$this->datei_id, 'doctype' => $typ]
           )) {
             $obj->AddUbertragungMonitorLog($uebertragungen_account, $this->datei_id, 0, 'not_allowed', 'Tracking-Eingang ist nicht aktiviert', '', '', '', $typ);
           }
@@ -6259,8 +6259,8 @@ XML;
       // [SECURITY] $typ validated via whitelist in calling context; shopextid and projekt use ? params
       $this->app->DatabaseService->validateIdentifier($typ);
       if(!$this->app->DatabaseService->selectValue(
-        "SELECT id FROM `{$typ}` WHERE shopextid = ? AND projekt = ? AND shopextid <> ''",
-        [empty($xml->extid) ? '' : (string)$xml->extid, (int)$projekt]
+        "SELECT id FROM `{$typ}` WHERE shopextid = :shopextid AND projekt = :projekt AND shopextid <> ''",
+        ['shopextid' => empty($xml->extid) ? '' : (string)$xml->extid, 'projekt' => (int)$projekt]
       )
         && (!isset($xml->belegnr) || strtoupper($xml->belegnr) == 'NEW' || strtoupper($xml->belegnr) == 'NEU' || !$this->GetFromExtID($typ, $xml->belegnr)))
       {
@@ -6610,8 +6610,8 @@ XML;
                 $auftrag = $this->app->erp->$createname();
                 // [SECURITY] $typ validated by validateIdentifier call above in this method; $auftrag is int
                 $belegnr = (string)$this->app->DatabaseService->selectValue(
-                  "SELECT `belegnr` FROM `{$typ}` WHERE `id` = ? LIMIT 1",
-                  [(int)$auftrag]
+                  "SELECT `belegnr` FROM `{$typ}` WHERE `id` = :id LIMIT 1",
+                  ['id' => (int)$auftrag]
                 );
                 if($belegnr === '' || $belegnr === '0'){
                   $belegnr = $this->app->erp->GetNextNummer($typ,$projekt,$auftrag);
@@ -6624,8 +6624,8 @@ XML;
                 if($typ === 'angebot' || $typ === 'auftrag'){
                   // [SECURITY] $typ is a literal from the if-condition; shopextid and $auftrag use ? params
                   $this->app->DatabaseService->execute(
-                    "UPDATE `{$typ}` SET `shopextid` = ? WHERE `id` = ? LIMIT 1",
-                    [empty($xml->extid) ? '' : (string)$xml->extid, (int)$auftrag]
+                    "UPDATE `{$typ}` SET `shopextid` = :shopextid WHERE `id` = :id LIMIT 1",
+                    ['shopextid' => empty($xml->extid) ? '' : (string)$xml->extid, 'id' => (int)$auftrag]
                   );
                 }
                 $auftragarr['belegnr'] = $belegnr;
