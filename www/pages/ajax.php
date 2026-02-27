@@ -265,14 +265,14 @@ class Ajax {
 
       // Label-Gruppen anlegen
       $labelGroupId = $this->app->DatabaseService->selectValue(
-        "SELECT lg.id FROM label_group AS lg WHERE lg.group_table = ?",
-        [$referenceTable]
+        "SELECT lg.id FROM label_group AS lg WHERE lg.group_table = :groupTable",
+        ['groupTable' => $referenceTable]
       );
       if (empty($labelGroupId)) {
         $groupTitle = ucwords($referenceTable);
         $this->app->DatabaseService->insert(
-          "INSERT INTO label_group (id, group_table, title, created_at) VALUES (NULL, ?, ?, CURRENT_TIMESTAMP)",
-          [$referenceTable, $groupTitle]
+          "INSERT INTO label_group (id, group_table, title, created_at) VALUES (NULL, :groupTable, :title, CURRENT_TIMESTAMP)",
+          ['groupTable' => $referenceTable, 'title' => $groupTitle]
         );
       }
 
@@ -441,13 +441,13 @@ class Ajax {
       $ersteller = $this->app->DB->real_escape_string($this->app->User->GetName());
 
       $geschuetzt = $this->app->DatabaseService->selectValue(
-        'SELECT geschuetzt FROM datei WHERE id = ?',
-        [$id]
+        'SELECT geschuetzt FROM datei WHERE id = :id',
+        ['id' => $id]
       );
 
       $datei = $this->app->DatabaseService->select(
-        'SELECT d.id, s.id as sid FROM datei d LEFT JOIN datei_stichwoerter s ON d.id=s.datei LEFT JOIN datei_version v ON v.datei=d.id WHERE s.objekt LIKE ? AND s.parameter=? AND d.geloescht=0 AND d.id = ? LIMIT 1',
-        [$objekt, $parameter, $id]
+        'SELECT d.id, s.id as sid FROM datei d LEFT JOIN datei_stichwoerter s ON d.id=s.datei LEFT JOIN datei_version v ON v.datei=d.id WHERE s.objekt LIKE :objekt AND s.parameter=:parameter AND d.geloescht=0 AND d.id = :id LIMIT 1',
+        ['objekt' => $objekt, 'parameter' => $parameter, 'id' => $id]
       );
       if($datei && !$geschuetzt)
       {
@@ -455,13 +455,13 @@ class Ajax {
         if($subjekt && $sid)
         {
           $this->app->DatabaseService->execute(
-            'UPDATE datei_stichwoerter SET subjekt = ? WHERE id = ? LIMIT 1',
-            [$subjekt, $sid]
+            'UPDATE datei_stichwoerter SET subjekt = :subjekt WHERE id = :sid LIMIT 1',
+            ['subjekt' => $subjekt, 'sid' => $sid]
           );
         }
         $this->app->DatabaseService->execute(
-          'UPDATE datei SET titel = ?, beschreibung = ? WHERE id = ? LIMIT 1',
-          [$titel, $beschreibung, $id]
+          'UPDATE datei SET titel = :titel, beschreibung = :beschreibung WHERE id = :id LIMIT 1',
+          ['titel' => $titel, 'beschreibung' => $beschreibung, 'id' => $id]
         );
         if(!empty($_FILES['datei']) && $_FILES['datei']['tmp_name']!='')
         {
@@ -837,7 +837,7 @@ class Ajax {
     if($this->app->erp->RechteVorhanden('welcome','unlock') &&
       ($salt = $this->app->Secure->GetGET('salt')))
     {
-      $this->app->DatabaseService->execute('DELETE FROM module_lock WHERE salt = ?', [$salt]);
+      $this->app->DatabaseService->execute('DELETE FROM module_lock WHERE salt = :salt', ['salt' => $salt]);
     }
     $this->app->erp->ExitWawi();
   }
@@ -977,11 +977,11 @@ class Ajax {
 
     if(is_numeric($term))
     {
-      $rechnung = $this->app->DatabaseService->select('SELECT id,belegnr,soll,ist FROM rechnung WHERE belegnr=?', [$term]);
-      $gutschrift = $this->app->DatabaseService->select('SELECT id,belegnr,soll,ist FROM gutschrift WHERE belegnr=?', [$term]);
-      $auftrag = $this->app->DatabaseService->select('SELECT id,belegnr FROM auftrag WHERE belegnr=?', [$term]);
-      $internet = $this->app->DatabaseService->select('SELECT id,belegnr FROM auftrag WHERE internet=?', [$term]);
-      $kunde = $this->app->DatabaseService->select('SELECT id,name FROM adresse WHERE kundennummer=?', [$term]);
+      $rechnung = $this->app->DatabaseService->select('SELECT id,belegnr,soll,ist FROM rechnung WHERE belegnr=:term', ['term' => $term]);
+      $gutschrift = $this->app->DatabaseService->select('SELECT id,belegnr,soll,ist FROM gutschrift WHERE belegnr=:term', ['term' => $term]);
+      $auftrag = $this->app->DatabaseService->select('SELECT id,belegnr FROM auftrag WHERE belegnr=:term', ['term' => $term]);
+      $internet = $this->app->DatabaseService->select('SELECT id,belegnr FROM auftrag WHERE internet=:term', ['term' => $term]);
+      $kunde = $this->app->DatabaseService->select('SELECT id,name FROM adresse WHERE kundennummer=:term', ['term' => $term]);
     }
     if(!empty($rechnung) && is_array($rechnung))
     {
@@ -1035,7 +1035,7 @@ class Ajax {
 
     //name	abteilung		unterabteilung	land	strasse		ort		plz
 
-    $values = $this->app->DatabaseService->selectRow('SELECT * FROM adresse WHERE id=? LIMIT 1', [(int)$id]);
+    $values = $this->app->DatabaseService->selectRow('SELECT * FROM adresse WHERE id=:id LIMIT 1', ['id' => (int)$id]);
     if(!empty($values)){
       foreach ($values as $key => $value) {
         $values[$key] = $this->app->erp->ReadyForPDF($value);
@@ -1063,7 +1063,7 @@ class Ajax {
 
     //name	abteilung		unterabteilung	land	strasse		ort		plz
 
-    $values = $this->app->DatabaseService->selectRow('SELECT * FROM adresse WHERE id=? LIMIT 1', [(int)$id]);
+    $values = $this->app->DatabaseService->selectRow('SELECT * FROM adresse WHERE id=:id LIMIT 1', ['id' => (int)$id]);
     if(!empty($values)){
       foreach ($values as $key => $value) {
         if($key !== 'zollinformationen') {
@@ -1085,7 +1085,7 @@ class Ajax {
 
     //name	abteilung		unterabteilung	land	strasse		ort		plz
 
-    $values = $this->app->DatabaseService->selectRow('SELECT * FROM lieferadressen WHERE id=? LIMIT 1', [(int)$id]);
+    $values = $this->app->DatabaseService->selectRow('SELECT * FROM lieferadressen WHERE id=:id LIMIT 1', ['id' => (int)$id]);
     if(!empty($values)){
       foreach ($values as $key => $value) {
         $values[$key] = $this->app->erp->ReadyForPDF($value);
@@ -1105,7 +1105,7 @@ class Ajax {
     {
       $this->app->erp->ExitWawi();
     }
-    $values = $this->app->DatabaseService->selectRow('SELECT * FROM ansprechpartner WHERE id=? LIMIT 1', [(int)$id]);
+    $values = $this->app->DatabaseService->selectRow('SELECT * FROM ansprechpartner WHERE id=:id LIMIT 1', ['id' => (int)$id]);
     if(!empty($values)){
       foreach ($values as $key => $value) {
         $values[$key] = $this->app->erp->ReadyForPDF($value);
@@ -1231,14 +1231,14 @@ class Ajax {
     if($raction === 'edit' && $rid && in_array($rmodule, $pruefemodule))
     {
       $projekt = $this->app->DatabaseService->selectValue(
-        'SELECT projekt FROM `' . $this->app->DatabaseService->validateIdentifier($rmodule) . '` WHERE id = ? LIMIT 1',
-        [$rid]
+        'SELECT projekt FROM `' . $this->app->DatabaseService->validateIdentifier($rmodule) . '` WHERE id = :id LIMIT 1',
+        ['id' => $rid]
       );
       if($projekt)
       {
         $eigenernummernkreis = $this->app->DatabaseService->selectValue(
-          'SELECT eigenernummernkreis FROM projekt WHERE id = ? LIMIT 1',
-          [(int)$projekt]
+          'SELECT eigenernummernkreis FROM projekt WHERE id = :projektId LIMIT 1',
+          ['projektId' => (int)$projekt]
         );
         //if($eigenernummernkreis)
         $filter_projekt = $projekt;
@@ -3085,8 +3085,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $smodule = $this->app->Secure->GetGET('smodule');	
         $sid = $this->app->Secure->GetGET('sid');
         $document = $this->app->DatabaseService->selectRow(
-          'SELECT * FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE `id` = ?',
-          [(int)$sid]
+          'SELECT * FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE `id` = :id',
+          ['id' => (int)$sid]
         );
 
         $adresse = $document['adresse'];// $this->app->DB->Select("SELECT adresse FROM $smodule WHERE id='$sid' LIMIT 1");
@@ -3096,12 +3096,12 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         if($smodule == 'auftrag' || $smodule == 'rechnung' || $smodule == 'gutschrift' || $smodule == 'angebot' || $smodule == 'proformarechnung')
         {
           $_anrede = $this->app->DatabaseService->selectValue(
-            'SELECT typ FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id = ? LIMIT 1',
-            [(int)$sid]
+            'SELECT typ FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id = :id LIMIT 1',
+            ['id' => (int)$sid]
           );
           $_projekt = $this->app->DatabaseService->selectValue(
-            'SELECT projekt FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id = ? LIMIT 1',
-            [(int)$sid]
+            'SELECT projekt FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id = :id LIMIT 1',
+            ['id' => (int)$sid]
           );
           $funktion = ucfirst($smodule).'MitUmsatzeuer';
           if($this->app->erp->AnzeigePositionenBrutto($_anrede, $smodule, $_projekt, $adresse,$sid) && $this->app->erp->$funktion($sid))

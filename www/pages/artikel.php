@@ -307,7 +307,7 @@ class Artikel extends GenArtikel {
             $table = $this->app->Secure->GetGET('smodule');
         }
         $this->app->DatabaseService->validateIdentifier($table);
-        $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$table}` WHERE id = ? LIMIT 1", [$id]);
+        $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$table}` WHERE id = :id LIMIT 1", ['id' => $id]);
 
         // headings
         $heading = array('', 'Nummer', 'Artikel', 'Ab', 'Preis', 'Lager', 'Res.', 'Menge', 'Projekt', 'Men&uuml;');
@@ -366,7 +366,7 @@ class Artikel extends GenArtikel {
             $table = substr($table , 0, strpos($table, "."));
         }
         $this->app->DatabaseService->validateIdentifier($table);
-        $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$table}` WHERE id = ? LIMIT 1", [$id]);
+        $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$table}` WHERE id = :id LIMIT 1", ['id' => $id]);
 
         $sEcho = (int)$this->app->Secure->GetGET('sEcho');
         if ($sEcho === 1) {
@@ -2032,17 +2032,17 @@ class Artikel extends GenArtikel {
     {
       // $cmd is validated against a strict whitelist above; safe to use as identifier
       $this->app->DatabaseService->validateIdentifier($cmd);
-      $schreibschutz = $this->app->DatabaseService->selectValue("SELECT schreibschutz FROM `{$cmd}` WHERE id = ? LIMIT 1", [(int)$id]);
+      $schreibschutz = $this->app->DatabaseService->selectValue("SELECT schreibschutz FROM `{$cmd}` WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       if($schreibschutz!='1')
       {
         $this->app->DatabaseService->update(
           "UPDATE `{$cmd}_position` AS `pos`
           INNER JOIN `artikel` AS `art` ON pos.artikel = art.id
-          SET pos.rabatt = ?,
+          SET pos.rabatt = :rabatt,
           pos.keinrabatterlaubt = 1
-          WHERE pos.`{$cmd}` = ?
+          WHERE pos.`{$cmd}` = :id
           AND (art.keinrabatterlaubt = 0 OR art.keinrabatterlaubt IS NULL)",
-          [(float)$rabatt, (int)$id]
+          ['rabatt' => (float)$rabatt, 'id' => (int)$id]
         );
       }
     }
@@ -2121,13 +2121,13 @@ class Artikel extends GenArtikel {
         if($name)// && $wert != "")
         {
           $status = 1;
-          $checkkategorie = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = ? AND geloescht <> 1 LIMIT 1", [$name]);
+          $checkkategorie = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = :name AND geloescht <> 1 LIMIT 1", ['name' => $name]);
           if(!$checkkategorie)
           {
-            $checkkategorie = $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (?)", [$name]);
+            $checkkategorie = $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (:name)", ['name' => $name]);
           }
-          $checkwert = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaftenwerte WHERE artikeleigenschaften = ? AND artikel = ? AND wert = ? LIMIT 1", [$checkkategorie, (int)$id, $wert]);
-          if(!$checkwert) $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (wert, artikeleigenschaften, artikel, einheit) VALUES (?, ?, ?, ?)", [$wert, $checkkategorie, (int)$id, $einheit]);
+          $checkwert = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaftenwerte WHERE artikeleigenschaften = :eigenschaft AND artikel = :artikelId AND wert = :wert LIMIT 1", ['eigenschaft' => $checkkategorie, 'artikelId' => (int)$id, 'wert' => $wert]);
+          if(!$checkwert) $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (wert, artikeleigenschaften, artikel, einheit) VALUES (:wert, :eigenschaft, :artikelId, :einheit)", ['wert' => $wert, 'eigenschaft' => $checkkategorie, 'artikelId' => (int)$id, 'einheit' => $einheit]);
         }
         
         echo json_encode(array('status'=>$status));
@@ -2167,9 +2167,9 @@ class Artikel extends GenArtikel {
         if($name == ""){
           $error .= "Bitte Eigenschaft ausfüllen\n";
         }else{
-          $artikeleigenschaftid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = ? AND geloescht = 0 LIMIT 1", [$name]);
+          $artikeleigenschaftid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = :name AND geloescht = 0 LIMIT 1", ['name' => $name]);
           if($artikeleigenschaftid == "" || $artikeleigenschaftid <= 0){
-            $artikeleigenschaftid = $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (?)", [$name]);
+            $artikeleigenschaftid = $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (:name)", ['name' => $name]);
           }
         }
 
@@ -2177,7 +2177,7 @@ class Artikel extends GenArtikel {
           $error .= "Bitte Wert ausfüllen\n";
         }
 
-        $eigenschaftvorhanden = $this->app->DatabaseService->selectValue("SELECT ew.id FROM artikeleigenschaften e INNER JOIN artikeleigenschaftenwerte ew ON e.id = ew.artikeleigenschaften WHERE ew.id != ? AND ew.artikel = ? AND ew.artikeleigenschaften = ? AND ew.wert = ? AND e.geloescht = 0 LIMIT 1", [$eigenschaftid, (int)$id, $artikeleigenschaftid, $wert]);
+        $eigenschaftvorhanden = $this->app->DatabaseService->selectValue("SELECT ew.id FROM artikeleigenschaften e INNER JOIN artikeleigenschaftenwerte ew ON e.id = ew.artikeleigenschaften WHERE ew.id != :eigenschaftId AND ew.artikel = :artikelId AND ew.artikeleigenschaften = :artikeleigenschaftId AND ew.wert = :wert AND e.geloescht = 0 LIMIT 1", ['eigenschaftId' => $eigenschaftid, 'artikelId' => (int)$id, 'artikeleigenschaftId' => $artikeleigenschaftid, 'wert' => $wert]);
 
         if($eigenschaftvorhanden != "" && $eigenschaftvorhanden > 0){
           $error .= 'Eigenschaft ist bereits vorhanden.';
@@ -2186,13 +2186,13 @@ class Artikel extends GenArtikel {
 
         if($error == ''){
           if($id && $eigenschaftid){
-            $this->app->DatabaseService->update("UPDATE artikeleigenschaftenwerte SET artikeleigenschaften = ?, wert = ?, einheit = ? WHERE id = ? LIMIT 1", [$artikeleigenschaftid, $wert, $einheit, $eigenschaftid]);
+            $this->app->DatabaseService->update("UPDATE artikeleigenschaftenwerte SET artikeleigenschaften = :artikeleigenschaftId, wert = :wert, einheit = :einheit WHERE id = :eigenschaftId LIMIT 1", ['artikeleigenschaftId' => $artikeleigenschaftid, 'wert' => $wert, 'einheit' => $einheit, 'eigenschaftId' => $eigenschaftid]);
 
             echo json_encode(array('status'=>1));
             $this->app->ExitXentral();
           }
           if($id){
-            $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (artikeleigenschaften, wert, einheit, artikel) VALUES (?, ?, ?, ?)", [$artikeleigenschaftid, $wert, $einheit, (int)$id]);
+            $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (artikeleigenschaften, wert, einheit, artikel) VALUES (:artikeleigenschaftId, :wert, :einheit, :artikelId)", ['artikeleigenschaftId' => $artikeleigenschaftid, 'wert' => $wert, 'einheit' => $einheit, 'artikelId' => (int)$id]);
 
             echo json_encode(array('status'=>1));
             $this->app->ExitXentral();
@@ -2217,9 +2217,9 @@ class Artikel extends GenArtikel {
         if($name == ""){
           $error .= "Bitte Eigenschaft ausfüllen\n";
         }else{
-          $artikeleigenschaftid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = ? AND geloescht = 0 LIMIT 1", [$name]);
+          $artikeleigenschaftid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = :name AND geloescht = 0 LIMIT 1", ['name' => $name]);
           if($artikeleigenschaftid == "" || $artikeleigenschaftid <= 0){
-            $artikeleigenschaftid = $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (?)", [$name]);
+            $artikeleigenschaftid = $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (:name)", ['name' => $name]);
           }
         }
 
@@ -2227,7 +2227,7 @@ class Artikel extends GenArtikel {
           $error .= "Bitte Wert ausfüllen\n";
         }
 
-        $eigenschaftvorhanden = $this->app->DatabaseService->selectValue("SELECT ew.id FROM artikeleigenschaften e INNER JOIN artikeleigenschaftenwerte ew ON e.id = ew.artikeleigenschaften WHERE ew.id != ? AND ew.artikel = ? AND ew.artikeleigenschaften = ? AND ew.wert = ? AND e.geloescht = 0 LIMIT 1", [$eigenschaftid, (int)$id, $artikeleigenschaftid, $wert]);
+        $eigenschaftvorhanden = $this->app->DatabaseService->selectValue("SELECT ew.id FROM artikeleigenschaften e INNER JOIN artikeleigenschaftenwerte ew ON e.id = ew.artikeleigenschaften WHERE ew.id != :eigenschaftId AND ew.artikel = :artikelId AND ew.artikeleigenschaften = :artikeleigenschaftId AND ew.wert = :wert AND e.geloescht = 0 LIMIT 1", ['eigenschaftId' => $eigenschaftid, 'artikelId' => (int)$id, 'artikeleigenschaftId' => $artikeleigenschaftid, 'wert' => $wert]);
 
         if($eigenschaftvorhanden != "" && $eigenschaftvorhanden > 0){
           $error .= 'Eigenschaft ist bereits vorhanden.';
@@ -2236,7 +2236,7 @@ class Artikel extends GenArtikel {
 
         if($error == ''){
           if($id && $eigenschaftid == 0){
-            $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (artikeleigenschaften, wert, einheit, artikel) VALUES (?, ?, ?, ?)", [$artikeleigenschaftid, $wert, $einheit, (int)$id]);
+            $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (artikeleigenschaften, wert, einheit, artikel) VALUES (:artikeleigenschaftId, :wert, :einheit, :artikelId)", ['artikeleigenschaftId' => $artikeleigenschaftid, 'wert' => $wert, 'einheit' => $einheit, 'artikelId' => (int)$id]);
 
             echo json_encode(array('status'=>1));
             $this->app->ExitXentral();
@@ -2249,11 +2249,11 @@ class Artikel extends GenArtikel {
       }
       if($cmd === 'delete'){
         $eigenschaftid = (int)$this->app->Secure->GetPOST('eigenschaftid');
-        $eigenschaftid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaftenwerte WHERE artikel = ? AND id = ? LIMIT 1", [(int)$id, $eigenschaftid]);
+        $eigenschaftid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaftenwerte WHERE artikel = :artikelId AND id = :eigenschaftId LIMIT 1", ['artikelId' => (int)$id, 'eigenschaftId' => $eigenschaftid]);
         $status = 0;
         if($eigenschaftid > 0)
         {
-          $this->app->DatabaseService->delete("DELETE FROM artikeleigenschaftenwerte WHERE id = ?", [$eigenschaftid]);
+          $this->app->DatabaseService->delete("DELETE FROM artikeleigenschaftenwerte WHERE id = :eigenschaftId", ['eigenschaftId' => $eigenschaftid]);
           $status = 1;
         }
         echo json_encode(array('status'=>$status,'statusText'=>'Fehler'));
@@ -2343,7 +2343,7 @@ class Artikel extends GenArtikel {
         }
         
         //shop bedenken
-        $uebersetzungschonvorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM article_property_translation WHERE article_id = ? AND language_from = ? AND language_to = ? AND property_from = ? AND property_to = ? AND property_value_from = ? AND property_value_to = ? AND id != ? LIMIT 1", [(int)$id, $languageFrom, $languageTo, $propertyFrom, $propertyTo, $propertyValueFrom, $propertyValueTo, $eintragid]);
+        $uebersetzungschonvorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM article_property_translation WHERE article_id = :articleId AND language_from = :languageFrom AND language_to = :languageTo AND property_from = :propertyFrom AND property_to = :propertyTo AND property_value_from = :propertyValueFrom AND property_value_to = :propertyValueTo AND id != :entryId LIMIT 1", ['articleId' => (int)$id, 'languageFrom' => $languageFrom, 'languageTo' => $languageTo, 'propertyFrom' => $propertyFrom, 'propertyTo' => $propertyTo, 'propertyValueFrom' => $propertyValueFrom, 'propertyValueTo' => $propertyValueTo, 'entryId' => $eintragid]);
         if($uebersetzungschonvorhanden != "" && $uebersetzungschonvorhanden > 0){
           $error .= "Diese Übersetzung gibt es bereits für diesen Artikel.\n";
         }
@@ -2352,27 +2352,27 @@ class Artikel extends GenArtikel {
 
           if($languageFrom === 'DE'){
             if($propertyFrom != ''){
-              $propertyFromExists = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = ? LIMIT 1", [$propertyFrom]);
+              $propertyFromExists = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = :name LIMIT 1", ['name' => $propertyFrom]);
               if(!$propertyFromExists){
-                $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (?)", [$propertyFrom]);
+                $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (:name)", ['name' => $propertyFrom]);
               }
             }
           }
 
           if($eintragid){
-            $this->app->DatabaseService->update("UPDATE article_property_translation SET article_id = ?, language_to = ?, property_to = ?, property_value_to = ?, language_from = ?, property_from = ?, property_value_from = ?, shop_id = ? WHERE id = ?", [(int)$id, $languageTo, $propertyTo, $propertyValueTo, $languageFrom, $propertyFrom, $propertyValueFrom, (int)$shopId, $eintragid]);
+            $this->app->DatabaseService->update("UPDATE article_property_translation SET article_id = :articleId, language_to = :languageTo, property_to = :propertyTo, property_value_to = :propertyValueTo, language_from = :languageFrom, property_from = :propertyFrom, property_value_from = :propertyValueFrom, shop_id = :shopId WHERE id = :entryId", ['articleId' => (int)$id, 'languageTo' => $languageTo, 'propertyTo' => $propertyTo, 'propertyValueTo' => $propertyValueTo, 'languageFrom' => $languageFrom, 'propertyFrom' => $propertyFrom, 'propertyValueFrom' => $propertyValueFrom, 'shopId' => (int)$shopId, 'entryId' => $eintragid]);
 
             echo json_encode(array('status'=>1));
             $this->app->ExitXentral();
           }
-          $eigenschaftvorhanden = $this->app->DatabaseService->selectValue("SELECT aw.id FROM artikeleigenschaftenwerte aw JOIN artikeleigenschaften ae ON aw.artikeleigenschaften = ae.id WHERE aw.wert = ? AND ae.name = ? AND aw.artikel = ? LIMIT 1", [$propertyValueFrom, $propertyFrom, (int)$id]);
+          $eigenschaftvorhanden = $this->app->DatabaseService->selectValue("SELECT aw.id FROM artikeleigenschaftenwerte aw JOIN artikeleigenschaften ae ON aw.artikeleigenschaften = ae.id WHERE aw.wert = :wert AND ae.name = :name AND aw.artikel = :artikelId LIMIT 1", ['wert' => $propertyValueFrom, 'name' => $propertyFrom, 'artikelId' => (int)$id]);
           if($eigenschaftvorhanden == "" || $eigenschaftvorhanden <= 0){
-            $eigenschaftsid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = ? LIMIT 1", [$propertyFrom]);
-            $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (artikeleigenschaften, wert, artikel) VALUES (?, ?, ?)", [$eigenschaftsid, $propertyValueFrom, (int)$id]);
+            $eigenschaftsid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE name = :name LIMIT 1", ['name' => $propertyFrom]);
+            $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (artikeleigenschaften, wert, artikel) VALUES (:eigenschaftsId, :wert, :artikelId)", ['eigenschaftsId' => $eigenschaftsid, 'wert' => $propertyValueFrom, 'artikelId' => (int)$id]);
           }
 
 
-          $this->app->DatabaseService->insert("INSERT INTO article_property_translation (article_id, language_to, property_to, property_value_to, language_from, property_from, property_value_from, shop_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", [(int)$id, $languageTo, $propertyTo, $propertyValueTo, $languageFrom, $propertyFrom, $propertyValueFrom, (int)$shopId]);
+          $this->app->DatabaseService->insert("INSERT INTO article_property_translation (article_id, language_to, property_to, property_value_to, language_from, property_from, property_value_from, shop_id) VALUES (:articleId, :languageTo, :propertyTo, :propertyValueTo, :languageFrom, :propertyFrom, :propertyValueFrom, :shopId)", ['articleId' => (int)$id, 'languageTo' => $languageTo, 'propertyTo' => $propertyTo, 'propertyValueTo' => $propertyValueTo, 'languageFrom' => $languageFrom, 'propertyFrom' => $propertyFrom, 'propertyValueFrom' => $propertyValueFrom, 'shopId' => (int)$shopId]);
 
           echo json_encode(array('status'=>1));
           $this->app->ExitXentral();
@@ -2396,25 +2396,25 @@ class Artikel extends GenArtikel {
         $vorlage = $this->app->Secure->GetPOST('vorlage');
         if(trim($vorlage) !== ''){
 
-          $vorlagenid = $this->app->DatabaseService->selectValue("SELECT id FROM eigenschaften_vorlagen WHERE bezeichnung = ?", [$vorlage]);
+          $vorlagenid = $this->app->DatabaseService->selectValue("SELECT id FROM eigenschaften_vorlagen WHERE bezeichnung = :bezeichnung", ['bezeichnung' => $vorlage]);
           $alleigenschaften = $this->app->DatabaseService->select("SELECT evw.name, evw.wert, evw.einheit, ae.id FROM eigenschaften_vorlagen_werte evw
             LEFT JOIN artikeleigenschaften ae ON evw.name = ae.name
-            WHERE evw.vorlage = ? AND (ISNULL(ae.name) OR ae.typ<>'select'
+            WHERE evw.vorlage = :vorlagenId AND (ISNULL(ae.name) OR ae.typ<>'select'
               AND NOT ae.name IN(SELECT name FROM artikeleigenschaften WHERE geloescht=0 AND typ='select'))
-            GROUP BY ae.name, evw.wert, evw.einheit", [(int)$vorlagenid]);
-          $eigenschaftenNurSelect = $this->app->DatabaseService->select("SELECT evw.name, evw.wert, evw.einheit, ae.id FROM eigenschaften_vorlagen_werte evw JOIN artikeleigenschaften ae ON evw.name = ae.name WHERE ae.geloescht = 0 AND evw.vorlage = ? AND ae.typ='select' GROUP BY evw.name", [(int)$vorlagenid]);
+            GROUP BY ae.name, evw.wert, evw.einheit", ['vorlagenId' => (int)$vorlagenid]);
+          $eigenschaftenNurSelect = $this->app->DatabaseService->select("SELECT evw.name, evw.wert, evw.einheit, ae.id FROM eigenschaften_vorlagen_werte evw JOIN artikeleigenschaften ae ON evw.name = ae.name WHERE ae.geloescht = 0 AND evw.vorlage = :vorlagenId AND ae.typ='select' GROUP BY evw.name", ['vorlagenId' => (int)$vorlagenid]);
           foreach ($eigenschaftenNurSelect as $eigenschaft){
             $alleigenschaften[] = $eigenschaft;
           }
 
           foreach($alleigenschaften as $eigenschaft){
-            $eigenschaftid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE id = ? LIMIT 1", [(int)$eigenschaft['id']]);
+            $eigenschaftid = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaften WHERE id = :eigenschaftId LIMIT 1", ['eigenschaftId' => (int)$eigenschaft['id']]);
             if(!$eigenschaftid){
-              $eigenschaftid = $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (?)", [$eigenschaft['name']]);
+              $eigenschaftid = $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaften (name) VALUES (:name)", ['name' => $eigenschaft['name']]);
             }
-            $checkwert = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaftenwerte WHERE artikeleigenschaften = ? AND artikel = ? AND wert = ? LIMIT 1", [$eigenschaftid, (int)$id, $eigenschaft['wert']]);
+            $checkwert = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaftenwerte WHERE artikeleigenschaften = :eigenschaftId AND artikel = :artikelId AND wert = :wert LIMIT 1", ['eigenschaftId' => $eigenschaftid, 'artikelId' => (int)$id, 'wert' => $eigenschaft['wert']]);
             if(!$checkwert){
-              $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (wert, artikeleigenschaften, artikel, einheit, vorlage) VALUES (?, ?, ?, ?, ?)", [$eigenschaft['wert'], $eigenschaftid, (int)$id, $eigenschaft['einheit'], (int)$vorlagenid]);
+              $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (wert, artikeleigenschaften, artikel, einheit, vorlage) VALUES (:wert, :eigenschaftId, :artikelId, :einheit, :vorlagenId)", ['wert' => $eigenschaft['wert'], 'eigenschaftId' => $eigenschaftid, 'artikelId' => (int)$id, 'einheit' => $eigenschaft['einheit'], 'vorlagenId' => (int)$vorlagenid]);
             }
           }
         }
@@ -6645,7 +6645,7 @@ class Artikel extends GenArtikel {
     foreach($check_tables as $table)
     {
       $this->app->DatabaseService->validateIdentifier($table);
-      $anzahl = (int)$this->app->DatabaseService->selectValue("SELECT id FROM `{$table}_position` WHERE artikel = ?", [(int)$id]);
+      $anzahl = (int)$this->app->DatabaseService->selectValue("SELECT id FROM `{$table}_position` WHERE artikel = :artikelId", ['artikelId' => (int)$id]);
       if($anzahl > 0) {
         return ['status'=>false, 'article_in'=>$table];
       }
@@ -6672,7 +6672,7 @@ class Artikel extends GenArtikel {
     $anzahl = 0;
     foreach($check_tables as $table)  {
       $this->app->DatabaseService->validateIdentifier($table);
-      $anzahl += (int)$this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM `{$table}_position` WHERE artikel = ?", [(int)$id]);
+      $anzahl += (int)$this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM `{$table}_position` WHERE artikel = :artikelId", ['artikelId' => (int)$id]);
     }
 
     $anzahl_stueckliste = $this->app->DB->Select("SELECT SUM(menge) FROM stueckliste WHERE artikel='$id'");

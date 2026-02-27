@@ -217,7 +217,7 @@ class Lieferschein extends GenLieferschein
 
     if($nummer==''){
       if($id > 0){
-        $adresse = $this->app->DatabaseService->selectValue("SELECT a.name FROM lieferschein b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id = ? LIMIT 1", [$id]);
+        $adresse = $this->app->DatabaseService->selectValue("SELECT a.name FROM lieferschein b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id = :id LIMIT 1", ['id' => $id]);
       }else{
         $adresse = 0;
       }
@@ -226,7 +226,7 @@ class Lieferschein extends GenLieferschein
       $adresse = $nummer;
     }
     if($id > 0){
-      $nummer = $this->app->DatabaseService->selectValue("SELECT b.belegnr FROM lieferschein b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id = ? LIMIT 1", [$id]);
+      $nummer = $this->app->DatabaseService->selectValue("SELECT b.belegnr FROM lieferschein b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id = :id LIMIT 1", ['id' => $id]);
     }else{
       $nummer = '';
     }
@@ -380,9 +380,9 @@ class Lieferschein extends GenLieferschein
 
     if($id > 0)
     {
-      $this->app->DatabaseService->update("UPDATE lieferschein SET status='abgeschlossen' WHERE id = ? LIMIT 1", [$id]);
+      $this->app->DatabaseService->update("UPDATE lieferschein SET status='abgeschlossen' WHERE id = :id LIMIT 1", ['id' => $id]);
       $this->app->erp->LieferscheinProtokoll($id,"Lieferschein abgeschlossen");
-      $auftragid = (int)$this->app->DatabaseService->selectValue("SELECT auftragid FROM lieferschein WHERE id = ? LIMIT 1", [$id]);
+      $auftragid = (int)$this->app->DatabaseService->selectValue("SELECT auftragid FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
       if($auftragid && $this->app->erp->ModulVorhanden('produktion') && method_exists($this->app->erp, 'ProduktionEinzelnBerechnen'))
       {
         $produktionen = $this->app->DB->SelectArr("SELECT id FROM produktion WHERE auftragid = '$auftragid'");
@@ -589,8 +589,8 @@ class Lieferschein extends GenLieferschein
   {
 
     $id = (int)$this->app->Secure->GetGET("id");
-    $this->app->DatabaseService->update("UPDATE lieferschein SET zuarchivieren='1' WHERE id = ?", [$id]);
-    $this->app->DatabaseService->update("UPDATE lieferschein SET schreibschutz='0' WHERE id = ?", [$id]);
+    $this->app->DatabaseService->update("UPDATE lieferschein SET zuarchivieren='1' WHERE id = :id", ['id' => $id]);
+    $this->app->DatabaseService->update("UPDATE lieferschein SET schreibschutz='0' WHERE id = :id", ['id' => $id]);
     header("Location: index.php?module=lieferschein&action=edit&id=$id");
     exit;
 
@@ -600,7 +600,7 @@ class Lieferschein extends GenLieferschein
   function LieferscheinLiveTabelle()
   {
     $id = (int)$this->app->Secure->GetGET("id");
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = ? LIMIT 1", [$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
 
     $table = new EasyTable($this->app);
 
@@ -685,7 +685,7 @@ class Lieferschein extends GenLieferschein
           $auslagern = '<option value="auslagern">Lieferschein auslagern</option>';
         }else{
           //12.07.19 LG lieferscheinlager als kommissionierverfahren zum if hinzugefuegt
-          $projektkommissionierverfahren = $this->app->DatabaseService->selectValue("SELECT kommissionierverfahren FROM projekt where id = ?", [(int)$projekt]);
+          $projektkommissionierverfahren = $this->app->DatabaseService->selectValue("SELECT kommissionierverfahren FROM projekt where id = :projekt", ['projekt' => (int)$projekt]);
           if($projekt && ($projektkommissionierverfahren == "" || $projektkommissionierverfahren == "rechnungsmail" || $projektkommissionierverfahren == "lieferschein" || $projektkommissionierverfahren == "lieferscheinscan" || $projektkommissionierverfahren == "lieferscheinlager" || $projektkommissionierverfahren == "lieferscheinlagerscan"))
           {
             if(($bestellmengelagerartikel != $liefermengelagerartikel && $bestellmengelagerartikel != $liefermengelagerartikel2) && $status!='angelegt' && $status!='storniert') {
@@ -785,7 +785,7 @@ class Lieferschein extends GenLieferschein
   function LieferscheinPDFfromArchiv()
   {
     $id = (int)$this->app->Secure->GetGET("id");
-    $archiv = $this->app->DatabaseService->selectValue("SELECT table_id FROM pdfarchiv WHERE id = ? LIMIT 1", [$id]);
+    $archiv = $this->app->DatabaseService->selectValue("SELECT table_id FROM pdfarchiv WHERE id = :id LIMIT 1", ['id' => $id]);
     if($archiv)
     {
       $projekt = $this->app->DB->Select("SELECT projekt from lieferschein where id = '".(int)$archiv."'");
@@ -824,11 +824,11 @@ class Lieferschein extends GenLieferschein
       $projektid = $auftragArr[0]['projekt'];
       $projekt = '';
       if($projektid){
-        $projekt = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = ? LIMIT 1", [(int)$auftragArr[0]['projekt']]);
+        $projekt = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :projekt LIMIT 1", ['projekt' => (int)$auftragArr[0]['projekt']]);
       }
       $kundenname = '';
       if($auftragArr[0]['adresse'] > 0){
-        $kundenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = ? LIMIT 1", [(int)$auftragArr[0]['adresse']]);
+        $kundenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int)$auftragArr[0]['adresse']]);
       }
       $lieferantenretoure = $auftragArr[0]['lieferantenretoure'];
       $lieferantenretoureinfo = $auftragArr[0]['lieferantenretoureinfo'];
@@ -1314,9 +1314,9 @@ class Lieferschein extends GenLieferschein
       $id = (int)$this->app->Secure->GetGET("id");
     }else $intern = true;
 
-    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM lieferschein WHERE id = ? LIMIT 1", [$id]);
-    $name = $this->app->DatabaseService->selectValue("SELECT name FROM lieferschein WHERE id = ? LIMIT 1", [$id]);
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = ? LIMIT 1", [$id]);
+    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
+    $name = $this->app->DatabaseService->selectValue("SELECT name FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
     $objekt_lager_platz = $this->app->DB->SelectArr("SELECT olp.id, olp.menge, olp.lager_platz, olp.artikel, olp.parameter FROM
       lieferschein_position lp INNER JOIN  objekt_lager_platz olp ON lp.id = olp.parameter AND olp.objekt = 'lieferschein' AND lp.lieferschein = '$id'");
     $cmdEinlagern = $this->app->Secure->GetGET('cmd') === 'einlagern';
@@ -1723,7 +1723,7 @@ class Lieferschein extends GenLieferschein
     //$this->app->Tpl->Add(TABS,"<li><a href=\"index.php?module=lieferschein&action=positionen&id=$id\">Positionen</a></li>");
 
     // status bestell
-    $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = ? LIMIT 1", [$id]);
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
 
     $this->app->erp->MenuEintrag("index.php?module=lieferschein&action=edit&id=$id","Details");
 
@@ -1931,7 +1931,7 @@ class Lieferschein extends GenLieferschein
     if($mengegeliefert <= 0 && $liefermengelagerartikel <=0 && $schreibschutz=="1" && $status!='angelegt' && $status!='storniert' && $anzahllagerartikel > 0) {
       $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Der Lieferschein wurde noch nicht ausgelagert! <input type=\"button\" value=\"Jetzt auslagern\" onclick=\"window.location.href='index.php?module=lieferschein&action=auslagern&id=$id'\"></div>");
     }else{
-      $projektkommissionierverfahren = $this->app->DatabaseService->selectValue("SELECT kommissionierverfahren FROM projekt where id = ?", [(int)$projekt]);
+      $projektkommissionierverfahren = $this->app->DatabaseService->selectValue("SELECT kommissionierverfahren FROM projekt where id = :projekt", ['projekt' => (int)$projekt]);
       if($projekt && ($projektkommissionierverfahren == "" || $projektkommissionierverfahren == "rechnungsmail" || $projektkommissionierverfahren == "lieferschein" || $projektkommissionierverfahren == "lieferscheinscan"))
       {
         if($mengegeliefert <= 0 && $liefermengelagerartikel <=0  && $status!='angelegt' && $status!='storniert' && $anzahllagerartikel > 0) {

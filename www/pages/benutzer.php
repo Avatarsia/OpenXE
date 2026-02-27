@@ -93,10 +93,10 @@ class Benutzer
     $id = $this->app->Secure->GetGET("id");
     if($id > 0)
     {
-      $result = $this->app->DatabaseService->select("SELECT module,action FROM userrights WHERE `user`=?", [(int)$id]);
+      $result = $this->app->DatabaseService->select("SELECT module,action FROM userrights WHERE `user`=:user", ['user' => (int)$id]);
 
-      $tmp['bezeichnung']=$this->app->DatabaseService->selectValue("SELECT username FROM `user` WHERE id=? LIMIT 1", [(int)$id]);
-      $tmp['beschreibung']=$this->app->DatabaseService->selectValue("SELECT description FROM `user` WHERE id=? LIMIT 1", [(int)$id]);
+      $tmp['bezeichnung']=$this->app->DatabaseService->selectValue("SELECT username FROM `user` WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+      $tmp['beschreibung']=$this->app->DatabaseService->selectValue("SELECT description FROM `user` WHERE id=:id LIMIT 1", ['id' => (int)$id]);
       $tmp['rechte']=$result;
 
       
@@ -145,9 +145,9 @@ class Benutzer
     if($isOwnAccount) {
       $this->app->Tpl->Set('MESSAGE', "<div class=\"error\">{|Du kannst deinen eigenen Account nicht löschen.|}</div>");
     } else{
-      $username = $this->app->DatabaseService->selectValue("SELECT `username` FROM `user` WHERE `id` = ?", [$id]);
+      $username = $this->app->DatabaseService->selectValue("SELECT `username` FROM `user` WHERE `id` = :id", ['id' => $id]);
       if(!$this->isUserLastAdmin($id)){
-        $this->app->DatabaseService->delete("DELETE FROM `user` WHERE `id` = ?", [$id]);
+        $this->app->DatabaseService->delete("DELETE FROM `user` WHERE `id` = :id", ['id' => $id]);
         $this->app->Tpl->Set('MESSAGE', "<div class=\"error\">Der Benutzer \"$username\" wurde gel&ouml;scht.</div>");
       }else{
         $this->app->Tpl->Set('MESSAGE', "<div class=\"error\">Der einzige aktive Admin \"$username\" kann nicht gel&ouml;scht werden.</div>");
@@ -176,7 +176,7 @@ class Benutzer
       if($input['password']=='' && $this->app->Secure->GetPOST('hwtoken') != 4 && $this->app->Secure->GetPOST('hwtoken') != 5) $error .= 'Geben Sie bitte ein Passwort ein.<br>';		
       if($input['repassword']=='' && $this->app->Secure->GetPOST('hwtoken') != 4 && $this->app->Secure->GetPOST('hwtoken') != 5 ) $error .= 'Wiederholen Sie bitte Ihr Passwort.<br>';		
       if($input['password'] != $input['repassword']) $error .= 'Die eingegebenen Passw&ouml;rter stimmen nicht &uuml;berein.<br>';
-      if($this->app->DatabaseService->selectValue("SELECT '1' FROM `user` WHERE username=? LIMIT 1", [$input['username']])=='1')
+      if($this->app->DatabaseService->selectValue("SELECT '1' FROM `user` WHERE username=:username LIMIT 1", ['username' => $input['username']])=='1')
         $error .= "Es existiert bereits ein Benutzer mit diesem Namen";
 
       $input['adresse'] = $this->app->erp->ReplaceAdresse($input['adresse'],$input['adresse'],1);
@@ -240,14 +240,14 @@ class Benutzer
     // convert value to user DB
     if($this->app->User->GetParameter('welcome_defaultcolor_fuer_kalender')!=''){
 
-      $this->app->DatabaseService->update("UPDATE user SET defaultcolor=? WHERE id=? LIMIT 1", [$defaultcolor, (int)$this->app->User->GetID()]);
+      $this->app->DatabaseService->update("UPDATE user SET defaultcolor=:defaultcolor WHERE id=:id LIMIT 1", ['defaultcolor' => $defaultcolor, 'id' => (int)$this->app->User->GetID()]);
       $this->app->User->SetParameter('welcome_defaultcolor_fuer_kalender',"");
     }
 
     
     if($this->app->Secure->GetGET('cmd') == 'qrruecksetzen' && $id)
     {
-      $this->app->DatabaseService->update("UPDATE `user` set stechuhrdevice = '' WHERE id = ? LIMIT 1", [(int)$id]);
+      $this->app->DatabaseService->update("UPDATE `user` set stechuhrdevice = '' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       echo json_encode(array('status'=>1));
       exit;
     }
@@ -258,7 +258,7 @@ class Benutzer
       $swhere = '';
       $seriennummer = $this->app->Secure->GetPOST('seriennummer');
       if($seriennummer != '') {
-        $deviceiddest = $this->app->DatabaseService->selectValue("SELECT seriennummer FROM adapterbox WHERE verwendenals = 'metratecrfid' AND seriennummer = ? LIMIT 1", [$seriennummer]);
+        $deviceiddest = $this->app->DatabaseService->selectValue("SELECT seriennummer FROM adapterbox WHERE verwendenals = 'metratecrfid' AND seriennummer = :seriennummer LIMIT 1", ['seriennummer' => $seriennummer]);
       } else {
         $deviceiddest = $this->app->DatabaseService->selectValue("SELECT seriennummer FROM adapterbox WHERE verwendenals = 'metratecrfid' LIMIT 1");
       }
@@ -310,7 +310,7 @@ class Benutzer
     }
     
     $this->app->erp->MenuEintrag("index.php?module=benutzer&action=edit&id=$id","Details");
-    $username = $this->app->DatabaseService->selectValue("SELECT username FROM `user` WHERE id=?", [(int)$id]);
+    $username = $this->app->DatabaseService->selectValue("SELECT username FROM `user` WHERE id=:id", ['id' => (int)$id]);
     //		$this->app->Tpl->Add(KURZUEBERSCHRIFT2,$username);
 
     $this->app->erp->MenuEintrag("index.php?module=benutzer&action=list","Zur&uuml;ck zur &Uuml;bersicht");
@@ -327,9 +327,9 @@ class Benutzer
     }
 
     $submit = $this->app->Secure->GetPOST('submituser');
-    $benutzer = $this->app->DatabaseService->selectValue("SELECT description FROM `user` WHERE id=? LIMIT 1", [(int)$id]);
-    $name_angezeigt = $this->app->DatabaseService->selectValue("SELECT adresse FROM `user` WHERE id=? LIMIT 1", [(int)$id]);
-    $name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=? LIMIT 1", [(int)$name_angezeigt]);
+    $benutzer = $this->app->DatabaseService->selectValue("SELECT description FROM `user` WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $name_angezeigt = $this->app->DatabaseService->selectValue("SELECT adresse FROM `user` WHERE id=:id LIMIT 1", ['id' => (int)$id]);
+    $name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:adresse LIMIT 1", ['adresse' => (int)$name_angezeigt]);
     if($benutzer!="")$tmp = "(".$benutzer.")";
     $this->app->Tpl->Add('KURZUEBERSCHRIFT2',$name." ".$tmp);
 
@@ -363,12 +363,12 @@ class Benutzer
 
         if($input['gpsstechuhr']!="1")
         {
-          $check = $this->app->DatabaseService->delete("DELETE FROM gpsstechuhr WHERE `user`=? AND DATE_FORMAT(zeit,'%Y-%m-%d')= DATE_FORMAT( NOW( ) , '%Y-%m-%d' ) LIMIT 1", [(int)$id]);
+          $check = $this->app->DatabaseService->delete("DELETE FROM gpsstechuhr WHERE `user`=:user AND DATE_FORMAT(zeit,'%Y-%m-%d')= DATE_FORMAT( NOW( ) , '%Y-%m-%d' ) LIMIT 1", ['user' => (int)$id]);
         }
         
         if(($input['hwtoken'] == 4) && $input['type'] == 'admin')
         {
-          $anzaktivadmin = $this->app->DatabaseService->selectValue("SELECT count(*) from `user` where activ=1 and type = 'admin' and id <> ?", [(int)$id]);
+          $anzaktivadmin = $this->app->DatabaseService->selectValue("SELECT count(*) from `user` where activ=1 and type = 'admin' and id <> :id", ['id' => (int)$id]);
           if($anzaktivadmin < 1)
           {
             $error = 'Sie k&ouml;nnen den einzigen Administrator als Stechuhruer einbinden. Legen Sie daf&uuml;r einen neuen User an';
@@ -383,10 +383,10 @@ class Benutzer
         {
           if($input['hwtoken'] == 4)
           {
-            $stechuhrdevice = $this->app->DatabaseService->selectValue("SELECT stechuhrdevice from `user` where id = ?", [(int)$id]);
+            $stechuhrdevice = $this->app->DatabaseService->selectValue("SELECT stechuhrdevice from `user` where id = :id", ['id' => (int)$id]);
             if(substr($input['username'], 0,6) !== substr($stechuhrdevice,0,6))
             {
-              $this->app->DatabaseService->update("UPDATE `user` set stechuhrdevice = '' where id = ?", [(int)$id]);
+              $this->app->DatabaseService->update("UPDATE `user` set stechuhrdevice = '' where id = :id", ['id' => (int)$id]);
             }
           }
 
@@ -394,83 +394,83 @@ class Benutzer
           
           $this->app->DatabaseService->update(
             "UPDATE `user`
-            SET username=?,
-                description=?,
-              activ=?,
-                type=?,
-                adresse=?,
-                vorlage=?,
-              gpsstechuhr=?,
-              rfidtag=?,
-              kalender_aktiv=?,
-              kalender_ausblenden=?,
-              projekt=?,
-              projekt_bevorzugen=?,
-              sprachebevorzugen=?,
-              email_bevorzugen=?,
-              fehllogins=?,
-                standarddrucker=?,
-                standardetikett=?,
-              standardversanddrucker=?,
-              paketmarkendrucker=?,
-              standardfax=?,
-              defaultcolor=?,
-              startseite=?,
-                hwtoken=?,
-                hwkey=?,
-              hwcounter=?,
-                hwdatablock=?,
-                motppin=?,
-              motpsecret=?,
-                externlogin=?,
-                firma=?,
-              kalender_passwort=?,
-              docscan_aktiv=?,
-              docscan_passwort=?,
-                `role` = ?
-              WHERE id=?
+            SET username=:username,
+                description=:description,
+              activ=:activ,
+                type=:type,
+                adresse=:adresse,
+                vorlage=:vorlage,
+              gpsstechuhr=:gpsstechuhr,
+              rfidtag=:rfidtag,
+              kalender_aktiv=:kalender_aktiv,
+              kalender_ausblenden=:kalender_ausblenden,
+              projekt=:projekt,
+              projekt_bevorzugen=:projekt_bevorzugen,
+              sprachebevorzugen=:sprachebevorzugen,
+              email_bevorzugen=:email_bevorzugen,
+              fehllogins=:fehllogins,
+                standarddrucker=:standarddrucker,
+                standardetikett=:standardetikett,
+              standardversanddrucker=:standardversanddrucker,
+              paketmarkendrucker=:paketmarkendrucker,
+              standardfax=:standardfax,
+              defaultcolor=:defaultcolor,
+              startseite=:startseite,
+                hwtoken=:hwtoken,
+                hwkey=:hwkey,
+              hwcounter=:hwcounter,
+                hwdatablock=:hwdatablock,
+                motppin=:motppin,
+              motpsecret=:motpsecret,
+                externlogin=:externlogin,
+                firma=:firma,
+              kalender_passwort=:kalender_passwort,
+              docscan_aktiv=:docscan_aktiv,
+              docscan_passwort=:docscan_passwort,
+                `role` = :role
+              WHERE id=:id
               LIMIT 1",
             [
-              $input['username'],
-              $input['description'],
-              (int)$input['activ'],
-              $input['type'],
-              (int)$input['adresse'],
-              $input['vorlage'],
-              (int)$input['gpsstechuhr'],
-              $input['rfidtag'],
-              (int)$input['kalender_aktiv'],
-              (int)$input['kalender_ausblenden'],
-              (int)$input['projekt'],
-              (int)$input['projekt_bevorzugen'],
-              $spracheBevorzugen,
-              (int)$input['email_bevorzugen'],
-              (int)$input['fehllogins'],
-              (int)$input['standarddrucker'],
-              (int)$input['standardetikett'],
-              (int)$input['standardversanddrucker'],
-              (int)$input['paketmarkendrucker'],
-              (int)$input['standardfax'],
-              $input['defaultcolor'],
-              $input['startseite'],
-              (int)$input['hwtoken'],
-              $input['hwkey'],
-              (int)$input['hwcounter'],
-              $input['hwdatablock'],
-              $input['motppin'],
-              $input['motpsecret'],
-              (int)$input['externlogin'],
-              (int)$firma,
-              $input['kalender_passwort'],
-              (int)$input['docscan_aktiv'],
-              $input['docscan_passwort'],
-              $input['role'],
-              (int)$id,
+              'username' => $input['username'],
+              'description' => $input['description'],
+              'activ' => (int)$input['activ'],
+              'type' => $input['type'],
+              'adresse' => (int)$input['adresse'],
+              'vorlage' => $input['vorlage'],
+              'gpsstechuhr' => (int)$input['gpsstechuhr'],
+              'rfidtag' => $input['rfidtag'],
+              'kalender_aktiv' => (int)$input['kalender_aktiv'],
+              'kalender_ausblenden' => (int)$input['kalender_ausblenden'],
+              'projekt' => (int)$input['projekt'],
+              'projekt_bevorzugen' => (int)$input['projekt_bevorzugen'],
+              'sprachebevorzugen' => $spracheBevorzugen,
+              'email_bevorzugen' => (int)$input['email_bevorzugen'],
+              'fehllogins' => (int)$input['fehllogins'],
+              'standarddrucker' => (int)$input['standarddrucker'],
+              'standardetikett' => (int)$input['standardetikett'],
+              'standardversanddrucker' => (int)$input['standardversanddrucker'],
+              'paketmarkendrucker' => (int)$input['paketmarkendrucker'],
+              'standardfax' => (int)$input['standardfax'],
+              'defaultcolor' => $input['defaultcolor'],
+              'startseite' => $input['startseite'],
+              'hwtoken' => (int)$input['hwtoken'],
+              'hwkey' => $input['hwkey'],
+              'hwcounter' => (int)$input['hwcounter'],
+              'hwdatablock' => $input['hwdatablock'],
+              'motppin' => $input['motppin'],
+              'motpsecret' => $input['motpsecret'],
+              'externlogin' => (int)$input['externlogin'],
+              'firma' => (int)$firma,
+              'kalender_passwort' => $input['kalender_passwort'],
+              'docscan_aktiv' => (int)$input['docscan_aktiv'],
+              'docscan_passwort' => $input['docscan_passwort'],
+              'role' => $input['role'],
+              'id' => (int)$id,
             ]
           );
 
           if($input['password']!='' && $input['password']!='***************') {
-            $this->app->DatabaseService->selectValue("SELECT passwordhash FROM `user` WHERE id = ? LIMIT 1", [(int)$id]);
+            $this->app->DatabaseService->selectValue("SELECT passwordhash FROM `user` WHERE id = :id LIMIT 1", ['id' => (int)$id]);
             if(!$this->app->DB->error()){
               $options = array(
                 'cost' => 12,
@@ -479,31 +479,31 @@ class Benutzer
               if($passwordhash != '')
               {
                 $this->app->DatabaseService->update(
-                  "UPDATE `user` SET passwordhash = ?, password='', passwordmd5='', salt = '', passwordsha512 = '' WHERE id = ? LIMIT 1",
-                  [$passwordhash, (int)$id]
+                  "UPDATE `user` SET passwordhash = :passwordhash, password='', passwordmd5='', salt = '', passwordsha512 = '' WHERE id = :id LIMIT 1",
+                  ['passwordhash' => $passwordhash, 'id' => (int)$id]
                 );
               }
             }
             else{
-              $salt = $this->app->DatabaseService->selectValue("SELECT salt FROM `user` WHERE id = ? LIMIT 1", [(int)$id]);
+              $salt = $this->app->DatabaseService->selectValue("SELECT salt FROM `user` WHERE id = :id LIMIT 1", ['id' => (int)$id]);
               if(!$this->app->DB->error()){
                 if(empty($salt)) $salt = hash('sha512', microtime(true));
                 $passwordsha512 = hash('sha512', $_POST['password'] . $salt);
                 $this->app->DatabaseService->update(
-                  "UPDATE `user` SET password='', passwordmd5='', salt = ?, passwordsha512 = ? WHERE id=? LIMIT 1",
-                  [$salt, $passwordsha512, (int)$id]
+                  "UPDATE `user` SET password='', passwordmd5='', salt = :salt, passwordsha512 = :passwordsha512 WHERE id=:id LIMIT 1",
+                  ['salt' => $salt, 'passwordsha512' => $passwordsha512, 'id' => (int)$id]
                 );
                 if($salt == "" || $passwordsha512 == "") {
                   $this->app->DatabaseService->update(
-                    "UPDATE `user` SET `password` = '', `passwordmd5` = MD5(?) WHERE `id` = ? LIMIT 1",
-                    [$input['password'], (int)$id]
+                    "UPDATE `user` SET `password` = '', `passwordmd5` = MD5(:password) WHERE `id` = :id LIMIT 1",
+                    ['password' => $input['password'], 'id' => (int)$id]
                   );
                 } //TODO rausnehmen
               }
               else{
                 $this->app->DatabaseService->update(
-                  "UPDATE `user` SET `password` = '', `passwordmd5` = MD5(?) WHERE `id` = ? LIMIT 1",
-                  [$input['password'], (int)$id]
+                  "UPDATE `user` SET `password` = '', `passwordmd5` = MD5(:password) WHERE `id` = :id LIMIT 1",
+                  ['password' => $input['password'], 'id' => (int)$id]
                 );
               }
             }
@@ -518,7 +518,7 @@ class Benutzer
 
 
 
-    $dataRow = $this->app->DatabaseService->selectRow("SELECT * FROM `user` WHERE id=? LIMIT 1", [(int)$id]);
+    $dataRow = $this->app->DatabaseService->selectRow("SELECT * FROM `user` WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     $data = $dataRow !== null ? [$dataRow] : [];
     if($data)
     {
@@ -825,7 +825,7 @@ class Benutzer
     $id = $this->app->Secure->GetGET('id');
     $template = $this->app->Secure->GetPOST('usertemplate');
     $copytemplate = $this->app->Secure->GetPOST('copyusertemplate');
-    $hwtoken = $this->app->DatabaseService->selectValue("SELECT hwtoken FROM `user` where id = ? LIMIT 1", [(int)$id]);
+    $hwtoken = $this->app->DatabaseService->selectValue("SELECT hwtoken FROM `user` where id = :id LIMIT 1", ['id' => (int)$id]);
     $modules = $this->ScanModules();
     if($hwtoken == 4)
     {
@@ -840,7 +840,7 @@ class Benutzer
           $active = 0;
           if($lower_m == 'stechuhr' && ($actions[$i] == 'list' || $actions[$i] == 'change'))$active = 1;
           if($active==1){
-            $this->app->DatabaseService->execute("INSERT INTO userrights (`user`, module, action, permission) VALUES (?, ?, ?, ?)", [(int)$id, $lower_m, $actions[$i], $active]);
+            $this->app->DatabaseService->execute("INSERT INTO userrights (`user`, module, action, permission) VALUES (:user, :module, :action, :permission)", ['user' => (int)$id, 'module' => $lower_m, 'action' => $actions[$i], 'permission' => $active]);
             $this->permissionLog($this->app->User->GetID(),$id,$module,$actions[$i],$active);
           }
         }
@@ -849,8 +849,8 @@ class Benutzer
 
       if($template!='') {
         $mytemplate = $this->app->Conf->WFconf['permissions'][$template];
-        $permissions = $this->app->DatabaseService->select("SELECT module,action FROM userrights WHERE user=?", [(int)$id]);
-        $this->app->DatabaseService->delete("DELETE FROM userrights WHERE `user`=?", [(int)$id]);
+        $permissions = $this->app->DatabaseService->select("SELECT module,action FROM userrights WHERE user=:user", ['user' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM userrights WHERE `user`=:user", ['user' => (int)$id]);
         foreach ($permissions as $permission){
           $this->permissionLog($this->app->User->GetID(),$id,$permission['module'],$permission['action'],0);
         }
@@ -866,7 +866,7 @@ class Benutzer
             $delimiter = (($curModule<$modulecount || $i+1<$actioncount) ? ', ' : ';');  
             $active = ((isset($mytemplate[$lower_m]) && in_array($actions[$i], $mytemplate[$lower_m])) ? '1' : '0');
             if($active==1){
-              $this->app->DatabaseService->execute("INSERT INTO userrights (`user`, module, action, permission) VALUES (?, ?, ?, ?)", [(int)$id, $lower_m, $actions[$i], $active]);
+              $this->app->DatabaseService->execute("INSERT INTO userrights (`user`, module, action, permission) VALUES (:user, :module, :action, :permission)", ['user' => (int)$id, 'module' => $lower_m, 'action' => $actions[$i], 'permission' => $active]);
               $this->permissionLog($this->app->User->GetID(),$id,$module,$actions[$i],$active);
             }
           }
@@ -876,16 +876,16 @@ class Benutzer
 
       if($copytemplate!='') {
         $ok = true;
-        //			echo "User $id $copytemplate";	
+        //			echo "User $id $copytemplate";
         if($ok)
         {
-          $permissions = $this->app->DatabaseService->select("SELECT module,action FROM userrights WHERE user=?", [(int)$id]);
+          $permissions = $this->app->DatabaseService->select("SELECT module,action FROM userrights WHERE user=:user", ['user' => (int)$id]);
           foreach ($permissions as $permission){
             $this->permissionLog($this->app->User->GetID(),$id,$permission['module'],$permission['action'],0);
           }
-          $this->app->DatabaseService->delete("DELETE FROM userrights WHERE `user`=?", [(int)$id]);
-          $permissions = $this->app->DatabaseService->select("SELECT module,action FROM userrights WHERE user=?", [(int)$copytemplate]);
-          $this->app->DatabaseService->execute("INSERT INTO userrights (`user`, module,action,permission) (SELECT ?,module, action,permission FROM userrights WHERE user=?)", [(int)$id, (int)$copytemplate]);
+          $this->app->DatabaseService->delete("DELETE FROM userrights WHERE `user`=:user", ['user' => (int)$id]);
+          $permissions = $this->app->DatabaseService->select("SELECT module,action FROM userrights WHERE user=:copytemplate", ['copytemplate' => (int)$copytemplate]);
+          $this->app->DatabaseService->execute("INSERT INTO userrights (`user`, module,action,permission) (SELECT :user,module, action,permission FROM userrights WHERE user=:copytemplate)", ['user' => (int)$id, 'copytemplate' => (int)$copytemplate]);
           foreach ($permissions as $permission){
             $this->permissionLog($this->app->User->GetID(),$id,$permission['module'],$permission['action'],1);
           }
@@ -893,8 +893,8 @@ class Benutzer
       }
     }
 
-    $dbrights = $this->app->DatabaseService->select("SELECT module, action, permission FROM userrights WHERE `user`=? ORDER BY module", [(int)$id]);
-    $group = $this->app->DatabaseService->selectValue("SELECT `type` FROM `user` WHERE id=? LIMIT 1", [(int)$id]);
+    $dbrights = $this->app->DatabaseService->select("SELECT module, action, permission FROM userrights WHERE `user`=:user ORDER BY module", ['user' => (int)$id]);
+    $group = $this->app->DatabaseService->selectValue("SELECT `type` FROM `user` WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
     $rights = $this->app->Conf->WFconf['permissions'][$group];
     if(is_array($dbrights) && (!empty($dbrights)?count($dbrights):0)>0) 
@@ -917,21 +917,21 @@ class Benutzer
     $value = $this->app->Secure->GetGET('b_value');
 
     if(is_numeric($user) && $module!='' && $action!='' && $value!='') {
-      $id = $this->app->DatabaseService->selectValue("SELECT id FROM userrights WHERE user=? AND module=? AND action=? LIMIT 1", [(int)$user, $module, $action]);
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM userrights WHERE user=:user AND module=:module AND action=:action LIMIT 1", ['user' => (int)$user, 'module' => $module, 'action' => $action]);
       if(is_numeric($id) && $id>0)
       {
         if($value=="1")
         {
-          $this->app->DatabaseService->update("UPDATE userrights SET permission=? WHERE id=? LIMIT 1", [$value, (int)$id]);
+          $this->app->DatabaseService->update("UPDATE userrights SET permission=:permission WHERE id=:id LIMIT 1", ['permission' => $value, 'id' => (int)$id]);
         }
         else
         {
           $sql = "SELECT permission
               FROM `uservorlagerights`
               INNER JOIN `uservorlage` INNER JOIN `user` ON `uservorlagerights`.`vorlage` = `uservorlage`.`id` AND `user`.`vorlage` = `uservorlage`.`bezeichnung`
-              WHERE `user`.`id` = ? AND `uservorlagerights`.`module` = ? AND `uservorlagerights`.`action` = ? LIMIT 1";
+              WHERE `user`.`id` = :user AND `uservorlagerights`.`module` = :module AND `uservorlagerights`.`action` = :action LIMIT 1";
 
-          $uservorlageright = $this->app->DatabaseService->selectValue($sql, [(int)$user, $module, $action]);
+          $uservorlageright = $this->app->DatabaseService->selectValue($sql, ['user' => (int)$user, 'module' => $module, 'action' => $action]);
 
           $fromtemplate = false;
           if (!empty($uservorlageright)) {
@@ -941,24 +941,24 @@ class Benutzer
           }
 
           if (!$fromtemplate) {
-            $this->app->DatabaseService->delete("DELETE FROM userrights WHERE user=? AND module=? AND action=?", [(int)$user, $module, $action]);
+            $this->app->DatabaseService->delete("DELETE FROM userrights WHERE user=:user AND module=:module AND action=:action", ['user' => (int)$user, 'module' => $module, 'action' => $action]);
           }
         }
       }
       else {
-        $this->app->DatabaseService->execute("INSERT INTO userrights (user, module, action, permission) VALUES (?, ?, ?, ?)", [(int)$user, $module, $action, $value]);
+        $this->app->DatabaseService->execute("INSERT INTO userrights (user, module, action, permission) VALUES (:user, :module, :action, :permission)", ['user' => (int)$user, 'module' => $module, 'action' => $action, 'permission' => $value]);
       }
       $this->permissionLog($this->app->User->GetID(),$user,$module,$action,$value);
     }
 
-    echo $this->app->DatabaseService->selectValue("SELECT permission FROM userrights WHERE user=? AND module=? AND action=? LIMIT 1", [(int)$user, $module, $action]);
+    echo $this->app->DatabaseService->selectValue("SELECT permission FROM userrights WHERE user=:user AND module=:module AND action=:action LIMIT 1", ['user' => (int)$user, 'module' => $module, 'action' => $action]);
 
     exit;
   }
 
   public function permissionLog($grantingUserId,$receivingUserId,$module,$action,$permission){
-    $grantingUserName = $this->app->DatabaseService->selectValue("SELECT username FROM user WHERE id=?", [(int)$grantingUserId]);
-    $receivingUserName = $this->app->DatabaseService->selectValue("SELECT username FROM user WHERE id=?", [(int)$receivingUserId]);
+    $grantingUserName = $this->app->DatabaseService->selectValue("SELECT username FROM user WHERE id=:id", ['id' => (int)$grantingUserId]);
+    $receivingUserName = $this->app->DatabaseService->selectValue("SELECT username FROM user WHERE id=:id", ['id' => (int)$receivingUserId]);
     $permission = !empty($permission);
     try {
       $userPermission = $this->app->Container->get('UserPermissionService');

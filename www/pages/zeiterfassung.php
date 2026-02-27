@@ -381,8 +381,8 @@ class Zeiterfassung { //extends GenZeiterfassung {
   {
     $id = $this->app->Secure->GetGET('id');
 
-    $tmp = $this->app->DatabaseService->selectRow("SELECT * FROM zeiterfassung WHERE id = ?", [(int)$id]);
-    $teilprojekt = $this->app->DatabaseService->selectValue("SELECT aufgabe FROM arbeitspaket WHERE id = ?", [(int)$tmp['arbeitspaket']]);
+    $tmp = $this->app->DatabaseService->selectRow("SELECT * FROM zeiterfassung WHERE id = :id", ['id' => (int)$id]);
+    $teilprojekt = $this->app->DatabaseService->selectValue("SELECT aufgabe FROM arbeitspaket WHERE id = :id", ['id' => (int)$tmp['arbeitspaket']]);
 
     echo '<table width="710">';
     echo '<tr><td width="200"><b>Ort:</b></td><td>'.$tmp['ort'].'</td></tr>';
@@ -528,7 +528,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
             $tmpadresse = $this->app->User->GetAdresse();
           }
 
-          $result = $this->app->DatabaseService->select("SELECT * FROM zeiterfassung WHERE adresse = ? AND DATE_FORMAT(von,'%Y-%m-%d') BETWEEN ? AND ?", [$tmpadresse, $start_datum, $end_datum]);
+          $result = $this->app->DatabaseService->select("SELECT * FROM zeiterfassung WHERE adresse = :adresse AND DATE_FORMAT(von,'%Y-%m-%d') BETWEEN :start_datum AND :end_datum", ['adresse' => $tmpadresse, 'start_datum' => $start_datum, 'end_datum' => $end_datum]);
           $cresult = !empty($result)?count($result):0;
           for($i=0;$i<$cresult;$i++)
           {
@@ -550,7 +550,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
           //background
           if($this->app->User->GetParameter('zeiterfassung_buchen_stechuhr')=='1') {
 
-            $stechuhr = $this->app->DatabaseService->select("SELECT *, datum as start, DATE_ADD(datum, INTERVAL 30 MINUTE) as end FROM stechuhr WHERE adresse = ? AND DATE_FORMAT(datum,'%Y-%m-%d') BETWEEN ? AND ?", [$tmpadresse, $start_datum, $end_datum]);
+            $stechuhr = $this->app->DatabaseService->select("SELECT *, datum as start, DATE_ADD(datum, INTERVAL 30 MINUTE) as end FROM stechuhr WHERE adresse = :adresse AND DATE_FORMAT(datum,'%Y-%m-%d') BETWEEN :start_datum AND :end_datum", ['adresse' => $tmpadresse, 'start_datum' => $start_datum, 'end_datum' => $end_datum]);
             $cstechuhr = !empty($stechuhr)?count($stechuhr):0;
             for($si=0; $si<$cstechuhr;$si++)
             {
@@ -567,7 +567,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
         break;
         case 'getzeiterfassung':
           $id=$this->app->Secure->GetGET('id');
-          $result = $this->app->DatabaseService->select("SELECT *,DATE_FORMAT(von,'%d.%m.%Y') as datum, DATE_FORMAT(von,'%H:%i') as vonzeit, DATE_FORMAT(bis,'%H:%i') as biszeit FROM zeiterfassung WHERE adresse = ? AND id = ? LIMIT 1", [$this->app->User->GetAdresse(), (int)$id]);
+          $result = $this->app->DatabaseService->select("SELECT *,DATE_FORMAT(von,'%d.%m.%Y') as datum, DATE_FORMAT(von,'%H:%i') as vonzeit, DATE_FORMAT(bis,'%H:%i') as biszeit FROM zeiterfassung WHERE adresse = :adresse AND id = :id LIMIT 1", ['adresse' => $this->app->User->GetAdresse(), 'id' => (int)$id]);
           $result = reset($result);
 
           $data['id']=$result['id'];
@@ -606,7 +606,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
         case 'copyzeiterfassung':
           $id = $this->app->Secure->GetPOST('id');
-          $zeiterfassungData = $this->app->DatabaseService->selectRow("SELECT * FROM zeiterfassung WHERE id = ? LIMIT 1", [(int)$id]);
+          $zeiterfassungData = $this->app->DatabaseService->selectRow("SELECT * FROM zeiterfassung WHERE id = :id LIMIT 1", ['id' => (int)$id]);
           $datum = explode(' ', $zeiterfassungData['von']);
           $datum = $datum[0];
           $checkzeit = $this->app->erp->ZeiterfassungAllowEdit($datum);
@@ -631,8 +631,8 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
         case 'delzeiterfassung':
           $id=$this->app->Secure->GetPOST('id');
-          $check = $this->app->DatabaseService->selectValue("SELECT id FROM zeiterfassung WHERE adresse = ? AND id = ? AND id > 0 LIMIT 1", [$this->app->User->GetAdresse(), (int)$id]);
-          $checkdatum = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(von,'%Y-%m-%d') FROM zeiterfassung WHERE adresse = ? AND id = ? AND id > 0 LIMIT 1", [$this->app->User->GetAdresse(), (int)$id]);
+          $check = $this->app->DatabaseService->selectValue("SELECT id FROM zeiterfassung WHERE adresse = :adresse AND id = :id AND id > 0 LIMIT 1", ['adresse' => $this->app->User->GetAdresse(), 'id' => (int)$id]);
+          $checkdatum = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(von,'%Y-%m-%d') FROM zeiterfassung WHERE adresse = :adresse AND id = :id AND id > 0 LIMIT 1", ['adresse' => $this->app->User->GetAdresse(), 'id' => (int)$id]);
 
           $checkzeit = $this->app->erp->ZeiterfassungAllowEdit($checkdatum);
 
@@ -689,34 +689,34 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
           $adresse_abrechnung = trim ($adresse_abrechnung);
           $adresse_abrechnung = substr ($adresse_abrechnung , 0 , (strpos ($adresse_abrechnung , ' ')));
-          $adresse_abrechnung = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = ? AND kundennummer != '' LIMIT 1", [$adresse_abrechnung]);
+          $adresse_abrechnung = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = :kundennummer AND kundennummer != '' LIMIT 1", ['kundennummer' => $adresse_abrechnung]);
 
           $auftrag = trim ($auftrag);
           $auftrag = substr ($auftrag , 0 , (strpos ($auftrag , ' ')));
-          $auftrag = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE belegnr = ? AND belegnr != '' LIMIT 1", [$auftrag]);
+          $auftrag = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE belegnr = :belegnr AND belegnr != '' LIMIT 1", ['belegnr' => $auftrag]);
 
           $string = $auftragpositionid;
           $string = trim ($string);
           $string = substr ($string , 0 , (strpos ($string , ' ')));
           $tmpauftrag = substr ($string , 0 , (strrpos ($string , '-')));
-          $tmpauftrag = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE belegnr = ? AND belegnr != '' LIMIT 1", [$tmpauftrag]);
+          $tmpauftrag = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE belegnr = :belegnr AND belegnr != '' LIMIT 1", ['belegnr' => $tmpauftrag]);
           $auftragpositionsort = substr ($string , (strrpos ($string , '-')+1),strlen($string));
-          $auftragpositionid = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag_position WHERE auftrag = ? AND sort = ? LIMIT 1", [(int)$tmpauftrag, $auftragpositionsort]);
+          $auftragpositionid = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag_position WHERE auftrag = :auftrag AND sort = :sort LIMIT 1", ['auftrag' => (int)$tmpauftrag, 'sort' => $auftragpositionsort]);
 
           $string = $produktion;
           $string = trim ($string);
           $produktion = substr ($string , 0 , (strpos ($string , ' ')));
-          $produktion = $this->app->DatabaseService->selectValue("SELECT id FROM produktion WHERE belegnr = ? AND belegnr != '' LIMIT 1", [$produktion]);
+          $produktion = $this->app->DatabaseService->selectValue("SELECT id FROM produktion WHERE belegnr = :belegnr AND belegnr != '' LIMIT 1", ['belegnr' => $produktion]);
 
           $arbeitspaket = strstr($arbeitspaket, ' ', true);
-          $arbeitspaket = $this->app->DatabaseService->selectValue("SELECT id FROM arbeitspaket WHERE id = ? LIMIT 1", [(int)$arbeitspaket]);
+          $arbeitspaket = $this->app->DatabaseService->selectValue("SELECT id FROM arbeitspaket WHERE id = :id LIMIT 1", ['id' => (int)$arbeitspaket]);
 
 /*          $serviceauftrag = reset(explode(' ',$serviceauftrag));
           $serviceauftrag = $this->app->DB->Select("SELECT id FROM serviceauftrag WHERE belegnr='".$serviceauftrag."' LIMIT 1");*/
 
           // Projekt grabben und notfalls wieder anzeigen
           $projekt_kennung = reset(explode(' ',$projekt_manuell));
-          $projekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = ? LIMIT 1", [$projekt_kennung]);
+          $projekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :abkuerzung LIMIT 1", ['abkuerzung' => $projekt_kennung]);
 
           $checkzeit = $this->app->erp->ZeiterfassungAllowEdit($datum);
 
@@ -724,7 +724,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
           {
             if($id > 0)
             {
-              $this->app->DatabaseService->update("UPDATE zeiterfassung SET aufgabe = ?, beschreibung = ?, ort = ?, internerkommentar = ?, art = ?, adresse_abrechnung = ?, von = ?, bis = ?, abrechnen = ?, arbeitspaket = ?, auftrag = ?, produktion = ?, auftragpositionid = ?, projekt = ?, serviceauftrag = ? WHERE id = ? LIMIT 1", [$aufgabe, $beschreibung, $ort, $internerkommentar, $art, $adresse_abrechnung, $datum." ".$start, $datum." ".$end, $abrechnen, $arbeitspaket, $auftrag, $produktion, $auftragpositionid, $projekt, $serviceauftrag, (int)$id]);
+              $this->app->DatabaseService->update("UPDATE zeiterfassung SET aufgabe = :aufgabe, beschreibung = :beschreibung, ort = :ort, internerkommentar = :internerkommentar, art = :art, adresse_abrechnung = :adresse_abrechnung, von = :von, bis = :bis, abrechnen = :abrechnen, arbeitspaket = :arbeitspaket, auftrag = :auftrag, produktion = :produktion, auftragpositionid = :auftragpositionid, projekt = :projekt, serviceauftrag = :serviceauftrag WHERE id = :id LIMIT 1", ['aufgabe' => $aufgabe, 'beschreibung' => $beschreibung, 'ort' => $ort, 'internerkommentar' => $internerkommentar, 'art' => $art, 'adresse_abrechnung' => $adresse_abrechnung, 'von' => $datum." ".$start, 'bis' => $datum." ".$end, 'abrechnen' => $abrechnen, 'arbeitspaket' => $arbeitspaket, 'auftrag' => $auftrag, 'produktion' => $produktion, 'auftragpositionid' => $auftragpositionid, 'projekt' => $projekt, 'serviceauftrag' => $serviceauftrag, 'id' => (int)$id]);
             }
             else {
             $this->app->erp->AddArbeitszeit($this->app->User->GetAdresse(), $datum.' '.$start, $datum.' '.$end, $aufgabe, $beschreibung,$ort, $projekt, $arbeitspaket,$art,$adresse_abrechnung,$abrechnen,'',
@@ -749,7 +749,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
           $checkzeit = $this->app->erp->ZeiterfassungAllowEdit($datum);
           if($eid > 0 && $checkzeit)
           {
-            $this->app->DatabaseService->update("UPDATE zeiterfassung SET von = ?, bis = ? WHERE id = ? LIMIT 1", [$start, $end, (int)$eid]);
+            $this->app->DatabaseService->update("UPDATE zeiterfassung SET von = :von, bis = :bis WHERE id = :id LIMIT 1", ['von' => $start, 'bis' => $end, 'id' => (int)$eid]);
           }
           else if(!$checkzeit)
           {
@@ -1176,7 +1176,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
     $projektabgeschlossen = false;
     if($id!='' && $this->app->Secure->GetPOST('art')=='')
     {
-      $tmp = $this->app->DatabaseService->select("SELECT *,DATE_FORMAT(von,'%H:%i') as von, if(bis!='0000-00-00 00:00:00',DATE_FORMAT(bis,'%H:%i'),'') as bis, DATE_FORMAT(von,'%d.%m.%Y') as datum FROM zeiterfassung WHERE id = ? LIMIT 1", [(int)$id]);
+      $tmp = $this->app->DatabaseService->select("SELECT *,DATE_FORMAT(von,'%H:%i') as von, if(bis!='0000-00-00 00:00:00',DATE_FORMAT(bis,'%H:%i'),'') as bis, DATE_FORMAT(von,'%d.%m.%Y') as datum FROM zeiterfassung WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       $tmp = !empty($tmp) ? $tmp : [[]];
       $aufgabe = $tmp[0]['aufgabe'];
       $art = $tmp[0]['art'];
@@ -1287,7 +1287,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
       // Projekt grabben und notfalls wieder anzeigen
       $paketauswahl = strstr($paketauswahl, ' ', true);
-      $paketauswahl = $this->app->DatabaseService->selectValue("SELECT id FROM arbeitspaket WHERE id = ? LIMIT 1", [(int)$paketauswahl]);
+      $paketauswahl = $this->app->DatabaseService->selectValue("SELECT id FROM arbeitspaket WHERE id = :id LIMIT 1", ['id' => (int)$paketauswahl]);
 
 
       //      if($paketauswahl > 0)
@@ -1319,25 +1319,25 @@ class Zeiterfassung { //extends GenZeiterfassung {
     $string = $auftrag;
     $string = trim ($string);
     $auftrag = substr ($string , 0 , strpos ($string , ' '));
-    $auftrag = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE belegnr = ? AND belegnr != '' LIMIT 1", [$auftrag]);
+    $auftrag = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE belegnr = :belegnr AND belegnr != '' LIMIT 1", ['belegnr' => $auftrag]);
 
     $string = $auftragpositionid;
     $string = trim ($string);
     $string = substr ($string , 0 , strpos ($string , ' '));
     $tmpauftrag = substr ($string , 0 , (strrpos ($string , '-')));
-    $tmpauftrag = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE belegnr = ? AND belegnr != '' LIMIT 1", [$tmpauftrag]);
+    $tmpauftrag = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE belegnr = :belegnr AND belegnr != '' LIMIT 1", ['belegnr' => $tmpauftrag]);
     $auftragpositionsort = substr ($string , strrpos ($string , '-')+1,strlen($string));
-    $auftragpositionid = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag_position WHERE auftrag = ? AND sort = ? LIMIT 1", [(int)$tmpauftrag, $auftragpositionsort]);
+    $auftragpositionid = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag_position WHERE auftrag = :auftrag AND sort = :sort LIMIT 1", ['auftrag' => (int)$tmpauftrag, 'sort' => $auftragpositionsort]);
 
     $string = $produktion;
     $string = trim ($string);
     $produktion = substr ($string , 0 , (strpos ($string , ' ')));
-    $produktion = $this->app->DatabaseService->selectValue("SELECT id FROM produktion WHERE belegnr = ? AND belegnr != '' LIMIT 1", [$produktion]);
+    $produktion = $this->app->DatabaseService->selectValue("SELECT id FROM produktion WHERE belegnr = :belegnr AND belegnr != '' LIMIT 1", ['belegnr' => $produktion]);
 
 
 
     if($mitarbeiter!=''){
-      $adr_id = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE mitarbeiternummer = ? LIMIT 1", [$mitarbeiter]);
+      $adr_id = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE mitarbeiternummer = :mitarbeiternummer LIMIT 1", ['mitarbeiternummer' => $mitarbeiter]);
     }
 
     $this->app->YUI->AutoSaveUserParameter('projekt_manuell','teilprojekt_filter');
@@ -1400,12 +1400,12 @@ class Zeiterfassung { //extends GenZeiterfassung {
     
     // Projekt grabben und notfalls wieder anzeigen
     $projekt_kennung = reset(explode(' ',$projekt));
-    $projekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = ? LIMIT 1", [$projekt_kennung]);
+    $projekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :abkuerzung LIMIT 1", ['abkuerzung' => $projekt_kennung]);
 
     // Kunde
     $adresse_abrechnung = strstr($adresse_abrechnung, ' ', true);
     if($adresse_abrechnung!=''){
-      $adresse_kunde = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = ? LIMIT 1", [$adresse_abrechnung]);
+      $adresse_kunde = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = :kundennummer LIMIT 1", ['kundennummer' => $adresse_abrechnung]);
     }
     else{
       $adresse_kunde = 'NULL';

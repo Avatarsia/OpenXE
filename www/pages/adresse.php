@@ -526,14 +526,14 @@ class Adresse extends GenAdresse {
     if($id > 0){
       $nummer = $this->app->DatabaseService->selectValue("SELECT CONCAT(
         if(kundennummer!='',CONCAT('Kunde: ',kundennummer),''),
-          if(lieferantennummer!='',CONCAT(' Lieferant: ',lieferantennummer),'')) FROM adresse WHERE id=? AND geloescht=0 LIMIT 1", [(int)$id]);
+          if(lieferantennummer!='',CONCAT(' Lieferant: ',lieferantennummer),'')) FROM adresse WHERE id=:id AND geloescht=0 LIMIT 1", ['id' => (int)$id]);
     }else{
       $nummer = '';
     }
 
 
     if(is_numeric($id)){
-      $name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=? AND geloescht=0 LIMIT 1", [(int)$id]);
+      $name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:id AND geloescht=0 LIMIT 1", ['id' => (int)$id]);
     }
 
     // else
@@ -618,7 +618,7 @@ class Adresse extends GenAdresse {
   public function AdresseDownloadDatei()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    if($this->app->DatabaseService->selectValue("SELECT id FROM datei_stichwoerter where datei = ? AND subjekt like 'anhang' and objekt like 'dokument' LIMIT 1", [$id]))
+    if($this->app->DatabaseService->selectValue("SELECT id FROM datei_stichwoerter where datei = :datei AND subjekt like 'anhang' and objekt like 'dokument' LIMIT 1", ['datei' => $id]))
     {
       $this->app->erp->SendDatei($id);
     } else {
@@ -633,12 +633,12 @@ class Adresse extends GenAdresse {
     $datei = (int)$this->app->Secure->GetGET('id');
     if($datei)
     {
-      $checkstichwort = $this->app->DatabaseService->selectValue("SELECT datei FROM datei_stichwoerter WHERE datei = ? AND subjekt like 'anhang' and objekt like 'dokument' LIMIT 1", [$datei]);
+      $checkstichwort = $this->app->DatabaseService->selectValue("SELECT datei FROM datei_stichwoerter WHERE datei = :datei AND subjekt like 'anhang' and objekt like 'dokument' LIMIT 1", ['datei' => $datei]);
       if($checkstichwort)
       {
-        $this->app->DatabaseService->delete("DELETE FROM datei_version WHERE datei=?", [$datei]);
-        $this->app->DatabaseService->delete("DELETE FROM datei_stichwoerter WHERE datei=?", [$datei]);
-        $this->app->DatabaseService->update("UPDATE datei SET geloescht=1 WHERE id=?", [$datei]);
+        $this->app->DatabaseService->delete("DELETE FROM datei_version WHERE datei=:datei", ['datei' => $datei]);
+        $this->app->DatabaseService->delete("DELETE FROM datei_stichwoerter WHERE datei=:datei", ['datei' => $datei]);
+        $this->app->DatabaseService->update("UPDATE datei SET geloescht=1 WHERE id=:datei", ['datei' => $datei]);
         $res['status'] = true;      
       }
     }
@@ -901,8 +901,8 @@ class Adresse extends GenAdresse {
     } else {
 
 
-      $tmp = $this->app->DatabaseService->selectRow("SELECT * FROM zeiterfassung WHERE id=?", [(int)$id]);
-      $teilprojekt = $this->app->DatabaseService->selectValue("SELECT aufgabe FROM arbeitspaket WHERE id=?", [(int)$tmp['arbeitspaket']]);
+      $tmp = $this->app->DatabaseService->selectRow("SELECT * FROM zeiterfassung WHERE id=:id", ['id' => (int)$id]);
+      $teilprojekt = $this->app->DatabaseService->selectValue("SELECT aufgabe FROM arbeitspaket WHERE id=:arbeitspaket", ['arbeitspaket' => (int)$tmp['arbeitspaket']]);
 
       echo '<table width="710">';
       echo '<tr><td width="200"><b>Ort:</b></td><td>'.$tmp['ort'].'</td></tr>';
@@ -923,7 +923,7 @@ class Adresse extends GenAdresse {
     $sid = $this->app->Secure->GetPOST('sid');
     $id = $this->app->Secure->GetGET('id');
     if($sid > 0){
-      $this->app->DatabaseService->update("UPDATE zeiterfassung SET ist_abgerechnet='1', abgerechnet='1' WHERE id=? AND adresse_abrechnung=? LIMIT 1", [(int)$sid, (int)$id]);
+      $this->app->DatabaseService->update("UPDATE zeiterfassung SET ist_abgerechnet='1', abgerechnet='1' WHERE id=:sid AND adresse_abrechnung=:adresse LIMIT 1", ['sid' => (int)$sid, 'adresse' => (int)$id]);
     }
     $this->AdresseAbrechnungzeit();
   }
@@ -934,7 +934,7 @@ class Adresse extends GenAdresse {
     $sid = $this->app->Secure->GetGET('sid');
     $id = $this->app->Secure->GetGET('id');
     if($sid > 0){
-      $this->app->DatabaseService->delete("DELETE FROM zeiterfassung WHERE id=? AND adresse_abrechnung=? LIMIT 1", [(int)$sid, (int)$id]);
+      $this->app->DatabaseService->delete("DELETE FROM zeiterfassung WHERE id=:sid AND adresse_abrechnung=:adresse LIMIT 1", ['sid' => (int)$sid, 'adresse' => (int)$id]);
     }
     $this->AdresseAbrechnungzeit();
   }
@@ -1036,12 +1036,12 @@ class Adresse extends GenAdresse {
       // Speichere neuen Stundensatz
       if($submit!='')
       {
-        $this->app->DatabaseService->insert("INSERT INTO stundensatz (adresse, satz, typ, projekt, datum) VALUES (?, ?, 'Standard', '0', NOW())", [(int)$id, $stundensatz]);
+        $this->app->DatabaseService->insert("INSERT INTO stundensatz (adresse, satz, typ, projekt, datum) VALUES (:adresse, :satz, 'Standard', '0', NOW())", ['adresse' => (int)$id, 'satz' => $stundensatz]);
         $this->app->Tpl->Set('MESSAGE', '<div class="success">Der neue Standard-Stundensatz wurde &uuml;bernommen.</div>');
       }
 
       // Hole neuesten Stundensatz
-      $standard = $this->app->DatabaseService->selectValue("SELECT satz FROM stundensatz WHERE typ='standard' AND adresse=? ORDER BY datum DESC LIMIT 1", [(int)$id]);
+      $standard = $this->app->DatabaseService->selectValue("SELECT satz FROM stundensatz WHERE typ='standard' AND adresse=:adresse ORDER BY datum DESC LIMIT 1", ['adresse' => (int)$id]);
       $this->app->Tpl->Set('STANDARDSTUNDENSATZ', $standard);
 
       // Fülle Projekt-Tabelle
@@ -1071,23 +1071,23 @@ class Adresse extends GenAdresse {
 
 
     // Hole neuesten Standard-Stundensatz
-    $standard = $this->app->DatabaseService->selectValue("SELECT satz FROM stundensatz WHERE typ='standard' AND adresse=? ORDER BY datum DESC LIMIT 1", [(int)$user]);
+    $standard = $this->app->DatabaseService->selectValue("SELECT satz FROM stundensatz WHERE typ='standard' AND adresse=:adresse ORDER BY datum DESC LIMIT 1", ['adresse' => (int)$user]);
 
     if(is_numeric($id))
     {
       // Stundensatz existiert bereits, hole Daten
-      $stundensatzRow = $this->app->DatabaseService->selectRow("SELECT * FROM stundensatz WHERE id=? LIMIT 1", [(int)$id]);
+      $stundensatzRow = $this->app->DatabaseService->selectRow("SELECT * FROM stundensatz WHERE id=:id LIMIT 1", ['id' => (int)$id]);
       $this->app->Tpl->Set('STUNDENSATZANGEPASST', $stundensatzRow['satz']);
 
       if($submit!='')
       {
-        $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM stundensatz WHERE id=? LIMIT 1", [(int)$id]);
+        $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM stundensatz WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
         if($adapt!=''){
-          $this->app->DatabaseService->update("UPDATE stundensatz SET satz=? WHERE adresse=? AND projekt=?", [$satz, (int)$user, $projekt]);
+          $this->app->DatabaseService->update("UPDATE stundensatz SET satz=:satz WHERE adresse=:adresse AND projekt=:projekt", ['satz' => $satz, 'adresse' => (int)$user, 'projekt' => $projekt]);
         }
 
-        $this->app->DatabaseService->insert("INSERT INTO stundensatz (adresse, satz, typ, projekt, datum) VALUES (?, ?, 'Angepasst', ?, NOW())", [(int)$user, $satz, $projekt]);
+        $this->app->DatabaseService->insert("INSERT INTO stundensatz (adresse, satz, typ, projekt, datum) VALUES (:adresse, :satz, 'Angepasst', :projekt, NOW())", ['adresse' => (int)$user, 'satz' => $satz, 'projekt' => $projekt]);
         $this->app->Location->execute("index.php?module=adresse&action=lohn&id=$user&msg=$msg");
       }
 
@@ -1102,7 +1102,7 @@ class Adresse extends GenAdresse {
       if($submit!='')
       {
         // Schreibe neuen Satz
-        $this->app->DatabaseService->insert("INSERT INTO stundensatz (adresse, satz, typ, projekt, datum) VALUES (?, ?, 'Angepasst', ?, NOW())", [(int)$user, $satz, $projekt]);
+        $this->app->DatabaseService->insert("INSERT INTO stundensatz (adresse, satz, typ, projekt, datum) VALUES (:adresse, :satz, 'Angepasst', :projekt, NOW())", ['adresse' => (int)$user, 'satz' => $satz, 'projekt' => $projekt]);
 
         $msg = $this->app->erp->base64_url_encode('<div class="success">Der Stundensatz wurde erfolgreich gespeichert.</div>');
         $this->app->Location->execute("index.php?module=adresse&action=lohn&id=$user&msg=$msg");
@@ -1120,7 +1120,7 @@ class Adresse extends GenAdresse {
     $id = $this->app->Secure->GetGET('id');
 
     if(is_numeric($id)){
-      $this->app->DatabaseService->delete("DELETE FROM stundensatz WHERE id=? LIMIT 1", [(int)$id]);
+      $this->app->DatabaseService->delete("DELETE FROM stundensatz WHERE id=:id LIMIT 1", ['id' => (int)$id]);
     }
     else{
       $msg = $this->app->erp->base64_url_encode('<div class="error">Stundensatz-ID konnte nicht gefunden werden. Standard-Stundens&auml;tze k&ouml;nnen nicht gel&ouml;scht werden.</div>');
@@ -1193,9 +1193,9 @@ class Adresse extends GenAdresse {
   {
     $id = (int)$this->app->Secure->GetGET('id');
     
-    $checkuser = $this->app->DatabaseService->selectValue("SELECT count(id) FROM user WHERE adresse=?", [$id]);
-    $checkkassierer = $this->app->DatabaseService->selectValue("SELECT count(id) FROM pos_kassierer WHERE adresse=?", [$id]);
-    $checkabo = $this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM abrechnungsartikel WHERE adresse = ?", [$id]);
+    $checkuser = $this->app->DatabaseService->selectValue("SELECT count(id) FROM user WHERE adresse=:adresse", ['adresse' => $id]);
+    $checkkassierer = $this->app->DatabaseService->selectValue("SELECT count(id) FROM pos_kassierer WHERE adresse=:adresse", ['adresse' => $id]);
+    $checkabo = $this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM abrechnungsartikel WHERE adresse = :adresse", ['adresse' => $id]);
 
     if($id > 0){
       $msg = '';
@@ -1206,13 +1206,13 @@ class Adresse extends GenAdresse {
       }else if($checkabo > 0){
         $msg .= $this->app->erp->base64_url_encode("<div class=\"error\">Die Adresse ist noch mit Abos verlinkt und kann daher nicht gelöscht werden.</div>");
       }else {
-        $this->app->DatabaseService->update("UPDATE adresse SET geloescht='1',kundennummer=CONCAT('DEL-',kundennummer), lieferantennummer=CONCAT('DEL-',lieferantennummer), mitarbeiternummer=CONCAT('DEL-',mitarbeiternummer) WHERE id=? LIMIT 1", [$id]);
+        $this->app->DatabaseService->update("UPDATE adresse SET geloescht='1',kundennummer=CONCAT('DEL-',kundennummer), lieferantennummer=CONCAT('DEL-',lieferantennummer), mitarbeiternummer=CONCAT('DEL-',mitarbeiternummer) WHERE id=:id LIMIT 1", ['id' => $id]);
 
-        $this->app->DatabaseService->delete("DELETE FROM ansprechpartner WHERE adresse=?", [$id]);
-        $this->app->DatabaseService->delete("DELETE FROM lieferadressen WHERE adresse=?", [$id]);
-        $this->app->DatabaseService->delete("DELETE FROM adresse_rolle WHERE adresse=?", [$id]);
-        $this->app->DatabaseService->delete("DELETE FROM dokumente WHERE adresse=?", [$id]);
-        $this->app->DatabaseService->delete("DELETE FROM dokumente_send WHERE adresse=?", [$id]);
+        $this->app->DatabaseService->delete("DELETE FROM ansprechpartner WHERE adresse=:adresse", ['adresse' => $id]);
+        $this->app->DatabaseService->delete("DELETE FROM lieferadressen WHERE adresse=:adresse", ['adresse' => $id]);
+        $this->app->DatabaseService->delete("DELETE FROM adresse_rolle WHERE adresse=:adresse", ['adresse' => $id]);
+        $this->app->DatabaseService->delete("DELETE FROM dokumente WHERE adresse=:adresse", ['adresse' => $id]);
+        $this->app->DatabaseService->delete("DELETE FROM dokumente_send WHERE adresse=:adresse", ['adresse' => $id]);
 
         $this->app->erp->ObjektProtokoll("adresse",$id,"adresse_delete","Adresse geloescht: $id");
         $this->app->erp->RunHook('address_delete', 1, $id);
@@ -1233,7 +1233,7 @@ class Adresse extends GenAdresse {
     $von = $this->app->String->Convert($von,'%1.%2.%3','%3-%2-%1');
     $bis = $this->app->String->Convert($bis,'%1.%2.%3','%3-%2-%1');
 
-    $this->app->DatabaseService->update("UPDATE adresse_rolle SET von=?, bis=? WHERE id=? AND adresse=? LIMIT 1", [$von, $bis, (int)$sid, (int)$id]);
+    $this->app->DatabaseService->update("UPDATE adresse_rolle SET von=:von, bis=:bis WHERE id=:sid AND adresse=:adresse LIMIT 1", ['von' => $von, 'bis' => $bis, 'sid' => (int)$sid, 'adresse' => (int)$id]);
 
     $gruppe = $this->app->DB->Select("SELECT parameter FROM adresse_rolle WHERE id='$sid' AND adresse='$id' LIMIT 1");
 
