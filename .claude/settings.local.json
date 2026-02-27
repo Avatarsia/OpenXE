@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(tail:*)",
+      "Bash(cd C:\\\\Users\\\\3D Partner\\\\Documents\\\\openxe_rework\\\\OpenXE:*)",
+      "Bash(grep:*)",
+      "Bash(sort -t: -k2 -rn)",
+      "Bash(php:*)"
+    ]
+  }
+}
