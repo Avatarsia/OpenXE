@@ -77,7 +77,7 @@ class Exportvorlage extends GenExportvorlage {
     $id = $this->app->Secure->GetGET("id");
     if(is_numeric($id))
     {
-      $this->app->DB->Delete("DELETE FROM exportvorlage WHERE id='$id'");
+      $this->app->DatabaseService->execute("DELETE FROM exportvorlage WHERE id = :id", ['id' => (int)$id]);
     }
     $this->ExportvorlageList();
   }
@@ -99,7 +99,7 @@ class Exportvorlage extends GenExportvorlage {
   function ExportvorlageMenu()
   {
     $id = $this->app->Secure->GetGET("id");
-    $bezeichnung = $this->app->DB->Select("SELECT bezeichnung FROM exportvorlage WHERE id='$id' LIMIT 1");
+    $bezeichnung = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM exportvorlage WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     $this->app->Tpl->Set('KURZUEBERSCHRIFT2',$bezeichnung);
 
@@ -127,7 +127,7 @@ class Exportvorlage extends GenExportvorlage {
 
   function ExportvorlageGetFields($id)
   {
-    $fields = $this->app->DB->Select("SELECT fields FROM exportvorlage WHERE id='$id' LIMIT 1");
+    $fields = $this->app->DatabaseService->selectValue("SELECT fields FROM exportvorlage WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     $fields = nl2br($fields);
     $fields = str_replace('<br />',';',$fields);
@@ -1086,7 +1086,7 @@ ean;';
   function ExportvorlageDo()
   {
     $id = $this->app->Secure->GetGET("id");
-    $ziel = $this->app->DB->Select("SELECT ziel FROM exportvorlage WHERE id='$id' LIMIT 1");
+    $ziel = $this->app->DatabaseService->selectValue("SELECT ziel FROM exportvorlage WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $fields = $this->ExportvorlageGetFields($id);
 
 
@@ -1098,11 +1098,19 @@ ean;';
     $number_of_rows = count($tmp['cmd']);
     for($i=1;$i<=$number_of_rows;$i++)
     {
-      $lieferantid = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='".$tmp['lieferantennummer'][$i]."' 
-          AND lieferantennummer!='' LIMIT 1");
+      $lieferantid = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM adresse WHERE lieferantennummer = :lieferantennummer AND lieferantennummer != '' LIMIT 1",
+        ['lieferantennummer' => $tmp['lieferantennummer'][$i]]
+      );
 
-      $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='".$tmp['nummer'][$i]."' AND nummer!='' LIMIT 1");
-      $kundenid = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='".$tmp['kundennummer'][$i]."' AND kundennummer!='' LIMIT 1");
+      $artikelid = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM artikel WHERE nummer = :nummer AND nummer != '' LIMIT 1",
+        ['nummer' => $tmp['nummer'][$i]]
+      );
+      $kundenid = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM adresse WHERE kundennummer = :kundennummer AND kundennummer != '' LIMIT 1",
+        ['kundennummer' => $tmp['kundennummer'][$i]]
+      );
       if($kundenid<=0) $kundenid=0;
       if($lieferantid<=0) $lieferantid=0;
 

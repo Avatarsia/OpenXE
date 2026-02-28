@@ -199,7 +199,7 @@ class Datenbankbereinigen {
   function DatenbankbereinigenLagerDelete()
   {
     $id = $this->app->Secure->GetGET("id");
-    $this->app->DB->DELETE("DELETE FROM lager_platz_inhalt WHERE id = '$id' LIMIT 1");
+    $this->app->DatabaseService->execute("DELETE FROM lager_platz_inhalt WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     header("Location: index.php?module=datenbankbereinigen&action=lager");
     exit;
@@ -210,20 +210,19 @@ class Datenbankbereinigen {
     if($this->app->Secure->GetGET('cmd')=='get'){
       $id = (int)$this->app->Secure->GetPOST('id');
 
-      $data = $this->app->DB->SelectArr("SELECT id FROM artikel WHERE id = '$id' LIMIT 1");
-      
-      if($data){
-        $data = reset($data);
+      $data = $this->app->DatabaseService->selectRow("SELECT id FROM artikel WHERE id = :id LIMIT 1", ['id' => $id]);
 
-        $bisherigenummer = $this->app->DB->Select("SELECT nummer FROM angebot_position WHERE artikel = '$id' LIMIT 1");
+      if($data){
+
+        $bisherigenummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM angebot_position WHERE artikel = :id LIMIT 1", ['id' => $id]);
         if($bisherigenummer == "" || $bisherigenummer <= 0){
-          $bisherigenummer = $this->app->DB->Select("SELECT nummer FROM auftrag_position WHERE artikel = '$id' LIMIT 1");
+          $bisherigenummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM auftrag_position WHERE artikel = :id LIMIT 1", ['id' => $id]);
           if($bisherigenummer == "" || $bisherigenummer <= 0){
-            $bisherigenummer = $this->app->DB->Select("SELECT nummer FROM gutschrift_position WHERE artikel = '$id' LIMIT 1");
+            $bisherigenummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM gutschrift_position WHERE artikel = :id LIMIT 1", ['id' => $id]);
             if($bisherigenummer == "" || $bisherigenummer <= 0 ){
-              $bisherigenummer = $this->app->DB->Select("SELECT nummer FROM lieferschein_position WHERE artikel = '$id' LIMIT 1");
+              $bisherigenummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM lieferschein_position WHERE artikel = :id LIMIT 1", ['id' => $id]);
               if($bisherigenummer == "" || $bisherigenummer <= 0){
-                $bisherigenummer = $this->app->DB->Select("SELECT nummer FROM rechnung_position WHERE artikel = '$id' LIMIT 1");
+                $bisherigenummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM rechnung_position WHERE artikel = :id LIMIT 1", ['id' => $id]);
               }
             }
           }
@@ -261,14 +260,14 @@ class Datenbankbereinigen {
       $error .= "Kein Artikel gefunden\n";
     }
 
-    $nummervergeben = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer = '$neuenummer' LIMIT 1");
+    $nummervergeben = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer LIMIT 1", ['nummer' => $neuenummer]);
     if($nummervergeben != ""){
       $error .= "Neue Nummer ist schon vergeben";
     }
 
-        
+
     if($error == ""){
-      $this->app->DB->Update("UPDATE artikel SET geloescht = 0, nummer = '$neuenummer' WHERE id = '$id'");
+      $this->app->DatabaseService->execute("UPDATE artikel SET geloescht = 0, nummer = :nummer WHERE id = :id", ['nummer' => $neuenummer, 'id' => $id]);
 
       echo json_encode(array('status'=>1));
       exit;
@@ -288,27 +287,26 @@ class Datenbankbereinigen {
     if($this->app->Secure->GetGET('cmd')=='get'){
       $id = (int)$this->app->Secure->GetPOST('id');
 
-      $data = $this->app->DB->SelectArr("SELECT id, kundennummer, lieferantennummer, mitarbeiternummer FROM adresse WHERE id = '$id' LIMIT 1");
-      
+      $data = $this->app->DatabaseService->selectRow("SELECT id, kundennummer, lieferantennummer, mitarbeiternummer FROM adresse WHERE id = :id LIMIT 1", ['id' => $id]);
+
       if($data){
-        $data = reset($data);
 
         $kundennummer = substr($data['kundennummer'], 4);
         $lieferantennummer = substr($data['lieferantennummer'], 4);
         $mitarbeiternummer = substr($data['mitarbeiternummer'], 4);
 
         if($kundennummer == "" || $kundennummer <= 0){
-          $belegkvorhanden = $this->app->DB->Select("SELECT kundennummer FROM angebot WHERE adresse = '$id' LIMIT 1");
+          $belegkvorhanden = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM angebot WHERE adresse = :id LIMIT 1", ['id' => $id]);
           if($belegkvorhanden == "" || $belegkvorhanden <= 0){
-            $belegkvorhanden = $this->app->DB->Select("SELECT kundennummer FROM auftrag WHERE adresse = '$id' LIMIT 1");
+            $belegkvorhanden = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM auftrag WHERE adresse = :id LIMIT 1", ['id' => $id]);
             if($belegkvorhanden == "" || $belegkvorhanden <= 0){
-              $belegkvorhanden = $this->app->DB->Select("SELECT kundennummer FROM bestellung WHERE adresse = '$id' LIMIT 1");
+              $belegkvorhanden = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM bestellung WHERE adresse = :id LIMIT 1", ['id' => $id]);
               if($belegkvorhanden == "" || $belegkvorhanden <= 0){
-                $belegkvorhanden = $this->app->DB->Select("SELECT kundennummer FROM gutschrift WHERE adresse = '$id' LIMIT 1");
+                $belegkvorhanden = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM gutschrift WHERE adresse = :id LIMIT 1", ['id' => $id]);
                 if($belegkvorhanden == "" || $belegkvorhanden <= 0){
-                  $belegkvorhanden = $this->app->DB->Select("SELECT kundennummer FROM lieferschein WHERE adresse = '$id' LIMIT 1");
+                  $belegkvorhanden = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM lieferschein WHERE adresse = :id LIMIT 1", ['id' => $id]);
                   if($belegkvorhanden == "" || $belegkvorhanden <= 0){
-                    $belegkvorhanden = $this->app->DB->Select("SELECT kundennummer FROM rechnung WHERE adresse = '$id' LIMIT 1");
+                    $belegkvorhanden = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM rechnung WHERE adresse = :id LIMIT 1", ['id' => $id]);
                   }
                 }
               }
@@ -323,7 +321,7 @@ class Datenbankbereinigen {
         }
 
         if($lieferantennummer == "" || $lieferantennummer <= 0){
-          $beleglvorhanden = $this->app->DB->Select("SELECT lieferantennummer FROM bestellung WHERE adresse = '$id' LIMIT 1");
+          $beleglvorhanden = $this->app->DatabaseService->selectValue("SELECT lieferantennummer FROM bestellung WHERE adresse = :id LIMIT 1", ['id' => $id]);
         }
 
         if(($lieferantennummer == "" || $lieferantennummer <= 0) && ($beleglvorhanden == "" || $beleglvorhanden <= 0)){

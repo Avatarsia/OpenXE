@@ -305,7 +305,7 @@ class Lager extends GenLager {
           $live = true;
         }else{
           $live = false;
-          $_datum = $app->DB->Select("SELECT max(datum) FROM lagerwert WHERE datum <= '$datum' AND '$datum' < curdate() ");
+          $_datum = $this->app->DatabaseService->selectValue("SELECT max(datum) FROM lagerwert WHERE datum <= :datum AND :datum2 < curdate()", ['datum' => $datum, 'datum2' => $datum]);
           if($_datum)
           {
             $datum = $_datum;
