@@ -629,7 +629,10 @@ class erpAPI
   // @refactor Module OrderPicking
   public function GetNextKommissionierung($bezeichnung = '')
   {
-    $this->app->DB->Insert("INSERT INTO kommissionierung (bearbeiter, bezeichnung) values ('" . $this->app->DB->real_escape_string($this->app->User->GetName()) . "','" . $bezeichnung . "')");
+    $this->app->DatabaseService->execute(
+      "INSERT INTO kommissionierung (bearbeiter, bezeichnung) VALUES (:bearbeiter, :bezeichnung)",
+      ['bearbeiter' => (string) $this->app->User->GetName(), 'bezeichnung' => (string) $bezeichnung]
+    );
     return $this->app->DB->GetInsertID();
   }
 
@@ -769,9 +772,15 @@ class erpAPI
       return;
     }
     if ($action) {
-      $this->app->DB->Delete("DELETE FROM `hook_navigation` WHERE `module` = '" . $this->app->DB->real_escape_string($module) . "' AND `action` = '" . $this->app->DB->real_escape_string($action) . "'");
+      $this->app->DatabaseService->execute(
+        "DELETE FROM `hook_navigation` WHERE `module` = :module AND `action` = :action",
+        ['module' => (string) $module, 'action' => (string) $action]
+      );
     } else {
-      $this->app->DB->Delete("DELETE FROM `hook_navigation` WHERE `module` = '" . $this->app->DB->real_escape_string($module) . "'");
+      $this->app->DatabaseService->execute(
+        "DELETE FROM `hook_navigation` WHERE `module` = :module",
+        ['module' => (string) $module]
+      );
     }
   }
 
@@ -1591,7 +1600,7 @@ class erpAPI
     $cuser = !empty($user) ? count($user) : 0;
 
     $grantingUserId = $this->app->User->GetID();
-    $grantingUserName = $this->app->DB->Select("SELECT username FROM user WHERE id=$grantingUserId");
+    $grantingUserName = $this->app->DatabaseService->selectValue("SELECT username FROM user WHERE id = :id", ['id' => (int) $grantingUserId]);
     $userPermission = $this->app->Container->get('UserPermissionService');
 
     for ($i = 0; $i < $cuser; $i++) {
@@ -1606,7 +1615,7 @@ class erpAPI
       }
       if ($id_vorlage == $vorlage || $vorlage == 0) {
         $receivingUserId = $user[$i]['id'];
-        $receivingUserName = $this->app->DB->Select("SELECT username FROM user WHERE id=$receivingUserId");
+        $receivingUserName = $this->app->DatabaseService->selectValue("SELECT username FROM user WHERE id = :id", ['id' => (int) $receivingUserId]);
 
         // neue eintraege
         if ($userid == 0 && $vorlag > 0 && $module != '' && $action != '') {
@@ -1647,20 +1656,23 @@ class erpAPI
           if ($action !== '') { $replaceSql .= " AND action = :action"; $replaceParams['action'] = (string) $action; }
           $replaceSql .= ")";
           $this->app->DatabaseService->execute($replaceSql, $replaceParams);
-          $neuesquery = $this->app->DB->Query("Select * from userrights where user = " . $user[$i]['id'] . " " . ($module != '' ? " AND module = '$module' " : "") . ($action != '' ? " AND action = '$action'" : '') . " order by module, action, id desc");
-          if ($neuesquery) {
+          $neuesSql = "SELECT * FROM userrights WHERE user = :user";
+          $neuesParams = ['user' => (int) $user[$i]['id']];
+          if ($module != '') { $neuesSql .= " AND module = :module"; $neuesParams['module'] = (string) $module; }
+          if ($action != '') { $neuesSql .= " AND action = :action"; $neuesParams['action'] = (string) $action; }
+          $neuesSql .= " ORDER BY module, action, id DESC";
+          $neuesRows = $this->app->DatabaseService->select($neuesSql, $neuesParams);
+          if ($neuesRows) {
             $aktmodule = false;
             $aktaction = false;
-            while ($v = $this->app->DB->Fetch_Array($neuesquery)) {
+            foreach ($neuesRows as $v) {
               if ($aktaction != $v['action'] || $aktmodule != $v['module']) {
                 $aktaction = $v['action'];
                 $aktmodule = $v['module'];
               } else {
-                $this->app->DB->Delete("DELETE FROM userrights where id = " . $v['id']);
-
+                $this->app->DatabaseService->execute("DELETE FROM userrights WHERE id = :id", ['id' => (int) $v['id']]);
               }
             }
-            $this->app->DB->free($neuesquery);
           }
         }
       }
@@ -2146,9 +2158,9 @@ class erpAPI
     //$this->LogFile("BelegeVersand T $typ I $id V $versandart Email $email Name $name betreff ".$emailtext['betreff']);
 
     if ($drucker < 0)
-      $drucker = $this->app->DB->Select("SELECT standarddrucker FROM user WHERE id='" . $this->app->User->GetID() . "' LIMIT 1");
+      $drucker = $this->app->DatabaseService->selectValue("SELECT standarddrucker FROM user WHERE id = :id LIMIT 1", ['id' => (int) $this->app->User->GetID()]);
     else
-      $drucker = $this->app->DB->Select("SELECT id FROM drucker WHERE id='" . $drucker . "' LIMIT 1");
+      $drucker = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE id = :id LIMIT 1", ['id' => (int) $drucker]);
 
     if ($drucker <= 0)
       $drucker = $this->Firmendaten('standardversanddrucker');
@@ -2166,7 +2178,7 @@ class erpAPI
         $dateien = [$tmpfile];
 
         if ($typ === 'auftrag') {
-          $stichwoerter = $this->app->DB->SelectArr("SELECT * FROM datei_stichwoerter WHERE objekt='geschaeftsbrief_vorlagen' AND parameter='$idvorlage' AND parameter > 0");
+          $stichwoerter = $this->app->DatabaseService->select("SELECT * FROM datei_stichwoerter WHERE objekt = 'geschaeftsbrief_vorlagen' AND parameter = :parameter AND parameter > 0", ['parameter' => (int) $idvorlage]);
           if ($stichwoerter) {
             foreach ($stichwoerter as $v) {
               $dateiname = str_replace(' ', '_', $this->app->erp->GetDateiName($v['datei']));
@@ -2184,7 +2196,7 @@ class erpAPI
           }
         }
 
-        $stichwoerterAnhaenge = $this->app->DB->SelectArr("SELECT * FROM datei_stichwoerter WHERE subjekt = 'Anhang' AND objekt = '$typ' AND parameter = '$id' AND parameter > 0");
+        $stichwoerterAnhaenge = $this->app->DatabaseService->select("SELECT * FROM datei_stichwoerter WHERE subjekt = 'Anhang' AND objekt = :objekt AND parameter = :parameter AND parameter > 0", ['objekt' => (string) $typ, 'parameter' => (int) $id]);
         if ($stichwoerterAnhaenge) {
           foreach ($stichwoerterAnhaenge as $v) {
             $dateiname = str_replace(' ', '_', $this->app->erp->GetDateiName($v['datei']));
@@ -2227,10 +2239,22 @@ class erpAPI
 
     $ansprechpartner = $name . " <" . $email . ">";
 
-    $this->app->DB->Insert("INSERT INTO dokumente_send
-        (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,versendet,dateiid)
-        VALUES ('','$typ',NOW(),'" . $this->app->User->GetName() . "',
-          '$adresse','$id','$versandart','" . $emailtext['betreff'] . "','" . $emailtext['text'] . "','$projekt','$ansprechpartner',1,'$fileid')");
+    $this->app->DatabaseService->execute(
+      "INSERT INTO dokumente_send (id, dokument, zeit, bearbeiter, adresse, parameter, art, betreff, text, projekt, ansprechpartner, versendet, dateiid)
+        VALUES ('', :dokument, NOW(), :bearbeiter, :adresse, :parameter, :art, :betreff, :text, :projekt, :ansprechpartner, 1, :dateiid)",
+      [
+        'dokument'       => (string) $typ,
+        'bearbeiter'     => (string) $this->app->User->GetName(),
+        'adresse'        => (int) $adresse,
+        'parameter'      => (int) $id,
+        'art'            => (string) $versandart,
+        'betreff'        => (string) $emailtext['betreff'],
+        'text'           => (string) $emailtext['text'],
+        'projekt'        => (int) $projekt,
+        'ansprechpartner'=> (string) $ansprechpartner,
+        'dateiid'        => (int) $fileid,
+      ]
+    );
 
     unlink($tmpfile);
 
@@ -2238,11 +2262,19 @@ class erpAPI
       if ($typ === 'rechnung') {
         $this->closeInvoice($id, 'freigegeben');
       }
-      $this->app->DB->Update("UPDATE $typ SET status='versendet' WHERE id='$id' AND status='freigegeben' LIMIT 1");
+      $this->app->DatabaseService->execute(
+        sprintf("UPDATE `%s` SET status = 'versendet' WHERE id = :id AND status = 'freigegeben' LIMIT 1", $this->app->DatabaseService->validateIdentifier($typ)),
+        ['id' => (int) $id]
+      );
     }
 
-    $this->app->DB->Update("UPDATE $typ SET versendet=1, versendet_am=NOW(),
-        versendet_per='$versandart',versendet_durch='" . $this->app->User->GetName() . "',schreibschutz='1' WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->execute(
+      sprintf(
+        "UPDATE `%s` SET versendet = 1, versendet_am = NOW(), versendet_per = :versandart, versendet_durch = :bearbeiter, schreibschutz = '1' WHERE id = :id LIMIT 1",
+        $this->app->DatabaseService->validateIdentifier($typ)
+      ),
+      ['versandart' => (string) $versandart, 'bearbeiter' => (string) $this->app->User->GetName(), 'id' => (int) $id]
+    );
 
 
 
@@ -2289,7 +2321,10 @@ class erpAPI
       $class = ucfirst($type) . 'PDF';
     }
     if (class_exists($class)) {
-      $projekt = $this->app->DB->Select("SELECT projekt FROM $type WHERE id = '$id' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue(
+        sprintf("SELECT projekt FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($type)),
+        ['id' => (int) $id]
+      );
       $Brief = new $class($this->app, $projekt);
       $get = 'Get' . ucfirst($type);
       if (method_exists($Brief, $get)) {
@@ -2326,7 +2361,10 @@ class erpAPI
         }
         $this->app->erp->BriefpapierHintergrunddisable = !$this->app->erp->BriefpapierHintergrunddisable;
         if ($force) {
-          $this->app->DB->Update("UPDATE `{$type}` SET `zuarchivieren` = 0 WHERE `id` = {$id}");
+          $this->app->DatabaseService->execute(
+            sprintf("UPDATE `%s` SET `zuarchivieren` = 0 WHERE `id` = :id", $this->app->DatabaseService->validateIdentifier($type)),
+            ['id' => (int) $id]
+          );
         }
         return true;
       }
@@ -2337,8 +2375,7 @@ class erpAPI
   // Rechnung special treatment because of XML
   function RechnungArchivieren($id)
   {
-    $sql = "SELECT xmlrechnung FROM rechnung WHERE id = '" . $id . "' LIMIT 1";
-    $xmlrechnung = $this->app->DB->Select($sql);
+    $xmlrechnung = $this->app->DatabaseService->selectValue("SELECT xmlrechnung FROM rechnung WHERE id = :id LIMIT 1", ['id' => (int) $id]);
     if ($xmlrechnung) {
       $rechnungsmodul = $this->app->loadModule('rechnung', false);
       return ($rechnungsmodul->RechnungArchiviereXML($id));
@@ -2444,7 +2481,10 @@ class erpAPI
   // @refactor in Dateien Modul
   function AnzahlDateien($objekt, $id)
   {
-    return $this->app->DB->Select("SELECT COUNT(ds.id) FROM datei_stichwoerter ds INNER JOIN datei d ON d.id = ds.datei WHERE ds.objekt='$objekt' AND ds.parameter='$id' AND d.geloescht <> 1");
+    return $this->app->DatabaseService->selectValue(
+      "SELECT COUNT(ds.id) FROM datei_stichwoerter ds INNER JOIN datei d ON d.id = ds.datei WHERE ds.objekt = :objekt AND ds.parameter = :parameter AND d.geloescht <> 1",
+      ['objekt' => (string) $objekt, 'parameter' => (int) $id]
+    );
   }
 
 
@@ -2458,7 +2498,10 @@ class erpAPI
   // @refactor in Aufgaben Modul
   function AnzahlOffeneAufgaben()
   {
-    return (int) $this->app->DB->Select("SELECT COUNT(a.id) FROM aufgabe a WHERE  (a.adresse='" . $this->app->User->GetAdresse() . "') AND a.startdatum='0000-00-00' AND a.status!='abgeschlossen' AND ( abgabe_bis='0000-00-00' OR abgabe_bis<=NOW())");
+    return (int) $this->app->DatabaseService->selectValue(
+      "SELECT COUNT(a.id) FROM aufgabe a WHERE a.adresse = :adresse AND a.startdatum = '0000-00-00' AND a.status != 'abgeschlossen' AND (abgabe_bis = '0000-00-00' OR abgabe_bis <= NOW())",
+      ['adresse' => (int) $this->app->User->GetAdresse()]
+    );
   }
 
 
@@ -2466,12 +2509,16 @@ class erpAPI
   {
 
     if ($eigene) {
-      $sql = "SELECT COUNT(t.id) FROM ticket t WHERE t.status = 'neu' AND (t.warteschlange IN (SELECT w.label FROM warteschlangen w WHERE w.adresse = '" . $this->app->User->GetAdresse() . "'))";
+      return (int) $this->app->DatabaseService->selectValue(
+        "SELECT COUNT(t.id) FROM ticket t WHERE t.status = 'neu' AND (t.warteschlange IN (SELECT w.label FROM warteschlangen w WHERE w.adresse = :adresse))",
+        ['adresse' => (int) $this->app->User->GetAdresse()]
+      );
     } else {
-      $sql = "SELECT COUNT(t.id) FROM ticket t WHERE t.status = 'neu' AND (t.warteschlange = '')";
+      return (int) $this->app->DatabaseService->selectValue(
+        "SELECT COUNT(t.id) FROM ticket t WHERE t.status = 'neu' AND (t.warteschlange = '')",
+        []
+      );
     }
-
-    return (int) $this->app->DB->Select($sql);
   }
 
 
@@ -2486,7 +2533,7 @@ class erpAPI
   {
     if ($this->app->User->GetID() != "") {
       if ($this->UserDevice() == "desktop") {
-        $startseite = (string) $weiterleitung !== '' ? '' : $this->app->DB->Select("SELECT startseite FROM user WHERE id='" . $this->app->User->GetID() . "' LIMIT 1");
+        $startseite = (string) $weiterleitung !== '' ? '' : $this->app->DatabaseService->selectValue("SELECT startseite FROM user WHERE id = :id LIMIT 1", ['id' => (int) $this->app->User->GetID()]);
         $startseite = $this->ReadyForPDF($startseite);
         if (strpos($startseite, 'action=logout') !== false && strpos($startseite, 'module=welcome') !== false) {
           $startseite = '';
@@ -2619,9 +2666,10 @@ class erpAPI
   // @refactor in Lager Modul
   function ArtikelAnzahlLagerPlatzMitSperre($artikel, $lager_platz)
   {
-    $result = $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi
-      LEFT JOIN lager_platz lp ON lp.id=lpi.lager_platz
-      WHERE lpi.artikel='$artikel' AND lpi.lager_platz='$lager_platz'");
+    $result = $this->app->DatabaseService->selectValue(
+      "SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi LEFT JOIN lager_platz lp ON lp.id = lpi.lager_platz WHERE lpi.artikel = :artikel AND lpi.lager_platz = :lager_platz",
+      ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz]
+    );
     if ($result <= 0)
       $result = 0;
     return $result;
@@ -2633,14 +2681,16 @@ class erpAPI
   {
     if (!$id)
       return;
-    $belegnr = $this->app->DB->Select("SELECT belegnr FROM lieferschein WHERE id = '$id' LIMIT 1");
+    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int) $id]);
     $bearbeiter = '';
     if (isset($this->app->User) && $this->app->User && method_exists($this->app->User, 'GetName'))
       $bearbeiter = $this->app->User->GetName();
-    $objekt_lager_platz = $this->app->DB->SelectArr("SELECT olp.id, olp.menge, olp.lager_platz, olp.artikel, olp.parameter, lp.id as lpid FROM 
-  lieferschein_position lp INNER JOIN  objekt_lager_platz olp ON lp.id = olp.parameter AND olp.objekt = 'lieferschein' AND lp.lieferschein = '$id'");
+    $objekt_lager_platz = $this->app->DatabaseService->select(
+      "SELECT olp.id, olp.menge, olp.lager_platz, olp.artikel, olp.parameter, lp.id as lpid FROM lieferschein_position lp INNER JOIN objekt_lager_platz olp ON lp.id = olp.parameter AND olp.objekt = 'lieferschein' AND lp.lieferschein = :id",
+      ['id' => (int) $id]
+    );
     if ($objekt_lager_platz) {
-      $projekt = $this->app->DB->Select("SELECT projekt FROM lieferschein WHERE id = '$id' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       foreach ($objekt_lager_platz as $olp) {
         $lpiid = null;
         if (isset($lpiids[$olp['lpid']]))
@@ -2658,8 +2708,8 @@ class erpAPI
           $id,
           $lpiid
         );
-        $beleg_chargesnmhd = $this->app->DB->SelectArr("SELECT * FROM `beleg_chargesnmhd` WEHRE doctype = 'lieferschein' AND doctypeid = '$id' AND pos = '" . $olp['parameter'] . "'");
-        $seriennummern = $this->app->DB->SelectArr("SELECT * FROM seriennummern WHERE lieferschein = '$id' AND lieferscheinpos = '" . $olp['parameter'] . "'");
+        $beleg_chargesnmhd = $this->app->DatabaseService->select("SELECT * FROM `beleg_chargesnmhd` WEHRE doctype = 'lieferschein' AND doctypeid = :id AND pos = :pos", ['id' => (int) $id, 'pos' => (int) $olp['parameter']]);
+        $seriennummern = $this->app->DatabaseService->select("SELECT * FROM seriennummern WHERE lieferschein = :id AND lieferscheinpos = :pos", ['id' => (int) $id, 'pos' => (int) $olp['parameter']]);
         if ($seriennummern) {
           foreach ($seriennummern as $sn) {
             $belegesnarr['sn'][] = array('menge' => 1, 'value' => $sn['seriennummer'], 'table' => 'seriennummern', 'id' => $sn['id']);
@@ -2701,7 +2751,7 @@ class erpAPI
               if (isset($v['table']) && $v['table'] == 'seriennummern' && !empty($v['id'])) {
                 // Xentral Legacy              $this->app->DB->Delete("DELETE FROM seriennummern WHERE id = '".$v['id']."' LIMIT 1");
               } elseif (isset($v['table']) && $v['table'] == 'beleg_chargesnmhd' && !empty($v['id'])) {
-                $this->app->DB->Delete("DELETE FROM beleg_chargesnmhd WHERE id = '" . $v['id'] . "' LIMIT 1");
+                $this->app->DatabaseService->execute("DELETE FROM beleg_chargesnmhd WHERE id = :id LIMIT 1", ['id' => (int) $v['id']]);
               }
               if (method_exists($this->app->erp, 'AddSeriennummerLager'))
                 $this->app->erp->AddSeriennummerLager($olp['artikel'], $olp['lager_platz'], $v['value'], "Stornierung Lieferschein $belegnr", "", $mhd, $charge, 'lieferschein', $id);
@@ -2726,7 +2776,7 @@ class erpAPI
               if (isset($v['table']) && $v['table'] == 'seriennummern' && !empty($v['id'])) {
                 // Xentral Legacy              $this->app->DB->Delete("DELETE FROM seriennummern WHERE id = '".$v['id']."' LIMIT 1");
               } elseif (isset($v['table']) && $v['table'] == 'beleg_chargesnmhd' && !empty($v['id'])) {
-                $this->app->DB->Delete("DELETE FROM beleg_chargesnmhd WHERE id = '" . $v['id'] . "' LIMIT 1");
+                $this->app->DatabaseService->execute("DELETE FROM beleg_chargesnmhd WHERE id = :id LIMIT 1", ['id' => (int) $v['id']]);
               }
               if (method_exists($this->app->erp, 'AddSeriennummerLager'))
                 $this->app->erp->AddSeriennummerLager($olp['artikel'], 1, $olp['lager_platz'], $v['value'], $grund, "", $mhd, $charge, 'lieferschein', $id);
@@ -2749,7 +2799,7 @@ class erpAPI
               if (isset($v['table']) && $v['table'] == 'seriennummern' && !empty($v['id'])) {
                 // Xentral Legacy              $this->app->DB->Delete("DELETE FROM seriennummern WHERE id = '".$v['id']."' LIMIT 1");
               } elseif (isset($v['table']) && $v['table'] == 'beleg_chargesnmhd' && !empty($v['id'])) {
-                $this->app->DB->Delete("DELETE FROM beleg_chargesnmhd WHERE id = '" . $v['id'] . "' LIMIT 1");
+                $this->app->DatabaseService->execute("DELETE FROM beleg_chargesnmhd WHERE id = :id LIMIT 1", ['id' => (int) $v['id']]);
               }
               if (method_exists($this->app->erp, 'AddSeriennummerLager'))
                 $this->app->erp->AddSeriennummerLager($olp['artikel'], $olp['lager_platz'], $v['value'], $grund, "", $mhd, $charge);
@@ -2759,7 +2809,7 @@ class erpAPI
               if (isset($v['table']) && $v['table'] == 'seriennummern' && !empty($v['id'])) {
                 // Xentral Legacy              $this->app->DB->Delete("DELETE FROM seriennummern WHERE id = '".$v['id']."' LIMIT 1");
               } elseif (isset($v['table']) && $v['table'] == 'beleg_chargesnmhd' && !empty($v['id'])) {
-                $this->app->DB->Delete("DELETE FROM beleg_chargesnmhd WHERE id = '" . $v['id'] . "' LIMIT 1");
+                $this->app->DatabaseService->execute("DELETE FROM beleg_chargesnmhd WHERE id = :id LIMIT 1", ['id' => (int) $v['id']]);
               }
               if (method_exists($this->app->erp, 'AddSeriennummerLager'))
                 $this->app->erp->AddSeriennummerLager($olp['artikel'], $olp['lager_platz'], $v['value'], $grund, "", $mhd, $charge);
@@ -2812,7 +2862,7 @@ class erpAPI
               $this->app->erp->AddMindesthaltbarkeitsdatumLagerOhneBewegung($olp['artikel'], $v2['menge'], $olp['lager_platz'], $v2['value'], "", "lieferschein", $id, $grund);
           }
         }
-        $this->app->DB->Delete("DELETE FROM objekt_lager_platz WHERE id = '" . $olp['id'] . "' LIMIT 1");
+        $this->app->DatabaseService->execute("DELETE FROM objekt_lager_platz WHERE id = :id LIMIT 1", ['id' => (int) $olp['id']]);
       }
     }
   }
@@ -2938,9 +2988,9 @@ class erpAPI
 
     if ($standardlager == 0) {
       if ($projekt > 0) {
-        $standardlager = $this->app->DB->Select("SELECT standardlager FROM projekt WHERE id='$projekt'");
+        $standardlager = $this->app->DatabaseService->selectValue("SELECT standardlager FROM projekt WHERE id = :id", ['id' => (int) $projekt]);
         if ($standardlager == 0) {
-          $projektlager = $this->app->DB->Select("SELECT projektlager FROM projekt WHERE id='$projekt'");
+          $projektlager = $this->app->DatabaseService->selectValue("SELECT projektlager FROM projekt WHERE id = :id", ['id' => (int) $projekt]);
         }
       }
     }
@@ -3278,7 +3328,7 @@ class erpAPI
             } else {
               $this->LagerAuslagernObjektLagerPlatz($artikel, $subid, $lager_max[0]['lager_platz'], $menge_auslagern, $belegtyp);
             }
-            $regal_name = $this->app->DB->Select("SELECT kurzbezeichnung FROM lager_platz WHERE id='" . $lager_max[0]['lager_platz'] . "' LIMIT 1");
+            $regal_name = $this->app->DatabaseService->selectValue("SELECT kurzbezeichnung FROM lager_platz WHERE id = :id LIMIT 1", ['id' => (int) $lager_max[0]['lager_platz']]);
             $lager_string .= $regal_name . "(" . (float) $menge_auslagern . ") ";
             if (!$nurrestmenge) {
               $this->LagerAuslagernRegalMHDCHARGESRN($artikel, $lager_max[0]['lager_platz'], $menge_auslagern, $projekt, ucfirst($belegtyp) . " $belegnr", "", $belegtyp, $lieferschein, $subid, $chargenauslagern, $mhdauslagern, $seriennummernauslagern);
@@ -3294,15 +3344,18 @@ class erpAPI
         if ($nurrestmenge && $belegtyp == 'produktion') {
           $geliefert = $menge + $artikelarr[$i]['geliefert_menge'];
         }
-        $artikelhatseriennummer = $this->app->DB->Select("SELECT seriennummern FROM artikel WHERE id='" . $artikel . "' LIMIT 1");
+        $artikelhatseriennummer = $this->app->DatabaseService->selectValue("SELECT seriennummern FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikel]);
         if ($belegtyp == 'produktion') {
-          $this->app->DB->Update("UPDATE " . $belegtyp . "_position SET geliefert_menge='$geliefert', geliefert = 1 WHERE id='$subid' LIMIT 1");
+          $this->app->DatabaseService->execute(
+            sprintf("UPDATE `%s_position` SET geliefert_menge = :geliefert, geliefert = 1 WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($belegtyp)),
+            ['geliefert' => (float) $geliefert, 'id' => (int) $subid]
+          );
         } else {
 
           if ($belegtyp == "lieferschein") {
-            $auftragposid = $this->app->DB->Select("SELECT auftrag_position_id FROM lieferschein_position WHERE id='$subid'");
+            $auftragposid = $this->app->DatabaseService->selectValue("SELECT auftrag_position_id FROM lieferschein_position WHERE id = :id", ['id' => (int) $subid]);
             if ($auftragposid > 0) {
-              $this->app->DB->Update("UPDATE auftrag_position SET geliefert_menge='$geliefert' WHERE id='$auftragposid' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE auftrag_position SET geliefert_menge = :geliefert WHERE id = :id LIMIT 1", ['geliefert' => (float) $geliefert, 'id' => (int) $auftragposid]);
             }
           }
 
@@ -3310,17 +3363,23 @@ class erpAPI
             // wenn Seriennummer erfasst werden soll
             //if($anzeige_lagerplaetze_in_lieferschein)
             //{
-            //$this->app->DB->Update("UPDATE ".$belegtyp."_position SET beschreibung='$beschreibung' WHERE id='$subid' LIMIT 1");
+            //$this->app->DatabaseService->execute(sprintf("UPDATE `%s_position` SET beschreibung=:beschreibung WHERE id=:id LIMIT 1",...));
             //neue datenstruktur
             //}
             if ($forceseriennummerngeliefertsetzen)
-              $this->app->DB->Update("UPDATE " . $belegtyp . "_position SET geliefert='$geliefert' WHERE id='$subid' LIMIT 1");
+              $this->app->DatabaseService->execute(
+                sprintf("UPDATE `%s_position` SET geliefert = :geliefert WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($belegtyp)),
+                ['geliefert' => (float) $geliefert, 'id' => (int) $subid]
+              );
           } else {
             //wenn nicht
             //if($anzeige_lagerplaetze_in_lieferschein)
-            //  $this->app->DB->Update("UPDATE ".$belegtyp."_position SET geliefert='$geliefert',beschreibung='$beschreibung' WHERE id='$subid' LIMIT 1");
+            //  $this->app->DatabaseService->execute(sprintf("UPDATE `%s_position` SET geliefert=:g,beschreibung=:b WHERE id=:id LIMIT 1",...));
             //else
-            $this->app->DB->Update("UPDATE " . $belegtyp . "_position SET geliefert='$geliefert' WHERE id='$subid' LIMIT 1");
+            $this->app->DatabaseService->execute(
+              sprintf("UPDATE `%s_position` SET geliefert = :geliefert WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($belegtyp)),
+              ['geliefert' => (float) $geliefert, 'id' => (int) $subid]
+            );
           }
         }
       } // simulieren
@@ -3331,12 +3390,21 @@ class erpAPI
       if (!empty($storageLocations)) {
         $this->addStorageCountry($belegtyp, $lieferschein, $storageLocations);
       }
-      $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE objekt = '$belegtyp' AND parameter = '$lieferschein'");
+      $this->app->DatabaseService->execute(
+        "DELETE FROM lager_reserviert WHERE objekt = :objekt AND parameter = :parameter",
+        ['objekt' => (string) $belegtyp, 'parameter' => (int) $lieferschein]
+      );
 
       if ($belegtyp == '' || $belegtyp === 'lieferschein') {
-        $auftragid = $this->app->DB->Select("SELECT auftragid FROM $belegtyp WHERE id='$lieferschein'");
+        $auftragid = $this->app->DatabaseService->selectValue(
+          "SELECT auftragid FROM lieferschein WHERE id = :id",
+          ['id' => (int) $lieferschein]
+        );
         if ($auftragid) {
-          $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE objekt = 'auftrag' AND parameter = '$auftragid'");
+          $this->app->DatabaseService->execute(
+            "DELETE FROM lager_reserviert WHERE objekt = 'auftrag' AND parameter = :auftragid",
+            ['auftragid' => (int) $auftragid]
+          );
         }
 
         $this->RunHook('erpapi_lieferschein_auslagern', 1, $lieferschein);
@@ -3468,7 +3536,10 @@ class erpAPI
     if (!method_exists($this->app->User, 'GetID'))
       return;
     $user = (int) $this->app->User->GetID();
-    $this->app->DB->Insert("INSERT INTO `templatemessage` (`message`, `user`, `zeitstempel`) VALUES ('" . $this->app->DB->real_escape_string($message) . "','$user',now())");
+    $this->app->DatabaseService->execute(
+      "INSERT INTO `templatemessage` (`message`, `user`, `zeitstempel`) VALUES (:message, :user, NOW())",
+      ['message' => (string) $message, 'user' => (int) $user]
+    );
     return $this->app->DB->GetInsertID();
   }
 
@@ -5665,7 +5736,7 @@ title: 'Abschicken',
   // @refactor in Lager Modul
   function ValidLager($lager)
   {
-    $result = $this->app->DB->Select("SELECT id FROM lager_platz WHERE id='$lager' LIMIT 1");
+    $result = $this->app->DatabaseService->selectValue("SELECT id FROM lager_platz WHERE id = :id LIMIT 1", ['id' => (int) $lager]);
     return $result > 0 ? 1 : 0;
   }
 
@@ -5676,7 +5747,7 @@ title: 'Abschicken',
       return 0;
     }
 
-    $result = $this->app->DB->Select("SELECT id FROM artikel WHERE id='$artikel' LIMIT 1");
+    $result = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikel]);
     return $result > 0 ? 1 : 0;
   }
 
@@ -5686,15 +5757,15 @@ title: 'Abschicken',
     if ($artikel <= 0 || $artikel == "")
       return 0;
 
-    $result = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$artikel' LIMIT 1");
+    $result = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :artikel LIMIT 1", ['artikel' => (string) $artikel]);
     if ($result > 0)
       return 1;
 
-    $result = $this->app->DB->Select("SELECT id FROM artikel WHERE id='$artikel' LIMIT 1");
+    $result = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE id = :artikel LIMIT 1", ['artikel' => (int) $artikel]);
     if ($result > 0)
       return 1;
 
-    $result = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='$artikel' LIMIT 1");
+    $result = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE ean = :artikel LIMIT 1", ['artikel' => (string) $artikel]);
     if ($result > 0)
       return 1;
 
@@ -5932,7 +6003,7 @@ title: 'Abschicken',
   function StandardVersandart($projekt = "")
   {
     if ($projekt > 0) {
-      $tmp = $this->app->DB->Select("SELECT versandart FROM projekt WHERE id='$projekt' LIMIT 1");
+      $tmp = $this->app->DatabaseService->selectValue("SELECT versandart FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $projekt]);
       if ($tmp != '') {
         return $tmp;
       }
@@ -5945,7 +6016,7 @@ title: 'Abschicken',
   function StandardZahlungsweiseLieferant($projekt = "")
   {
     if ($projekt > 0) {
-      $tmp = $this->app->DB->Select("SELECT zahlungsweiselieferant FROM projekt WHERE id='$projekt' LIMIT 1");
+      $tmp = $this->app->DatabaseService->selectValue("SELECT zahlungsweiselieferant FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $projekt]);
       if ($tmp != '') {
         return $tmp;
       }
@@ -5963,7 +6034,7 @@ title: 'Abschicken',
   function StandardZahlungsweise($projekt = "")
   {
     if ($projekt > 0) {
-      $tmp = $this->app->DB->Select("SELECT zahlungsweise FROM projekt WHERE id='$projekt' LIMIT 1");
+      $tmp = $this->app->DatabaseService->selectValue("SELECT zahlungsweise FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $projekt]);
       if ($tmp != '') {
         return $tmp;
       }
@@ -7291,15 +7362,17 @@ title: 'Abschicken',
   function ArtikelAnzahlLagerPlatz($artikel, $lager_platz, $isProduction = false, $ignoreSperrLager = false)
   {
     if ($isProduction) {
-      $result = $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi
-      LEFT JOIN lager_platz lp ON lp.id=lpi.lager_platz
-      WHERE lpi.artikel='$artikel' AND lpi.lager_platz='$lager_platz' AND (lp.sperrlager!=1 OR lp.allowproduction = 1)");
+      $result = $this->app->DatabaseService->selectValue(
+        "SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi LEFT JOIN lager_platz lp ON lp.id = lpi.lager_platz WHERE lpi.artikel = :artikel AND lpi.lager_platz = :lager_platz AND (lp.sperrlager != 1 OR lp.allowproduction = 1)",
+        ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz]
+      );
     } else {
-      $sperrlagerSQL = $ignoreSperrLager ? '' : "AND lp.sperrlager!='1'";
+      $sperrlagerSQL = $ignoreSperrLager ? '' : "AND lp.sperrlager != '1'";
 
-      $result = $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi
-      LEFT JOIN lager_platz lp ON lp.id=lpi.lager_platz
-      WHERE lpi.artikel='$artikel' AND lpi.lager_platz='$lager_platz' {$sperrlagerSQL}");
+      $result = $this->app->DatabaseService->selectValue(
+        "SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi LEFT JOIN lager_platz lp ON lp.id = lpi.lager_platz WHERE lpi.artikel = :artikel AND lpi.lager_platz = :lager_platz {$sperrlagerSQL}",
+        ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz]
+      );
     }
     if ($result <= 0) {
       return 0;
@@ -7311,23 +7384,29 @@ title: 'Abschicken',
   // @refactor in Lager Modul
   function ArtikelAnzahlLagerOhneNachschublager($artikel)
   {
-    return $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi LEFT JOIN lager_platz lp ON lp.id=lpi.lager_platz
-      WHERE lpi.artikel='$artikel' AND lp.autolagersperre!='1' AND lp.sperrlager!='1'");
+    return $this->app->DatabaseService->selectValue(
+      "SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi LEFT JOIN lager_platz lp ON lp.id = lpi.lager_platz WHERE lpi.artikel = :artikel AND lp.autolagersperre != '1' AND lp.sperrlager != '1'",
+      ['artikel' => (int) $artikel]
+    );
   }
 
 
   // @refactor in Lager Modul
   function ArtikelAnzahlLagerNurNachschublager($artikel)
   {
-    return $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id=lpi.lager_platz
-      WHERE lpi.artikel='$artikel' AND lp.autolagersperre='1'");
+    return $this->app->DatabaseService->selectValue(
+      "SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id = lpi.lager_platz WHERE lpi.artikel = :artikel AND lp.autolagersperre = '1'",
+      ['artikel' => (int) $artikel]
+    );
   }
 
   // @refactor in Lager Modul
   function ArtikelAnzahlLagerPOS($artikel, $lager)
   {
-    return $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id=lpi.lager_platz
-        WHERE lpi.artikel='$artikel' AND lp.lager='$lager' AND lp.poslager='1'");
+    return $this->app->DatabaseService->selectValue(
+      "SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id = lpi.lager_platz WHERE lpi.artikel = :artikel AND lp.lager = :lager AND lp.poslager = '1'",
+      ['artikel' => (int) $artikel, 'lager' => (int) $lager]
+    );
   }
 
   // @refactor in Lager Modul
@@ -7335,14 +7414,20 @@ title: 'Abschicken',
   {
     if ($lager <= 0) {
       if ($projektlager) {
-        return $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id=lpi.lager_platz INNER JOIN lager lag ON lp.lager = lag.id AND lag.geloescht <> 1
-          WHERE lpi.artikel='$artikel' AND lp.sperrlager!='1' AND lag.projekt = '$projektlager'");
+        return $this->app->DatabaseService->selectValue(
+          "SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id = lpi.lager_platz INNER JOIN lager lag ON lp.lager = lag.id AND lag.geloescht <> 1 WHERE lpi.artikel = :artikel AND lp.sperrlager != '1' AND lag.projekt = :projektlager",
+          ['artikel' => (int) $artikel, 'projektlager' => (int) $projektlager]
+        );
       }
-      return $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi LEFT JOIN lager_platz lp ON lp.id=lpi.lager_platz
-        WHERE lpi.artikel='$artikel' AND lp.sperrlager!='1'");
+      return $this->app->DatabaseService->selectValue(
+        "SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi LEFT JOIN lager_platz lp ON lp.id = lpi.lager_platz WHERE lpi.artikel = :artikel AND lp.sperrlager != '1'",
+        ['artikel' => (int) $artikel]
+      );
     } else {
-      return $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id=lpi.lager_platz
-        WHERE lpi.artikel='$artikel' AND lp.lager='$lager' AND lp.sperrlager!='1'");
+      return $this->app->DatabaseService->selectValue(
+        "SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id = lpi.lager_platz WHERE lpi.artikel = :artikel AND lp.lager = :lager AND lp.sperrlager != '1'",
+        ['artikel' => (int) $artikel, 'lager' => (int) $lager]
+      );
     }
   }
 
@@ -7350,8 +7435,16 @@ title: 'Abschicken',
   // @refactor in Lager Modul
   function ArtikelAnzahlOffene($artikel, $projekt = 0)
   {
-    return $this->app->DB->Select("SELECT SUM(ap.menge) FROM auftrag_position ap INNER JOIN auftrag a ON a.id=ap.auftrag WHERE ap.artikel='$artikel' AND a.status='freigegeben'" . ($projekt ? " AND a.projekt = '$projekt' " : ''));
-    //              return $this->app->DB->Select("SELECT SUM(menge) FROM lager_reserviert WHERE artikel='$artikel'");
+    if ($projekt) {
+      return $this->app->DatabaseService->selectValue(
+        "SELECT SUM(ap.menge) FROM auftrag_position ap INNER JOIN auftrag a ON a.id = ap.auftrag WHERE ap.artikel = :artikel AND a.status = 'freigegeben' AND a.projekt = :projekt",
+        ['artikel' => (int) $artikel, 'projekt' => (int) $projekt]
+      );
+    }
+    return $this->app->DatabaseService->selectValue(
+      "SELECT SUM(ap.menge) FROM auftrag_position ap INNER JOIN auftrag a ON a.id = ap.auftrag WHERE ap.artikel = :artikel AND a.status = 'freigegeben'",
+      ['artikel' => (int) $artikel]
+    );
   }
 
 
@@ -10392,8 +10485,9 @@ title: 'Abschicken',
     if (empty($name)) {
       return [];
     }
-    $checkarr = $this->app->DB->SelectRow(
-      "SELECT h.id, h.parametercount, h.aktiv FROM `hook` AS `h` WHERE h.name = '$name' LIMIT 1"
+    $checkarr = $this->app->DatabaseService->selectRow(
+      "SELECT h.id, h.parametercount, h.aktiv FROM `hook` AS `h` WHERE h.name = :name LIMIT 1",
+      ['name' => $name]
     );
     $aktiv = (int) $aktiv;
     if ($checkarr && $new) {
@@ -10402,10 +10496,9 @@ title: 'Abschicken',
       }
       $parametercount = (int) $parametercount;
       if ($parametercount != $checkarr['parametercount']) {
-        $this->app->DB->Update(
-          "UPDATE `hook` 
-          SET `parametercount` = '$parametercount' 
-          WHERE `id` = '" . $checkarr['id'] . "' LIMIT 1"
+        $this->app->DatabaseService->execute(
+          "UPDATE `hook` SET `parametercount` = :parametercount WHERE `id` = :id LIMIT 1",
+          ['parametercount' => $parametercount, 'id' => (int) $checkarr['id']]
         );
         if ($this->app->DB->affected_rows() > 0) {
           $checkarr['parametercount'] = $parametercount;
@@ -10417,8 +10510,9 @@ title: 'Abschicken',
     if ($checkarr) {
       $check = (int) $checkarr['id'];
       if ($checkarr['aktiv'] != $aktiv) {
-        $this->app->DB->Update(
-          "UPDATE `hook` SET `aktiv` = '$aktiv' WHERE `id` = '$check'"
+        $this->app->DatabaseService->execute(
+          "UPDATE `hook` SET `aktiv` = :aktiv WHERE `id` = :id",
+          ['aktiv' => $aktiv, 'id' => $check]
         );
         if ($this->app->DB->affected_rows() > 0) {
           $checkarr['aktiv'] = $aktiv;
@@ -10426,8 +10520,9 @@ title: 'Abschicken',
       }
 
       if ($checkarr['parametercount'] != $parametercount) {
-        $this->app->DB->Update(
-          "UPDATE `hook` SET `parametercount` = '$parametercount' WHERE `id` = '$check'"
+        $this->app->DatabaseService->execute(
+          "UPDATE `hook` SET `parametercount` = :parametercount WHERE `id` = :id",
+          ['parametercount' => (int) $parametercount, 'id' => $check]
         );
         if ($this->app->DB->affected_rows() > 0) {
           $checkarr['parametercount'] = $parametercount;
@@ -10436,18 +10531,20 @@ title: 'Abschicken',
 
       return $checkarr;
     }
-    $this->app->DB->Insert(
-      "INSERT INTO `hook` (`name`, `aktiv`, `parametercount`) VALUES ('$name','$aktiv','$parametercount')"
+    $this->app->DatabaseService->execute(
+      "INSERT INTO `hook` (`name`, `aktiv`, `parametercount`) VALUES (:name, :aktiv, :parametercount)",
+      ['name' => $name, 'aktiv' => $aktiv, 'parametercount' => (int) $parametercount]
     );
     $id = (int) $this->app->DB->GetInsertID();
     if ($id > 0) {
       return ['id' => $id, 'parametercount' => $parametercount, 'name' => $name, 'aktiv' => $aktiv];
     }
 
-    $max = 1 + (int) $this->app->DB->Select("SELECT MAX(h.id) FROM `hook` AS `h`");
+    $max = 1 + (int) $this->app->DatabaseService->selectValue("SELECT MAX(h.id) FROM `hook` AS `h`");
 
-    $this->app->DB->Update(
-      "UPDATE `hook` SET `id` = '$max' WHERE `id` = 0 AND `name` = '$name' AND `aktiv` = '$aktiv' AND `parametercount` = '$parametercount' LIMIT 1"
+    $this->app->DatabaseService->execute(
+      "UPDATE `hook` SET `id` = :max WHERE `id` = 0 AND `name` = :name AND `aktiv` = :aktiv AND `parametercount` = :parametercount LIMIT 1",
+      ['max' => $max, 'name' => $name, 'aktiv' => $aktiv, 'parametercount' => (int) $parametercount]
     );
     if ($this->app->DB->affected_rows() > 0) {
       return ['id' => $max, 'parametercount' => $parametercount, 'name' => $name, 'aktiv' => $aktiv];
@@ -10511,8 +10608,9 @@ title: 'Abschicken',
     }
     $hookArr = $this->GenerateHook($name, null, 1, true);
     if (empty($hookArr)) {
-      $hook = $this->app->DB->Select(
-        sprintf("SELECT h.id FROM `hook` AS `h` WHERE h.name = '%s' LIMIT 1", $name)
+      $hook = $this->app->DatabaseService->selectValue(
+        "SELECT h.id FROM `hook` AS `h` WHERE h.name = :name LIMIT 1",
+        ['name' => $name]
       );
     } else {
       $hook = $hookArr['id'];
@@ -10520,52 +10618,35 @@ title: 'Abschicken',
     if (empty($hook)) {
       return false;
     }
-    $check = $this->app->DB->Select(
-      sprintf(
-        "SELECT hr.id FROM `hook_register` AS `hr` WHERE hr.hook = %d AND hr.module = '%s' AND hr.module_parameter = %d LIMIT 1",
-        (int) $hook,
-        $callmodule,
-        (int) $moduleParameter
-      )
+    $check = $this->app->DatabaseService->selectValue(
+      "SELECT hr.id FROM `hook_register` AS `hr` WHERE hr.hook = :hook AND hr.module = :module AND hr.module_parameter = :module_parameter LIMIT 1",
+      ['hook' => (int) $hook, 'module' => $callmodule, 'module_parameter' => (int) $moduleParameter]
     );
     if ($check && $new) {
       return false;
     }
     if ($check) {
-      $this->app->DB->Update(
-        sprintf(
-          "UPDATE `hook_register` SET `aktiv` = %d, `function` = '%s' WHERE `id` = %d LIMIT 1",
-          $aktiv,
-          $funktion,
-          $check
-        )
+      $this->app->DatabaseService->execute(
+        "UPDATE `hook_register` SET `aktiv` = :aktiv, `function` = :function WHERE `id` = :id LIMIT 1",
+        ['aktiv' => (int) $aktiv, 'function' => $funktion, 'id' => (int) $check]
       );
       if ($position !== null) {
-        $this->app->DB->Update(
-          sprintf(
-            'UPDATE `hook_register` SET `position` = %d WHERE `id` = %d LIMIT 1',
-            (int) $position,
-            $check
-          )
+        $this->app->DatabaseService->execute(
+          "UPDATE `hook_register` SET `position` = :position WHERE `id` = :id LIMIT 1",
+          ['position' => (int) $position, 'id' => (int) $check]
         );
       }
       return true;
     }
     if ($position === null) {
-      $position = 1 + (int) $this->app->DB->Select(
-        sprintf('SELECT MAX(hr.position) FROM `hook_register` AS `hr` WHERE hr.hook = %d', $hook)
+      $position = 1 + (int) $this->app->DatabaseService->selectValue(
+        "SELECT MAX(hr.position) FROM `hook_register` AS `hr` WHERE hr.hook = :hook",
+        ['hook' => (int) $hook]
       );
     }
-    $this->app->DB->Insert(
-      sprintf("INSERT INTO `hook_register` (`hook`, `module`, `function`, `aktiv`, `position`, `module_parameter`) 
-        VALUES (%d,'%s','%s',%d,%d,%d)",
-        $hook,
-        $callmodule,
-        $funktion,
-        (int) $aktiv,
-        (int) $position,
-        (int) $moduleParameter
-      )
+    $this->app->DatabaseService->execute(
+      "INSERT INTO `hook_register` (`hook`, `module`, `function`, `aktiv`, `position`, `module_parameter`) VALUES (:hook, :module, :function, :aktiv, :position, :module_parameter)",
+      ['hook' => (int) $hook, 'module' => $callmodule, 'function' => $funktion, 'aktiv' => (int) $aktiv, 'position' => (int) $position, 'module_parameter' => (int) $moduleParameter]
     );
 
     return $this->app->DB->GetInsertID() > 0;
@@ -10694,14 +10775,9 @@ title: 'Abschicken',
    */
   public function RemoveHook($name)
   {
-    $this->app->DB->Delete(
-      sprintf(
-        "DELETE `h`, `hr` 
-        FROM `hook` AS `h` 
-        LEFT JOIN `hook_register` AS `hr` ON h.id = hr.hook 
-        WHERE h.name = '%s'",
-        $this->app->DB->real_escape_string($name)
-      )
+    $this->app->DatabaseService->execute(
+      "DELETE `h`, `hr` FROM `hook` AS `h` LEFT JOIN `hook_register` AS `hr` ON h.id = hr.hook WHERE h.name = :name",
+      ['name' => $name]
     );
   }
 
@@ -10715,23 +10791,16 @@ title: 'Abschicken',
     if (empty($hookName) || empty($module) || empty($callback)) {
       return;
     }
-    $hook = $this->app->DB->Select(
-      sprintf(
-        "SELECT h.id FROM `hook` AS `h` WHERE h.name = '%s' OR h.alias = '%s' LIMIT 1",
-        $this->app->DB->real_escape_string($hookName),
-        $this->app->DB->real_escape_string($hookName)
-      )
+    $hook = $this->app->DatabaseService->selectValue(
+      "SELECT h.id FROM `hook` AS `h` WHERE h.name = :name OR h.alias = :alias LIMIT 1",
+      ['name' => $hookName, 'alias' => $hookName]
     );
     if (empty($hook)) {
       return;
     }
-    $this->app->DB->Delete(
-      sprintf(
-        "DELETE FROM `hook_register` WHERE `hook` = %d AND `module` = '%s' AND `function` = '%s'",
-        $hook,
-        $this->app->DB->real_escape_string($module),
-        $this->app->DB->real_escape_string($callback)
-      )
+    $this->app->DatabaseService->execute(
+      "DELETE FROM `hook_register` WHERE `hook` = :hook AND `module` = :module AND `function` = :function",
+      ['hook' => (int) $hook, 'module' => $module, 'function' => $callback]
     );
   }
 
@@ -10745,11 +10814,9 @@ title: 'Abschicken',
     if (empty($alias)) {
       return null;
     }
-    return $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT h.* FROM `hook` AS `h` WHERE h.alias = '%s' AND h.name <> ''",
-        $this->app->DB->real_escape_string($alias)
-      )
+    return $this->app->DatabaseService->selectRow(
+      "SELECT h.* FROM `hook` AS `h` WHERE h.alias = :alias AND h.name <> ''",
+      ['alias' => $alias]
     );
   }
 
@@ -10874,7 +10941,7 @@ title: 'Abschicken',
     }
     $check = $this->GenerateHook($name, $parametercount, 1, true);
     if (empty($check) || !isset($check['id']) || !isset($check['aktiv']) || !isset($check['parametercount'])) {
-      $check = $this->app->DB->SelectRow("SELECT id, aktiv, parametercount FROM hook WHERE name = '$name' LIMIT 1");
+      $check = $this->app->DatabaseService->selectRow("SELECT id, aktiv, parametercount FROM hook WHERE name = :name LIMIT 1", ['name' => $name]);
     }
     if (!$check || !$check['aktiv']) {
       return;
@@ -11113,18 +11180,15 @@ title: 'Abschicken',
     }
     $check = $this->GenerateMenuHook($module, 1, true);
     if (empty($check) || !isset($check['id']) || !isset($check['aktiv'])) {
-      $check = $this->app->DB->SelectRow("SELECT hm.id, hm.aktiv FROM `hook_menu` AS `hm` WHERE hm.module = '$module' LIMIT 1");
+      $check = $this->app->DatabaseService->selectRow("SELECT hm.id, hm.aktiv FROM `hook_menu` AS `hm` WHERE hm.module = :module LIMIT 1", ['module' => $module]);
     }
     if (empty($check) || !$check['aktiv']) {
       return;
     }
     $hook_menu = $check['id'];
-    $hooks = $this->app->DB->SelectArr(
-      "SELECT hmr.module, hmr.funktion 
-      FROM `hook_menu_register` AS `hmr` 
-      WHERE hmr.hook_menu = '$hook_menu' AND hmr.aktiv = 1 AND hmr.module <> '' AND hmr.funktion <> '' 
-      GROUP BY hmr.module, hmr.funktion 
-      ORDER BY hmr.position"
+    $hooks = $this->app->DatabaseService->select(
+      "SELECT hmr.module, hmr.funktion FROM `hook_menu_register` AS `hmr` WHERE hmr.hook_menu = :hook_menu AND hmr.aktiv = 1 AND hmr.module <> '' AND hmr.funktion <> '' GROUP BY hmr.module, hmr.funktion ORDER BY hmr.position",
+      ['hook_menu' => (int) $hook_menu]
     );
     if (empty($hooks)) {
       return;
@@ -11843,16 +11907,16 @@ title: 'Abschicken',
   // @refactor Auftrag Modul
   function SaldoAdresseAuftrag($adresse)
   {
-    return $this->app->DB->Select("SELECT SUM(gesamtsumme) FROM auftrag WHERE adresse='$adresse' AND status='freigegeben' LIMIT 1");
+    return $this->app->DatabaseService->selectValue("SELECT SUM(gesamtsumme) FROM auftrag WHERE adresse = :adresse AND status = 'freigegeben' LIMIT 1", ['adresse' => (int) $adresse]);
   }
 
   // @refactor Adresse Modul
   function UmsatzAdresseAuftragJahr($adresse)
   {
-    return $this->app->DB->Select("SELECT
-        SUM(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)))
-        FROM auftrag_position ap LEFT JOIN auftrag a ON ap.auftrag=a.id WHERE (a.status='freigegeben' OR a.status='abgeschlossen')
-        AND DATE_FORMAT(a.datum,'%Y')=DATE_FORMAT(NOW(),'%Y') AND a.adresse='$adresse'");
+    return $this->app->DatabaseService->selectValue(
+      "SELECT SUM(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1))) FROM auftrag_position ap LEFT JOIN auftrag a ON ap.auftrag=a.id WHERE (a.status='freigegeben' OR a.status='abgeschlossen') AND DATE_FORMAT(a.datum,'%Y')=DATE_FORMAT(NOW(),'%Y') AND a.adresse = :adresse",
+      ['adresse' => (int) $adresse]
+    );
     //"SELECT SUM(gesamtsumme) FROM auftrag WHERE adresse='$adresse' AND status='freigegeben'
     //                      AND DATE_FORMAT(datum,'%Y')=DATE_FORMAT(NOW(),'%Y') LIMIT 1");
   }
@@ -11860,10 +11924,10 @@ title: 'Abschicken',
   // @refactor Adresse Modul
   function UmsatzAdresseRechnungJahr($adresse)
   {
-    return $this->app->DB->Select("SELECT
-        SUM(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)))
-        FROM rechnung_position ap LEFT JOIN rechnung a ON ap.rechnung=a.id WHERE (a.status='freigegeben' OR a.status='abgeschlossen' OR a.status='versendet')
-        AND DATE_FORMAT(a.datum,'%Y')=DATE_FORMAT(NOW(),'%Y') AND a.adresse='$adresse'");
+    return $this->app->DatabaseService->selectValue(
+      "SELECT SUM(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1))) FROM rechnung_position ap LEFT JOIN rechnung a ON ap.rechnung=a.id WHERE (a.status='freigegeben' OR a.status='abgeschlossen' OR a.status='versendet') AND DATE_FORMAT(a.datum,'%Y')=DATE_FORMAT(NOW(),'%Y') AND a.adresse = :adresse",
+      ['adresse' => (int) $adresse]
+    );
   }
 
 
@@ -11880,8 +11944,8 @@ title: 'Abschicken',
       return 0;
     }
 
-    $rechnungs = $this->app->DB->Select("SELECT IFNULL(SUM(soll-ist),0) FROM rechnung WHERE status != 'angelegt' AND zahlungsstatus != 'bezahlt' AND adresse = '$adresse'");
-    $gutschrifts = $this->app->DB->Select("SELECT IFNULL(SUM(soll-ist),0) FROM gutschrift WHERE status != 'angelegt' AND (manuell_vorabbezahlt = '0000-00-00' OR manuell_vorabbezahlt IS NULL) AND zahlungsstatus != 'bezahlt' AND adresse = '$adresse'");
+    $rechnungs = $this->app->DatabaseService->selectValue("SELECT IFNULL(SUM(soll-ist),0) FROM rechnung WHERE status != 'angelegt' AND zahlungsstatus != 'bezahlt' AND adresse = :adresse", ['adresse' => (int) $adresse]);
+    $gutschrifts = $this->app->DatabaseService->selectValue("SELECT IFNULL(SUM(soll-ist),0) FROM gutschrift WHERE status != 'angelegt' AND (manuell_vorabbezahlt = '0000-00-00' OR manuell_vorabbezahlt IS NULL) AND zahlungsstatus != 'bezahlt' AND adresse = :adresse", ['adresse' => (int) $adresse]);
 
     $kundensaldo = $rechnungs - $gutschrifts;
     $kundensaldo = round($kundensaldo, 2);
@@ -11904,7 +11968,7 @@ title: 'Abschicken',
   {
     if ($typ === 'produktion') {
     } else {
-      $auftraege = $this->app->DB->SelectRow("SELECT * FROM auftrag WHERE (status='freigegeben' OR status='angelegt') AND id='$auftrag'");
+      $auftraege = $this->app->DatabaseService->selectRow("SELECT * FROM auftrag WHERE (status='freigegeben' OR status='angelegt') AND id = :id", ['id' => (int) $auftrag]);
       $projektlager = 0;
     }
 
@@ -11918,12 +11982,12 @@ title: 'Abschicken',
     if ($projekt > 0) {
       if (
         !$listeexplodieren
-        && ($this->app->DB->Select("SELECT autostuecklistenanpassung FROM projekt WHERE id='$projekt' LIMIT 1")) == 0
+        && ($this->app->DatabaseService->selectValue("SELECT autostuecklistenanpassung FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $projekt])) == 0
       ) {
         return;
       }
       if ($typ !== 'produktion') {
-        $projektlager = $this->app->DB->Select("SELECT id FROM projekt WHERE id = $projekt AND projektlager = 1 LIMIT 1");
+        $projektlager = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND projektlager = 1 LIMIT 1", ['id' => (int) $projekt]);
       }
     }
 
@@ -11946,11 +12010,9 @@ title: 'Abschicken',
           WHERE ap.auftrag='$auftrag' AND (ap.geliefert_menge < ap.menge AND ap.geliefert=0) AND $swhere"
         );
       } else {
-        $artikelarr = $this->app->DB->SelectArr(
-          "SELECT ap.* ,art.lagerartikel, art.keineeinzelartikelanzeigen,art.juststueckliste,art.stueckliste
-          FROM auftrag_position AS ap
-          LEFT JOIN artikel AS art ON ap.artikel = art.id
-          WHERE ap.auftrag='$auftrag' AND (ap.geliefert_menge < ap.menge AND ap.geliefert=0)"
+        $artikelarr = $this->app->DatabaseService->select(
+          "SELECT ap.* ,art.lagerartikel, art.keineeinzelartikelanzeigen,art.juststueckliste,art.stueckliste FROM auftrag_position AS ap LEFT JOIN artikel AS art ON ap.artikel = art.id WHERE ap.auftrag = :auftrag AND (ap.geliefert_menge < ap.menge AND ap.geliefert=0)",
+          ['auftrag' => (int) $auftrag]
         );
       }
     }
@@ -12077,11 +12139,9 @@ title: 'Abschicken',
                 );
               }
               else{ */
-            $artikel_von_stueckliste = $this->app->DB->SelectArr(
-              "SELECT s.*, art.nummer AS artnummer,art.projekt AS artprojekt
-              FROM stueckliste AS s
-              INNER JOIN artikel AS art ON s.artikel = art.id
-              WHERE s.stuecklistevonartikel='$artikel'"
+            $artikel_von_stueckliste = $this->app->DatabaseService->select(
+              "SELECT s.*, art.nummer AS artnummer,art.projekt AS artprojekt FROM stueckliste AS s INNER JOIN artikel AS art ON s.artikel = art.id WHERE s.stuecklistevonartikel = :artikel",
+              ['artikel' => (int) $artikel]
             );
             //            }
 
@@ -12093,7 +12153,7 @@ title: 'Abschicken',
             $erhoehe_sort = !empty($artikel_von_stueckliste) ? count($artikel_von_stueckliste) : 0;
             if ($typ === 'produktion') {
             } else {
-              $this->app->DB->Update("UPDATE auftrag_position SET sort=sort+$erhoehe_sort WHERE auftrag='$auftrag' AND sort > $sort");
+              $this->app->DatabaseService->execute("UPDATE auftrag_position SET sort = sort + :erhoehe_sort WHERE auftrag = :auftrag AND sort > :sort", ['erhoehe_sort' => (int) $erhoehe_sort, 'auftrag' => (int) $auftrag, 'sort' => (int) $sort]);
             }
 
             if (!empty($artikel_von_stueckliste)) {
@@ -12117,23 +12177,23 @@ title: 'Abschicken',
                   $this->app->DB->Update("UPDATE auftrag_position SET einkaufspreis='0',einkaufspreisurspruenglich=0 WHERE id='$explodiert_id' AND preis=0");
                   $this->app->DB->Update("UPDATE auftrag_position SET ausblenden_im_pdf='" . ($keineeinzelartikelanzeigen == 1 ? 1 : 0) . "' WHERE id='$explodiert_id' ");
                   $this->app->DB->Update("UPDATE auftrag_position  SET explodiert_parent='$artikel_position_id',sort='$sort',ohnepreis=1 WHERE id='$explodiert_id' LIMIT 1");
-                  if ($this->app->DB->Select("SELECT id FROM artikel WHERE id = '" . $value['artikel'] . "' AND (juststueckliste = 1 " . ($listeexplodieren ? " OR stueckliste = 1 " : '') . ") LIMIT 1"))
-                    $this->app->DB->Update("UPDATE auftrag_position SET explodiert = 1 WHERE id='$explodiert_id' LIMIT 1");
+                  if ($this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE id = :id AND (juststueckliste = 1" . ($listeexplodieren ? " OR stueckliste = 1" : '') . ") LIMIT 1", ['id' => (int) $value['artikel']]))
+                    $this->app->DatabaseService->execute("UPDATE auftrag_position SET explodiert = 1 WHERE id = :id LIMIT 1", ['id' => (int) $explodiert_id]);
                   if ($this->Firmendaten('auftragexplodieren_unterstuecklisten'))
-                    $this->app->DB->Update("UPDATE auftrag_position SET explodiert = 0 WHERE id = '$explodiert_id' LIMIT 1");
-                  $this->app->DB->Update("UPDATE `beleg_zwischenpositionen` SET pos = pos + 1 WHERE doctype = 'auftrag' AND doctypeid = '$auftrag' AND pos >= '" . ($sort - 1) . "'  ");
+                    $this->app->DatabaseService->execute("UPDATE auftrag_position SET explodiert = 0 WHERE id = :id LIMIT 1", ['id' => (int) $explodiert_id]);
+                  $this->app->DatabaseService->execute("UPDATE `beleg_zwischenpositionen` SET pos = pos + 1 WHERE doctype = 'auftrag' AND doctypeid = :auftrag AND pos >= :pos", ['auftrag' => (int) $auftrag, 'pos' => (int) ($sort - 1)]);
                 }
               }
             }
 
             // MLM wenn mlm und der artikel explodiert ist alle punkte platt machen
             if ($typ === 'auftrag' && $this->Firmendaten('modul_mlm') == '1') {
-              $this->app->DB->Update("UPDATE auftrag_position SET mlmdirektpraemie=0, bonuspunkte=0,punkte=0 WHERE explodiert_parent='$artikel_position_id'");
+              $this->app->DatabaseService->execute("UPDATE auftrag_position SET mlmdirektpraemie = 0, bonuspunkte = 0, punkte = 0 WHERE explodiert_parent = :parent", ['parent' => (int) $artikel_position_id]);
             }
 
             if ($typ === 'produktion') {
             } else {
-              $this->app->DB->Update("UPDATE auftrag_position SET explodiert='1' WHERE id='$artikel_position_id' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE auftrag_position SET explodiert = 1 WHERE id = :id LIMIT 1", ['id' => (int) $artikel_position_id]);
             }
           }
         }
@@ -12158,7 +12218,7 @@ title: 'Abschicken',
     $this->AuftragExplodieren($auftrag);
 
     $this->BerechneDeckungsbeitrag($auftrag, "auftrag");
-    $auftragarr = $this->app->DB->SelectRow("SELECT projekt,internet FROM auftrag WHERE id = '$auftrag' LIMIT 1");
+    $auftragarr = $this->app->DatabaseService->selectRow("SELECT projekt,internet FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     if (empty($auftragarr)) {
       return;
     }
@@ -12184,31 +12244,31 @@ title: 'Abschicken',
     $toleranz = (float) str_replace(',', '.', $this->app->erp->GetKonfiguration('zahlungseingang_toleranz'));
     if ($toleranz < 0)
       $toleranz = 0;
-    $auftraege = $this->app->DB->SelectArr("SELECT * FROM auftrag WHERE id='$auftrag'");
+    $auftraege = $this->app->DatabaseService->select("SELECT * FROM auftrag WHERE id = :id", ['id' => (int) $auftrag]);
     $adresse = $auftraege[0]['adresse'];
-    $artikelarr = $this->app->DB->SelectArr("SELECT ap.id, ap.artikel, ap.menge, ap.geliefert_menge, art.lagerartikel as artlagerartikel FROM auftrag_position ap LEFT JOIN artikel art ON ap.artikel = art.id WHERE ap.auftrag='$auftrag' AND ap.geliefert_menge < ap.menge AND ap.geliefert=0");
+    $artikelarr = $this->app->DatabaseService->select("SELECT ap.id, ap.artikel, ap.menge, ap.geliefert_menge, art.lagerartikel as artlagerartikel FROM auftrag_position ap LEFT JOIN artikel art ON ap.artikel = art.id WHERE ap.auftrag = :auftrag AND ap.geliefert_menge < ap.menge AND ap.geliefert = 0", ['auftrag' => (int) $auftrag]);
 
     //pruefe ob es mindestens eine reservierung gibt
-    $reservierte = $this->app->DB->Select("SELECT COUNT(id) FROM lager_reserviert WHERE adresse='$adresse' AND datum>=NOW() AND objekt!='lieferschein'");
+    $reservierte = $this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM lager_reserviert WHERE adresse = :adresse AND datum >= NOW() AND objekt != 'lieferschein'", ['adresse' => (int) $adresse]);
     if ($reservierte > 0 && $auftraege[0]['reserviert_ok'] != 1) {
-      $this->app->DB->Update("UPDATE auftrag SET reserviert_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET reserviert_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     } elseif ($reservierte <= 0 && $auftraege[0]['reserviert_ok'] != 0) {
-      $this->app->DB->Update("UPDATE auftrag SET reserviert_ok='0' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET reserviert_ok = 0 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
 
     // liefertermin
-    $liefertermincheck = $this->app->DB->Select("SELECT id FROM auftrag WHERE (tatsaechlicheslieferdatum<=NOW() OR tatsaechlicheslieferdatum IS NULL OR tatsaechlicheslieferdatum='0000-00-00') AND id='$auftrag'");
+    $liefertermincheck = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE (tatsaechlicheslieferdatum <= NOW() OR tatsaechlicheslieferdatum IS NULL OR tatsaechlicheslieferdatum = '0000-00-00') AND id = :id", ['id' => (int) $auftrag]);
     if ($liefertermincheck > 0 && $auftraege[0]['liefertermin_ok'] != 1) {
-      $this->app->DB->Update("UPDATE auftrag SET liefertermin_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET liefertermin_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     } elseif ($liefertermincheck <= 0 && $auftraege[0]['liefertermin_ok'] != 0) {
-      $this->app->DB->Update("UPDATE auftrag SET liefertermin_ok='0' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET liefertermin_ok = 0 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
     //liefersperre
-    $liefersperre = $this->app->DB->Select("SELECT liefersperre FROM adresse WHERE id='$adresse'");
+    $liefersperre = $this->app->DatabaseService->selectValue("SELECT liefersperre FROM adresse WHERE id = :id", ['id' => (int) $adresse]);
     if ($liefersperre > 0 && $auftraege[0]['liefersperre_ok'] != 0) {
-      $this->app->DB->Update("UPDATE auftrag SET liefersperre_ok='0' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET liefersperre_ok = 0 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     } elseif ($liefersperre <= 0 && $auftraege[0]['liefersperre_ok'] != 1) {
-      $this->app->DB->Update("UPDATE auftrag SET liefersperre_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET liefersperre_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
 
     //kreditlimit
@@ -12217,13 +12277,13 @@ title: 'Abschicken',
       || $this->KundeHatZR($adresse)
       || $this->KreditlimitCheck($adresse) == true;
     if ($setKreditLimitOk && $auftraege[0]['kreditlimit_ok'] != 1) {
-      $this->app->DB->Update("UPDATE auftrag SET kreditlimit_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET kreditlimit_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     } elseif (!$setKreditLimitOk && $auftraege[0]['kreditlimit_ok'] != 0) {
-      $this->app->DB->Update("UPDATE auftrag SET kreditlimit_ok='0' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET kreditlimit_ok = 0 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
 
     if ($auftraege[0]['ust_ok'] != 1 && ($auftraege[0]['ust_befreit'] == 0 || ($auftraege[0]['ust_befreit'] == 1 && $auftraege[0]['ustid'] == ''))) {
-      $this->app->DB->Update("UPDATE auftrag SET ust_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET ust_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
 
     // Lager Check
@@ -12238,7 +12298,7 @@ title: 'Abschicken',
       if ($lagerartikel == 1) {
         // wenn artikel oefters im Auftrag nehme gesamte summe her
 
-        $gesamte_menge_im_auftrag = $this->app->DB->Select("SELECT SUM(menge-geliefert_menge) FROM auftrag_position WHERE auftrag='$auftrag' AND artikel='$artikel'");
+        $gesamte_menge_im_auftrag = $this->app->DatabaseService->selectValue("SELECT SUM(menge-geliefert_menge) FROM auftrag_position WHERE auftrag = :auftrag AND artikel = :artikel", ['auftrag' => (int) $auftrag, 'artikel' => (int) $artikel]);
         if ($gesamte_menge_im_auftrag > $menge) {
           $menge = $gesamte_menge_im_auftrag;
         }
@@ -12252,21 +12312,21 @@ title: 'Abschicken',
 
       }
     }
-    $projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id='$auftrag' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
 
-    $this->app->DB->Update("UPDATE auftrag SET teillieferung_moeglich='0' WHERE id='$auftrag' LIMIT 1");
+    $this->app->DatabaseService->execute("UPDATE auftrag SET teillieferung_moeglich = 0 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     //echo "$positionen_vorhanden $artikelzaehlen<hr>";
     if ($positionen_vorhanden == $artikelzaehlen) {
-      $this->app->DB->Update("UPDATE auftrag SET lager_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET lager_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     } else {
-      $kommissionierverfahren = $this->app->DB->Select("SELECT kommissionierverfahren FROM projekt WHERE id = '$projekt' LIMIT 1");
+      $kommissionierverfahren = $this->app->DatabaseService->selectValue("SELECT kommissionierverfahren FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $projekt]);
       if ($kommissionierverfahren == 'rechnungsmail') {
-        $this->app->DB->Update("UPDATE auftrag SET lager_ok='1' WHERE id='$auftrag' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE auftrag SET lager_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
       } else {
-        $this->app->DB->Update("UPDATE auftrag SET lager_ok='0' WHERE id='$auftrag' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE auftrag SET lager_ok = 0 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
       }
       if ($positionen_vorhanden > 0 && $artikelzaehlen > 0) {
-        $this->app->DB->Update("UPDATE auftrag SET teillieferung_moeglich='1' WHERE id='$auftrag' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE auftrag SET teillieferung_moeglich = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
       }
 
     }
@@ -12277,7 +12337,7 @@ title: 'Abschicken',
     $projektcheckname = 0;
     $projektportocheck = 0;
     $projektnachnahmecheck = 0;
-    $projektarr = empty($projekt) ? null : $this->app->DB->SelectRow("SELECT * FROM projekt WHERE id='$projekt' LIMIT 1");
+    $projektarr = empty($projekt) ? null : $this->app->DatabaseService->selectRow("SELECT * FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $projekt]);
 
     if (!empty($projektarr)) {
       $projektcheck = $projektarr['checkok'];
@@ -12285,7 +12345,7 @@ title: 'Abschicken',
       $projektportocheck = $projektarr['portocheck'];
       $projektnachnahmecheck = $projektarr['nachnahmecheck'];
     }
-    $altercheck = $this->app->DB->Select("SELECT check_ok FROM auftrag WHERE id='$auftrag' LIMIT 1");
+    $altercheck = $this->app->DatabaseService->selectValue("SELECT check_ok FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
 
     if ($projektcheck == '1' && @is_file(dirname(__FILE__) . "/../plugins/class." . $projektcheckname . ".php")) {
       //echo "projekt check $projektcheckname notwendig";
@@ -12296,15 +12356,15 @@ title: 'Abschicken',
       if (class_exists('unishop')) {
         $tmp = new unishop($this->app);
         if ($tmp->CheckOK($auftrag)) {
-          $this->app->DB->Update("UPDATE auftrag SET check_ok='1' WHERE id='$auftrag' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE auftrag SET check_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
         } else {
-          $this->app->DB->Update("UPDATE auftrag SET check_ok='0' WHERE id='$auftrag' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE auftrag SET check_ok = 0 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
         }
       } else {
-        $this->app->DB->Update("UPDATE auftrag SET check_ok='1' WHERE id='$auftrag' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE auftrag SET check_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
       }
     } else {
-      $this->app->DB->Update("UPDATE auftrag SET check_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET check_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
     $this->RunHook('auftragcheck', 2, $auftrag, $altercheck);
 
@@ -12314,11 +12374,11 @@ title: 'Abschicken',
     // UST Check
     // pruefe adresse 23 ust innerhalb 3 tagen vorhanden? wenn nicht schaue ob selber ordern kann wenn ja ordern und auf gruen
 
-    $ustprf = $this->app->DB->Select("SELECT id FROM ustprf WHERE DATE_FORMAT(datum_online,'%Y-%m-%d')=DATE_FORMAT(NOW(),'%Y-%m-%d') AND adresse='$adresse' AND status='erfolgreich' LIMIT 1");
+    $ustprf = $this->app->DatabaseService->selectValue("SELECT id FROM ustprf WHERE DATE_FORMAT(datum_online,'%Y-%m-%d') = DATE_FORMAT(NOW(),'%Y-%m-%d') AND adresse = :adresse AND status = 'erfolgreich' LIMIT 1", ['adresse' => (int) $adresse]);
     $ustid = '';
     $ust_befreit = '';
     $land = '';
-    $auftragarr = $this->app->DB->SelectRow("SELECT * FROM auftrag WHERE id='$auftrag' LIMIT 1");
+    $auftragarr = $this->app->DatabaseService->selectRow("SELECT * FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     if (!empty($auftragarr)) {
       $ustid = $auftragarr['ustid'];
       $ust_befreit = $auftragarr['ust_befreit'];
@@ -12326,13 +12386,12 @@ title: 'Abschicken',
     }
 
     if ($auftragarr['ust_ok'] != 1 && ($ust_befreit == 0 || ($ust_befreit == 1 && $ustid == ''))) {
-      $this->app->DB->Update("UPDATE auftrag SET ust_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET ust_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
 
     // Porto Check
     // sind versandkosten im auftrag
-    $porto = $this->app->DB->Select("SELECT ap.id FROM auftrag_position ap, artikel a WHERE ap.auftrag='$auftrag' AND ap.artikel=a.id AND a.porto=1 AND ap.preis >= 0
-        AND a.id=ap.artikel LIMIT 1");
+    $porto = $this->app->DatabaseService->selectValue("SELECT ap.id FROM auftrag_position ap, artikel a WHERE ap.auftrag = :auftrag AND ap.artikel = a.id AND a.porto = 1 AND ap.preis >= 0 AND a.id = ap.artikel LIMIT 1", ['auftrag' => (int) $auftrag]);
     $keinporto = 0;
     $selbstabholer = '';
     $projekt = 0;
@@ -12343,8 +12402,7 @@ title: 'Abschicken',
       $projekt = $auftragarr['projekt'];
 
       // portocheck bei projekt
-      $checkkeinportocheck = $this->app->DB->Select("SELECT keinportocheck FROM versandarten WHERE type = '" . $this->app->DB->real_escape_string($auftragarr['versandart']) . "' AND
-        (projekt = '$projekt' OR projekt = 0) ORDER BY projekt = '$projekt' DESC LIMIT 1");
+      $checkkeinportocheck = $this->app->DatabaseService->selectValue("SELECT keinportocheck FROM versandarten WHERE type = :type AND (projekt = :projekt OR projekt = 0) ORDER BY projekt = :projekt2 DESC LIMIT 1", ['type' => $auftragarr['versandart'], 'projekt' => (int) $projekt, 'projekt2' => (int) $projekt]);
 
 
     }
@@ -12355,26 +12413,26 @@ title: 'Abschicken',
 
     if ($projektportocheck == 1) {
       if ($porto > 0) {
-        $this->app->DB->Update("UPDATE auftrag SET porto_ok='1' WHERE id='$auftrag' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE auftrag SET porto_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
       } else {
-        $portoFreeLimit = (double) $this->app->DB->Select("SELECT portofreiab FROM adresse WHERE id={$adresse} LIMIT 1");
+        $portoFreeLimit = (double) $this->app->DatabaseService->selectValue("SELECT portofreiab FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $adresse]);
         $parcelValue = (double) $auftragarr['gesamtsumme'];
 
         if (!empty($portoFreeLimit) && !empty($parcelValue) && $parcelValue > $portoFreeLimit) {
-          $this->app->DB->Update("UPDATE auftrag SET porto_ok='1' WHERE id='$auftrag' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE auftrag SET porto_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
         } else {
-          $this->app->DB->Update("UPDATE auftrag SET porto_ok='0' WHERE id='$auftrag' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE auftrag SET porto_ok = 0 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
         }
       }
     } else {
       //projekt hat kein portocheck porto ist immer ok
-      $this->app->DB->Update("UPDATE auftrag SET porto_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET porto_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
 
 
 
     if ($keinporto == 1 || $selbstabholer == 'selbstabholer') {
-      $this->app->DB->Update("UPDATE auftrag SET porto_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET porto_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
       //$this->app->DB->Update("UPDATE auftrag_position ap, artikel a SET ap.preis='0' WHERE ap.auftrag='$auftrag' AND a.id=ap.artikel AND a.porto='1'");
     }
 
@@ -12393,7 +12451,7 @@ title: 'Abschicken',
     $zahlungsweise = strtolower($zahlungsweise);
 
     // Check behaviour
-    $zahlungsweisenmodule = $this->app->DB->SelectArr("SELECT id, modul, verhalten FROM zahlungsweisen WHERE type = '" . $this->app->DB->real_escape_string($zahlungsweise) . "' AND (projekt = '$projekt' OR projekt = 0) ORDER BY projekt = '$projekt' DESC LIMIT 1");
+    $zahlungsweisenmodule = $this->app->DatabaseService->select("SELECT id, modul, verhalten FROM zahlungsweisen WHERE type = :type AND (projekt = :projekt OR projekt = 0) ORDER BY projekt = :projekt2 DESC LIMIT 1", ['type' => $zahlungsweise, 'projekt' => (int) $projekt, 'projekt2' => (int) $projekt]);
     if (!empty($zahlungsweisenmodule)) {
       if ($zahlungsweisenmodule[0]['verhalten'] == 'vorkasse') {
         $auftrag_ist_vorkasse = true;
@@ -12417,22 +12475,21 @@ title: 'Abschicken',
       $vorkasse_ok = '1';
     }
 
-    $this->app->DB->Update("UPDATE auftrag SET vorkasse_ok='$vorkasse_ok' WHERE id='$auftrag'");
+    $this->app->DatabaseService->execute("UPDATE auftrag SET vorkasse_ok = :vorkasse_ok WHERE id = :id", ['vorkasse_ok' => $vorkasse_ok, 'id' => (int) $auftrag]);
 
     //nachnahme gebuehr check!!!!
     //$nachnahme = $this->app->DB->Select("SELECT id FROM auftrag_position WHERE auftrag='$auftrag' AND nummer='200001' LIMIT 1");
-    $nachnahme = $this->app->DB->Select("SELECT COUNT(ap.id) FROM auftrag_position ap, artikel a WHERE ap.auftrag='$auftrag' AND ap.artikel=a.id AND a.porto=1 AND ap.preis >= 0
-      AND a.id=ap.artikel");
+    $nachnahme = $this->app->DatabaseService->selectValue("SELECT COUNT(ap.id) FROM auftrag_position ap, artikel a WHERE ap.auftrag = :auftrag AND ap.artikel = a.id AND a.porto = 1 AND ap.preis >= 0 AND a.id = ap.artikel", ['auftrag' => (int) $auftrag]);
 
     if ($zahlungsweise == "nachnahme" && $nachnahme < 2 && $projektnachnahmecheck == 1) {
-      $this->app->DB->Update("UPDATE auftrag SET nachnahme_ok='0' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET nachnahme_ok = 0 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     } else {
-      $this->app->DB->Update("UPDATE auftrag SET nachnahme_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET nachnahme_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
 
-    $lieferungtrotzsperre = $this->app->DB->Select("SELECT lieferungtrotzsperre FROM auftrag WHERE id='$auftrag' LIMIT 1");
+    $lieferungtrotzsperre = $this->app->DatabaseService->selectValue("SELECT lieferungtrotzsperre FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     if ($lieferungtrotzsperre == 1) {
-      $this->app->DB->Update("UPDATE auftrag SET liefersperre_ok='1' WHERE id='$auftrag' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET liefersperre_ok = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
     }
   }
 
@@ -12458,7 +12515,7 @@ title: 'Abschicken',
     if ($adresse <= 0) {
       return true;
     }
-    $kreditlimit = $this->app->DB->Select("SELECT kreditlimit FROM adresse WHERE id='$adresse' LIMIT 1");
+    $kreditlimit = $this->app->DatabaseService->selectValue("SELECT kreditlimit FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $adresse]);
     if ($kreditlimit <= 0) {
       return true;
     }
@@ -12509,7 +12566,7 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(id,' ',name) FROM adresse WHERE id='$id' AND geloescht=0 LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(id,' ',name) FROM adresse WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
@@ -12520,7 +12577,7 @@ title: 'Abschicken',
       $tmp = trim($value);
       $rest = explode(" ", $tmp);
       $rest = $rest[0];
-      $id = $this->app->DB->Select("SELECT id FROM adresse WHERE id='$rest' AND geloescht=0 LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => (int) $rest]);
       if ($id <= 0)
         $id = 0;
     }
@@ -12543,7 +12600,7 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(mitarbeiternummer,' ',name) FROM adresse WHERE id='$id' AND geloescht=0 LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(mitarbeiternummer,' ',name) FROM adresse WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
@@ -12554,7 +12611,7 @@ title: 'Abschicken',
       $tmp = trim($value);
       $rest = explode(" ", $tmp);
       $rest = $rest[0];
-      $id = $this->app->DB->Select("SELECT id FROM adresse WHERE mitarbeiternummer='$rest' AND mitarbeiternummer!='' AND geloescht=0 LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE mitarbeiternummer = :nr AND mitarbeiternummer != '' AND geloescht = 0 LIMIT 1", ['nr' => $rest]);
       if ($id <= 0)
         $id = 0;
 
@@ -12577,7 +12634,7 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(id,' ',bezeichnung) as name FROM gruppen_kategorien WHERE id='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(id,' ',bezeichnung) as name FROM gruppen_kategorien WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
@@ -12588,7 +12645,7 @@ title: 'Abschicken',
       $tmp = trim($value);
       $rest = explode(" ", $tmp);
       $rest = (int) $rest[0];
-      $id = $this->app->DB->Select("SELECT id FROM gruppen_kategorien WHERE id='$rest' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM gruppen_kategorien WHERE id = :id LIMIT 1", ['id' => (int) $rest]);
       if ($id <= 0)
         $id = 0;
     }
@@ -12608,7 +12665,7 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(g.kennziffer,' ',g.name) as name FROM gruppen g WHERE id='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(g.kennziffer,' ',g.name) as name FROM gruppen g WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
@@ -12622,11 +12679,10 @@ title: 'Abschicken',
       $tmp = trim($value);
       $rest = explode(" ", $tmp);
       $rest = $rest[0];
-      $id = $this->app->DB->Select("SELECT id 
-        FROM gruppen AS g 
-        WHERE (CONCAT(g.kennziffer,' ',g.name)='$value' OR g.kennziffer = '$rest') AND 
-              (g.name!='' OR g.kennziffer != '') AND g.art = 'preisgruppe' AND g.aktiv=1 
-        LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM gruppen AS g WHERE (CONCAT(g.kennziffer,' ',g.name) = :value OR g.kennziffer = :rest) AND (g.name != '' OR g.kennziffer != '') AND g.art = 'preisgruppe' AND g.aktiv = 1 LIMIT 1",
+        ['value' => $value, 'rest' => $rest]
+      );
       if ($id <= 0)
         $id = 0;
     }
@@ -12648,7 +12704,7 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(nummer,' ',name_de) as name FROM artikel WHERE id='$id' AND geloescht=0 LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(nummer,' ',name_de) as name FROM artikel WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
@@ -12661,7 +12717,7 @@ title: 'Abschicken',
       $tmp = trim($value);
       $rest = explode(" ", $tmp);
       $rest = $rest[0];
-      $id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$rest' AND nummer!='' AND geloescht=0 LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer AND nummer != '' AND geloescht = 0 LIMIT 1", ['nummer' => $rest]);
       if ($id <= 0)
         $id = 0;
     }
@@ -12948,14 +13004,14 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT kurzbezeichnung FROM lager_platz WHERE id ='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT kurzbezeichnung FROM lager_platz WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
     } else {
       $dbformat = 0;
       $abkuerzung = $value;
-      $id = $this->app->DB->Select("SELECT id FROM lager_platz WHERE kurzbezeichnung LIKE '$value' AND kurzbezeichnung!='' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM lager_platz WHERE kurzbezeichnung LIKE :value AND kurzbezeichnung != '' LIMIT 1", ['value' => $value]);
       if ($id <= 0)
         $id = 0;
     }
@@ -12978,14 +13034,14 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT bezeichnung FROM lager WHERE id ='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM lager WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
     } else {
       $dbformat = 0;
       $abkuerzung = $value;
-      $id = $this->app->DB->Select("SELECT id FROM lager WHERE bezeichnung LIKE '$value' AND bezeichnung!='' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM lager WHERE bezeichnung LIKE :value AND bezeichnung != '' LIMIT 1", ['value' => $value]);
       if ($id <= 0)
         $id = 0;
     }
@@ -13009,14 +13065,14 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT bezeichnung FROM konten WHERE id ='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM konten WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
     } else {
       $dbformat = 0;
       $abkuerzung = $value;
-      $id = $this->app->DB->Select("SELECT id FROM konten WHERE bezeichnung LIKE '$value' AND bezeichnung!='' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM konten WHERE bezeichnung LIKE :value AND bezeichnung != '' LIMIT 1", ['value' => $value]);
       if ($id <= 0)
         $id = 0;
     }
@@ -13040,14 +13096,14 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(nummer,' ',beschreibung) FROM kostenstelle WHERE nummer='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(nummer,' ',beschreibung) FROM kostenstelle WHERE nummer = :nummer LIMIT 1", ['nummer' => $id]);
       } else {
         $abkuerzung = '';
       }
     } else {
       $dbformat = 0;
       $abkuerzung = $value;
-      $id = $this->app->DB->Select("SELECT nummer FROM kostenstelle WHERE CONCAT(nummer,' ',beschreibung)='$value' AND CONCAT(nummer,' ',beschreibung)!='' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT nummer FROM kostenstelle WHERE CONCAT(nummer,' ',beschreibung) = :value AND CONCAT(nummer,' ',beschreibung) != '' LIMIT 1", ['value' => $value]);
       if ($id <= 0)
         $id = 0;
     }
@@ -13071,14 +13127,14 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(name,' ',kennziffer) as name FROM gruppen WHERE id='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(name,' ',kennziffer) as name FROM gruppen WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
     } else {
       $dbformat = 0;
       $abkuerzung = $value;
-      $id = $this->app->DB->Select("SELECT id FROM gruppen WHERE CONCAT(name,' ',kennziffer)='$value' OR (kennziffer='$value' AND kennziffer!='') LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM gruppen WHERE CONCAT(name,' ',kennziffer) = :value OR (kennziffer = :kennziffer AND kennziffer != '') LIMIT 1", ['value' => $value, 'kennziffer' => $value]);
       if ($id <= 0)
         $id = 0;
     }
@@ -13102,7 +13158,7 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(id,' ',kurzbezeichnung,' (',name,')') FROM wiedervorlage_stages WHERE id='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(id,' ',kurzbezeichnung,' (',name,')') FROM wiedervorlage_stages WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
@@ -13112,7 +13168,7 @@ title: 'Abschicken',
       $rest = explode(" ", $tmp);
       $rest = $rest[0];
 
-      $id = $this->app->DB->Select("SELECT id FROM wiedervorlage_stages WHERE id='$rest' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM wiedervorlage_stages WHERE id = :id LIMIT 1", ['id' => (int) $rest]);
       if ($value == '')
         $id = 0;
     }
@@ -13136,7 +13192,7 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(a.id,' ',p.abkuerzung,' ',a.aufgabe) FROM arbeitspaket a LEFT JOIN projekt p ON a.projekt=p.id WHERE a.id='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(a.id,' ',p.abkuerzung,' ',a.aufgabe) FROM arbeitspaket a LEFT JOIN projekt p ON a.projekt = p.id WHERE a.id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
@@ -13146,7 +13202,7 @@ title: 'Abschicken',
       $rest = explode(" ", $tmp);
       $rest = $rest[0];
 
-      $id = $this->app->DB->Select("SELECT id FROM arbeitspaket WHERE id='$rest' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM arbeitspaket WHERE id = :id LIMIT 1", ['id' => (int) $rest]);
       if ($value == '')
         $id = 0;
     }
@@ -13169,18 +13225,18 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(abkuerzung,' ',name) FROM projekt WHERE id='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(abkuerzung,' ',name) FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
     } else {
       $dbformat = 0;
       $abkuerzung = $value;
-      $id = $this->app->DB->Select("SELECT id FROM projekt WHERE CONCAT(abkuerzung,' ',name)='$value' AND abkuerzung!='' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE CONCAT(abkuerzung,' ',name) = :value AND abkuerzung != '' LIMIT 1", ['value' => $value]);
       if ($id != '') {
         $value = explode(' ', $value);
         $value = reset($value);
-        $id = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='$value' AND abkuerzung!='' LIMIT 1");
+        $id = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :value AND abkuerzung != '' LIMIT 1", ['value' => $value]);
       }
       if ($value == '')
         $id = 0;
@@ -13204,14 +13260,14 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT CONCAT(abkuerzung,' ',name) FROM projekt WHERE id='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT CONCAT(abkuerzung,' ',name) FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
     } else {
       $dbformat = 0;
       $abkuerzung = $value;
-      $id = $this->app->DB->Select("SELECT id FROM projekt WHERE CONCAT(abkuerzung,' ',name)='$value' AND abkuerzung!='' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE CONCAT(abkuerzung,' ',name) = :value AND abkuerzung != '' LIMIT 1", ['value' => $value]);
       if ($value == '')
         $id = 0;
     }
@@ -13235,14 +13291,14 @@ title: 'Abschicken',
       $dbformat = 1;
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='$id' LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
     } else {
       $dbformat = 0;
       $abkuerzung = $value;
-      $id = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='$value' AND abkuerzung!='' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :value AND abkuerzung != '' LIMIT 1", ['value' => $value]);
       if ($value == '')
         $id = 0;
     }
@@ -13265,7 +13321,7 @@ title: 'Abschicken',
     if (!$fromform) { // wenn es eine id ist!
       $id = $value;
       if ($id > 0) {
-        $abkuerzung = $this->app->DB->Select("SELECT lieferantennummer as name FROM adresse WHERE id='$id' AND geloescht=0 LIMIT 1");
+        $abkuerzung = $this->app->DatabaseService->selectValue("SELECT lieferantennummer as name FROM adresse WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => (int) $id]);
       } else {
         $abkuerzung = '';
       }
@@ -20055,12 +20111,12 @@ $( this ).dialog( "close" );
   {
     $lagerplatz_name = trim($lagerplatz_name);
     // pruefe ob es Lagerplatz bereits gibt
-    $check_id = $this->app->DB->Select("SELECT id FROM lager_platz WHERE kurzbezeichnung='$lagerplatz_name' AND lager='$lager' LIMIT 1");
+    $check_id = $this->app->DatabaseService->selectValue("SELECT id FROM lager_platz WHERE kurzbezeichnung=:name AND lager=:lager LIMIT 1", ['name' => $lagerplatz_name, 'lager' => $lager]);
 
     if ($check_id <= 0) {
       if ($firma <= 0)
         $firma = 1;
-      $this->app->DB->Insert("INSERT INTO lager_platz (id,lager,kurzbezeichnung,firma) VALUES ('','$lager','$lagerplatz_name',$firma)");
+      $this->app->DatabaseService->execute("INSERT INTO lager_platz (id,lager,kurzbezeichnung,firma) VALUES ('', :lager, :name, :firma)", ['lager' => $lager, 'name' => $lagerplatz_name, 'firma' => $firma]);
       $check_id = $this->app->DB->GetInsertID();
     }
     return $check_id;
@@ -20072,13 +20128,13 @@ $( this ).dialog( "close" );
 
     if (is_numeric($lager) && $lager > 0) {
       $lager = $lager + 0;
-      $lager = $this->app->DB->Select("SELECT id FROM lager_platz WHERE id='$lager' LIMIT 1");
+      $lager = $this->app->DatabaseService->selectValue("SELECT id FROM lager_platz WHERE id=:lager LIMIT 1", ['lager' => $lager]);
       if ($lager > 0)
         return $lager;
     }
 
     if ($lager != "") {
-      $id = $this->app->DB->Select("SELECT id FROM lager_platz WHERE kurzbezeichnung='$lager' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM lager_platz WHERE kurzbezeichnung=:name LIMIT 1", ['name' => $lager]);
       return $id;
     } else
       return "";
@@ -20086,7 +20142,7 @@ $( this ).dialog( "close" );
 
   function IsArtikelInZwischenlager($artikel)
   {
-    $check = $this->app->DB->Select("SELECT id FROM zwischenlager WHERE richtung='Eingang' AND artikel='$artikel' LIMIT 1");
+    $check = $this->app->DatabaseService->selectValue("SELECT id FROM zwischenlager WHERE richtung='Eingang' AND artikel=:artikel LIMIT 1", ['artikel' => $artikel]);
     return $check > 0;
   }
 
@@ -30002,8 +30058,10 @@ $( this ).dialog( "close" );
 
   function ZeitSollDatumArbeit($adresse, $datum)
   {
-    $erg = $this->app->DB->Select('SELECT stunden FROM mitarbeiterzeiterfassung_sollstunden WHERE datum = "' . $datum . '"
-          AND adresse = "' . $adresse . '" LIMIT 1');
+    $erg = $this->app->DatabaseService->selectValue(
+      'SELECT stunden FROM mitarbeiterzeiterfassung_sollstunden WHERE datum = :datum AND adresse = :adresse LIMIT 1',
+      [':datum' => $datum, ':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30035,24 +30093,28 @@ $( this ).dialog( "close" );
 
   function ZeitGesamtDatumArbeitAbrechnen($adresse, $datum)
   {
-    $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Arbeit'
-          AND DATE_FORMAT(z.von,'%Y-%m-%d')='$datum' AND z.adresse='$adresse' AND z.abrechnen=1";
-
-    $erg = $this->app->DB->Select($sql);
+    $erg = $this->app->DatabaseService->selectValue(
+      "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Arbeit'
+          AND DATE_FORMAT(z.von,'%Y-%m-%d') = :datum AND z.adresse = :adresse AND z.abrechnen = 1",
+      [':datum' => $datum, ':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
   }
   function ZeitGesamtAufgabe($id, $adresse = 0)
   {
-
     if ($adresse <= 0) {
-      $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Arbeit' AND z.aufgabe_id='$id'";
+      $erg = $this->app->DatabaseService->selectValue(
+        "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Arbeit' AND z.aufgabe_id = :id",
+        [':id' => $id]
+      );
     } else {
-      $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Arbeit' AND z.aufgabe_id='$id' AND z.adresse='$adresse'";
+      $erg = $this->app->DatabaseService->selectValue(
+        "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Arbeit' AND z.aufgabe_id = :id AND z.adresse = :adresse",
+        [':id' => $id, ':adresse' => $adresse]
+      );
     }
-
-    $erg = $this->app->DB->Select($sql);
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30063,10 +30125,11 @@ $( this ).dialog( "close" );
 
   function ZeitGesamtDatumArbeit($adresse, $datum)
   {
-    $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
-          AND DATE_FORMAT(z.von,'%Y-%m-%d')='$datum' AND z.adresse='$adresse'";
-
-    $erg = $this->app->DB->Select($sql);
+    $erg = $this->app->DatabaseService->selectValue(
+      "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
+          AND DATE_FORMAT(z.von,'%Y-%m-%d') = :datum AND z.adresse = :adresse",
+      [':datum' => $datum, ':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30074,10 +30137,11 @@ $( this ).dialog( "close" );
 
   function ZeitGesamtHeuteArbeit($adresse)
   {
-    $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
-          AND DATE_FORMAT(z.von,'%Y-%m-%d')=DATE_FORMAT(NOW(),'%Y-%m-%d') AND z.adresse='$adresse'";
-
-    $erg = $this->app->DB->Select($sql);
+    $erg = $this->app->DatabaseService->selectValue(
+      "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
+          AND DATE_FORMAT(z.von,'%Y-%m-%d') = DATE_FORMAT(NOW(),'%Y-%m-%d') AND z.adresse = :adresse",
+      [':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30085,10 +30149,11 @@ $( this ).dialog( "close" );
 
   function ZeitGesamtArbeit($adresse, $datum)
   {
-    $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
-          AND DATE_FORMAT(z.von,'%Y-%m-%d')=DATE_FORMAT('$datum','%Y-%m-%d') AND z.adresse='$adresse'";
-
-    $erg = $this->app->DB->Select($sql);
+    $erg = $this->app->DatabaseService->selectValue(
+      "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
+          AND DATE_FORMAT(z.von,'%Y-%m-%d') = DATE_FORMAT(:datum,'%Y-%m-%d') AND z.adresse = :adresse",
+      [':datum' => $datum, ':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30097,10 +30162,11 @@ $( this ).dialog( "close" );
 
   function ZeitGesamtDatumPause($adresse, $datum)
   {
-    $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Pause'
-          AND DATE_FORMAT(z.von,'%Y-%m-%d')='$datum' AND z.adresse='$adresse'";
-
-    $erg = $this->app->DB->Select($sql);
+    $erg = $this->app->DatabaseService->selectValue(
+      "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Pause'
+          AND DATE_FORMAT(z.von,'%Y-%m-%d') = :datum AND z.adresse = :adresse",
+      [':datum' => $datum, ':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30109,10 +30175,11 @@ $( this ).dialog( "close" );
 
   function ZeitGesamtHeutePause($adresse)
   {
-    $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Pause'
-          AND DATE_FORMAT(z.von,'%Y-%m-%d')=DATE_FORMAT(NOW(),'%Y-%m-%d') AND z.adresse='$adresse'";
-
-    $erg = $this->app->DB->Select($sql);
+    $erg = $this->app->DatabaseService->selectValue(
+      "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Pause'
+          AND DATE_FORMAT(z.von,'%Y-%m-%d') = DATE_FORMAT(NOW(),'%Y-%m-%d') AND z.adresse = :adresse",
+      [':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30120,10 +30187,11 @@ $( this ).dialog( "close" );
 
   function ZeitGesamtPause($adresse, $datum)
   {
-    $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Pause'
-          AND DATE_FORMAT(z.von,'%Y-%m-%d')=DATE_FORMAT('$datum','%Y-%m-%d') AND z.adresse='$adresse'";
-
-    $erg = $this->app->DB->Select($sql);
+    $erg = $this->app->DatabaseService->selectValue(
+      "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art LIKE 'Pause'
+          AND DATE_FORMAT(z.von,'%Y-%m-%d') = DATE_FORMAT(:datum,'%Y-%m-%d') AND z.adresse = :adresse",
+      [':datum' => $datum, ':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30134,8 +30202,8 @@ $( this ).dialog( "close" );
   function ZeitGesamtWocheIst($adresse, $jahr = "", $kw = "", $datum = "")
   {
     if ($datum != "") {
-      $jahr = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%Y')");
-      $kw = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%u')");
+      $jahr = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%Y')", [':datum' => $datum]);
+      $kw = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%u')", [':datum' => $datum]);
     }
 
     if ($jahr == "")
@@ -30144,11 +30212,13 @@ $( this ).dialog( "close" );
       $kw = date('W');
 
     $kw = str_pad($kw, 2, "0", STR_PAD_LEFT);
+    $jahrKw = $jahr . "-" . $kw;
 
-    $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
-          AND DATE_FORMAT(z.von,'%Y-%v')='" . $jahr . "-" . $kw . "' AND z.adresse='$adresse'";
-
-    $erg = $this->app->DB->Select($sql);
+    $erg = $this->app->DatabaseService->selectValue(
+      "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
+          AND DATE_FORMAT(z.von,'%Y-%v') = :jahrKw AND z.adresse = :adresse",
+      [':jahrKw' => $jahrKw, ':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30157,8 +30227,8 @@ $( this ).dialog( "close" );
   function ZeitGesamtMonatIst($adresse, $jahr = "", $monat = "", $datum = "")
   {
     if ($datum != "") {
-      $jahr = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%Y')");
-      $monat = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%m')");
+      $jahr = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%Y')", [':datum' => $datum]);
+      $monat = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%m')", [':datum' => $datum]);
     }
 
     if ($jahr == "")
@@ -30167,11 +30237,13 @@ $( this ).dialog( "close" );
       $monat = date('m');
 
     $monat = str_pad($monat, 2, "0", STR_PAD_LEFT);
+    $jahrMonat = $jahr . "-" . $monat;
 
-    $sql = "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
-          AND DATE_FORMAT(z.von,'%Y-%m')='" . $jahr . "-" . $monat . "' AND z.adresse='$adresse'";
-
-    $erg = $this->app->DB->Select($sql);
+    $erg = $this->app->DatabaseService->selectValue(
+      "SELECT SUM((TIMESTAMPDIFF(SECOND,z.von, z.bis))/3600) FROM `zeiterfassung` z WHERE z.art NOT LIKE 'Pause'
+          AND DATE_FORMAT(z.von,'%Y-%m') = :jahrMonat AND z.adresse = :adresse",
+      [':jahrMonat' => $jahrMonat, ':adresse' => $adresse]
+    );
     if ($erg <= 0)
       $erg = 0;
     return $erg;
@@ -30392,14 +30464,14 @@ $( this ).dialog( "close" );
       }
 
 
-      $stundenprowoche = $this->app->DB->Select("SELECT stundenprowoche FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $ueberstundentoleranz = $this->app->DB->Select("SELECT ueberstundentoleranz FROM zeiterfassung_stundenuebersicht_jahre wHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $urlaubimjahr = $this->app->DB->Select("SELECT urlaubimjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $stundenprowoche = $this->app->DatabaseService->selectValue("SELECT stundenprowoche FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $ueberstundentoleranz = $this->app->DatabaseService->selectValue("SELECT ueberstundentoleranz FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $urlaubimjahr = $this->app->DatabaseService->selectValue("SELECT urlaubimjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
-      $restueberstunden = $this->app->DB->Select("SELECT ueberstundenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $restueberstunden = $this->app->DatabaseService->selectValue("SELECT ueberstundenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
-      $resturlaub = $this->app->DB->Select("SELECT urlaubvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $restnotiz = $this->app->DB->Select("SELECT notizenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $resturlaub = $this->app->DatabaseService->selectValue("SELECT urlaubvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $restnotiz = $this->app->DatabaseService->selectValue("SELECT notizenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
       if ($stundenprowoche == "") {
         $stundenprowoche = 0;
@@ -30434,7 +30506,7 @@ $( this ).dialog( "close" );
       $this->app->Tpl->Set("RESTURLAUB", $resturlaub);
       $this->app->Tpl->Set("RESTNOTIZ", $restnotiz);
 
-      $gesamtsummesoll = $this->app->DB->Select("SELECT SUM(soll) FROM zeiterfassung_stundenuebersicht WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $gesamtsummesoll = $this->app->DatabaseService->selectValue("SELECT SUM(soll) FROM zeiterfassung_stundenuebersicht WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
       $eingeloest = 0;
       for ($i = 1; $i < 13; $i++) {
@@ -30455,7 +30527,7 @@ $( this ).dialog( "close" );
 
         if ($gesamtsummesoll != 0) {
           //SOLL
-          $asoll2[$i] = $this->app->DB->Select("SELECT soll FROM zeiterfassung_stundenuebersicht WHERE adresse = \"$adresse\" AND monat = \"$i\" AND jahr = \"$jahr\"");
+          $asoll2[$i] = $this->app->DatabaseService->selectValue("SELECT soll FROM zeiterfassung_stundenuebersicht WHERE adresse = :adresse AND monat = :monat AND jahr = :jahr", [':adresse' => $adresse, ':monat' => $i, ':jahr' => $jahr]);
           $asoll2[$i] = number_format($asoll2[$i], 2, '.', '');
         } else {
           if ($stundenprowoche != "") {
@@ -30469,15 +30541,15 @@ $( this ).dialog( "close" );
         }
 
         //EINGELÖSTE ÜBERSTUNDEN
-        $aueberstunden2[$i] = $this->app->DB->Select("SELECT ueberstunden_eingeloest FROM zeiterfassung_stundenuebersicht WHERE adresse = \"$adresse\" AND monat = \"$i\" AND jahr = \"$jahr\"");
+        $aueberstunden2[$i] = $this->app->DatabaseService->selectValue("SELECT ueberstunden_eingeloest FROM zeiterfassung_stundenuebersicht WHERE adresse = :adresse AND monat = :monat AND jahr = :jahr", [':adresse' => $adresse, ':monat' => $i, ':jahr' => $jahr]);
         $aueberstunden2[$i] = number_format($aueberstunden2[$i], 2, '.', '');
 
         //EINGELÖSTER URLAUB
-        $aurlaub2[$i] = $this->app->DB->Select("SELECT urlaub_eingeloest FROM zeiterfassung_stundenuebersicht WHERE adresse = \"$adresse\" AND monat = \"$i\" AND jahr = \"$jahr\"");
+        $aurlaub2[$i] = $this->app->DatabaseService->selectValue("SELECT urlaub_eingeloest FROM zeiterfassung_stundenuebersicht WHERE adresse = :adresse AND monat = :monat AND jahr = :jahr", [':adresse' => $adresse, ':monat' => $i, ':jahr' => $jahr]);
         $aurlaub2[$i] = number_format($aurlaub2[$i], 2, '.', '');
         $eingeloest += $aurlaub2[$i];
         //NOTIZEN
-        $anotizen2[$i] = $this->app->DB->Select("SELECT notizen FROM zeiterfassung_stundenuebersicht WHERE adresse = \"$adresse\" AND monat = \"$i\" AND jahr = \"$jahr\"");
+        $anotizen2[$i] = $this->app->DatabaseService->selectValue("SELECT notizen FROM zeiterfassung_stundenuebersicht WHERE adresse = :adresse AND monat = :monat AND jahr = :jahr", [':adresse' => $adresse, ':monat' => $i, ':jahr' => $jahr]);
 
 
         if ($aist2[$i] == 0) {
@@ -30544,25 +30616,25 @@ $( this ).dialog( "close" );
   function ZeitGesamtMonatSoll($adresse, $jahr = "", $monat = "", $datum = "")
   {
     if ($datum != "") {
-      $jahr = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%Y')");
-      $monat = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%m')");
+      $jahr = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%Y')", [':datum' => $datum]);
+      $monat = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%m')", [':datum' => $datum]);
     }
-    if ($this->ModulVorhanden('mitarbeiterzeiterfassung') && $this->app->DB->Select("SELECT id FROM mitarbeiterzeiterfassung_einstellungen WHERE adresse = '$adresse' LIMIT 1")) {
+    if ($this->ModulVorhanden('mitarbeiterzeiterfassung') && $this->app->DatabaseService->selectValue("SELECT id FROM mitarbeiterzeiterfassung_einstellungen WHERE adresse = :adresse LIMIT 1", [':adresse' => $adresse])) {
       if (!$jahr || !$monat) {
-        $urlaubkrankheitsstunden = (float) $this->app->DB->Select("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE  adresse = '$adresse' AND month(datum) = month(now()) and year(datum) = year(now()) AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))");
+        $urlaubkrankheitsstunden = (float) $this->app->DatabaseService->selectValue("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND month(datum) = month(now()) and year(datum) = year(now()) AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))", [':adresse' => $adresse]);
 
-        $urlaubkrankheitsstunden += (float) $this->app->DB->Select("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
+        $urlaubkrankheitsstunden += (float) $this->app->DatabaseService->selectValue("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
           INNER JOIN (SELECT distinct datum FROM arbeitsfreietage) a ON a.datum = ms.datum
-          WHERE  ms.adresse = '$adresse' AND month(ms.datum) = month(now()) and year(ms.datum) = year(now()) AND NOT (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))");
-        $mitarbeiterzeiterfassung_sollstunden = $this->app->DB->Select("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND month(datum) = month(now()) and year(datum) = year(now())");
+          WHERE ms.adresse = :adresse AND month(ms.datum) = month(now()) and year(ms.datum) = year(now()) AND NOT (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))", [':adresse' => $adresse]);
+        $mitarbeiterzeiterfassung_sollstunden = $this->app->DatabaseService->selectValue("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND month(datum) = month(now()) and year(datum) = year(now())", [':adresse' => $adresse]);
         if ($mitarbeiterzeiterfassung_sollstunden)
           return $mitarbeiterzeiterfassung_sollstunden - $urlaubkrankheitsstunden;
       } else {
-        $urlaubkrankheitsstunden = (float) $this->app->DB->Select("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND month(datum) = $monat and year(datum) = $jahr AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))");
-        $urlaubkrankheitsstunden += (float) $this->app->DB->Select("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
+        $urlaubkrankheitsstunden = (float) $this->app->DatabaseService->selectValue("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND month(datum) = :monat and year(datum) = :jahr AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))", [':adresse' => $adresse, ':monat' => $monat, ':jahr' => $jahr]);
+        $urlaubkrankheitsstunden += (float) $this->app->DatabaseService->selectValue("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
           INNER JOIN (SELECT distinct datum FROM arbeitsfreietage) a ON a.datum = ms.datum
-          WHERE  ms.adresse = '$adresse' AND month(ms.datum) = $monat and year(ms.datum) = $jahr AND NOT (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))");
-        $mitarbeiterzeiterfassung_sollstunden = $this->app->DB->Select("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND month(datum) = $monat and year(datum) = $jahr");
+          WHERE ms.adresse = :adresse AND month(ms.datum) = :monat and year(ms.datum) = :jahr AND NOT (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))", [':adresse' => $adresse, ':monat' => $monat, ':jahr' => $jahr]);
+        $mitarbeiterzeiterfassung_sollstunden = $this->app->DatabaseService->selectValue("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND month(datum) = :monat and year(datum) = :jahr", [':adresse' => $adresse, ':monat' => $monat, ':jahr' => $jahr]);
         if ($mitarbeiterzeiterfassung_sollstunden)
           return $mitarbeiterzeiterfassung_sollstunden - $urlaubkrankheitsstunden;
       }
@@ -30571,14 +30643,14 @@ $( this ).dialog( "close" );
         $monat = date('m', strtotime($datum));
         $jahr = date('Y', strtotime($datum));
       }
-      $stundenprowoche = $this->app->DB->Select("SELECT stundenprowoche FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $ueberstundentoleranz = $this->app->DB->Select("SELECT ueberstundentoleranz FROM zeiterfassung_stundenuebersicht_jahre wHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $urlaubimjahr = $this->app->DB->Select("SELECT urlaubimjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $stundenprowoche = $this->app->DatabaseService->selectValue("SELECT stundenprowoche FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $ueberstundentoleranz = $this->app->DatabaseService->selectValue("SELECT ueberstundentoleranz FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $urlaubimjahr = $this->app->DatabaseService->selectValue("SELECT urlaubimjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
-      $restueberstunden = $this->app->DB->Select("SELECT ueberstundenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $restueberstunden = $this->app->DatabaseService->selectValue("SELECT ueberstundenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
-      $resturlaub = $this->app->DB->Select("SELECT urlaubvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $restnotiz = $this->app->DB->Select("SELECT notizenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $resturlaub = $this->app->DatabaseService->selectValue("SELECT urlaubvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $restnotiz = $this->app->DatabaseService->selectValue("SELECT notizenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
       if ($stundenprowoche == "") {
         $stundenprowoche = 0;
@@ -30605,10 +30677,10 @@ $( this ).dialog( "close" );
       if ($stundenprowoche <= 0 && $stundenausadresse > 0)
         $stundenprowoche = $stundenausadresse;
 
-      $gesamtsummesoll = $this->app->DB->Select("SELECT SUM(soll) FROM zeiterfassung_stundenuebersicht WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $gesamtsummesoll = $this->app->DatabaseService->selectValue("SELECT SUM(soll) FROM zeiterfassung_stundenuebersicht WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
       if ($gesamtsummesoll != 0) {
-        $asoll2 = $this->app->DB->Select("SELECT soll FROM zeiterfassung_stundenuebersicht WHERE adresse = \"$adresse\" AND monat = \"$monat\" AND jahr = \"$jahr\"");
+        $asoll2 = $this->app->DatabaseService->selectValue("SELECT soll FROM zeiterfassung_stundenuebersicht WHERE adresse = :adresse AND monat = :monat AND jahr = :jahr", [':adresse' => $adresse, ':monat' => $monat, ':jahr' => $jahr]);
         return number_format($asoll2, 2, '.', '');
       }
       if ($stundenprowoche != "") {
@@ -30623,24 +30695,24 @@ $( this ).dialog( "close" );
   function GetArbeitszeitTag($adresse, $datum = "")
   {
     if ($datum != "") {
-      $jahr = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%Y')");
-      $kw = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%u')");
+      $jahr = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%Y')", [':datum' => $datum]);
+      $kw = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%u')", [':datum' => $datum]);
     }
     if ($this->ModulVorhanden('mitarbeiterzeiterfassung')) {
       if ($datum != "") {
-        $urlaubkrankheitsstunden = (float) $this->app->DB->Select("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND datum = '$datum' AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))");
-        $urlaubkrankheitsstunden += (float) $this->app->DB->Select("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
+        $urlaubkrankheitsstunden = (float) $this->app->DatabaseService->selectValue("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND datum = :datum AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))", [':adresse' => $adresse, ':datum' => $datum]);
+        $urlaubkrankheitsstunden += (float) $this->app->DatabaseService->selectValue("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
           INNER JOIN (SELECT distinct datum FROM arbeitsfreietage) a ON a.datum = ms.datum
-          WHERE ms.adresse = '$adresse' AND datum='$datum' AND not (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))");
-        $mitarbeiterzeiterfassung_sollstunden = $this->app->DB->Select("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND datum='$datum'");
+          WHERE ms.adresse = :adresse AND ms.datum = :datum AND not (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))", [':adresse' => $adresse, ':datum' => $datum]);
+        $mitarbeiterzeiterfassung_sollstunden = $this->app->DatabaseService->selectValue("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND datum = :datum", [':adresse' => $adresse, ':datum' => $datum]);
         if ($mitarbeiterzeiterfassung_sollstunden)
           return $mitarbeiterzeiterfassung_sollstunden - $urlaubkrankheitsstunden;
       } else {
-        $urlaubkrankheitsstunden = (float) $this->app->DB->Select("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND datum='$datum' AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))");
-        $urlaubkrankheitsstunden += (float) $this->app->DB->Select("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
+        $urlaubkrankheitsstunden = (float) $this->app->DatabaseService->selectValue("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND datum = :datum AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))", [':adresse' => $adresse, ':datum' => $datum]);
+        $urlaubkrankheitsstunden += (float) $this->app->DatabaseService->selectValue("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
           INNER JOIN (SELECT distinct datum FROM arbeitsfreietage) a ON a.datum = ms.datum
-          WHERE ms.adresse = '$adresse' AND datum='$datum' AND not (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))");
-        $mitarbeiterzeiterfassung_sollstunden = $this->app->DB->Select("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND datum='$datum'");
+          WHERE ms.adresse = :adresse AND ms.datum = :datum AND not (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))", [':adresse' => $adresse, ':datum' => $datum]);
+        $mitarbeiterzeiterfassung_sollstunden = $this->app->DatabaseService->selectValue("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND datum = :datum", [':adresse' => $adresse, ':datum' => $datum]);
         if ($mitarbeiterzeiterfassung_sollstunden)
           return $mitarbeiterzeiterfassung_sollstunden - $urlaubkrankheitsstunden;
       }
@@ -30651,14 +30723,14 @@ $( this ).dialog( "close" );
       }
 
 
-      $stundenprowoche = $this->app->DB->Select("SELECT stundenprowoche/5 FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $ueberstundentoleranz = $this->app->DB->Select("SELECT ueberstundentoleranz FROM zeiterfassung_stundenuebersicht_jahre wHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $urlaubimjahr = $this->app->DB->Select("SELECT urlaubimjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $stundenprowoche = $this->app->DatabaseService->selectValue("SELECT stundenprowoche/5 FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $ueberstundentoleranz = $this->app->DatabaseService->selectValue("SELECT ueberstundentoleranz FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $urlaubimjahr = $this->app->DatabaseService->selectValue("SELECT urlaubimjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
-      $restueberstunden = $this->app->DB->Select("SELECT ueberstundenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $restueberstunden = $this->app->DatabaseService->selectValue("SELECT ueberstundenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
-      $resturlaub = $this->app->DB->Select("SELECT urlaubvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $restnotiz = $this->app->DB->Select("SELECT notizenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $resturlaub = $this->app->DatabaseService->selectValue("SELECT urlaubvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $restnotiz = $this->app->DatabaseService->selectValue("SELECT notizenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
       if ($stundenprowoche == "") {
         $stundenprowoche = 0;
@@ -30676,13 +30748,13 @@ $( this ).dialog( "close" );
       if ($resturlaub == "") {
         $resturlaub = 0;
       }
-      $stundenausadresse = $this->app->DB->Select("SELECT arbeitszeitprowoche/5 FROM adresse WHERE id='$adresse' AND id>0");
+      $stundenausadresse = $this->app->DatabaseService->selectValue("SELECT arbeitszeitprowoche/5 FROM adresse WHERE id = :adresse AND id > 0", [':adresse' => $adresse]);
       if ($stundenprowoche <= 0 && $stundenausadresse > 0)
         $stundenprowoche = $stundenausadresse;
       return $stundenprowoche;
     }
 
-    $arbeitszeitprowoche = $this->app->DB->Select("SELECT arbeitszeitprowoche/5 FROM adresse WHERE id='$adresse' LIMIT 1");
+    $arbeitszeitprowoche = $this->app->DatabaseService->selectValue("SELECT arbeitszeitprowoche/5 FROM adresse WHERE id = :adresse LIMIT 1", [':adresse' => $adresse]);
     if ($arbeitszeitprowoche <= 0 || !is_numeric($arbeitszeitprowoche)) {
       return 0;
     }
@@ -30694,24 +30766,24 @@ $( this ).dialog( "close" );
   function GetArbeitszeitWoche($adresse, $jahr, $kw, $datum = "")
   {
     if ($datum != "") {
-      $jahr = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%Y')");
-      $kw = $this->app->DB->Select("SELECT DATE_FORMAT('$datum','%u')");
+      $jahr = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%Y')", [':datum' => $datum]);
+      $kw = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(:datum,'%u')", [':datum' => $datum]);
     }
     if ($this->ModulVorhanden('mitarbeiterzeiterfassung')) {
       if (!$jahr || !$kw) {
-        $urlaubkrankheitsstunden = (float) $this->app->DB->Select("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND week(datum,3) = week(now(),3) and year(datum) = year(now()) AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))");
-        $urlaubkrankheitsstunden += (float) $this->app->DB->Select("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
+        $urlaubkrankheitsstunden = (float) $this->app->DatabaseService->selectValue("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND week(datum,3) = week(now(),3) and year(datum) = year(now()) AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))", [':adresse' => $adresse]);
+        $urlaubkrankheitsstunden += (float) $this->app->DatabaseService->selectValue("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
           INNER JOIN (SELECT distinct datum FROM arbeitsfreietage) a ON a.datum = ms.datum
-          WHERE ms.adresse = '$adresse' AND week(ms.datum,3) = week(now(),3) and year(ms.datum) = year(now()) AND not (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))");
-        $mitarbeiterzeiterfassung_sollstunden = $this->app->DB->Select("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND week(datum,3) = week(now(),3) and year(datum) = year(now())");
+          WHERE ms.adresse = :adresse AND week(ms.datum,3) = week(now(),3) and year(ms.datum) = year(now()) AND not (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))", [':adresse' => $adresse]);
+        $mitarbeiterzeiterfassung_sollstunden = $this->app->DatabaseService->selectValue("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND week(datum,3) = week(now(),3) and year(datum) = year(now())", [':adresse' => $adresse]);
         if ($mitarbeiterzeiterfassung_sollstunden)
           return $mitarbeiterzeiterfassung_sollstunden - $urlaubkrankheitsstunden;
       } else {
-        $urlaubkrankheitsstunden = (float) $this->app->DB->Select("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND week(datum,3) = $kw and year(datum) = $jahr AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))");
-        $urlaubkrankheitsstunden += (float) $this->app->DB->Select("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
+        $urlaubkrankheitsstunden = (float) $this->app->DatabaseService->selectValue("SELECT sum(minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND week(datum,3) = :kw and year(datum) = :jahr AND (instr(kuerzel,'U') OR instr(kuerzel,'K'))", [':adresse' => $adresse, ':kw' => $kw, ':jahr' => $jahr]);
+        $urlaubkrankheitsstunden += (float) $this->app->DatabaseService->selectValue("SELECT sum(ms.minuten)/60 FROM mitarbeiterzeiterfassung_sollstunden ms
           INNER JOIN (SELECT distinct datum FROM arbeitsfreietage) a ON a.datum = ms.datum
-          WHERE ms.adresse = '$adresse' AND week(ms.datum,3) = $kw and year(ms.datum) = $jahr AND not (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))");
-        $mitarbeiterzeiterfassung_sollstunden = $this->app->DB->Select("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = '$adresse' AND week(datum,3) = $kw and year(datum) = $jahr");
+          WHERE ms.adresse = :adresse AND week(ms.datum,3) = :kw and year(ms.datum) = :jahr AND not (instr(ms.kuerzel,'U') OR instr(ms.kuerzel,'K'))", [':adresse' => $adresse, ':kw' => $kw, ':jahr' => $jahr]);
+        $mitarbeiterzeiterfassung_sollstunden = $this->app->DatabaseService->selectValue("SELECT sum(minuten) / 60 as wochenstunden FROM mitarbeiterzeiterfassung_sollstunden WHERE adresse = :adresse AND week(datum,3) = :kw and year(datum) = :jahr", [':adresse' => $adresse, ':kw' => $kw, ':jahr' => $jahr]);
         if ($mitarbeiterzeiterfassung_sollstunden)
           return $mitarbeiterzeiterfassung_sollstunden - $urlaubkrankheitsstunden;
       }
@@ -30722,14 +30794,14 @@ $( this ).dialog( "close" );
       }
 
 
-      $stundenprowoche = $this->app->DB->Select("SELECT stundenprowoche FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $ueberstundentoleranz = $this->app->DB->Select("SELECT ueberstundentoleranz FROM zeiterfassung_stundenuebersicht_jahre wHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $urlaubimjahr = $this->app->DB->Select("SELECT urlaubimjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $stundenprowoche = $this->app->DatabaseService->selectValue("SELECT stundenprowoche FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $ueberstundentoleranz = $this->app->DatabaseService->selectValue("SELECT ueberstundentoleranz FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $urlaubimjahr = $this->app->DatabaseService->selectValue("SELECT urlaubimjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
-      $restueberstunden = $this->app->DB->Select("SELECT ueberstundenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $restueberstunden = $this->app->DatabaseService->selectValue("SELECT ueberstundenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
-      $resturlaub = $this->app->DB->Select("SELECT urlaubvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
-      $restnotiz = $this->app->DB->Select("SELECT notizenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = \"$adresse\" AND jahr = \"$jahr\"");
+      $resturlaub = $this->app->DatabaseService->selectValue("SELECT urlaubvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
+      $restnotiz = $this->app->DatabaseService->selectValue("SELECT notizenvorjahr FROM zeiterfassung_stundenuebersicht_jahre WHERE adresse = :adresse AND jahr = :jahr", [':adresse' => $adresse, ':jahr' => $jahr]);
 
       if ($stundenprowoche == "") {
         $stundenprowoche = 0;
@@ -30756,7 +30828,7 @@ $( this ).dialog( "close" );
       return $stundenprowoche;
     }
 
-    $arbeitszeitprowoche = $this->app->DB->Select("SELECT arbeitszeitprowoche FROM adresse WHERE id='$adresse' LIMIT 1");
+    $arbeitszeitprowoche = $this->app->DatabaseService->selectValue("SELECT arbeitszeitprowoche FROM adresse WHERE id = :adresse LIMIT 1", [':adresse' => $adresse]);
     if ($arbeitszeitprowoche <= 0 || !is_numeric($arbeitszeitprowoche)) {
       return 0;
     }
@@ -30767,8 +30839,9 @@ $( this ).dialog( "close" );
 
   function AddArbeitsnachweisPositionZeiterfassung($arbeitsnachweis, $zid)
   {
-    $tmp = $this->app->DB->SelectArr("SELECT *,DATE_FORMAT(von,'%Y-%m-%d') as datum,DATE_FORMAT(von,'%H:%i') as von,DATE_FORMAT(bis,'%H:%i') as bis FROM zeiterfassung WHERE id='$zid'");
-    $sort = $this->app->DB->Select("SELECT MAX(sort) FROM arbeitsnachweis_position WHERE arbeitsnachweis='$arbeitsnachweis' LIMIT 1");
+    $tmp = $this->app->DatabaseService->selectRow("SELECT *,DATE_FORMAT(von,'%Y-%m-%d') as datum,DATE_FORMAT(von,'%H:%i') as von,DATE_FORMAT(bis,'%H:%i') as bis FROM zeiterfassung WHERE id = :id", [':id' => $zid]);
+    $tmp = $tmp ? [$tmp] : [];
+    $sort = $this->app->DatabaseService->selectValue("SELECT MAX(sort) FROM arbeitsnachweis_position WHERE arbeitsnachweis = :an LIMIT 1", [':an' => $arbeitsnachweis]);
     $sort = $sort + 1;
 
     $adresse = $tmp[0]['adresse']; //mitarbeiter
@@ -30780,11 +30853,16 @@ $( this ).dialog( "close" );
     $von = $tmp[0]['von'];
     $bis = $tmp[0]['bis'];
 
-    $this->app->DB->Insert("INSERT INTO arbeitsnachweis_position (id,arbeitsnachweis,artikel,bezeichnung,beschreibung,ort,arbeitspaket,datum,von,bis,sort,status,projekt,adresse)
-            VALUES ('','$arbeitsnachweis','$artikel','$bezeichnung','$beschreibung','$ort','$arbeitspaket','$datum','$von','$bis','$sort','angelegt','$projekt','$adresse')");
+    $this->app->DatabaseService->insert(
+      "INSERT INTO arbeitsnachweis_position (arbeitsnachweis,artikel,bezeichnung,beschreibung,ort,arbeitspaket,datum,von,bis,sort,status,projekt,adresse) VALUES (:arbeitsnachweis,:artikel,:bezeichnung,:beschreibung,:ort,:arbeitspaket,:datum,:von,:bis,:sort,'angelegt',:projekt,:adresse)",
+      [':arbeitsnachweis' => $arbeitsnachweis, ':artikel' => $artikel, ':bezeichnung' => $bezeichnung, ':beschreibung' => $beschreibung, ':ort' => $ort, ':arbeitspaket' => $arbeitspaket, ':datum' => $datum, ':von' => $von, ':bis' => $bis, ':sort' => $sort, ':projekt' => $projekt, ':adresse' => $adresse]
+    );
     $tmpid = $this->app->DB->GetInsertID();
     //markieren als erledigt
-    $this->app->DB->Update("UPDATE zeiterfassung SET arbeitsnachweis='$arbeitsnachweis',arbeitsnachweispositionid='$tmpid' WHERE id='$zid'");
+    $this->app->DatabaseService->execute(
+      "UPDATE zeiterfassung SET arbeitsnachweis = :arbeitsnachweis, arbeitsnachweispositionid = :tmpid WHERE id = :zid",
+      [':arbeitsnachweis' => $arbeitsnachweis, ':tmpid' => $tmpid, ':zid' => $zid]
+    );
   }
 
 
@@ -30799,9 +30877,9 @@ $( this ).dialog( "close" );
   {
 
     // einmalig immer weg
-    $intervall_tage = $this->app->DB->Select("SELECT intervall_tage FROM aufgabe WHERE id='$id'");
-    $startdatum = $this->app->DB->Select("SELECT abgabe_bis FROM aufgabe WHERE id='$id'");
-    $check = $this->app->DB->Select("SELECT id FROM aufgabe WHERE id='$id' AND ((abgabe_bis <= NOW() AND intervall_tage > 0) OR intervall_tage=0)");
+    $intervall_tage = $this->app->DatabaseService->selectValue("SELECT intervall_tage FROM aufgabe WHERE id = :id", [':id' => $id]);
+    $startdatum = $this->app->DatabaseService->selectValue("SELECT abgabe_bis FROM aufgabe WHERE id = :id", [':id' => $id]);
+    $check = $this->app->DatabaseService->selectValue("SELECT id FROM aufgabe WHERE id = :id AND ((abgabe_bis <= NOW() AND intervall_tage > 0) OR intervall_tage = 0)", [':id' => $id]);
 
     if ($check <= 0)
       return -1;
@@ -30810,30 +30888,30 @@ $( this ).dialog( "close" );
       case 1: //taeglich
         $newaufgabe = $this->CopyAufgabe($id);
         $newstartdatum = date('Y-m-d H:i:s', strtotime("$startdatum +1 days"));
-        $this->app->DB->Update("UPDATE aufgabe SET abgabe_bis='$newstartdatum' WHERE id='$newaufgabe'");
+        $this->app->DatabaseService->execute("UPDATE aufgabe SET abgabe_bis = :datum WHERE id = :id", [':datum' => $newstartdatum, ':id' => $newaufgabe]);
         break;
 
       case 2: //wochen
         $newaufgabe = $this->CopyAufgabe($id);
         $newstartdatum = date('Y-m-d H:i:s', strtotime("$startdatum +7 days"));
-        $this->app->DB->Update("UPDATE aufgabe SET abgabe_bis='$newstartdatum' WHERE id='$newaufgabe'");
+        $this->app->DatabaseService->execute("UPDATE aufgabe SET abgabe_bis = :datum WHERE id = :id", [':datum' => $newstartdatum, ':id' => $newaufgabe]);
         break;
       case 3: //monatlich
         $newaufgabe = $this->CopyAufgabe($id);
         $newstartdatum = date('Y-m-d H:i:s', strtotime("$startdatum +1 month"));
-        $this->app->DB->Update("UPDATE aufgabe SET abgabe_bis='$newstartdatum' WHERE id='$newaufgabe'");
+        $this->app->DatabaseService->execute("UPDATE aufgabe SET abgabe_bis = :datum WHERE id = :id", [':datum' => $newstartdatum, ':id' => $newaufgabe]);
         break;
       case 4: // jaehrlich
         $newaufgabe = $this->CopyAufgabe($id);
         $newstartdatum = date('Y-m-d H:i:s', strtotime("$startdatum +1 year"));
-        $this->app->DB->Update("UPDATE aufgabe SET abgabe_bis='$newstartdatum' WHERE id='$newaufgabe'");
+        $this->app->DatabaseService->execute("UPDATE aufgabe SET abgabe_bis = :datum WHERE id = :id", [':datum' => $newstartdatum, ':id' => $newaufgabe]);
         break;
     }
     // aufgaben kopieren und dann wenn intervall_tage 2 = woechen 3 monatlich 4 jaehrlich
     // alles kopieren 1:1 neue hat mit dem datum von turnus +1 tag + 7 Tage oder monatlich immer wieder dann rein
 
     // ab taeglich kann man nur abschliessen abgabe_bis <= heute ist
-    $this->app->DB->Update("UPDATE aufgabe SET status='abgeschlossen',abgeschlossen_am=NOW() WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->execute("UPDATE aufgabe SET status='abgeschlossen', abgeschlossen_am=NOW() WHERE id = :id LIMIT 1", [':id' => $id]);
     return 1;
   }
 
@@ -30846,7 +30924,7 @@ $( this ).dialog( "close" );
   {
     $projekt = $this->GetCreateProjekt($adresse);
 
-    $standardlager = $this->app->DB->Select("SELECT l.id FROM projekt p INNER JOIN lager l ON p.standardlager = l.id WHERE p.id = '$projekt' LIMIT 1");
+    $standardlager = $this->app->DatabaseService->selectValue("SELECT l.id FROM projekt p INNER JOIN lager l ON p.standardlager = l.id WHERE p.id = :id LIMIT 1", [':id' => $projekt]);
 
     $belegmax = "";
     $ohnebriefpapier = $this->Firmendaten("retoure_ohnebriefpapier");
@@ -30867,7 +30945,7 @@ $( this ).dialog( "close" );
     if (!$id)
       die($this->app->DB->error());
     if ($standardlager)
-      $this->app->DB->Update("UPDATE retoure SET standardlager = '$standardlager' WHERE id = '$id' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE retoure SET standardlager = :lager WHERE id = :id LIMIT 1", [':lager' => $standardlager, ':id' => $id]);
     $type = "retoure";
     $this->app->erp->ObjektProtokoll($type, $id, $type . "_create", ucfirst($type) . " angelegt");
     $this->SchnellFreigabe($type, $id);
@@ -30905,9 +30983,9 @@ $( this ).dialog( "close" );
 
   function DeleteAnfrage($id)
   {
-    $this->app->DB->Delete("DELETE FROM anfrage_position WHERE anfrage='$id'");
-    $this->app->DB->Delete("DELETE FROM anfrage_protokoll WHERE anfrage='$id'");
-    $this->app->DB->Delete("DELETE FROM anfrage WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->execute("DELETE FROM anfrage_position WHERE anfrage = :id", [':id' => $id]);
+    $this->app->DatabaseService->execute("DELETE FROM anfrage_protokoll WHERE anfrage = :id", [':id' => $id]);
+    $this->app->DatabaseService->execute("DELETE FROM anfrage WHERE id = :id LIMIT 1", [':id' => $id]);
   }
 
 
@@ -30923,10 +31001,10 @@ $( this ).dialog( "close" );
 
   function DeleteProformarechnung($id)
   {
-    $this->app->DB->Delete("DELETE FROM proformarechnung_lieferschein WHERE proformarechnung='$id'");
-    $this->app->DB->Delete("DELETE FROM proformarechnung_position WHERE proformarechnung='$id'");
-    $this->app->DB->Delete("DELETE FROM proformarechnung_protokoll WHERE proformarechnung='$id'");
-    $this->app->DB->Delete("DELETE FROM proformarechnung WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->execute("DELETE FROM proformarechnung_lieferschein WHERE proformarechnung = :id", [':id' => $id]);
+    $this->app->DatabaseService->execute("DELETE FROM proformarechnung_position WHERE proformarechnung = :id", [':id' => $id]);
+    $this->app->DatabaseService->execute("DELETE FROM proformarechnung_protokoll WHERE proformarechnung = :id", [':id' => $id]);
+    $this->app->DatabaseService->execute("DELETE FROM proformarechnung WHERE id = :id LIMIT 1", [':id' => $id]);
   }
 
 
@@ -30943,9 +31021,9 @@ $( this ).dialog( "close" );
 
   function DeleteKalkulation($id)
   {
-    $this->app->DB->Delete("DELETE FROM kalkulation_position WHERE kalkulation='$id'");
-    $this->app->DB->Delete("DELETE FROM kalkulation_protokoll WHERE kalkulation='$id'");
-    $this->app->DB->Delete("DELETE FROM kalkulation WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->execute("DELETE FROM kalkulation_position WHERE kalkulation = :id", [':id' => $id]);
+    $this->app->DatabaseService->execute("DELETE FROM kalkulation_protokoll WHERE kalkulation = :id", [':id' => $id]);
+    $this->app->DatabaseService->execute("DELETE FROM kalkulation WHERE id = :id LIMIT 1", [':id' => $id]);
   }
 
 
@@ -30969,9 +31047,9 @@ $( this ).dialog( "close" );
 
   function DeleteRetoure($id)
   {
-    $this->app->DB->Delete("DELETE FROM retoure_position WHERE retoure='$id'");
-    $this->app->DB->Delete("DELETE FROM retoure_protokoll WHERE retoure='$id'");
-    $this->app->DB->Delete("DELETE FROM retoure WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->execute("DELETE FROM retoure_position WHERE retoure = :id", [':id' => $id]);
+    $this->app->DatabaseService->execute("DELETE FROM retoure_protokoll WHERE retoure = :id", [':id' => $id]);
+    $this->app->DatabaseService->execute("DELETE FROM retoure WHERE id = :id LIMIT 1", [':id' => $id]);
   }
 
   function DeleteLieferschein($id)
@@ -30990,7 +31068,7 @@ $( this ).dialog( "close" );
     $belegmax = "";
 
     $projekt = $this->GetCreateProjekt($adresse);
-    $standardlager = $this->app->DB->Select("SELECT standardlager FROM projekt WHERE id = '$projekt' LIMIT 1");
+    $standardlager = $this->app->DatabaseService->selectValue("SELECT standardlager FROM projekt WHERE id = :id LIMIT 1", [':id' => $projekt]);
 
     $firma = $this->app->DB->Select("SELECT MAX(f.id) FROM firma f INNER JOIN firmendaten fd ON f.id = fd.firma LIMIT 1");
     if (!$firma)
@@ -31018,7 +31096,7 @@ $( this ).dialog( "close" );
 
     $id = $this->app->DB->GetInsertID();
     if ($standardlager)
-      $this->app->DB->Update("UPDATE auftrag SET standardlager = '$standardlager' WHERE id = '$id' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE auftrag SET standardlager = :lager WHERE id = :id LIMIT 1", [':lager' => $standardlager, ':id' => $id]);
     $this->CheckVertrieb($id, "auftrag");
     $this->CheckBearbeiter($id, "auftrag");
 
@@ -31044,16 +31122,16 @@ $( this ).dialog( "close" );
 
   function ArtikelIDProjekt($artikelnummer, $projekt = 0)
   {
-    $eigenernummernkreis = $this->app->DB->Select("SELECT eigenernummernkreis FROM projekt WHERE id='$projekt' LIMIT 1");
+    $eigenernummernkreis = $this->app->DatabaseService->selectValue("SELECT eigenernummernkreis FROM projekt WHERE id = :id LIMIT 1", [':id' => $projekt]);
     if ($eigenernummernkreis == "1") {
-      $artikel = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$artikelnummer' AND projekt='$projekt' AND nummer!='' LIMIT 1");
+      $artikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nr AND projekt = :projekt AND nummer != '' LIMIT 1", [':nr' => $artikelnummer, ':projekt' => $projekt]);
       if ($artikel) {
         return $artikel;
       }
-      return $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$artikelnummer' AND projekt='0' AND nummer!='' LIMIT 1");
+      return $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nr AND projekt = '0' AND nummer != '' LIMIT 1", [':nr' => $artikelnummer]);
     }
 
-    return $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$artikelnummer' AND nummer!='' LIMIT 1");
+    return $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nr AND nummer != '' LIMIT 1", [':nr' => $artikelnummer]);
   }
 
   function AddAuftragPositionNummer($auftrag, $nummer, $menge, $projekt, $nullpreis = "", $taxfree = false, $typ = "", $data = null)
@@ -31090,7 +31168,7 @@ $( this ).dialog( "close" );
     $bestellnummer = $artikeldata['nummer'];
     $beschreibung = $artikeldata['anabregs_text'];
 
-    $sprache = $this->app->DB->Select("SELECT sprache FROM $doctype WHERE id='$auftrag' LIMIT 1");
+    $sprache = $this->app->DatabaseService->selectValue("SELECT sprache FROM `$doctype` WHERE id = :id LIMIT 1", [':id' => $auftrag]);
 
     $this->RunHook('AARLGPositionenSprache', 6, $doctype, $auftrag, $artikel, $sprache, $bezeichnunglieferant, $beschreibung);
     $this->app->erp->LogFile("Add $nummer,$menge $artikel $sprache Name: $bezeichnunglieferant");
@@ -31229,31 +31307,31 @@ $( this ).dialog( "close" );
 
   function KopiereArtikelEigenschaften($vonartikel, $nachartikel)
   {
-    $vonartikel = $this->app->DB->Select("SELECT id FROM artikel WHERE geloescht <> 1 AND id = '" . (int) $vonartikel . "' LIMIT 1");
-    $nachartikel = $this->app->DB->Select("SELECT id FROM artikel WHERE geloescht <> 1 AND id = '" . (int) $nachartikel . "' LIMIT 1");
+    $vonartikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE geloescht <> 1 AND id = :id LIMIT 1", [':id' => (int)$vonartikel]);
+    $nachartikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE geloescht <> 1 AND id = :id LIMIT 1", [':id' => (int)$nachartikel]);
     if (!$vonartikel || !$nachartikel || $vonartikel == $nachartikel) {
       return;
     }
-    $artikeleigenschaftenwerte = $this->app->DB->SelectArr("SELECT id FROM artikeleigenschaftenwerte WHERE artikel = '$vonartikel' ORDER by id");
+    $artikeleigenschaftenwerte = $this->app->DatabaseService->select("SELECT id FROM artikeleigenschaftenwerte WHERE artikel = :id ORDER by id", [':id' => $vonartikel]);
     if ($artikeleigenschaftenwerte) {
       foreach ($artikeleigenschaftenwerte as $v) {
         $idnew = $this->app->DB->MysqlCopyRow("artikeleigenschaftenwerte", "id", $v['id']);
-        $this->app->DB->Update("UPDATE artikeleigenschaftenwerte SET artikel = '$nachartikel' WHERE id = '$idnew' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE artikeleigenschaftenwerte SET artikel = :nachartikel WHERE id = :id LIMIT 1", [':nachartikel' => $nachartikel, ':id' => $idnew]);
       }
     }
   }
 
   function KopiereArtikelDateistichwoerter($vonartikel, $nachartikel)
   {
-    $vonartikel = $this->app->DB->Select("SELECT id FROM artikel WHERE geloescht <> 1 AND id = '" . (int) $vonartikel . "' LIMIT 1");
-    $nachartikel = $this->app->DB->Select("SELECT id FROM artikel WHERE geloescht <> 1 AND id = '" . (int) $nachartikel . "' LIMIT 1");
+    $vonartikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE geloescht <> 1 AND id = :id LIMIT 1", [':id' => (int)$vonartikel]);
+    $nachartikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE geloescht <> 1 AND id = :id LIMIT 1", [':id' => (int)$nachartikel]);
     if (!$vonartikel || !$nachartikel || $vonartikel == $nachartikel)
       return;
-    $dateistichwoerter = $this->app->DB->SelectArr("SELECT id FROM datei_stichwoerter WHERE objekt LIKE 'Artikel' AND parameter = '$vonartikel' ORDER by id");
+    $dateistichwoerter = $this->app->DatabaseService->select("SELECT id FROM datei_stichwoerter WHERE objekt LIKE 'Artikel' AND parameter = :id ORDER by id", [':id' => $vonartikel]);
     if ($dateistichwoerter) {
       foreach ($dateistichwoerter as $v) {
         $idnew = $this->app->DB->MysqlCopyRow("datei_stichwoerter", "id", $v['id']);
-        $this->app->DB->Update("UPDATE datei_stichwoerter SET parameter = '$nachartikel' WHERE id = '$idnew' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE datei_stichwoerter SET parameter = :nachartikel WHERE id = :id LIMIT 1", [':nachartikel' => $nachartikel, ':id' => $idnew]);
       }
     }
   }
