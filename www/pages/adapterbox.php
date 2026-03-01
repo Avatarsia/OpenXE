@@ -304,10 +304,11 @@ class Adapterbox extends GenAdapterbox {
 
     if($submit)
     {
-      $this->app->DB->Update("UPDATE adapterbox SET seriennummer='$seriennummer',verwendenals='$verwendenals',bezeichnung='$bezeichnung',model='$model',baudrate='$baudrate' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE adapterbox SET seriennummer=:seriennummer,verwendenals=:verwendenals,bezeichnung=:bezeichnung,model=:model,baudrate=:baudrate WHERE id=:id LIMIT 1",
+        ['seriennummer' => $seriennummer, 'verwendenals' => $verwendenals, 'bezeichnung' => $bezeichnung, 'model' => $model, 'baudrate' => $baudrate, 'id' => $id]);
 
-      $iddrucker = $this->app->DB->Select("SELECT id FROM drucker WHERE adapterboxseriennummer='$seriennummer' AND adapterboxseriennummer!='' AND art=2 LIMIT 1");
-      $idseriennummer = $this->app->DB->Select("SELECT COUNT(id) FROM adapterbox WHERE seriennummer='$seriennummer' AND seriennummer!='' LIMIT 1");
+      $iddrucker = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE adapterboxseriennummer=:seriennummer AND adapterboxseriennummer!='' AND art=2 LIMIT 1", ['seriennummer' => $seriennummer]);
+      $idseriennummer = $this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM adapterbox WHERE seriennummer=:seriennummer AND seriennummer!='' LIMIT 1", ['seriennummer' => $seriennummer]);
 
       //$this->app->Tpl->Set(MESSAGE,"<div class=\"info\">Die Einstellung wurde gespeichert!</div>");
       if($idseriennummer>=2) {
@@ -319,14 +320,15 @@ class Adapterbox extends GenAdapterbox {
         if($iddrucker<=0)
         {
           // pruefe ob es namen schon gibt 
-          $checkname = $this->app->DB->Select("SELECT id FROM drucker WHERE name LIKE '$bezeichnung' LIMIT 1");
+          $checkname = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE name LIKE :bezeichnung LIMIT 1", ['bezeichnung' => $bezeichnung]);
 
           if($checkname <= 0 && $bezeichnung!='' && $seriennummer!='' && $idseriennummer<2)
           {
-            //drucker anlegen  
-            $this->app->DB->Insert("INSERT INTO drucker (id,name,art,adapterboxseriennummer,aktiv,anbindung,firma) VALUES ('','$bezeichnung','2','$seriennummer',1,'adapterbox',1)");
+            //drucker anlegen
+            $this->app->DatabaseService->insert("INSERT INTO drucker (id,name,art,adapterboxseriennummer,aktiv,anbindung,firma) VALUES ('', :bezeichnung, '2', :seriennummer, 1, 'adapterbox', 1)",
+              ['bezeichnung' => $bezeichnung, 'seriennummer' => $seriennummer]);
             $iddrucker = $this->app->DB->GetInsertID();
-            $this->app->DB->Update("UPDATE adapterbox SET bezeichnung='$bezeichnung' WHERE id='$id' LIMIT 1");
+            $this->app->DatabaseService->execute("UPDATE adapterbox SET bezeichnung=:bezeichnung WHERE id=:id LIMIT 1", ['bezeichnung' => $bezeichnung, 'id' => $id]);
           }  else {
             if($checkname > 0)
               $this->app->Tpl->Set('MESSAGE',"<div class=\"error\">Es gibt bereits einen Drucker mit dem gleichen Namen! Bitte w&auml;hlen Sie einen anderen Namen.</div>");
@@ -336,18 +338,18 @@ class Adapterbox extends GenAdapterbox {
         } else {
           if($idseriennummer<2)
           {
-            $this->app->DB->Update("UPDATE drucker SET name='$bezeichnung' WHERE adapterboxseriennummer='$seriennummer' AND adapterboxseriennummer!='' LIMIT 1");
-            $this->app->DB->Update("UPDATE adapterbox SET bezeichnung='$bezeichnung' WHERE id='$id' LIMIT 1");
+            $this->app->DatabaseService->execute("UPDATE drucker SET name=:bezeichnung WHERE adapterboxseriennummer=:seriennummer AND adapterboxseriennummer!='' LIMIT 1", ['bezeichnung' => $bezeichnung, 'seriennummer' => $seriennummer]);
+            $this->app->DatabaseService->execute("UPDATE adapterbox SET bezeichnung=:bezeichnung WHERE id=:id LIMIT 1", ['bezeichnung' => $bezeichnung, 'id' => $id]);
           }
         }
         $standarddrucker = $this->app->erp->Firmendaten('standardetikettendrucker');
-        $checkstandarddrucker = $this->app->DB->Select("SELECT id FROM drucker WHERE id='$standarddrucker' LIMIT 1");
+        $checkstandarddrucker = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE id=:id LIMIT 1", ['id' => $standarddrucker]);
         if($standarddrucker <= 0 || $checkstandarddrucker <=0)
         {
           $this->app->erp->FirmendatenSet('standardetikettendrucker',$iddrucker);
         }
         $standarddrucker = $this->app->erp->Firmendaten('etikettendrucker_wareneingang');
-        $checkstandarddrucker = $this->app->DB->Select("SELECT id FROM drucker WHERE id='$standarddrucker' LIMIT 1");
+        $checkstandarddrucker = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE id=:id LIMIT 1", ['id' => $standarddrucker]);
         if($standarddrucker <= 0 || $checkstandarddrucker <=0)
         {
           $this->app->erp->FirmendatenSet('etikettendrucker_wareneingang',$iddrucker);
@@ -359,13 +361,13 @@ class Adapterbox extends GenAdapterbox {
       // pruefe ob es einen standard etikettendrucker gibt wenn nicht lege ihn an
     }
 
-    $verwendenals = $this->app->DB->Select("SELECT verwendenals FROM adapterbox WHERE id='$id' LIMIT 1");
-    $baudrate = $this->app->DB->Select("SELECT baudrate FROM adapterbox WHERE id='$id' LIMIT 1");
-    $model = $this->app->DB->Select("SELECT model FROM adapterbox WHERE id='$id' LIMIT 1");
+    $verwendenals = $this->app->DatabaseService->selectValue("SELECT verwendenals FROM adapterbox WHERE id=:id LIMIT 1", ['id' => $id]);
+    $baudrate = $this->app->DatabaseService->selectValue("SELECT baudrate FROM adapterbox WHERE id=:id LIMIT 1", ['id' => $id]);
+    $model = $this->app->DatabaseService->selectValue("SELECT model FROM adapterbox WHERE id=:id LIMIT 1", ['id' => $id]);
 
     if($idseriennummer<2)
     {
-      $seriennummer = $this->app->DB->Select("SELECT seriennummer FROM adapterbox WHERE id='$id' LIMIT 1");
+      $seriennummer = $this->app->DatabaseService->selectValue("SELECT seriennummer FROM adapterbox WHERE id=:id LIMIT 1", ['id' => $id]);
     }
     else { 
       $seriennummer='';
@@ -373,14 +375,14 @@ class Adapterbox extends GenAdapterbox {
 
 
     $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Druckerbezeichnung frei vergeben und Seriennummer der Adapterbox eintragen. Dann einmal Speichern drücken und auf den Reiter \"Schritt 4 - Demo\" wechseln. Bzw. auf die <a href=\"index.php?module=adapterbox&action=list\">Übersicht</a> gehen und prüfen ob die Adapterbox vom Status auf \"connected\" wechselt.</div>");
-    $iddrucker = $this->app->DB->Select("SELECT id FROM drucker WHERE adapterboxseriennummer='$seriennummer' AND adapterboxseriennummer!='' AND art=2 LIMIT 1");
+    $iddrucker = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE adapterboxseriennummer=:seriennummer AND adapterboxseriennummer!='' AND art=2 LIMIT 1", ['seriennummer' => $seriennummer]);
     if($iddrucker > 0 && ($verwendenals=='' || $verwendenals==='etikettendrucker'))
     {
-      $name_drucker = $this->app->DB->Select("SELECT name FROM drucker WHERE adapterboxseriennummer='$seriennummer' AND art=2 LIMIT 1");
+      $name_drucker = $this->app->DatabaseService->selectValue("SELECT name FROM drucker WHERE adapterboxseriennummer=:seriennummer AND art=2 LIMIT 1", ['seriennummer' => $seriennummer]);
       //$this->app->Tpl->Add(MESSAGE,"<div class=\"warning\">Nach dem Anstecken kann es ca. 1-2 Minuten dauern bis die ersten Testetiketten aus dem Drucker kommen.</div>");
       $this->app->Tpl->Add('MESSAGE',"<div class=\"info\">Einen <a href=\"index.php?module=adapterbox&action=testdruck&id=$id\">Testdruck</a> (kann das erste Mal einige Sekunden dauern) durchf&uuml;hren oder das <a href=\"index.php?module=drucker&action=edit&id=$iddrucker\" target=\"_blank\">Etikettenformat</a> (Men&uuml;punkt Drucker) einstellen.</div>");
     } else {
-      $name_drucker = $this->app->DB->Select("SELECT bezeichnung FROM adapterbox WHERE id='$id' LIMIT 1");
+      $name_drucker = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM adapterbox WHERE id=:id LIMIT 1", ['id' => $id]);
     }
 
     $options = '';
@@ -538,7 +540,7 @@ class Adapterbox extends GenAdapterbox {
     $id = $this->app->Secure->GetGET('id');
     if(is_numeric($id))
     {
-      $this->app->DB->Delete("DELETE FROM adapterbox WHERE id='$id'");
+      $this->app->DatabaseService->delete("DELETE FROM adapterbox WHERE id=:id", ['id' => $id]);
     }
     //$this->AdapterboxList();
     header('Location: index.php?module=adapterbox&action=list');
@@ -597,7 +599,7 @@ class Adapterbox extends GenAdapterbox {
 
       case 'etikettendrucker':
       $seriennummer = $data['seriennummer'];
-      $druckercode = $this->app->DB->Select("SELECT id FROM drucker WHERE adapterboxseriennummer='$seriennummer' AND adapterboxseriennummer!='' AND art=2 LIMIT 1");
+      $druckercode = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE adapterboxseriennummer=:seriennummer AND adapterboxseriennummer!='' AND art=2 LIMIT 1", ['seriennummer' => $seriennummer]);
       $this->app->erp->EtikettenDrucker("etikettendrucker_einfach",1,"","",array('bezeichnung1'=>'Xentral','bezeichnung2'=>'www.xentral.com'),"",$druckercode);
         $this->app->Tpl->Set('TAB1',"<div class=\"info\">Zum Testen bitte klicken: <input type=\"button\" value=\"Testdruck starten\"
           onclick=\"window.location.href='index.php?module=adapterbox&action=demo&id=$id'\"></div>");  
@@ -612,7 +614,7 @@ class Adapterbox extends GenAdapterbox {
       break;
       case 'bondrucker':
       $seriennummer = $data['seriennummer'];
-      $druckercode = $this->app->DB->Select("SELECT id FROM drucker WHERE adapterboxseriennummer='$seriennummer' AND adapterboxseriennummer!='' AND art=2 LIMIT 1");
+      $druckercode = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE adapterboxseriennummer=:seriennummer AND adapterboxseriennummer!='' AND art=2 LIMIT 1", ['seriennummer' => $seriennummer]);
 
       $printer = new phpprint();
 
@@ -683,7 +685,7 @@ class Adapterbox extends GenAdapterbox {
     $id = (int)$this->app->Secure->GetGET('id');
     $msg = $this->app->erp->base64_url_encode('<div class="info">Der Job wurde gel&ouml;scht!</div>  ');
     if($id > 0){
-      $this->app->DB->Delete("DELETE FROM device_jobs WHERE id='$id'");
+      $this->app->DatabaseService->delete("DELETE FROM device_jobs WHERE id=:id", ['id' => $id]);
     }
     header("Location: index.php?module=adapterbox&action=jobs&msg=$msg");
     exit;
@@ -720,7 +722,7 @@ class Adapterbox extends GenAdapterbox {
   public function AdapterboxDeleteLog()
   {
     $id = $this->app->Secure->GetGET('id');
-    $this->app->DB->Delete("DELETE FROM adapterbox_log WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->delete("DELETE FROM adapterbox_log WHERE id=:id LIMIT 1", ['id' => $id]);
     $msg = $this->app->erp->base64_url_encode('<div class="error2">Der Logeintrag wurde gel&ouml;scht!</div>  ');
     header("Location: index.php?module=adapterbox&action=log&msg=$msg");
     exit;
@@ -731,7 +733,7 @@ class Adapterbox extends GenAdapterbox {
   {
     $id = $this->app->Secure->GetGET('id');
 
-    $seriennummer = $this->app->DB->Select("SELECT seriennummer FROM adapterbox WHERE id='$id' LIMIT 1");
+    $seriennummer = $this->app->DatabaseService->selectValue("SELECT seriennummer FROM adapterbox WHERE id=:id LIMIT 1", ['id' => $id]);
     //$image = $this->app->erp->GetAdapterboxAPIImage($seriennummer,"480","360");
     $image = $this->app->erp->GetAdapterboxAPIImage($seriennummer,'800','600');
     //$image = $this->app->erp->GetAdapterboxAPIImage("999999999","960","720");
@@ -745,8 +747,8 @@ class Adapterbox extends GenAdapterbox {
   {
     $id = $this->app->Secure->GetGET('id');
 
-    $seriennummer = $this->app->DB->Select("SELECT seriennummer FROM adapterbox WHERE id='$id' LIMIT 1");
-    $druckercode = $this->app->DB->Select("SELECT id FROM drucker WHERE adapterboxseriennummer='$seriennummer' AND adapterboxseriennummer!='' AND art=2 LIMIT 1");
+    $seriennummer = $this->app->DatabaseService->selectValue("SELECT seriennummer FROM adapterbox WHERE id=:id LIMIT 1", ['id' => $id]);
+    $druckercode = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE adapterboxseriennummer=:seriennummer AND adapterboxseriennummer!='' AND art=2 LIMIT 1", ['seriennummer' => $seriennummer]);
     $this->app->erp->EtikettenDrucker('etikettendrucker_einfach',1,'','',array('bezeichnung1'=>'Xentral','bezeichnung2'=>'www.xentral.biz'),'',$druckercode);
     header('Location: index.php?module=adapterbox&action=endgeraet&id='.$id);
     exit;

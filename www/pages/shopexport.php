@@ -69,7 +69,7 @@ class Shopexport
     $this->app->erp->Headlines('Navigation');
     $this->ShopexportMenu();
 
-    $url = $this->app->DB->Select("SELECT url FROM shopexport WHERE id='$id' LIMIT 1");
+    $url = $this->app->DatabaseService->selectValue("SELECT url FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->Tpl->Set('ID',$id);
     $this->app->Tpl->Set('URL',$url);
 
@@ -178,16 +178,17 @@ class Shopexport
     // Edit
     if(is_numeric($edit)) {
       if(!empty($submit) && is_numeric($shop)) {
-        $this->app->DB->Update("UPDATE artikelgruppen SET bezeichnung='$bezeichnung', 
-            bezeichnung_en='$bezeichnung_en', 
-            beschreibung_de='$beschreibung_de', 
-            beschreibung_en='$beschreibung_en', 
-            shop='$shop', aktiv='$aktiv' WHERE id='$edit' LIMIT 1");
+        $this->app->DatabaseService->execute(
+          "UPDATE artikelgruppen SET bezeichnung = :bezeichnung, bezeichnung_en = :bezeichnung_en, beschreibung_de = :beschreibung_de, beschreibung_en = :beschreibung_en, shop = :shop, aktiv = :aktiv WHERE id = :edit LIMIT 1",
+          ['bezeichnung' => $bezeichnung, 'bezeichnung_en' => $bezeichnung_en, 'beschreibung_de' => $beschreibung_de, 'beschreibung_en' => $beschreibung_en, 'shop' => (int)$shop, 'aktiv' => $aktiv, 'edit' => (int)$edit]
+        );
         $this->app->Location->execute('index.php?module=shopexport&action=artikelgruppen&id='.$shop.'#tabs-1');
       }
 
-      $data = $this->app->DB->SelectArr("SELECT bezeichnung, bezeichnung_en, beschreibung_de, beschreibung_en, aktiv
-          FROM artikelgruppen WHERE id='$edit' LIMIT 1");		
+      $data = $this->app->DatabaseService->select(
+        "SELECT bezeichnung, bezeichnung_en, beschreibung_de, beschreibung_en, aktiv FROM artikelgruppen WHERE id = :edit LIMIT 1",
+        ['edit' => (int)$edit]
+      );
       if(is_array($data)) {
         $this->app->Tpl->Set('BEZEICHNUNG', $data[0]['bezeichnung']);
         $this->app->Tpl->Set('BESCHREIBUNG_DE', $data[0]['beschreibung_de']);
@@ -197,14 +198,17 @@ class Shopexport
       }
     }else{
       if(!empty($submit) && is_numeric($shop)) {
-        $this->app->DB->Insert("INSERT INTO artikelgruppen (bezeichnung, bezeichnung_en, beschreibung_de,beschreibung_en, shop, aktiv) VALUES ('$bezeichnung', '$bezeichnung_en','$beschreibung_de','$beschreibung_en','$shop', '$aktiv')");
+        $this->app->DatabaseService->execute(
+          "INSERT INTO artikelgruppen (bezeichnung, bezeichnung_en, beschreibung_de, beschreibung_en, shop, aktiv) VALUES (:bezeichnung, :bezeichnung_en, :beschreibung_de, :beschreibung_en, :shop, :aktiv)",
+          ['bezeichnung' => $bezeichnung, 'bezeichnung_en' => $bezeichnung_en, 'beschreibung_de' => $beschreibung_de, 'beschreibung_en' => $beschreibung_en, 'shop' => (int)$shop, 'aktiv' => $aktiv]
+        );
         $this->app->Location->execute('index.php?module=shopexport&action=artikelgruppen&id='.$shop.'#tabs-1');
       }
     }
 
     // Delete
     if(is_numeric($delete)) {
-      $this->app->DB->Delete("DELETE FROM artikelgruppen WHERE id='$delete' LIMIT 1");
+      $this->app->DatabaseService->execute("DELETE FROM artikelgruppen WHERE id = :delete LIMIT 1", ['delete' => (int)$delete]);
       $this->app->Location->execute('index.php?module=shopexport&action=artikelgruppen&id='.$shop);
     }
 
@@ -264,7 +268,7 @@ class Shopexport
     //$this->app->erp->MenuEintrag("index.php?module=shopexport&action=export&id=$id","Export");
     $this->app->erp->MenuEintrag('index.php?module=onlineshops&action=artikellist&id='.$id,'Artikelliste');
     $this->app->erp->MenuEintrag("index.php?module=shopexport&action=artikeluebertragung&id=$id","Artikel &Uuml;bertragung");
-    if($this->app->DB->Select("SELECT modulename FROM shopexport WHERE id = '$id'") === 'shopimporter_shopware'){
+    if($this->app->DatabaseService->selectValue("SELECT modulename FROM shopexport WHERE id = :id", ['id' => (int)$id]) === 'shopimporter_shopware'){
       //Soll nur in Shopware angezeigt werden, da nur in Shopware unterstüzt
       $this->app->erp->MenuEintrag("index.php?module=shopexport&action=adressuebertragung&id=$id","Adressen &Uuml;bertragung");
     }
@@ -286,8 +290,8 @@ class Shopexport
   {
     $id = $this->app->Secure->GetGET('id');
 
-    $url = $this->app->DB->Select("SELECT url FROM shopexport WHERE id='$id' LIMIT 1");
-    $typ = $this->app->DB->Select("SELECT typ FROM shopexport WHERE id='$id' LIMIT 1");
+    $url = $this->app->DatabaseService->selectValue("SELECT url FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $typ = $this->app->DatabaseService->selectValue("SELECT typ FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
 
     if($typ==='wawision') {
@@ -338,14 +342,17 @@ class Shopexport
         $this->app->Tpl->Set('SCHRITT2','');
         $this->app->Tpl->Set('HIDDENSCHRITT2',"<input type=\"hidden\" name=\"schritt1_check\" value=\"1\">");
         if($anzargs > 1 && is_array($pageContents2)) {
-          $json = $this->app->DB->Select("SELECT json FROM shopexport WHERE id = '$id' LIMIT 1");
+          $json = $this->app->DatabaseService->selectValue("SELECT json FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$id]);
           if($json)
           {
             $json = array_merge(json_decode($json, true), $pageContents2);
           }else{
             $json = $pageContents2;
           }
-          $this->app->DB->Update("UPDATE shopexport set json = '".$this->app->DB->real_escape_string(json_encode($json))."' WHERE id = '$id' LIMIT 1");
+          $this->app->DatabaseService->execute(
+            "UPDATE shopexport SET json = :json WHERE id = :id LIMIT 1",
+            ['json' => json_encode($json), 'id' => (int)$id]
+          );
           unset($json);
           $this->app->Tpl->Set('STATUS',"<div class=\"info\">");
           if(isset($pageContents2['subshops']))
@@ -372,7 +379,7 @@ class Shopexport
     }
 
     if($this->app->Secure->GetPOST('schritt2')!='' && $this->app->Secure->GetPOST('schritt1_check')=='1') {
-      $projekt = $this->app->DB->Select("SELECT projekt FROM shopexport WHERE id='$id' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
       $this->app->erp->UpdateChecksumShopartikel($projekt);
 
@@ -396,7 +403,7 @@ class Shopexport
          else if ($projekt=="2") $checkmasterarray = $this->app->DB->SelectArr("SELECT id,checksum FROM artikel WHERE shop='2' AND projekt='$projekt' AND geloescht='0'");
          else if ($projekt=="4") $checkmasterarray = $this->app->DB->SelectArr("SELECT id,checksum FROM artikel WHERE shop='3' AND projekt='$projekt' AND geloescht='0'");
        */
-      $checkmasterarray = $this->app->DB->SelectArr("SELECT id,checksum FROM artikel WHERE shop='$id' AND geloescht='0'");
+      $checkmasterarray = $this->app->DatabaseService->select("SELECT id,checksum FROM artikel WHERE shop = :id AND geloescht = '0'", ['id' => (int)$id]);
       $html = $html."<tr><td>CMS</td><td><input type=\"checkbox\" name=\"cms\" value=\"1\" checked></td><td>Inhaltsseiten (keine Shop-Artikeltexte)</td>                              
         <td></td><td>(falls vorhanden)</td></tr>";                                                                                                                 
 
@@ -414,10 +421,10 @@ class Shopexport
         if(isset($checkarray) && isset($checkarray[$artikel]) && ($checkarray[$artikel]!=$checksum || $checkarray[$artikel]==""))
         {
           $aenderungen++;
-          $tmp = $this->app->DB->SelectArr("SELECT a.name_de, a.nummer FROM artikel a WHERE a. id='$artikel' LIMIT 1");
+          $tmp = $this->app->DatabaseService->select("SELECT a.name_de, a.nummer FROM artikel a WHERE a.id = :artikel LIMIT 1", ['artikel' => (int)$artikel]);
           if($tmp)
           {
-            $tmp[0]['logdatei'] = $this->app->DB->Select("SELECT logdatei FROM shopexport_artikel WHERE artikel='$artikel' AND shopexport='$id' LIMIT 1");
+            $tmp[0]['logdatei'] = $this->app->DatabaseService->selectValue("SELECT logdatei FROM shopexport_artikel WHERE artikel = :artikel AND shopexport = :shopexport LIMIT 1", ['artikel' => (int)$artikel, 'shopexport' => (int)$id]);
 
             if($tmp[0]['logdatei']=="") $tmp[0]['logdatei']="noch nicht vorhanden";
 
@@ -459,7 +466,7 @@ class Shopexport
       // artikelgruppen update
 
       if($this->app->Secure->GetPOST("cms")=="1") {
-        $cms = $this->app->DB->Select("SELECT cms FROM shopexport WHERE id='$id' LIMIT 1");
+        $cms = $this->app->DatabaseService->selectValue("SELECT cms FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$id]);
         if($cms=='1'){
           $this->app->remote->RemoteSendInhalt($id);
         }
@@ -485,7 +492,10 @@ class Shopexport
       //$dateien = $this->app->DB->SelectArr("SELECT DISTINCT ds.datei FROM datei_stichwoerter ds, datei d WHERE d.id=ds.datei AND (ds.subjekt!='Druckbild') AND (ds.objekt='Artikel'  OR ds.objekt='Kampangen') AND d.firma='".$this->app->User->GetFirma()."'");
 
       if($this->app->Secure->GetPOST("dateienupdate")==1) {
-        $dateien = $this->app->DB->SelectArr("SELECT DISTINCT ds.datei FROM datei_stichwoerter ds, datei d, artikel a WHERE d.id=ds.datei AND (ds.subjekt='Shopbild' OR ds.subjekt='Gruppenbild') AND ((ds.objekt='Artikel' AND ds.parameter=a.id)  OR (ds.objekt='Kampangen' AND ds.parameter='$id')) AND d.firma='".$this->app->User->GetFirma()."' AND a.shop='$id'");
+        $dateien = $this->app->DatabaseService->select(
+          "SELECT DISTINCT ds.datei FROM datei_stichwoerter ds, datei d, artikel a WHERE d.id=ds.datei AND (ds.subjekt='Shopbild' OR ds.subjekt='Gruppenbild') AND ((ds.objekt='Artikel' AND ds.parameter=a.id) OR (ds.objekt='Kampangen' AND ds.parameter=:id1)) AND d.firma=:firma AND a.shop=:id2",
+          ['id1' => (int)$id, 'firma' => $this->app->User->GetFirma(), 'id2' => (int)$id]
+        );
 
         $tmp = $this->app->remote->RemoteGetFileList($id);
 
@@ -498,7 +508,7 @@ class Shopexport
         $cdateien = !empty($dateien)?count($dateien):0;
         for($i=0;$i<$cdateien;$i++) {
           $fid = $dateien[$i]['datei'];
-          $geloescht = $this->app->DB->Select("SELECT geloescht FROM datei WHERE id='$fid' LIMIT 1");
+          $geloescht = $this->app->DatabaseService->selectValue("SELECT geloescht FROM datei WHERE id = :fid LIMIT 1", ['fid' => (int)$fid]);
 
           if(isset($checkarray) && ($checkarray[$fid]!=md5($this->app->erp->GetDatei($fid))) && $geloescht==0) {
             $datei_updates++;
@@ -539,8 +549,10 @@ class Shopexport
       }
       // ende dateien update
 
-      $this->app->DB->Insert("INSERT INTO shopexport_status (id, shopexport, bearbeiter,zeit, bemerkung,befehl)
-          VALUES('','$id','".$this->app->User->GetName()."',NOW(),'','".serialize($artikel)."')");
+      $this->app->DatabaseService->execute(
+        "INSERT INTO shopexport_status (id, shopexport, bearbeiter, zeit, bemerkung, befehl) VALUES('', :shopexport, :bearbeiter, NOW(), '', :befehl)",
+        ['shopexport' => (int)$id, 'bearbeiter' => $this->app->User->GetName(), 'befehl' => serialize($artikel)]
+      );
 
       $this->app->Tpl->Add('STATUS',"<div class=\"info\">Erfolgreiche Updates an ".$tmp_anzahl." Artikeln durchgef&uuml;hrt.</div>");
     }
@@ -556,9 +568,9 @@ class Shopexport
     $id = (int)$this->app->Secure->GetGET('id');
     $shop = (int)$this->app->Secure->GetGET('shop');;
     if($id > 0){
-      $shop = $this->app->DB->Select("SELECT shop FROM shopexport_artikeluebertragen WHERE artikel='$id' AND shop = '$shop' LIMIT 1");
-      $this->app->DB->Delete("DELETE FROM shopexport_artikeluebertragen WHERE artikel='$id' AND shop = '$shop' LIMIT 1");
-      $this->app->DB->Delete("DELETE FROM shopexport_artikeluebertragen_check WHERE artikel='$id' AND shop = '$shop' LIMIT 1");
+      $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM shopexport_artikeluebertragen WHERE artikel = :artikel AND shop = :shop LIMIT 1", ['artikel' => (int)$id, 'shop' => (int)$shop]);
+      $this->app->DatabaseService->execute("DELETE FROM shopexport_artikeluebertragen WHERE artikel = :artikel AND shop = :shop LIMIT 1", ['artikel' => (int)$id, 'shop' => (int)$shop]);
+      $this->app->DatabaseService->execute("DELETE FROM shopexport_artikeluebertragen_check WHERE artikel = :artikel AND shop = :shop LIMIT 1", ['artikel' => (int)$id, 'shop' => (int)$shop]);
     }
     $msg = $this->app->erp->base64_url_encode('<div class="success">Der Artikel wurde aus der &Uuml;bertragung entfernt.</div>');
     $this->app->Location->execute('index.php?module=shopexport&action=artikeluebertragung&id='.$shop.'&msg='.$msg);
@@ -570,8 +582,8 @@ class Shopexport
     $id = (int)$this->app->Secure->GetGET('id');
     $shop = 0;
     if($id > 0){
-      $shop = $this->app->DB->Select("SELECT shop FROM shopexport_adressenuebertragen WHERE id='$id' LIMIT 1");
-      $this->app->DB->Delete("DELETE FROM shopexport_adressenuebertragen WHERE id='$id' LIMIT 1");
+      $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM shopexport_adressenuebertragen WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $this->app->DatabaseService->execute("DELETE FROM shopexport_adressenuebertragen WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     $msg = $this->app->erp->base64_url_encode('<div class="success">Die Adresse wurde aus der &Uuml;bertragung entfernt.</div>');
     $this->app->Location->execute('index.php?module=shopexport&action=adressuebertragung&id='.$shop.'&msg='.$msg);
@@ -687,7 +699,7 @@ class Shopexport
     $artikelexporterlauben = $this->app->Secure->GetPOST('artikelexporterlauben');
 
     if(!empty($artikelexporterlauben)){
-      $this->app->DB->Update("UPDATE shopexport SET artikelexport=1 WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE shopexport SET artikelexport=1 WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
 
     if(!empty($delzerostockcache)) {
@@ -697,9 +709,10 @@ class Shopexport
     if(!empty($delcache)) {
       $anz = 0;
       if($id > 0) {
-        $this->app->DB->Update("UPDATE artikel a 
-        LEFT JOIN (SELECT artikel FROM artikel_onlineshops WHERE shop = '$id' AND aktiv = 1 GROUP BY artikel) oa ON a.id = oa.artikel
-        SET a.cache_lagerplatzinhaltmenge = -999 WHERE (a.shop = '$id' OR a.shop2 = '$id' OR a.shop3 = '$id' OR NOT ISNULL(oa.artikel)) AND a.geloescht = 0");
+        $this->app->DatabaseService->execute(
+          "UPDATE artikel a LEFT JOIN (SELECT artikel FROM artikel_onlineshops WHERE shop = :id AND aktiv = 1 GROUP BY artikel) oa ON a.id = oa.artikel SET a.cache_lagerplatzinhaltmenge = -999 WHERE (a.shop = :id2 OR a.shop2 = :id3 OR a.shop3 = :id4 OR NOT ISNULL(oa.artikel)) AND a.geloescht = 0",
+          ['id' => (int)$id, 'id2' => (int)$id, 'id3' => (int)$id, 'id4' => (int)$id]
+        );
         $anz = $this->app->DB->affected_rows();
         $this->app->erp->LogFile("Lagerzahlencache zurückgesetzt für $anz Artikel, shopid: $id");
       }
@@ -810,8 +823,8 @@ class Shopexport
     }
 
     if(!empty($abbrechen)) {
-      $this->app->DB->Delete("DELETE FROM shopexport_artikeluebertragen WHERE shop='$id'");
-      $this->app->DB->Delete("DELETE FROM shopexport_artikeluebertragen_check WHERE shop='$id'");
+      $this->app->DatabaseService->execute("DELETE FROM shopexport_artikeluebertragen WHERE shop = :id", ['id' => (int)$id]);
+      $this->app->DatabaseService->execute("DELETE FROM shopexport_artikeluebertragen_check WHERE shop = :id", ['id' => (int)$id]);
       $this->resetChangedInfo($id);
       //$this->app->erp-> 'shopexport_artikeluebertragen_check_start_'.$id
       $msg = $this->app->erp->base64_url_encode('<div class="success">Alle aktuellen Artikel wurden aus der &Uuml;bertragung entfernt.</div>');
@@ -820,7 +833,7 @@ class Shopexport
 
     if($kategorieladen != '') {
       if(!empty($bestaetigen)) {
-        $typ = $this->app->DB->Select("SELECT id FROM artikelkategorien WHERE bezeichnung!='' AND bezeichnung='$kategorie' LIMIT 1");
+        $typ = $this->app->DatabaseService->selectValue("SELECT id FROM artikelkategorien WHERE bezeichnung != '' AND bezeichnung = :kategorie LIMIT 1", ['kategorie' => $kategorie]);
         if($typ) {
           $typ .= '_kat';
         }
@@ -829,7 +842,10 @@ class Shopexport
         }
 
         if((String)$typ !== '') {
-          $this->app->DB->Query("INSERT INTO shopexport_artikeluebertragen (artikel, shop) SELECT id as artikel ,'$id' as shop FROM artikel WHERE (geloescht = 0 OR isnull(geloescht)) AND nummer <> 'DEL' AND nummer <> '' AND typ = '$typ'");
+          $this->app->DatabaseService->execute(
+            "INSERT INTO shopexport_artikeluebertragen (artikel, shop) SELECT id as artikel, :id as shop FROM artikel WHERE (geloescht = 0 OR isnull(geloescht)) AND nummer <> 'DEL' AND nummer <> '' AND typ = :typ",
+            ['id' => (int)$id, 'typ' => (string)$typ]
+          );
           $anz = (int)$this->app->DB->affected_rows();
           //$artikelarr = $this->app->DB->SelectArr("SELECT id FROM artikel WHERE (geloescht = 0 OR isnull(geloescht)) AND nummer <> 'DEL' AND nummer <> '' AND typ = '$typ'");
           if($anz > 0) {
@@ -848,11 +864,17 @@ class Shopexport
     
     if($artikelladen!='') {
       if(!empty($bestaetigen)) {
-        $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer!='' AND nummer='$artikel' AND (geloescht = 0 OR isnull(geloescht))  AND nummer <> 'DEL' LIMIT 1");
+        $artikelid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM artikel WHERE nummer != '' AND nummer = :nummer AND (geloescht = 0 OR isnull(geloescht)) AND nummer <> 'DEL' LIMIT 1",
+          ['nummer' => $artikel]
+        );
 
         if($artikelid > 0 && $id > 0)
         {
-          $this->app->DB->Insert("INSERT INTO shopexport_artikeluebertragen (id,shop,artikel) VALUES ('','$id','$artikelid')");
+          $this->app->DatabaseService->execute(
+            "INSERT INTO shopexport_artikeluebertragen (id,shop,artikel) VALUES ('', :shop, :artikel)",
+            ['shop' => (int)$id, 'artikel' => (int)$artikelid]
+          );
 
           $msg = $this->app->erp->base64_url_encode("<div class=\"success\">Der Artikel wurde der &Uuml;bertragung hinzugef&uuml;gt.</div>");
           $this->app->Location->execute("index.php?module=shopexport&action=artikeluebertragung&id=$id&msg=$msg");
@@ -913,7 +935,7 @@ class Shopexport
     }
 
 
-    $exportErlaubt = $this->app->DB->Select("SELECT artikelexport FROM shopexport WHERE id='$id' LIMIT 1");
+    $exportErlaubt = $this->app->DatabaseService->selectValue("SELECT artikelexport FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if(!$exportErlaubt){
       $this->app->Tpl->Set('IMPORTERINFO','<div class="info">');
@@ -964,7 +986,7 @@ class Shopexport
     }
 
     if(!empty($abbrechen)) {
-      $this->app->DB->Delete("DELETE FROM shopexport_adressenuebertragen WHERE shop='$id'");
+      $this->app->DatabaseService->execute("DELETE FROM shopexport_adressenuebertragen WHERE shop = :id", ['id' => (int)$id]);
       $msg = $this->app->erp->base64_url_encode('<div class="success">Alle Adressen wurden aus der &Uuml;bertragung entfernt.</div>');
       $this->app->Location->execute('index.php?module=shopexport&action=adressuebertragung&id='.$id.'&msg='.$msg);
     }
@@ -972,7 +994,7 @@ class Shopexport
     if($gruppeladen!='') {
       if(!empty($bestaetigen) && $gruppe!='') {
         $gruppetmp = explode(' ', $gruppe);
-        $gruppenid = $this->app->DB->Select("SELECT id FROM gruppen WHERE kennziffer='".$gruppetmp[0]."' LIMIT 1");
+        $gruppenid = $this->app->DatabaseService->selectValue("SELECT id FROM gruppen WHERE kennziffer = :kennziffer LIMIT 1", ['kennziffer' => $gruppetmp[0]]);
         if($gruppenid > 0 && $id > 0)
         {
           $this->app->DB->Insert("INSERT INTO shopexport_adressenuebertragen (shop,adresse) SELECT $id, a.id FROM adresse a JOIN adresse_rolle ar ON a.id = ar.adresse WHERE ar.subjekt='Mitglied' AND ar.objekt='Gruppe' AND ar.parameter='$gruppenid' AND a.geloescht <> 1 AND a.kundennummer <> '' AND a.id NOT IN (SELECT adresse FROM shopexport_adressenuebertragen WHERE shop = $id)");
@@ -990,9 +1012,15 @@ class Shopexport
       if(!empty($bestaetigen) && $adresse!=''){
         $adressetmp = explode(' ', $adresse);
         $adressid = $adressetmp[0];
-        $adressid = $this->app->DB->Select("SELECT id FROM adresse WHERE name!='' AND kundennummer!='' AND geloescht<>1 AND id='$adressid' LIMIT 1");
+        $adressid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM adresse WHERE name != '' AND kundennummer != '' AND geloescht <> 1 AND id = :adressid LIMIT 1",
+          ['adressid' => (int)$adressid]
+        );
         if($adressid > 0 && $id > 0) {
-          $this->app->DB->Insert("INSERT INTO shopexport_adressenuebertragen (id,shop,adresse) VALUES ('','$id','$adressid')");
+          $this->app->DatabaseService->execute(
+            "INSERT INTO shopexport_adressenuebertragen (id,shop,adresse) VALUES ('', :shop, :adresse)",
+            ['shop' => (int)$id, 'adresse' => (int)$adressid]
+          );
 
           $msg = $this->app->erp->base64_url_encode("<div class=\"success\">Die Adresse wurde der &Uuml;bertragung hinzugef&uuml;gt.</div>");
           $this->app->Location->execute("index.php?module=shopexport&action=adressuebertragung&id=$id&msg=$msg");

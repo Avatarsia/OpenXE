@@ -763,13 +763,19 @@ class Lager extends GenLager {
 
 
         $lagerplatz = $app->User->GetParameter("lager_bewegung_lagerplatz");
-        $lagerplatzid = $app->DB->Select("SELECT id FROM lager_platz WHERE kurzbezeichnung = '$lagerplatz' AND kurzbezeichnung != '' LIMIT 1");
+        $lagerplatzid = $app->DatabaseService->selectValue(
+          "SELECT id FROM lager_platz WHERE kurzbezeichnung = :kurzbezeichnung AND kurzbezeichnung != '' LIMIT 1",
+          ['kurzbezeichnung' => $lagerplatz]
+        );
 
         $artikel = $app->User->GetParameter("lager_bewegung_artikel");
         $artikeldaten = explode(" ", $artikel, 2);
         $artikelnr = $artikeldaten[0];
         $artikelname = $artikeldaten[1];
-        $artikelid = $app->DB->Select("SELECT id FROM artikel WHERE name_de = '$artikelname' AND name_de != '' AND nummer = '$artikelnr' AND nummer != '' LIMIT 1");
+        $artikelid = $app->DatabaseService->selectValue(
+          "SELECT id FROM artikel WHERE name_de = :name_de AND name_de != '' AND nummer = :nummer AND nummer != '' LIMIT 1",
+          ['name_de' => $artikelname, 'nummer' => $artikelnr]
+        );
 
 
         /*if($lagerplatzid != "" && $artikelid != ""){
@@ -783,18 +789,18 @@ class Lager extends GenLager {
         }*/
 
         if($lagerplatzid != ""){
-          $lagerplatzwhere = " AND i.lager_platz = '$lagerplatzid'";
+          $lagerplatzwhere = " AND i.lager_platz = " . (int)$lagerplatzid;
         }else{
           $lagerplatzwhere = "";
         }
 
         if($artikelid != ""){
-          $artikelwhere = " AND i.artikel = '$artikelid'";
+          $artikelwhere = " AND i.artikel = " . (int)$artikelid;
         }else{
           $artikelwhere = "";
         }
 
-        $where = " i.id > 0 AND p.lager = '$id'".$lagerplatzwhere.$artikelwhere;
+        $where = " i.id > 0 AND p.lager = " . (int)$id . $lagerplatzwhere . $artikelwhere;
 
         $count = "SELECT count(i.id) FROM lager_bewegung i LEFT JOIN lager_platz p ON p.id = i.lager_platz WHERE $where";
 
@@ -842,28 +848,34 @@ class Lager extends GenLager {
         $lager = $app->User->GetParameter("lager_bewegungalle_lager");
 
         $lagerplatz = $app->User->GetParameter("lager_bewegungalle_lagerplatz");
-        $lagerplatzid = $app->DB->Select("SELECT id FROM lager_platz WHERE kurzbezeichnung = '$lagerplatz' AND kurzbezeichnung != '' LIMIT 1");
+        $lagerplatzid = $app->DatabaseService->selectValue(
+          "SELECT id FROM lager_platz WHERE kurzbezeichnung = :kurzbezeichnung AND kurzbezeichnung != '' LIMIT 1",
+          ['kurzbezeichnung' => $lagerplatz]
+        );
 
         $artikel = $app->User->GetParameter("lager_bewegungalle_artikel");
         $artikeldaten = explode(" ", $artikel, 2);
         $artikelnr = $artikeldaten[0];
         $artikelname = $artikeldaten[1];
-        $artikelid = $app->DB->Select("SELECT id FROM artikel WHERE name_de = '$artikelname' AND name_de != '' AND nummer = '$artikelnr' AND nummer != '' LIMIT 1");
+        $artikelid = $app->DatabaseService->selectValue(
+          "SELECT id FROM artikel WHERE name_de = :name_de AND name_de != '' AND nummer = :nummer AND nummer != '' LIMIT 1",
+          ['name_de' => $artikelname, 'nummer' => $artikelnr]
+        );
 
         if($lager != ""){
-          $lagerwhere = " AND l.bezeichnung = '$lager'";
+          $lagerwhere = " AND l.bezeichnung = '" . $app->DB->real_escape_string($lager) . "'";
         }else{
           $lagerwhere = "";
         }
 
         if($lagerplatzid != ""){
-          $lagerplatzwhere = " AND i.lager_platz = '$lagerplatzid'";
+          $lagerplatzwhere = " AND i.lager_platz = " . (int)$lagerplatzid;
         }else{
           $lagerplatzwhere = "";
         }
 
         if($artikelid != ""){
-          $artikelwhere = " AND i.artikel = '$artikelid'";
+          $artikelwhere = " AND i.artikel = " . (int)$artikelid;
         }else{
           $artikelwhere = "";
         }
@@ -904,29 +916,35 @@ class Lager extends GenLager {
         //$groupby = " GROUP BY p.kurzbezeichnung, a.id";
 
         $lagerplatz = $app->User->GetParameter("lager_inhalt_lagerplatz");
-        $lagerplatzid = $app->DB->Select("SELECT id FROM lager_platz WHERE kurzbezeichnung = '$lagerplatz' AND kurzbezeichnung != '' LIMIT 1");
+        $lagerplatzid = $app->DatabaseService->selectValue(
+          "SELECT id FROM lager_platz WHERE kurzbezeichnung = :kurzbezeichnung AND kurzbezeichnung != '' LIMIT 1",
+          ['kurzbezeichnung' => $lagerplatz]
+        );
 
         $artikel = $app->User->GetParameter("lager_inhalt_artikel");
         $artikeldaten = explode(" ", $artikel, 2);
         $artikelnr = $artikeldaten[0];
         $artikelname = $artikeldaten[1];
-        $artikelid = $app->DB->Select("SELECT id FROM artikel WHERE name_de = '$artikelname' AND name_de != '' AND nummer = '$artikelnr' AND nummer != '' LIMIT 1");
+        $artikelid = $app->DatabaseService->selectValue(
+          "SELECT id FROM artikel WHERE name_de = :name_de AND name_de != '' AND nummer = :nummer AND nummer != '' LIMIT 1",
+          ['name_de' => $artikelname, 'nummer' => $artikelnr]
+        );
 
         $lagerid = $app->Secure->GetGET("id");
 
         if($lagerplatzid != ""){
-          $lagerplatzwhere = " AND t.lager_platz = '$lagerplatzid'";
+          $lagerplatzwhere = " AND t.lager_platz = " . (int)$lagerplatzid;
         }else{
           $lagerplatzwhere = "";
         }
 
         if($artikelid != ""){
-          $artikelwhere = " AND t.artikel = '$artikelid'";
+          $artikelwhere = " AND t.artikel = " . (int)$artikelid;
         }else{
           $artikelwhere = "";
         }
 
-        $where = " p.lager = '$lagerid'".$lagerplatzwhere.$artikelwhere;
+        $where = " p.lager = " . (int)$lagerid . $lagerplatzwhere . $artikelwhere;
 
         //$count = "SELECT count(p.kurzbezeichnung) FROM lager_platz p LEFT JOIN lager_platz_inhalt i ON p.id=i.lager_platz LEFT JOIN artikel a ON i.artikel=a.id LEFT JOIN lager_reserviert r ON r.artikel=a.id LEFT JOIN projekt pro ON pro.id=a.projekt WHERE $where";
 
@@ -1170,7 +1188,10 @@ class Lager extends GenLager {
     $nummer = $this->app->Secure->GetPOST('nummer');
     if ($nummer == '' && $id > 0)
     {
-      $lager = $this->app->DB->Select("SELECT bezeichnung FROM lager WHERE id='$id' LIMIT 1");
+      $lager = $this->app->DatabaseService->selectValue(
+        "SELECT bezeichnung FROM lager WHERE id = :id LIMIT 1",
+        ['id' => (int)$id]
+      );
     }
     else
     {
@@ -1553,11 +1574,20 @@ class Lager extends GenLager {
     }
 
 
-    $lager_platz = $this->app->DB->Select("SELECT id FROM lager_platz WHERE kurzbezeichnung='$ziellager' AND kurzbezeichnung!='' LIMIT 1");
+    $lager_platz = $this->app->DatabaseService->selectValue(
+      "SELECT id FROM lager_platz WHERE kurzbezeichnung = :kurzbezeichnung AND kurzbezeichnung != '' LIMIT 1",
+      ['kurzbezeichnung' => $ziellager]
+    );
     if($lager_platz<=0 && $ziellager > 0)
     {
-      $lager_platz = $this->app->DB->Select("SELECT id FROM lager_platz WHERE id='$ziellager' LIMIT 1");
-      $ziellager = $this->app->DB->Select("SELECT kurzbezeichnung FROM lager_platz WHERE id='$lager_platz' LIMIT 1");
+      $lager_platz = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM lager_platz WHERE id = :id LIMIT 1",
+        ['id' => (int)$ziellager]
+      );
+      $ziellager = $this->app->DatabaseService->selectValue(
+        "SELECT kurzbezeichnung FROM lager_platz WHERE id = :id LIMIT 1",
+        ['id' => (int)$lager_platz]
+      );
     }
 
     if($grundreferenz!='') {
@@ -1569,18 +1599,33 @@ class Lager extends GenLager {
 
     if($submit!='')
     {
-      $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$nummer' AND nummer!='' LIMIT 1");
+      $artikelid = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM artikel WHERE nummer = :nummer AND nummer != '' LIMIT 1",
+        ['nummer' => $nummer]
+      );
       if($artikelid <=0)
-        $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='$nummer' AND ean!='' AND geloescht <> 1 LIMIT 1");
+        $artikelid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM artikel WHERE ean = :ean AND ean != '' AND geloescht <> 1 LIMIT 1",
+          ['ean' => $nummer]
+        );
       if($artikelid <=0)
-        $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE herstellernummer='$nummer' AND herstellernummer!='' AND geloescht <> 1 LIMIT 1");
+        $artikelid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM artikel WHERE herstellernummer = :herstellernummer AND herstellernummer != '' AND geloescht <> 1 LIMIT 1",
+          ['herstellernummer' => $nummer]
+        );
 
-      $name_de = $this->app->DB->Select("SELECT CONCAT(nummer,' ',name_de) FROM artikel WHERE id='$artikelid' LIMIT 1");
+      $name_de = $this->app->DatabaseService->selectValue(
+        "SELECT CONCAT(nummer,' ',name_de) FROM artikel WHERE id = :id LIMIT 1",
+        ['id' => (int)$artikelid]
+      );
       //$projekt = $this->app->DB->Select("SELECT projekt FROM artikel WHERE id='$artikelid' LIMIT 1");
 
       if($artikelid > 0 && $lager_platz > 0)
       {
-        $anzahl_artikel = $this->app->DB->Select("SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel='$artikelid'");
+        $anzahl_artikel = $this->app->DatabaseService->selectValue(
+          "SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel = :artikel",
+          ['artikel' => (int)$artikelid]
+        );
         if($anzahl_artikel >= $menge)
         {
           // auslagern bevorzugt aus lager_platz ansonsten von den anderen
@@ -1656,17 +1701,32 @@ class Lager extends GenLager {
 
     if($submit!='')
     {
-      $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$nummer' AND nummer!='' LIMIT 1");
+      $artikelid = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM artikel WHERE nummer = :nummer AND nummer != '' LIMIT 1",
+        ['nummer' => $nummer]
+      );
       if($artikelid <=0)
-        $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='$nummer' AND ean!='' AND geloescht <> 1 LIMIT 1");
+        $artikelid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM artikel WHERE ean = :ean AND ean != '' AND geloescht <> 1 LIMIT 1",
+          ['ean' => $nummer]
+        );
       if($artikelid <=0)
-        $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE herstellernummer='$nummer' AND herstellernummer!='' AND geloescht <> 1 LIMIT 1");
+        $artikelid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM artikel WHERE herstellernummer = :herstellernummer AND herstellernummer != '' AND geloescht <> 1 LIMIT 1",
+          ['herstellernummer' => $nummer]
+        );
 
-      $name_de = $this->app->DB->Select("SELECT CONCAT(nummer,' ',name_de) FROM artikel WHERE id='$artikelid' LIMIT 1");
+      $name_de = $this->app->DatabaseService->selectValue(
+        "SELECT CONCAT(nummer,' ',name_de) FROM artikel WHERE id = :id LIMIT 1",
+        ['id' => (int)$artikelid]
+      );
 
       if($artikelid > 0)
       {
-        $anzahl_artikel = $this->app->DB->Select("SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel='$artikelid'");
+        $anzahl_artikel = $this->app->DatabaseService->selectValue(
+          "SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel = :artikel",
+          ['artikel' => (int)$artikelid]
+        );
         if($anzahl_artikel >= $menge )
         {
           // auslagern bevorzugt aus lager_platz ansonsten von den anderen
@@ -1757,7 +1817,10 @@ class Lager extends GenLager {
   {
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
-      $this->app->DB->Delete("DELETE FROM zwischenlager WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->execute(
+        "DELETE FROM zwischenlager WHERE id = :id LIMIT 1",
+        ['id' => (int)$id]
+      );
     }
     $this->app->Location->execute('index.php?module=lager&action=buchenzwischenlager&top=TGFnZXI=');
   }
@@ -1839,7 +1902,10 @@ class Lager extends GenLager {
   public function LagerArtikelEntfernenReserviert() {
     $reservierung = $this->app->Secure->GetGET('reservierung');
     if (is_numeric($reservierung)) {
-      $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE id='$reservierung'");
+      $this->app->DatabaseService->execute(
+        "DELETE FROM lager_reserviert WHERE id = :id",
+        ['id' => (int)$reservierung]
+      );
     }
     $this->app->Location->execute('index.php?module=lager&action=reservierungen');
   }
@@ -1909,7 +1975,10 @@ class Lager extends GenLager {
     $adresse = trim($adresse);
     $grund = $this->app->Secure->GetPOST('grund');
     $artikelid = $this->app->Secure->GetGET('artikelid');
-    $artikelbeschreibung = $this->app->DB->Select("SELECT CONCAT(nummer,' ',name_de) FROM artikel WHERE id='$artikelid' AND lagerartikel=1 LIMIT 1");
+    $artikelbeschreibung = $this->app->DatabaseService->selectValue(
+      "SELECT CONCAT(nummer,' ',name_de) FROM artikel WHERE id = :id AND lagerartikel = 1 LIMIT 1",
+      ['id' => (int)$artikelid]
+    );
 
     if($back==='artikel' && $artikelid!='')
     {
@@ -1974,11 +2043,17 @@ class Lager extends GenLager {
       $projekt = explode(' ', $projekt);
       $projekt = $projekt[0];
       if(!is_numeric($projekt)) {
-        $projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='$projekt' LIMIT 1");
+        $projekt = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM projekt WHERE abkuerzung = :abkuerzung LIMIT 1",
+          ['abkuerzung' => $projekt]
+        );
       }
       $_SESSION['projekt'] = $projekt;
     } else {
-      $projekt = $this->app->DB->Select("SELECT standardprojekt  FROM firma WHERE id='" . $this->app->User->GetFirma() . "' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue(
+        "SELECT standardprojekt FROM firma WHERE id = :id LIMIT 1",
+        ['id' => (int)$this->app->User->GetFirma()]
+      );
       $_SESSION['projekt'] = $projekt;
     }
 
@@ -2014,7 +2089,10 @@ class Lager extends GenLager {
 
 
     if((String)$regal!=='') {
-      $regal_id = $this->app->DB->Select("SELECT id FROM lager_platz WHERE kurzbezeichnung='$regal' LIMIT 1");
+      $regal_id = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM lager_platz WHERE kurzbezeichnung = :kurzbezeichnung LIMIT 1",
+        ['kurzbezeichnung' => $regal]
+      );
     }
 
     if(is_numeric($regal_id)){
@@ -2043,14 +2121,26 @@ class Lager extends GenLager {
       $alles_komplett++;
     }
 
-    $artikel_tmp = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$nummer' AND nummer!='' AND geloescht!=1 AND lagerartikel=1 LIMIT 1");
-    $ean = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='$nummer' AND ean!='' AND geloescht!=1 AND lagerartikel=1 LIMIT 1");
+    $artikel_tmp = $this->app->DatabaseService->selectValue(
+      "SELECT id FROM artikel WHERE nummer = :nummer AND nummer != '' AND geloescht != 1 AND lagerartikel = 1 LIMIT 1",
+      ['nummer' => $nummer]
+    );
+    $ean = $this->app->DatabaseService->selectValue(
+      "SELECT id FROM artikel WHERE ean = :ean AND ean != '' AND geloescht != 1 AND lagerartikel = 1 LIMIT 1",
+      ['ean' => $nummer]
+    );
     if($artikel_tmp <=0 && $ean > 0)
     {
       $artikel_tmp = $ean;
-      $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$ean' AND lagerartikel=1 LIMIT 1");
+      $nummer = $this->app->DatabaseService->selectValue(
+        "SELECT nummer FROM artikel WHERE id = :id AND lagerartikel = 1 LIMIT 1",
+        ['id' => (int)$ean]
+      );
     }
-    $artikelcheck = $this->app->DB->Select("SELECT id FROM artikel WHERE id='$artikel_tmp' AND lagerartikel=1 LIMIT 1");
+    $artikelcheck = $this->app->DatabaseService->selectValue(
+      "SELECT id FROM artikel WHERE id = :id AND lagerartikel = 1 LIMIT 1",
+      ['id' => (int)$artikel_tmp]
+    );
 
     $artikel_quickcheck = 0;
     if ($submit !='' && ($artikelcheck != $artikel_tmp || $artikel_tmp == '' || $artikel_tmp == 0)) {
@@ -2060,7 +2150,10 @@ class Lager extends GenLager {
     }
 
     // gibts regal
-    $regalcheck = $this->app->DB->Select("SELECT id FROM lager_platz WHERE id='$regal' LIMIT 1");
+    $regalcheck = $this->app->DatabaseService->selectValue(
+      "SELECT id FROM lager_platz WHERE id = :id LIMIT 1",
+      ['id' => (int)$regal]
+    );
     if ($regalcheck != $regal) {
       $grund.= "<li>Regal gibt es nicht!</li>";
       $alles_komplett++;
@@ -2144,16 +2237,31 @@ class Lager extends GenLager {
     }
 
     if ($alles_komplett == 0 && $regal != '') {
-      $artikel = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$nummer' AND geloescht!=1 AND lagerartikel=1 LIMIT 1");
-      $name = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$artikel' AND geloescht!=1 AND lagerartikel=1 LIMIT 1");
-      $einheit = $this->app->DB->Select("SELECT einheit FROM artikel WHERE id='$artikel' AND geloescht!=1 AND lagerartikel=1 LIMIT 1");
+      $artikel = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM artikel WHERE nummer = :nummer AND geloescht != 1 AND lagerartikel = 1 LIMIT 1",
+        ['nummer' => $nummer]
+      );
+      $name = $this->app->DatabaseService->selectValue(
+        "SELECT name_de FROM artikel WHERE id = :id AND geloescht != 1 AND lagerartikel = 1 LIMIT 1",
+        ['id' => (int)$artikel]
+      );
+      $einheit = $this->app->DatabaseService->selectValue(
+        "SELECT einheit FROM artikel WHERE id = :id AND geloescht != 1 AND lagerartikel = 1 LIMIT 1",
+        ['id' => (int)$artikel]
+      );
       // pruefe ob es einen ek fuers projekt gibt sonst meckern!!!
       //echo "buchen entweder aus zwischenlager, prpoduktion oder so";
       if ($woher === 'Zwischenlager') {
         $this->app->erp->LagerEinlagerVomZwischenlager($zwischenlagerid, $menge, $regal, $projekt,$grundreferenz);
 
-        $gesamt = $this->app->DB->Select("SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel='$artikel' AND lager_platz='$regal'");
-        $gesamt_alle = $this->app->DB->Select("SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel='$artikel'");
+        $gesamt = $this->app->DatabaseService->selectValue(
+          "SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel = :artikel AND lager_platz = :lager_platz",
+          ['artikel' => (int)$artikel, 'lager_platz' => (int)$regal]
+        );
+        $gesamt_alle = $this->app->DatabaseService->selectValue(
+          "SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel = :artikel",
+          ['artikel' => (int)$artikel]
+        );
         if(is_float($menge) || is_numeric($menge))
         {
           $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Der Artikel $name wurde $menge mal eingelagert. Anzahl Regal: <b>".(float)$gesamt." $einheit</b>, Anzahl Komplettbestand alle Regale: <b>".(float)$gesamt_alle." $einheit</b></div>");
@@ -2172,8 +2280,14 @@ class Lager extends GenLager {
         //$data['lager_platz_name'] = $this->app->DB->Select("SELECT kurzbezeichnung FROM lager_platz WHERE id='$regal'");
         //$this->app->erp->EtikettenDrucker("artikel_klein",1,'artikel',$artikel,$data);
 
-        $gesamt = $this->app->DB->Select("SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel='$artikel' AND lager_platz='$regal'");
-        $gesamt_alle = $this->app->DB->Select("SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel='$artikel'");
+        $gesamt = $this->app->DatabaseService->selectValue(
+          "SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel = :artikel AND lager_platz = :lager_platz",
+          ['artikel' => (int)$artikel, 'lager_platz' => (int)$regal]
+        );
+        $gesamt_alle = $this->app->DatabaseService->selectValue(
+          "SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel = :artikel",
+          ['artikel' => (int)$artikel]
+        );
         if(is_float($menge) || is_numeric($menge))
         {
           $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Der Artikel $name wurde $menge mal eingelagert. Anzahl Regal: <b>".(float)$gesamt." $einheit</b>, Anzahl Komplettbestand alle Regale: <b>".(float)$gesamt_alle." $einheit</b></div>");
@@ -2958,8 +3072,10 @@ $check_charge=="2" || $check_charge=="1" || $check_mhd=="1")
                 $passende_artikel = $passendArr['artikel'];
                 $passende_menge = $passendArr['menge'];
                 $this->app->DB->Delete("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE id='".$lager_mhd_id[$q]."' LIMIT 1");
-                $this->app->DB->Delete("DELETE FROM lager_charge WHERE charge='".$passende_charge."'
-                    AND lager_platz='$passende_lager_platz' AND artikel='$passende_artikel' LIMIT 1");
+                $this->app->DatabaseService->execute(
+                  "DELETE FROM lager_charge WHERE charge = :charge AND lager_platz = :lager_platz AND artikel = :artikel LIMIT 1",
+                  ['charge' => $passende_charge, 'lager_platz' => (int)$passende_lager_platz, 'artikel' => (int)$passende_artikel]
+                );
                 $this->app->erp->MHDLog($passende_artikel, $passende_lager_platz, 0, $passende_mhd,$passende_menge, 'manuell auslagern', "", 0, $passende_charge,0, $isInterim);
                 // umlagern3
                 if($cmd==='umlagern')

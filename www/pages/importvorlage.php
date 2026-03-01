@@ -984,7 +984,10 @@ class Importvorlage extends GenImportvorlage {
     $upload = $this->app->Secure->GetPOST('upload');
     $selcharsets = array('UTF8'=>'UTF-8','ISO-8859-1'=>'ISO-8859-1','CP850'=>'CP850');
     $sel = '<select id="selcharset">';
-    $charset = $this->app->DB->Select("SELECT charset from importvorlage where id = '$id'");
+    $charset = $this->app->DatabaseService->selectValue(
+      "SELECT charset FROM importvorlage WHERE id = :id",
+      ['id' => (int)$id]
+    );
     if($upload!='') {
       $charset = $this->app->Secure->GetPOST('charset');
     }
@@ -1352,7 +1355,10 @@ class Importvorlage extends GenImportvorlage {
 
             if($fieldname === 'ean' && $value != ''){
               if(!isset($tmp['nummer'][$rowcounter_real]) && !$tmp['nummer'][$rowcounter_real]){
-                $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE ean='$value' AND ean<>'' AND geloescht <> 1 LIMIT 1");
+                $nummer = $this->app->DatabaseService->selectValue(
+                  "SELECT nummer FROM artikel WHERE ean = :ean AND ean <> '' AND geloescht <> 1 LIMIT 1",
+                  ['ean' => $value]
+                );
                 if(!is_array($nummer) && $nummer){
                   $tmp['nummer'][$rowcounter_real] = $nummer;
                   $tmp['cmd'][$rowcounter_real] = 'update';
@@ -1394,7 +1400,10 @@ class Importvorlage extends GenImportvorlage {
     }
     $isCronjob = !empty($parameter['is_cronjob']) && !empty($parameter['importmasterdata_id']);
     if(empty($parameter['ziel'])) {
-      $ziel = $this->app->DB->Select("SELECT ziel FROM importvorlage WHERE id='$id' LIMIT 1");
+      $ziel = $this->app->DatabaseService->selectValue(
+        "SELECT ziel FROM importvorlage WHERE id = :id LIMIT 1",
+        ['id' => (int)$id]
+      );
     }
     else {
       $ziel = $parameter['ziel'];
@@ -1462,13 +1471,18 @@ class Importvorlage extends GenImportvorlage {
         $tmp['lieferantennummer'][$i] = str_replace(' ','',trim($tmp['lieferantennummer'][$i]));
       }
       if($tmp['lieferantennummer'][$i]!='' && ($tmp['kundennummer'][$i]!=='NEW' || $tmp['kundennummer'][$i]!=='NEU')) {
-        $lieferantid = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='".$this->app->DB->real_escape_string($tmp['lieferantennummer'][$i])."' 
-            AND lieferantennummer!='' LIMIT 1");
+        $lieferantid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM adresse WHERE lieferantennummer = :lieferantennummer AND lieferantennummer != '' LIMIT 1",
+          ['lieferantennummer' => $tmp['lieferantennummer'][$i]]
+        );
 
       }
 
       if($tmp['kundennummer'][$i]!='' && ($tmp['kundennummer'][$i]!=='NEW' || $tmp['kundennummer'][$i]!=='NEU')) {
-        $kundenid = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='".$this->app->DB->real_escape_string($tmp['kundennummer'][$i])."' AND kundennummer!='' LIMIT 1");
+        $kundenid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM adresse WHERE kundennummer = :kundennummer AND kundennummer != '' LIMIT 1",
+          ['kundennummer' => $tmp['kundennummer'][$i]]
+        );
       }
 
       if($kundenid<=0) {
@@ -1479,7 +1493,10 @@ class Importvorlage extends GenImportvorlage {
       }
 
       if($lieferantid<=0 && $tmp['lieferantname'][$i]!='') {
-        $lieferantid = $this->app->DB->Select("SELECT id FROM adresse WHERE name='".$this->app->DB->real_escape_string($tmp['lieferantname'][$i])."' LIMIT 1");
+        $lieferantid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM adresse WHERE name = :name LIMIT 1",
+          ['name' => $tmp['lieferantname'][$i]]
+        );
       }
 
       if($ziel!=='adresse') {
@@ -1513,7 +1530,11 @@ class Importvorlage extends GenImportvorlage {
           if(trim(strtolower($bedingung)) === 'unique') {
             if($v['field'] && isset($tmp[$v['field']]) && isset($tmp[$v['field']][$i]) && $tmp[$v['field']][$i]) {
               if(!isset($artikelid) || !$artikelid){
-                $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE " . $v['field'] . "='" . $this->app->DB->real_escape_string($tmp[$v['field']][$i]) . "' AND nummer!='' LIMIT 1");
+                $artikelFieldName = $this->app->DatabaseService->validateIdentifier($v['field']);
+                $artikelid = $this->app->DatabaseService->selectValue(
+                  "SELECT id FROM artikel WHERE `{$artikelFieldName}` = :fieldvalue AND nummer != '' LIMIT 1",
+                  ['fieldvalue' => $tmp[$v['field']][$i]]
+                );
               }
             }
           }
@@ -1533,18 +1554,28 @@ class Importvorlage extends GenImportvorlage {
           if(trim(strtolower($bedingung)) === 'unique') {
             if($v['field'] && isset($tmp[$v['field']]) && isset($tmp[$v['field']][$i]) && $tmp[$v['field']][$i])
             {
-              $adressid = $this->app->DB->Select("SELECT id FROM adresse WHERE ".$v['field']."='".$this->app->DB->real_escape_string($tmp[$v['field']][$i])."' LIMIT 1");
+              $adressFieldName = $this->app->DatabaseService->validateIdentifier($v['field']);
+              $adressid = $this->app->DatabaseService->selectValue(
+                "SELECT id FROM adresse WHERE `{$adressFieldName}` = :fieldvalue LIMIT 1",
+                ['fieldvalue' => $tmp[$v['field']][$i]]
+              );
               if($adressid)
               {
                 if(isset($tmp['kundennummer'][$i]) && (strtoupper(trim($tmp['kundennummer'][$i])) === 'NEW' || strtoupper(trim($tmp['kundennummer'][$i])) === 'NEU'))
                 {
                   $kundenid = $adressid;
-                  $tmp['kundennummer'][$i] = $this->app->DB->Select("SELECT kundennummer FROM adresse WHERE id = '$adressid' LIMIT 1");
+                  $tmp['kundennummer'][$i] = $this->app->DatabaseService->selectValue(
+                    "SELECT kundennummer FROM adresse WHERE id = :id LIMIT 1",
+                    ['id' => (int)$adressid]
+                  );
                 }
                 if(isset($tmp['lieferantennummer'][$i]) && (strtoupper(trim($tmp['lieferantennummer'][$i])) === 'NEW' || strtoupper(trim($tmp['lieferantennummer'][$i])) === 'NEU'))
                 {
                   $lieferantid = $adressid;
-                  $tmp['lieferantennummer'][$i] = $this->app->DB->Select("SELECT lieferantennummer FROM adresse WHERE id = '$adressid' LIMIT 1");
+                  $tmp['lieferantennummer'][$i] = $this->app->DatabaseService->selectValue(
+                    "SELECT lieferantennummer FROM adresse WHERE id = :id LIMIT 1",
+                    ['id' => (int)$adressid]
+                  );
                 }
               }
             }
@@ -1560,8 +1591,14 @@ class Importvorlage extends GenImportvorlage {
             $bedingung = $fieldset[$k]['bedingung'];
           }
           if(trim(strtolower($bedingung)) === 'sonstiges' && $v['field'] === 'lieferantennummer' && $tmp[$v['field']][$i] != '') {
-            $tmp['lieferantennummer'][$i] = $this->app->DB->Select("SELECT lieferantennummer FROM adresse WHERE sonstiges='".$this->app->DB->real_escape_string($tmp[$v['field']][$i])."' LIMIT 1");
-            $lieferantid = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='".$this->app->DB->real_escape_string($tmp['lieferantennummer'][$i])."' LIMIT 1");
+            $tmp['lieferantennummer'][$i] = $this->app->DatabaseService->selectValue(
+              "SELECT lieferantennummer FROM adresse WHERE sonstiges = :sonstiges LIMIT 1",
+              ['sonstiges' => $tmp[$v['field']][$i]]
+            );
+            $lieferantid = $this->app->DatabaseService->selectValue(
+              "SELECT id FROM adresse WHERE lieferantennummer = :lieferantennummer LIMIT 1",
+              ['lieferantennummer' => $tmp['lieferantennummer'][$i]]
+            );
           }
         }
       }
@@ -1629,7 +1666,10 @@ class Importvorlage extends GenImportvorlage {
             }
             if($tmp['projekt'][$i]!='')
             {
-              $tmp['projekt'][$i] = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='".$this->app->DB->real_escape_string($tmp['projekt'][$i])."' AND abkuerzung!='' LIMIT 1");
+              $tmp['projekt'][$i] = $this->app->DatabaseService->selectValue(
+                "SELECT id FROM projekt WHERE abkuerzung = :abkuerzung AND abkuerzung != '' LIMIT 1",
+                ['abkuerzung' => $tmp['projekt'][$i]]
+              );
               $felder['projekt'] = $tmp['projekt'][$i];
             }
             if( strtoupper($tmp['nummer'][$i]) === 'NEW' ||  strtoupper($tmp['nummer'][$i]) === 'NEU' || $tmp['nummer'][$i] == '')
@@ -1645,7 +1685,10 @@ class Importvorlage extends GenImportvorlage {
               }
               else if ($tmp['artikelkategorie_name'][$i] !='')
               {
-                $tmp_katname = $this->app->DB->Select("SELECT id FROM artikelkategorien WHERE bezeichnung='".$this->app->DB->real_escape_string($tmp['artikelkategorie_name'][$i])."'  order by geloescht LIMIT 1");
+                $tmp_katname = $this->app->DatabaseService->selectValue(
+                  "SELECT id FROM artikelkategorien WHERE bezeichnung = :bezeichnung ORDER BY geloescht LIMIT 1",
+                  ['bezeichnung' => $tmp['artikelkategorie_name'][$i]]
+                );
                 $felder['nummer']=$this->app->erp->GetNextArtikelnummer($tmp_katname, 1, empty($tmp['projekt'][$i])?'':$tmp['projekt'][$i]);
               }
               else{
@@ -1692,13 +1735,22 @@ class Importvorlage extends GenImportvorlage {
 
             if(isset($tmp['artikelkategorie_name'][$i]))
             {
-              $check = $this->app->DB->Select("SELECT id FROM artikelkategorien WHERE bezeichnung like '".$this->app->DB->real_escape_string($tmp['artikelkategorie_name'][$i])."'  order by geloescht LIMIT 1");
+              $check = $this->app->DatabaseService->selectValue(
+                "SELECT id FROM artikelkategorien WHERE bezeichnung LIKE :bezeichnung ORDER BY geloescht LIMIT 1",
+                ['bezeichnung' => $tmp['artikelkategorie_name'][$i]]
+              );
               if(!$check)
               {
-                $this->app->DB->Insert("INSERT INTO artikelkategorien (bezeichnung) values ('".$this->app->DB->real_escape_string($tmp['artikelkategorie_name'][$i])."')");
+                $this->app->DatabaseService->execute(
+                  "INSERT INTO artikelkategorien (bezeichnung) VALUES (:bezeichnung)",
+                  ['bezeichnung' => $tmp['artikelkategorie_name'][$i]]
+                );
                 $check = $this->app->DB->GetInsertID();
               }else {
-                $this->app->DB->Update("UPDATE artikelkategorien set geloescht = 0 WHERE id = '$check' LIMIT 1");
+                $this->app->DatabaseService->execute(
+                  "UPDATE artikelkategorien SET geloescht = 0 WHERE id = :id LIMIT 1",
+                  ['id' => (int)$check]
+                );
               }
               if($check){
                 $felder['typ'] = $check.'_kat';
@@ -1723,27 +1775,48 @@ class Importvorlage extends GenImportvorlage {
               {
                 $check = $this->app->DB->Select("SELECT id FROM artikelkategorien WHERE id = '".(int)$tmp['artikelkategorie'][$i]."' LIMIT 1");
               }else{
-                $check = $this->app->DB->Select("SELECT id FROM artikelkategorien WHERE bezeichnung like '".$this->app->DB->real_escape_string($tmp['artikelkategorie_name'][$i])."' order by geloescht LIMIT 1");
+                $check = $this->app->DatabaseService->selectValue(
+                  "SELECT id FROM artikelkategorien WHERE bezeichnung LIKE :bezeichnung ORDER BY geloescht LIMIT 1",
+                  ['bezeichnung' => $tmp['artikelkategorie_name'][$i]]
+                );
                 if(!$check)
                 {
-                  $this->app->DB->Insert("INSERT INTO artikelkategorien (bezeichnung) values ('".$this->app->DB->real_escape_string($tmp['artikelkategorie_name'][$i])."')");
+                  $this->app->DatabaseService->execute(
+                    "INSERT INTO artikelkategorien (bezeichnung) VALUES (:bezeichnung)",
+                    ['bezeichnung' => $tmp['artikelkategorie_name'][$i]]
+                  );
                   $check = $this->app->DB->GetInsertID();
                 }else {
-                  $this->app->DB->Update("UPDATE artikelkategorien set geloescht = 0 WHERE id = '$check' LIMIT 1");
+                  $this->app->DatabaseService->execute(
+                    "UPDATE artikelkategorien SET geloescht = 0 WHERE id = :id LIMIT 1",
+                    ['id' => (int)$check]
+                  );
                 }
               }
               if($check)
               {
                 $felder['typ'] = $check.'_kat';
-                $this->app->DB->Update("UPDATE artikel SET typ='".$check."_kat' WHERE id='".$artikelid."' LIMIT 1");
+                $this->app->DatabaseService->execute(
+                  "UPDATE artikel SET typ = :typ WHERE id = :id LIMIT 1",
+                  ['typ' => $check . '_kat', 'id' => (int)$artikelid]
+                );
 
-                $check2 = $this->app->DB->Select("SELECT id FROM artikelkategorien WHERE bezeichnung like '".$this->app->DB->real_escape_string($tmp['artikelunterkategorie_name'][$i])."' order by geloescht, parent = '$check'  DESC LIMIT 1");
+                $check2 = $this->app->DatabaseService->selectValue(
+                  "SELECT id FROM artikelkategorien WHERE bezeichnung LIKE :bezeichnung ORDER BY geloescht, (parent = :parent) DESC LIMIT 1",
+                  ['bezeichnung' => $tmp['artikelunterkategorie_name'][$i], 'parent' => (int)$check]
+                );
                 if(!$check2)
                 {
-                  $this->app->DB->Insert("INSERT INTO artikelkategorien (bezeichnung,parent) values ('".$this->app->DB->real_escape_string($tmp['artikelunterkategorie_name'][$i])."', '$check')");
+                  $this->app->DatabaseService->execute(
+                    "INSERT INTO artikelkategorien (bezeichnung, parent) VALUES (:bezeichnung, :parent)",
+                    ['bezeichnung' => $tmp['artikelunterkategorie_name'][$i], 'parent' => (int)$check]
+                  );
                   $check2 = $this->app->DB->GetInsertID();
                 }else {
-                  $this->app->DB->Update("UPDATE artikelkategorien set geloescht = 0 WHERE id = '$check2' LIMIT 1");
+                  $this->app->DatabaseService->execute(
+                    "UPDATE artikelkategorien SET geloescht = 0 WHERE id = :id LIMIT 1",
+                    ['id' => (int)$check2]
+                  );
                 }
                 if($check2)
                 {
@@ -6050,7 +6123,10 @@ class Importvorlage extends GenImportvorlage {
           $fields['ean'] = $value;
           if($value != ''){
             if(!isset($fields['nummer']) && !$fields['nummer']){
-              $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE ean='$value' AND ean<>'' AND geloescht <> 1 LIMIT 1");
+              $nummer = $this->app->DatabaseService->selectValue(
+                "SELECT nummer FROM artikel WHERE ean = :ean AND ean <> '' AND geloescht <> 1 LIMIT 1",
+                ['ean' => $value]
+              );
               if(!is_array($nummer) && $nummer) {
                 $fields['nummer'] = $nummer;
               }

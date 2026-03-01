@@ -158,9 +158,11 @@ class Kalender {
 
 
     if($wert == '0'){
-      $delete = $this->app->DB->Delete("DELETE FROM kalender_gruppen_mitglieder WHERE adresse = '$adresse' AND benutzergruppe = '$benutzergruppe' AND kalendergruppe = '$kalendergruppe'");
+      $delete = $this->app->DatabaseService->delete("DELETE FROM kalender_gruppen_mitglieder WHERE adresse=:adresse AND benutzergruppe=:benutzergruppe AND kalendergruppe=:kalendergruppe",
+        ['adresse' => $adresse, 'benutzergruppe' => $benutzergruppe, 'kalendergruppe' => $kalendergruppe]);
     }elseif($wert == '1'){
-      $insert = $this->app->DB->Insert("INSERT INTO kalender_gruppen_mitglieder(adresse,kalendergruppe,benutzergruppe) VALUES('$adresse','$kalendergruppe','$benutzergruppe')");
+      $insert = $this->app->DatabaseService->insert("INSERT INTO kalender_gruppen_mitglieder(adresse,kalendergruppe,benutzergruppe) VALUES(:adresse,:kalendergruppe,:benutzergruppe)",
+        ['adresse' => $adresse, 'kalendergruppe' => $kalendergruppe, 'benutzergruppe' => $benutzergruppe]);
     }
     $this->app->ExitXentral();
   }
@@ -236,21 +238,21 @@ class Kalender {
       $adresse = trim($adresse);
       $rest = explode(" ",$adresse);
       $rest = $rest[0];
-      $adresse =  $this->app->DB->Select("SELECT id FROM adresse WHERE id='$rest' AND geloescht=0 LIMIT 1");
+      $adresse =  $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE id=:id AND geloescht=0 LIMIT 1", ['id' => $rest]);
 
       $ansprechpartner = trim($ansprechpartner);
       $ansprechpartner = explode(" ", $ansprechpartner);
       $ansprechpartner = $ansprechpartner[0];
-      $ansprechpartnerId = $this->app->DB->Select("SELECT id FROM ansprechpartner WHERE id = '$ansprechpartner' LIMIT 1");
+      $ansprechpartnerId = $this->app->DatabaseService->selectValue("SELECT id FROM ansprechpartner WHERE id=:id LIMIT 1", ['id' => $ansprechpartner]);
 
       $adresseintern = trim($adresseintern);
       $rest = explode(" ",$adresseintern);
       $rest = $rest[0];
-      $adresseintern =  $this->app->DB->Select("SELECT id FROM adresse WHERE id='$rest' AND geloescht=0 LIMIT 1");
-  
+      $adresseintern =  $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE id=:id AND geloescht=0 LIMIT 1", ['id' => $rest]);
+
 
       $projekt = trim($projekt);
-      $projekt =  $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='$projekt' AND abkuerzung!='' LIMIT 1");
+      $projekt =  $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung=:abkuerzung AND abkuerzung!='' LIMIT 1", ['abkuerzung' => $projekt]);
 
       if($mode==="new") {
 
@@ -289,7 +291,7 @@ class Kalender {
         $hookEvent = $eventid;
         $hookAction = $calendarActionType;
         // Personenzuordnung entfernen (alle)
-        $this->app->DB->Delete("DELETE FROM kalender_user WHERE event = '$eventid' AND userid > 0");
+        $this->app->DatabaseService->delete("DELETE FROM kalender_user WHERE event=:event AND userid > 0", ['event' => $eventid]);
         // Gruppenzuordnung entfernen (nur Gruppen in denen der User ist)
 
         if (!empty($eigene_kalendergruppen)) {
@@ -305,8 +307,8 @@ class Kalender {
         $hookEvent = $eventid;
         $hookAction = $calendarActionType;
 
-        $this->app->DB->Delete("DELETE FROM kalender_event WHERE id='$eventid' LIMIT 1");
-        $this->app->DB->Delete("DELETE FROM kalender_user WHERE event='$eventid'");
+        $this->app->DatabaseService->delete("DELETE FROM kalender_event WHERE id=:id LIMIT 1", ['id' => $eventid]);
+        $this->app->DatabaseService->delete("DELETE FROM kalender_user WHERE event=:event", ['event' => $eventid]);
       }
 
       if($mode==="copy" && is_numeric($eventid)) {
@@ -341,7 +343,8 @@ class Kalender {
       if(is_numeric($event) && is_array($personen) && (!empty($personen)?count($personen):0) && $mode!=='delete') {
         $cpersonen = (!empty($personen)?count($personen):0);
         for($p=0;$p<$cpersonen;$p++) {
-          $this->app->DB->Insert("INSERT INTO kalender_user (event, userid) VALUES ('$event', '{$personen[$p]}')");
+          $this->app->DatabaseService->insert("INSERT INTO kalender_user (event, userid) VALUES (:event, :userid)",
+            ['event' => $event, 'userid' => $personen[$p]]);
         }
       }
 
@@ -356,15 +359,16 @@ class Kalender {
         for($p=0;$p<$cgruppenkalender;$p++){
           // stelle farbe von kalender eintrag um wenn gruppe (also erste gruppe in auswahl)
           if($p==0){
-            $color = $this->app->DB->Select("SELECT farbe FROM kalender_gruppen WHERE id='".$gruppenkalender[$p]."' LIMIT 1");
+            $color = $this->app->DatabaseService->selectValue("SELECT farbe FROM kalender_gruppen WHERE id=:id LIMIT 1", ['id' => $gruppenkalender[$p]]);
             if($color!=""){
-              $this->app->DB->Update("UPDATE kalender_event SET color='$color' WHERE id='$event' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE kalender_event SET color=:color WHERE id=:id LIMIT 1", ['color' => $color, 'id' => $event]);
 
               $calendarActionType = 'modified';
               $this->app->erp->RunHook('kalender_event_hook', 2, $event, $calendarActionType);
             }
           }
-          $this->app->DB->Insert("INSERT INTO kalender_user (event, gruppe) VALUES ('$event', '{$gruppenkalender[$p]}')");
+          $this->app->DatabaseService->insert("INSERT INTO kalender_user (event, gruppe) VALUES (:event, :gruppe)",
+            ['event' => $event, 'gruppe' => $gruppenkalender[$p]]);
         }
       }
 
@@ -591,7 +595,7 @@ class Kalender {
     else{
       $new_status = '1';
     }
-    $this->app->DB->Update("UPDATE adresse SET kalender_aufgaben='$new_status' WHERE id='{$data[0]['id']}' LIMIT 1");
+    $this->app->DatabaseService->execute("UPDATE adresse SET kalender_aufgaben=:status WHERE id=:id LIMIT 1", ['status' => $new_status, 'id' => $data[0]['id']]);
     $this->app->ExitXentral();
   }
 
@@ -942,14 +946,14 @@ class Kalender {
       if($allday=="true")
       {
         //$this->app->DB->Update("UPDATE kalender_event SET von='$start', bis=DATE_ADD('$end', INTERVAL 1439 MINUTE) WHERE id='$id' LIMIT 1");
-        $this->app->DB->Update("UPDATE kalender_event SET von='$start', bis='$end' WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE kalender_event SET von=:von, bis=:bis WHERE id=:id LIMIT 1", ['von' => $start, 'bis' => $end, 'id' => $id]);
 
         $calendarActionType = 'modified';
         $this->app->erp->RunHook('kalender_event_hook', 2, $id, $calendarActionType);
       }
       else
       {
-        $this->app->DB->Update("UPDATE kalender_event SET von='$start', bis='$end' WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE kalender_event SET von=:von, bis=:bis WHERE id=:id LIMIT 1", ['von' => $start, 'bis' => $end, 'id' => $id]);
 
         $calendarActionType = 'modified';
         $this->app->erp->RunHook('kalender_event_hook', 2, $id, $calendarActionType);
@@ -962,7 +966,7 @@ class Kalender {
 
       $allday_db = (($allday=='true') ? '1' : '0');
       $converted = $this->app->String->Convert($start, "%1-%2-%3 %4-%5-%6", "%1-%2-%3 %4:%5:%6"); 
-      $this->app->DB->Update("UPDATE aufgabe SET abgabe_bis='$converted', ganztags='$allday_db' WHERE id='$task' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE aufgabe SET abgabe_bis=:abgabe_bis, ganztags=:ganztags WHERE id=:id LIMIT 1", ['abgabe_bis' => $converted, 'ganztags' => $allday_db, 'id' => $task]);
     }
 
     $this->app->ExitXentral();
@@ -1002,8 +1006,8 @@ class Kalender {
       $organizer_to_name = $this->app->User->GetName();
     }
     else {
-      $organizer_to = $this->app->DB->Select("SELECT email FROM adresse WHERE id='$adresseintern' AND geloescht!=1 LIMIT 1");
-      $organizer_to_name = $this->app->DB->Select("SELECT name FROM adresse WHERE id='$adresseintern' AND geloescht!=1 LIMIT 1");
+      $organizer_to = $this->app->DatabaseService->selectValue("SELECT email FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresseintern]);
+      $organizer_to_name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresseintern]);
     }
 
     // Add Organizer
@@ -1027,8 +1031,8 @@ class Kalender {
         }
       } else 
       {
-        $recipient_to = $this->app->DB->Select("SELECT email FROM adresse WHERE id='" . $data['adresse'] . "' AND geloescht!=1 LIMIT 1");
-        $recipient_to_name = $this->app->DB->Select("SELECT name FROM adresse WHERE id='" . $data['adresse'] . "' AND geloescht!=1 LIMIT 1");
+        $recipient_to = $this->app->DatabaseService->selectValue("SELECT email FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $data['adresse']]);
+        $recipient_to_name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $data['adresse']]);
      }
     }
 
@@ -1236,7 +1240,8 @@ class Kalender {
       if($error != ""){
         $this->app->Tpl->Set("MESSAGE", "<div class=\"error\" style=\"margin-top:7px\"><ul>$error</ul></div>");
       }else{
-        $this->app->DB->Insert("INSERT INTO kalender_gruppen (bezeichnung, farbe, ausblenden) VALUES (\"$bezeichnung\", \"$farbe\", \"$ausblenden\")");
+        $this->app->DatabaseService->insert("INSERT INTO kalender_gruppen (bezeichnung, farbe, ausblenden) VALUES (:bezeichnung, :farbe, :ausblenden)",
+          ['bezeichnung' => $bezeichnung, 'farbe' => $farbe, 'ausblenden' => $ausblenden]);
       }
     }
 
@@ -1278,11 +1283,13 @@ class Kalender {
 
     if($error == ""){
       if($editid){
-        $this->app->DB->Update("UPDATE kalender_gruppen SET bezeichnung = \"$editbezeichnung\", farbe = \"$editfarbe\", ausblenden = \"$editausblenden\" WHERE id = \"$editid\"");
+        $this->app->DatabaseService->execute("UPDATE kalender_gruppen SET bezeichnung=:bezeichnung, farbe=:farbe, ausblenden=:ausblenden WHERE id=:id",
+          ['bezeichnung' => $editbezeichnung, 'farbe' => $editfarbe, 'ausblenden' => $editausblenden, 'id' => $editid]);
         echo json_encode(array('status'=>1));
         $this->app->ExitXentral();
       }
-      $this->app->DB->Insert("INSERT INTO kalender_gruppen (bezeichnung, farbe, ausblenden) VALUES ('$editbezeichnung', '$editfarbe', '$editausblenden')");
+      $this->app->DatabaseService->insert("INSERT INTO kalender_gruppen (bezeichnung, farbe, ausblenden) VALUES (:bezeichnung, :farbe, :ausblenden)",
+        ['bezeichnung' => $editbezeichnung, 'farbe' => $editfarbe, 'ausblenden' => $editausblenden]);
       echo json_encode(array('status'=>2,'id'=>$this->app->DB->GetInsertID(),'farbe' => $editfarbe, 'bezeichnung' => $editbezeichnung, 'ausblenden' => $editausblenden));
       $this->app->ExitXentral();
     }
@@ -1293,8 +1300,8 @@ class Kalender {
   function KalenderGruppenDelete(){
     $id = (int) $this->app->Secure->GetPOST('editid');
     if($id > 0){
-      $this->app->DB->Delete("DELETE FROM kalender_gruppen WHERE id = \"$id\"");
-      $this->app->DB->Delete("DELETE FROM kalender_gruppen_mitglieder WHERE kalendergruppe = \"$id\"");
+      $this->app->DatabaseService->delete("DELETE FROM kalender_gruppen WHERE id=:id", ['id' => $id]);
+      $this->app->DatabaseService->delete("DELETE FROM kalender_gruppen_mitglieder WHERE kalendergruppe=:id", ['id' => $id]);
     }
     echo json_encode(array('status'=>1));
     $this->app->ExitXentral();
@@ -1462,13 +1469,13 @@ class Kalender {
     $adresse = $arraufgabe[0]["adresse"];
     $adresseintern = $arraufgabe[0]["adresseintern"];
 
-    $to = $this->app->DB->Select("SELECT email FROM adresse WHERE id='$adresse' AND geloescht!=1 LIMIT 1");
-    $to_name = $this->app->DB->Select("SELECT name FROM adresse WHERE id='$adresse' AND geloescht!=1 LIMIT 1");
+    $to = $this->app->DatabaseService->selectValue("SELECT email FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresse]);
+    $to_name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresse]);
 
     if($adresseintern > 0)
     {
-      $initiator_to = $this->app->DB->Select("SELECT email FROM adresse WHERE id='$adresseintern' AND geloescht!=1 LIMIT 1");
-      $initiator_to_name = $this->app->DB->Select("SELECT name FROM adresse WHERE id='$adresseintern' AND geloescht!=1 LIMIT 1");
+      $initiator_to = $this->app->DatabaseService->selectValue("SELECT email FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresseintern]);
+      $initiator_to_name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresseintern]);
     } else {
       $initiator_to = $this->app->User->GetEmail();
       $initiator_to_name = $this->app->User->GetName();

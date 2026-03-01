@@ -214,10 +214,10 @@ class Shopimporter_Shopify extends ShopimporterBase
 
   public function ShopifyImporterShopexportCreate($id)
   {
-    if($id <= 0 || !$this->app->DB->Select("SELECT id FROM shopexport WHERE shoptyp = 'intern' AND id = '$id' AND modulename = 'shopimporter_shopify' LIMIT 1")){
+    if($id <= 0 || !$this->app->DatabaseService->selectValue("SELECT id FROM shopexport WHERE shoptyp = 'intern' AND id = :id AND modulename = 'shopimporter_shopify' LIMIT 1", ['id' => (int)$id])){
       return;
     }
-    $this->app->DB->Update("UPDATE shopexport SET positionsteuersaetzeerlauben = 1 WHERE id = $id LIMIT 1");
+    $this->app->DatabaseService->execute("UPDATE shopexport SET positionsteuersaetzeerlauben = 1 WHERE id = :id LIMIT 1", ['id' => (int)$id]);
   }
 
   public function getKonfig($shopid, $data = null)
@@ -234,7 +234,7 @@ class Shopimporter_Shopify extends ShopimporterBase
       $this->bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
     }
 
-    $einstellungen = $this->app->DB->Select("SELECT einstellungen_json FROM shopexport WHERE id = '$shopid' LIMIT 1");
+    $einstellungen = $this->app->DatabaseService->selectValue("SELECT einstellungen_json FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$shopid]);
     if(!empty($einstellungen)){
       $einstellungen = json_decode($einstellungen,true);
     } else {
@@ -328,7 +328,7 @@ class Shopimporter_Shopify extends ShopimporterBase
     if($this->app->DB->error()){
       $this->Install();
     }
-    if($id = $this->app->DB->Select("SELECT id FROM shopexport WHERE modulename = 'shopimporter_shopify' ORDER BY aktiv = 1 DESC LIMIT 1"))
+    if($id = $this->app->DatabaseService->selectValue("SELECT id FROM shopexport WHERE modulename = 'shopimporter_shopify' ORDER BY aktiv = 1 DESC LIMIT 1"))
     {
       header('Location: index.php?module=onlineshops&action=edit&id='.$id);
       exit;
@@ -732,7 +732,7 @@ class Shopimporter_Shopify extends ShopimporterBase
       $preisart = "bruttopreis";
     }
 
-    $shopeinstellungen = $this->app->DB->SelectArr("SELECT * FROM shopexport WHERE id = '".$this->shopid."' AND aktiv = 1 LIMIT 1");
+    $shopeinstellungen = $this->app->DatabaseService->select("SELECT * FROM shopexport WHERE id = :id AND aktiv = 1 LIMIT 1", ['id' => (int)$this->shopid]);
     if(!empty($shopeinstellungen))
     {
       $shopeinstellungen = reset($shopeinstellungen);
@@ -974,7 +974,10 @@ class Shopimporter_Shopify extends ShopimporterBase
       if($productid != ''){
         $result = $this->adapter->call('products/'.$productid.'.json');
         if(!$result['data']['product']['id']){
-          $this->app->DB->Delete("DELETE FROM artikelnummer_fremdnummern WHERE artikel='$artikel' AND aktiv='1' AND shopid='$shopid' AND bezeichnung='$bezprodukt'");
+          $this->app->DatabaseService->execute(
+            "DELETE FROM artikelnummer_fremdnummern WHERE artikel = :artikel AND aktiv = '1' AND shopid = :shopid AND bezeichnung = :bezeichnung",
+            ['artikel' => (int)$artikel, 'shopid' => (int)$shopid, 'bezeichnung' => $bezprodukt]
+          );
           $productanlegen = true;
           $variantidskumatching = array();
         }
@@ -984,7 +987,10 @@ class Shopimporter_Shopify extends ShopimporterBase
       if($variantid != ''){
         $resultv = $this->adapter->call('variants/'.$variantid.'.json');
         if(!$resultv['data']['variant']['id']){
-          $this->app->DB->Delete("DELETE FROM artikelnummer_fremdnummern WHERE artikel='$artikel' AND aktiv='1' AND shopid='$shopid' AND bezeichnung='$bezvariant'");
+          $this->app->DatabaseService->execute(
+            "DELETE FROM artikelnummer_fremdnummern WHERE artikel = :artikel AND aktiv = '1' AND shopid = :shopid AND bezeichnung = :bezeichnung",
+            ['artikel' => (int)$artikel, 'shopid' => (int)$shopid, 'bezeichnung' => $bezvariant]
+          );
           $variantanlegen = true;
         }
       }else{
@@ -1111,11 +1117,17 @@ class Shopimporter_Shopify extends ShopimporterBase
         $productdata = $this->adapter->call('products/'.$productid.'.json');
 
         foreach ($tmp[$i]['artikel_varianten'] as $key => $value) {
-          $variantid = $this->app->DB->Select("SELECT nummer FROM artikelnummer_fremdnummern WHERE artikel='".$value['artikel']."' AND bezeichnung='$bezvariant' AND shopid='$shopid' AND aktiv='1' LIMIT 1");
+          $variantid = $this->app->DatabaseService->selectValue(
+            "SELECT nummer FROM artikelnummer_fremdnummern WHERE artikel = :artikel AND bezeichnung = :bezvariant AND shopid = :shopid AND aktiv = '1' LIMIT 1",
+            ['artikel' => (int)$value['artikel'], 'bezvariant' => $bezvariant, 'shopid' => (int)$shopid]
+          );
           if($variantid){
             $resultv = $this->adapter->call('variants/'.$variantid.'.json');
             if(isset($resultv['data']['errors'])){
-              $this->app->DB->Delete("DELETE FROM artikelnummer_fremdnummern WHERE artikel='".$value['artikel']."' AND aktiv='1' AND shopid='$shopid' AND bezeichnung='$bezvariant'");
+              $this->app->DatabaseService->execute(
+                "DELETE FROM artikelnummer_fremdnummern WHERE artikel = :artikel AND aktiv = '1' AND shopid = :shopid AND bezeichnung = :bezvariant",
+                ['artikel' => (int)$value['artikel'], 'shopid' => (int)$shopid, 'bezvariant' => $bezvariant]
+              );
               $variantid = '';
             }
           }
@@ -1135,7 +1147,10 @@ class Shopimporter_Shopify extends ShopimporterBase
             if($variantid){
               $resultv = $this->adapter->call('variants/'.$variantid.'.json');
               if(isset($resultv['data']['errors'])){
-                $this->app->DB->Delete("DELETE FROM artikelnummer_fremdnummern WHERE artikel='".$value['artikel']."' AND aktiv='1' AND shopid='$shopid' AND bezeichnung='$bezvariant'");
+                $this->app->DatabaseService->execute(
+                  "DELETE FROM artikelnummer_fremdnummern WHERE artikel = :artikel AND aktiv = '1' AND shopid = :shopid AND bezeichnung = :bezvariant",
+                  ['artikel' => (int)$value['artikel'], 'shopid' => (int)$shopid, 'bezvariant' => $bezvariant]
+                );
                 $variantid = '';
               }else{
                 $this->FremdnummerInsert($value['artikel'],$variantid,$bezvariant);
@@ -1154,7 +1169,10 @@ class Shopimporter_Shopify extends ShopimporterBase
           if($deletevariant){
             if($variantid){
               $this->adapter->call("products/$productid/variants/$variantid.json", 'DELETE');
-              $this->app->DB->Delete("DELETE FROM artikelnummer_fremdnummern WHERE artikel='".$value['artikel']."' AND aktiv='1' AND shopid='$shopid' AND bezeichnung='$bezvariant'");
+              $this->app->DatabaseService->execute(
+                "DELETE FROM artikelnummer_fremdnummern WHERE artikel = :artikel AND aktiv = '1' AND shopid = :shopid AND bezeichnung = :bezvariant",
+                ['artikel' => (int)$value['artikel'], 'shopid' => (int)$shopid, 'bezvariant' => $bezvariant]
+              );
               $this->ShopifyLog('Sendlist DELETE Variant '.$value['nummer'],json_decode($tmpres,true));
             }
             continue;
@@ -1384,7 +1402,10 @@ class Shopimporter_Shopify extends ShopimporterBase
           //Variante 0 entfernen, falls vorhanden:
           if($variantidhauptartikel != ''){
             $this->adapter->call("variants/$variantidhauptartikel.json", 'DELETE');
-            $this->app->DB->Delete("DELETE FROM artikelnummer_fremdnummern WHERE artikel='$artikel' AND aktiv='1' AND shopid='$shopid' AND bezeichnung='$bezvariant' AND nummer = '$variantidhauptartikel'");
+            $this->app->DatabaseService->execute(
+              "DELETE FROM artikelnummer_fremdnummern WHERE artikel = :artikel AND aktiv = '1' AND shopid = :shopid AND bezeichnung = :bezvariant AND nummer = :nummer",
+              ['artikel' => (int)$artikel, 'shopid' => (int)$shopid, 'bezvariant' => $bezvariant, 'nummer' => $variantidhauptartikel]
+            );
           }
         }
       }
@@ -1550,7 +1571,10 @@ class Shopimporter_Shopify extends ShopimporterBase
   
   function CheckOldAuftrag($anz = 50)
   {
-    $arr = $this->app->DB->SelectArr("SELECT id,extid FROM shopimporter_shopify_auftraege WHERE shop = '".$this->shopid."' AND extid <> '' AND  transaction_id = '' AND getestet = 0 ORDER BY id LIMIT $anz");
+    $arr = $this->app->DatabaseService->select(
+      "SELECT id,extid FROM shopimporter_shopify_auftraege WHERE shop = :shop AND extid <> '' AND transaction_id = '' AND getestet = 0 ORDER BY id LIMIT :anz",
+      ['shop' => (int)$this->shopid, 'anz' => (int)$anz]
+    );
     if(!$arr){
       return;
     }
@@ -1573,15 +1597,18 @@ class Shopimporter_Shopify extends ShopimporterBase
           {
             if(isset($transactionsarr['data']['receipt']) && isset($transactionsarr['data']['receipt']['transaction_id']) && (String)$transactionsarr['data']['receipt']['transaction_id'] !== '')
             {
-              $transaction_id = $this->app->DB->real_escape_string($transactionsarr['data']['receipt']['transaction_id']);
+              $transaction_id = $transactionsarr['data']['receipt']['transaction_id'];
             }else{
-              $transaction_id = $this->app->DB->real_escape_string($transactionsarr['data']['authorization']);
+              $transaction_id = $transactionsarr['data']['authorization'];
             }
-            $this->app->DB->Update("UPDATE shopimporter_shopify_auftraege SET transaction_id = '$transaction_id',zahlungsweise ='".$this->app->DB->real_escape_string((String)$result['orders'][$i]['gateway'])."' WHERE id = '$checkid' LIMIT 1");
+            $this->app->DatabaseService->execute(
+              "UPDATE shopimporter_shopify_auftraege SET transaction_id = :transaction_id, zahlungsweise = :zahlungsweise WHERE id = :id LIMIT 1",
+              ['transaction_id' => (string)$transaction_id, 'zahlungsweise' => (string)$result['orders'][$i]['gateway'], 'id' => (int)$checkid]
+            );
           }
         }
       }
-      $this->app->DB->Update("UPDATE shopimporter_shopify_auftraege SET getestet = 1 WHERE id = '$checkid' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE shopimporter_shopify_auftraege SET getestet = 1 WHERE id = :id LIMIT 1", ['id' => (int)$checkid]);
     }
   }
 

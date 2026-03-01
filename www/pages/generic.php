@@ -32,23 +32,23 @@ class Generic  {
     $this->app->Tpl->Set('FARBE',"[FARBE5]");
   }
 	
-	function GenericReiterDown() 
+	function GenericReiterDown()
 	{
 		$id = $this->app->Secure->GetGET('id');
 
 		if(is_numeric($id)) {
-			$total = $this->app->DB->Select("SELECT MAX(position) FROM accordion");
-	
-			$curPos = $this->app->DB->Select("SELECT position FROM accordion WHERE id='$id' LIMIT 1");
+			$total = $this->app->DatabaseService->selectValue("SELECT MAX(position) FROM accordion");
+
+			$curPos = $this->app->DatabaseService->selectValue("SELECT position FROM accordion WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
 			$nextPos = $curPos+1;
 			if($nextPos <= $total){
-				$cur = $this->app->DB->Select("Select id FROM accordion WHERE position=$curPos LIMIT 1");
-				$next = $this->app->DB->Select("Select id FROM accordion WHERE position=$nextPos LIMIT 1");	
+				$cur = $this->app->DatabaseService->selectValue("SELECT id FROM accordion WHERE position = :pos LIMIT 1", ['pos' => (int)$curPos]);
+				$next = $this->app->DatabaseService->selectValue("SELECT id FROM accordion WHERE position = :pos LIMIT 1", ['pos' => (int)$nextPos]);
 
-				$this->app->DB->Update("UPDATE accordion SET position=position+1 WHERE id='$cur' LIMIT 1");
-				$this->app->DB->Update("UPDATE accordion SET position=position-1 WHERE id='$next' LIMIT 1");
-			}	
+				$this->app->DatabaseService->execute("UPDATE accordion SET position=position+1 WHERE id = :id LIMIT 1", ['id' => (int)$cur]);
+				$this->app->DatabaseService->execute("UPDATE accordion SET position=position-1 WHERE id = :id LIMIT 1", ['id' => (int)$next]);
+			}
 		}
 
 		header("Location: index.php?module=generic&action=edit");
@@ -60,15 +60,15 @@ class Generic  {
     $id = $this->app->Secure->GetGET('id');
 
     if(is_numeric($id)) {
-      $curPos = $this->app->DB->Select("SELECT position FROM accordion WHERE id='$id' LIMIT 1");
-      $nextPos = $curPos-1; 
-      if($nextPos > 0){ 
-        $cur = $this->app->DB->Select("Select id FROM accordion WHERE position=$curPos LIMIT 1");
-        $next = $this->app->DB->Select("Select id FROM accordion WHERE position=$nextPos LIMIT 1");
+      $curPos = $this->app->DatabaseService->selectValue("SELECT position FROM accordion WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $nextPos = $curPos-1;
+      if($nextPos > 0){
+        $cur = $this->app->DatabaseService->selectValue("SELECT id FROM accordion WHERE position = :pos LIMIT 1", ['pos' => (int)$curPos]);
+        $next = $this->app->DatabaseService->selectValue("SELECT id FROM accordion WHERE position = :pos LIMIT 1", ['pos' => (int)$nextPos]);
 
-        $this->app->DB->Update("UPDATE accordion SET position=position-1 WHERE id='$cur' LIMIT 1");
-        $this->app->DB->Update("UPDATE accordion SET position=position+1 WHERE id='$next' LIMIT 1");
-      } 
+        $this->app->DatabaseService->execute("UPDATE accordion SET position=position-1 WHERE id = :id LIMIT 1", ['id' => (int)$cur]);
+        $this->app->DatabaseService->execute("UPDATE accordion SET position=position+1 WHERE id = :id LIMIT 1", ['id' => (int)$next]);
+      }
     }
 
     header("Location: index.php?module=generic&action=edit");
@@ -76,13 +76,13 @@ class Generic  {
   }
 		
 
-	function GenericReiterDelete() 
+	function GenericReiterDelete()
 	{
 		$id = $this->app->Secure->GetGET('id');
 		if(is_numeric($id)) {
-			$curPos = $this->app->DB->Select("SELECT position FROM accordion WHERE id='$id' LIMIT 1");
- 			$this->app->DB->Delete("DELETE FROM accordion WHERE id='$id' LIMIT 1");
-			$this->app->DB->Update("UPDATE accordion SET position=position-1 WHERE position>$curPos");
+			$curPos = $this->app->DatabaseService->selectValue("SELECT position FROM accordion WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+			$this->app->DatabaseService->execute("DELETE FROM accordion WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+			$this->app->DatabaseService->execute("UPDATE accordion SET position=position-1 WHERE position > :pos", ['pos' => (int)$curPos]);
 		}
 
 		header("Location: index.php?module=generic&action=edit");
@@ -99,15 +99,18 @@ class Generic  {
 		/* ********************* Startseitenreiter ******************** */
 		$new = $this->app->Secure->GetPOST('newReiter');
 		if($new!='') {
-			$max = $this->app->DB->Select("SELECT MAX(position) FROM accordion") + 1;
-			$this->app->DB->Insert("INSERT INTO accordion (name, position) VALUES('NEU', '$max')");
+			$max = (int)$this->app->DatabaseService->selectValue("SELECT MAX(position) FROM accordion") + 1;
+			$this->app->DatabaseService->execute("INSERT INTO accordion (name, position) VALUES('NEU', :pos)", ['pos' => $max]);
 		}
-		
+
 		if($submit!='') {
 			$reiter = $this->app->Secure->GetPOST('startseitenreiter');
 			foreach($reiter AS $key=>$value) {
-				$this->app->DB->Update("UPDATE accordion SET name='{$value['name']}', target='{$value['target']}' WHERE id='$key' LIMIT 1");
-			} 
+				$this->app->DatabaseService->execute(
+					"UPDATE accordion SET name = :name, target = :target WHERE id = :id LIMIT 1",
+					['name' => $value['name'], 'target' => $value['target'], 'id' => (int)$key]
+				);
+			}
 		}
 
 		$this->app->Tpl->Set('REITER', $this->StartseitenreiterTable());
@@ -120,7 +123,7 @@ class Generic  {
 
 	function StartseitenreiterTable()
 	{
-		$data = $this->app->DB->SelectArr("SELECT * FROM accordion ORDER BY position ASC");
+		$data = $this->app->DatabaseService->select("SELECT * FROM accordion ORDER BY position ASC");
 
 		$out = '';
 		for($i=0;$i<(!empty($data)?count($data):0);$i++) {

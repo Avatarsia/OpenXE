@@ -55,10 +55,10 @@ class Uservorlage
     $id = $this->app->Secure->GetGET("id");
     if($id > 0)
     {
-      $result = $this->app->DB->SelectArr("SELECT module,action FROM uservorlagerights WHERE `vorlage`='$id'");
+      $result = $this->app->DatabaseService->select("SELECT module,action FROM uservorlagerights WHERE vorlage = :id", ['id' => (int)$id]);
 
-      $tmp['bezeichnung']=$this->app->DB->Select("SELECT bezeichnung FROM `uservorlage` WHERE id='$id' LIMIT 1");
-      $tmp['beschreibung']=$this->app->DB->Select("SELECT beschreibung FROM `uservorlage` WHERE id='$id' LIMIT 1");
+      $tmp['bezeichnung'] = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM uservorlage WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $tmp['beschreibung'] = $this->app->DatabaseService->selectValue("SELECT beschreibung FROM uservorlage WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       $tmp['rechte']=$result;
       
       header('Content-Type: application/json');
@@ -84,8 +84,8 @@ class Uservorlage
   {
     $id = (int)$this->app->Secure->GetGET('id');
 
-    $benutzervorlage = $this->app->DB->Select("SELECT bezeichnung FROM `uservorlage` WHERE id='$id' LIMIT 1");	
-    $users = $this->app->DB->Select("SELECT `username` FROM `user` WHERE `vorlage` = '$benutzervorlage'");
+    $benutzervorlage = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM uservorlage WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $users = $this->app->DatabaseService->selectValue("SELECT username FROM user WHERE vorlage = :vorlage", ['vorlage' => $benutzervorlage]);
     $prefix = "\"";
 	if (!empty($users)) {		
 		$usernames = "";
@@ -100,8 +100,8 @@ class Uservorlage
 
 	      $this->app->Tpl->Set('MESSAGE', "<div class=\"error\">{|Benutzervorlage \"$benutzervorlage\" ist in Benutzung durch ".$usernames.".|}</div>");
 	} else {
-	        $this->app->DB->Delete("DELETE FROM `uservorlage` WHERE `id` = '{$id}'");
-	        $this->app->DB->Delete("DELETE FROM `uservorlagerights` WHERE `vorlage` = '{$id}'");
+	        $this->app->DatabaseService->execute("DELETE FROM uservorlage WHERE id = :id", ['id' => (int)$id]);
+	        $this->app->DatabaseService->execute("DELETE FROM uservorlagerights WHERE vorlage = :id", ['id' => (int)$id]);
 	        $this->app->Tpl->Set('MESSAGE', "<div class=\"error\">Die Benutzervorlage \"$benutzervorlage\" wurde gel&ouml;scht.</div>");		
 	}    
 
@@ -123,7 +123,7 @@ class Uservorlage
       if($input['bezeichnung']=='') {
 	 $error .= 'Geben Sie bitte einen Vorlagennamen ein.<br>';		
       }
-      if($this->app->DB->Select("SELECT '1' FROM `uservorlage` WHERE bezeichnung='{$input['bezeichnung']}' LIMIT 1")=='1') {
+      if($this->app->DatabaseService->selectValue("SELECT '1' FROM uservorlage WHERE bezeichnung = :bez LIMIT 1", ['bez' => $input['bezeichnung']]) === '1') {
         $error .= "Es existiert bereits eine Vorlage mit diesem Namen";
       }
 
@@ -170,18 +170,27 @@ class Uservorlage
         $anzahl = count($tmp->{'rechte'});
         for($i=0;$i<=$anzahl;$i++)
         {
-          $tmpmodule  = $this->app->DB->real_escape_string($tmp->{'rechte'}[$i]->{'module'});
-          $tmpaction = $this->app->DB->real_escape_string($tmp->{'rechte'}[$i]->{'action'});
+          $tmpmodule  = $tmp->{'rechte'}[$i]->{'module'};
+          $tmpaction = $tmp->{'rechte'}[$i]->{'action'};
 
           if($tmpmodule!="" && $tmpaction!="")
           {
-            $check = $this->app->DB->Select("SELECT id FROM uservorlagerights WHERE module='".$tmpmodule."' AND action='".$tmpaction."' AND vorlage='".$id."' LIMIT 1");
+            $check = $this->app->DatabaseService->selectValue(
+              "SELECT id FROM uservorlagerights WHERE module = :module AND action = :action AND vorlage = :vorlage LIMIT 1",
+              ['module' => $tmpmodule, 'action' => $tmpaction, 'vorlage' => (int)$id]
+            );
 
             if($check > 0)
-              $this->app->DB->Update("UPDATE uservorlagerights SET permission=1 WHERE module='".$tmpmodule."' AND action='".$tmpaction."' AND vorlage='".$id."' LIMIT 1");
+              $this->app->DatabaseService->execute(
+                "UPDATE uservorlagerights SET permission=1 WHERE module = :module AND action = :action AND vorlage = :vorlage LIMIT 1",
+                ['module' => $tmpmodule, 'action' => $tmpaction, 'vorlage' => (int)$id]
+              );
             else {
               $neuerechte++;
-              $this->app->DB->Insert("INSERT INTO uservorlagerights (id,module,action,vorlage,permission) VALUES ('','".$tmpmodule."','".$tmpaction."','$id','1')");
+              $this->app->DatabaseService->execute(
+                "INSERT INTO uservorlagerights (id,module,action,vorlage,permission) VALUES ('', :module, :action, :vorlage, '1')",
+                ['module' => $tmpmodule, 'action' => $tmpaction, 'vorlage' => (int)$id]
+              );
             }
           }
         }
@@ -205,25 +214,17 @@ class Uservorlage
 	}
 	else {
           
-          $this->app->DB->Update(
-            sprintf(
-              "UPDATE `uservorlage` 
-            SET bezeichnung='%s', 
-                beschreibung='%s'
-              WHERE id=%d 
-              LIMIT 1",
-              $input['bezeichnung'],
-              $input['beschreibung'],
-              $id
-            )
+          $this->app->DatabaseService->execute(
+            "UPDATE uservorlage SET bezeichnung = :bez, beschreibung = :beschr WHERE id = :id LIMIT 1",
+            ['bez' => $input['bezeichnung'], 'beschr' => $input['beschreibung'], 'id' => (int)$id]
           );
 
           $this->app->Tpl->Set('MESSAGE', "<div class=\"success\">Die Einstellungen wurden erfolgreich &uuml;bernommen.</div>");
         }	
     }	// END Input Get
 
-    $benutzervorlage = $this->app->DB->Select("SELECT bezeichnung FROM `uservorlage` WHERE id='$id' LIMIT 1");
-    $beschreibung = $this->app->DB->Select("SELECT beschreibung FROM `uservorlage` WHERE id='$id' LIMIT 1");
+    $benutzervorlage = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM uservorlage WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $beschreibung = $this->app->DatabaseService->selectValue("SELECT beschreibung FROM uservorlage WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->Tpl->Add('KURZUEBERSCHRIFT2',$benutzervorlage);
     $this->app->Tpl->Add('BEZEICHNUNG',$benutzervorlage);
     $this->app->Tpl->Add('BESCHREIBUNG',$beschreibung);
@@ -262,8 +263,8 @@ class Uservorlage
 
       if($template!='') {
         $mytemplate = $this->app->Conf->WFconf['permissions'][$template];
-        $permissions = $this->app->DB->SelectArr("SELECT module,action FROM uservorlagerights WHERE `vorlage`=$id");
-        $this->app->DB->Delete("DELETE FROM uservorlagerights WHERE `vorlage`='$id'");
+        $permissions = $this->app->DatabaseService->select("SELECT module,action FROM uservorlagerights WHERE vorlage = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->execute("DELETE FROM uservorlagerights WHERE vorlage = :id", ['id' => (int)$id]);
 
         $modulecount = (!empty($modules)?count($modules):0);
         $curModule = 0;
@@ -276,7 +277,10 @@ class Uservorlage
             $delimiter = (($curModule<$modulecount || $i+1<$actioncount) ? ', ' : ';');  
             $active = ((isset($mytemplate[$lower_m]) && in_array($actions[$i], $mytemplate[$lower_m])) ? '1' : '0');
             if($active==1){
-              $this->app->DB->Insert("INSERT INTO uservorlagerights (`vorlage`, module, action, permission) VALUES ('$id', '$lower_m', '{$actions[$i]}', '$active')");
+              $this->app->DatabaseService->execute(
+                "INSERT INTO uservorlagerights (vorlage, module, action, permission) VALUES (:vorlage, :module, :action, :permission)",
+                ['vorlage' => (int)$id, 'module' => $lower_m, 'action' => $actions[$i], 'permission' => $active]
+              );
             }
           }
         }
@@ -286,15 +290,18 @@ class Uservorlage
         $ok = true;
         if($ok)
         {
-          $permissions = $this->app->DB->SelectArr("SELECT module,action FROM uservorlagerights WHERE `vorlage`=$id");
-          $this->app->DB->Delete("DELETE FROM uservorlagerights WHERE `vorlage`='$id'");
-          $permissions = $this->app->DB->SelectArr("SELECT module,action FROM userrights WHERE vorlage=$copytemplate");
-          $this->app->DB->Update("INSERT INTO uservorlagerights (`vorlage`, module,action,permission) (SELECT '$id',module, action,permission FROM uservorlagerights WHERE vorlage='".$copytemplate."')");
+          $permissions = $this->app->DatabaseService->select("SELECT module,action FROM uservorlagerights WHERE vorlage = :id", ['id' => (int)$id]);
+          $this->app->DatabaseService->execute("DELETE FROM uservorlagerights WHERE vorlage = :id", ['id' => (int)$id]);
+          $permissions = $this->app->DatabaseService->select("SELECT module,action FROM userrights WHERE vorlage = :copytemplate", ['copytemplate' => (int)$copytemplate]);
+          $this->app->DatabaseService->execute(
+            "INSERT INTO uservorlagerights (vorlage, module, action, permission) (SELECT :id, module, action, permission FROM uservorlagerights WHERE vorlage = :copytemplate)",
+            ['id' => (int)$id, 'copytemplate' => (int)$copytemplate]
+          );
         }
       }
     }
 
-    $dbrights = $this->app->DB->SelectArr("SELECT module, action, permission FROM uservorlagerights WHERE `vorlage`='$id' ORDER BY module");
+    $dbrights = $this->app->DatabaseService->select("SELECT module, action, permission FROM uservorlagerights WHERE vorlage = :id ORDER BY module", ['id' => (int)$id]);
 
     $rights = $this->app->Conf->WFconf['permissions'][$group];
     if ((!empty($dbrights)?count($dbrights):0)>0) {
@@ -319,23 +326,38 @@ class Uservorlage
 
     if(is_numeric($vorlage) && $module!='' && $action!='' && $value!='') {
 
-      $id = $this->app->DB->Select("SELECT id FROM uservorlagerights WHERE vorlage='$vorlage' AND module='$module' AND action='$action' LIMIT 1");
-      
+      $id = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM uservorlagerights WHERE vorlage = :vorlage AND module = :module AND action = :action LIMIT 1",
+        ['vorlage' => (int)$vorlage, 'module' => $module, 'action' => $action]
+      );
+
       if(is_numeric($id) && $id>0)
       {
         if($value=="1")
         {
-          $this->app->DB->Update("UPDATE uservorlagerights SET permission=1 WHERE id='$id' LIMIT 1");
+          $this->app->DatabaseService->execute(
+            "UPDATE uservorlagerights SET permission=1 WHERE id = :id LIMIT 1",
+            ['id' => (int)$id]
+          );
         }
         else {
-          $this->app->DB->Delete("DELETE FROM uservorlagerights WHERE vorlage='$vorlage' AND module='$module' AND action='$action'");
+          $this->app->DatabaseService->execute(
+            "DELETE FROM uservorlagerights WHERE vorlage = :vorlage AND module = :module AND action = :action",
+            ['vorlage' => (int)$vorlage, 'module' => $module, 'action' => $action]
+          );
         }
       }
       else
-        $this->app->DB->Insert("INSERT INTO uservorlagerights (vorlage, module, action, permission) VALUES ('$vorlage', '$module', '$action', '$value')");
+        $this->app->DatabaseService->execute(
+          "INSERT INTO uservorlagerights (vorlage, module, action, permission) VALUES (:vorlage, :module, :action, :permission)",
+          ['vorlage' => (int)$vorlage, 'module' => $module, 'action' => $action, 'permission' => $value]
+        );
     }
 
-    echo $this->app->DB->Select("SELECT permission FROM uservorlagerights WHERE vorlage='$vorlage' AND module='$module' AND action='$action' LIMIT 1");
+    echo $this->app->DatabaseService->selectValue(
+      "SELECT permission FROM uservorlagerights WHERE vorlage = :vorlage AND module = :module AND action = :action LIMIT 1",
+      ['vorlage' => (int)$vorlage, 'module' => $module, 'action' => $action]
+    );
     $this->app->erp->AbgleichBenutzerVorlagen(null, $id, $module, $action); // Update permissions for all users
 
     exit;

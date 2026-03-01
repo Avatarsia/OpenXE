@@ -544,7 +544,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
       $this->app->erp->ExitWawi();
     }
 
-    $mail = $this->app->DB->Select("SELECT adr.email FROM aufgabe a LEFT JOIN adresse adr ON a.adresse=adr.id WHERE a.id='$id' LIMIT 1");
+    $mail = $this->app->DatabaseService->selectValue("SELECT adr.email FROM aufgabe a LEFT JOIN adresse adr ON a.adresse=adr.id WHERE a.id=:id LIMIT 1", ['id' => $id]);
 
     $result = $this->app->erp->AufgabenMail($id);
 
@@ -554,7 +554,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
       $this->app->erp->ExitWawi();
     }else{
       if($mail==""){
-        $empfaenger = $this->app->DB->Select("SELECT a.name FROM adresse a LEFT JOIN aufgabe auf ON a.id = auf.adresse WHERE auf.id = '$id' LIMIT 1");
+        $empfaenger = $this->app->DatabaseService->selectValue("SELECT a.name FROM adresse a LEFT JOIN aufgabe auf ON a.id = auf.adresse WHERE auf.id=:id LIMIT 1", ['id' => $id]);
         $mail=" $empfaenger (Mailadresse von Mitarbeiter fehlt)";
       }
       $msg =  "Fehler beim Senden der Aufgabe an:$mail!";
@@ -613,7 +613,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
     $bondrucker = $this->app->erp->Firmendaten("aufgaben_bondrucker");
     if($bondrucker > 0)
     {
-      $seriennummer = $this->app->DB->Select("SELECT seriennummer FROM adapterbox WHERE id='$bondrucker' LIMIT 1");
+      $seriennummer = $this->app->DatabaseService->selectValue("SELECT seriennummer FROM adapterbox WHERE id=:id LIMIT 1", ['id' => $bondrucker]);
     } 
     $this->app->erp->AufgabeBonDrucker($id,$seriennummer);
     $this->app->ExitXentral();
@@ -763,11 +763,11 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
     $sid = $this->app->Secure->GetGET("sid");
     $referrer = $this->app->Secure->GetGET("referrer");
 
-    $check = $this->app->DB->Select("Select initiator FROM aufgabe WHERE id='$id' LIMIT 1");
+    $check = $this->app->DatabaseService->selectValue("SELECT initiator FROM aufgabe WHERE id=:id LIMIT 1", ['id' => $id]);
 
     if($check==$this->app->User->GetAdresse() || $this->app->User->GetType()=="admin")
     {
-      $this->app->DB->Update("DELETE FROM aufgabe WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->execute("DELETE FROM aufgabe WHERE id=:id LIMIT 1", ['id' => $id]);
       $msg = base64_encode("<div class=\"error2\">Die Aufgabe wurde gel&ouml;scht!</div>");
     } else {
       $msg = base64_encode("<div class=\"error2\">Die Aufgabe darf nur vom Initiator gel&ouml;scht werden!</div>");
@@ -1418,8 +1418,8 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
         $datum = date("Y-m-d", $timestamp_montag) ;
         $timestamp_montag += 3600*24;
 
-        $erste_zeiterfassung = $this->app->DB->Select("SELECT DATE_FORMAT(MIN(von),'%H:%i') FROM zeiterfassung WHERE adresse='$adresse' AND DATE_FORMAT(von,'%Y-%m-%d')='$datum'");
-        $letzte_zeiterfassung = $this->app->DB->Select("SELECT DATE_FORMAT(MAX(bis),'%H:%i') FROM zeiterfassung WHERE adresse='$adresse' AND DATE_FORMAT(von,'%Y-%m-%d')='$datum'");
+        $erste_zeiterfassung = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(MIN(von),'%H:%i') FROM zeiterfassung WHERE adresse=:adresse AND DATE_FORMAT(von,'%Y-%m-%d')=:datum", ['adresse' => $adresse, 'datum' => $datum]);
+        $letzte_zeiterfassung = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(MAX(bis),'%H:%i') FROM zeiterfassung WHERE adresse=:adresse AND DATE_FORMAT(von,'%Y-%m-%d')=:datum", ['adresse' => $adresse, 'datum' => $datum]);
 
         // alle aufgaben von dem Tag
         if($adresse==0)
@@ -1429,9 +1429,8 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
         else
         {
           $tmp = $this->app->DB->SelectArr("SELECT * FROM aufgabe WHERE DATE_FORMAT(abgabe_bis,'%Y-%m-%d')='$datum' AND adresse='".$adresse."' ORDER by sort,abgabe_bis,id");
-          $summe_dauer = $this->app->DB->Select("SELECT SUM(stunden) FROM aufgabe WHERE DATE_FORMAT(abgabe_bis,'%Y-%m-%d')='$datum' AND adresse='".$adresse."'");
-          $summe_dauer_abrechnen = $this->app->DB->Select("SELECT SUM(stunden) FROM aufgabe WHERE DATE_FORMAT(abgabe_bis,'%Y-%m-%d')='$datum' 
-            AND adresse='".$adresse."' AND zeiterfasung_abrechnung=1");
+          $summe_dauer = $this->app->DatabaseService->selectValue("SELECT SUM(stunden) FROM aufgabe WHERE DATE_FORMAT(abgabe_bis,'%Y-%m-%d')=:datum AND adresse=:adresse", ['datum' => $datum, 'adresse' => $adresse]);
+          $summe_dauer_abrechnen = $this->app->DatabaseService->selectValue("SELECT SUM(stunden) FROM aufgabe WHERE DATE_FORMAT(abgabe_bis,'%Y-%m-%d')=:datum AND adresse=:adresse AND zeiterfasung_abrechnung=1", ['datum' => $datum, 'adresse' => $adresse]);
           if($summe_dauer<=0) $summe_dauer=0;
           if($summe_dauer_abrechnen<=0) $summe_dauer_abrechnen=0;
         }
@@ -1440,7 +1439,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
         $ctmp = !empty($tmp)?count($tmp):0;
         for($tmpi=0;$tmpi<$ctmp;$tmpi++)
         {
-          $kunde = $this->app->DB->Select("SELECT name FROM adresse WHERE id='".$tmp[$tmpi]['kunde']."' LIMIT 1");
+          $kunde = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:id LIMIT 1", ['id' => $tmp[$tmpi]['kunde']]);
 
           if($kunde != "") {
             $kunde = $kunde."<br>";
@@ -1835,10 +1834,10 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
     if($mitarbeiter != ""){
       $mitarbeiter = explode(" ", $mitarbeiter);
       $mitarbeiternummer = $mitarbeiter[0];
-      $mitarbeiterid = $this->app->DB->Select("SELECT `id` FROM `adresse` WHERE `mitarbeiternummer` = '$mitarbeiternummer' AND `geloescht` = 0 LIMIT 1");
+      $mitarbeiterid = $this->app->DatabaseService->selectValue("SELECT `id` FROM `adresse` WHERE `mitarbeiternummer`=:nr AND `geloescht`=0 LIMIT 1", ['nr' => $mitarbeiternummer]);
       if($mitarbeiterid != "" && $mitarbeiterid > 0){
         if($sid != "" && $sid > 0){
-          $altemitarbeiterid = $this->app->DB->Select("SELECT `adresse` FROM `aufgabe` WHERE `id` = '$sid' LIMIT 1");
+          $altemitarbeiterid = $this->app->DatabaseService->selectValue("SELECT `adresse` FROM `aufgabe` WHERE `id`=:id LIMIT 1", ['id' => $sid]);
         }
       }else{
         $error .= "Bitte gültigen Mitarbeiter ausfüllen"."\n";
@@ -1851,7 +1850,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
     if($kunde != ""){
       $kunde = explode(" ", $kunde);
       $kundenid = $kunde[0];
-      $kundenid = $this->app->DB->Select("SELECT `id` FROM `adresse` WHERE `id` = '$kundenid' AND `geloescht` = 0 LIMIT 1");
+      $kundenid = $this->app->DatabaseService->selectValue("SELECT `id` FROM `adresse` WHERE `id`=:id AND `geloescht`=0 LIMIT 1", ['id' => $kundenid]);
       if($kundenid != "" && $kundenid > 0){
       }else{
         $error .= "Bitte gültigen Kunden ausfüllen"."\n";
@@ -1861,7 +1860,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
     if($ansprechpartner != ""){
       $ansprechpartner = explode(" ", $ansprechpartner);
       $ansprechpartnerId = $ansprechpartner[0];
-      $ansprechpartnerId = $this->app->DB->Select("SELECT `id` FROM `ansprechpartner` WHERE `id` = '$ansprechpartnerId' LIMIT 1");
+      $ansprechpartnerId = $this->app->DatabaseService->selectValue("SELECT `id` FROM `ansprechpartner` WHERE `id`=:id LIMIT 1", ['id' => $ansprechpartnerId]);
       if($ansprechpartnerId === '' || $ansprechpartnerId <= 0){
         $error .= "Bitte gültigen Ansprechpartner ausfüllen"."\n";
       }
@@ -1872,7 +1871,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
     if($projekt != ""){
       $projekt = explode(" ", $projekt);
       $projekt = $projekt[0];
-      $projektid = $this->app->DB->Select("SELECT `id` FROM `projekt` WHERE `abkuerzung` = '$projekt' LIMIT 1");
+      $projektid = $this->app->DatabaseService->selectValue("SELECT `id` FROM `projekt` WHERE `abkuerzung`=:abkuerzung LIMIT 1", ['abkuerzung' => $projekt]);
       if($projektid != "" && $projektid > 0){
       }else{
         $error .= "Bitte gültiges Projekt ausfüllen"."\n";
@@ -1882,7 +1881,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
     if($teilprojekt != ""){
       $teilprojekt = explode(" ", $teilprojekt);
       $teilprojekt = $teilprojekt[0];
-      $teilprojektid = $this->app->DB->Select("SELECT `id` FROM `arbeitspaket` WHERE `id` = '$teilprojekt' LIMIT 1");
+      $teilprojektid = $this->app->DatabaseService->selectValue("SELECT `id` FROM `arbeitspaket` WHERE `id`=:id LIMIT 1", ['id' => $teilprojekt]);
       if($teilprojektid != "" && $teilprojektid > 0){
       }else{
         $error .= "Bitte gültiges Teilprojekt ausfüllen"."\n";
@@ -1913,29 +1912,39 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
     }
 
     if($sid){
-      $this->app->DB->Update(
-        "UPDATE `aufgabe` SET `aufgabe` = '$aufgabe', `adresse` = '$mitarbeiterid', `kunde` = '$kundenid', 
-         `ansprechpartner_id` = '$ansprechpartnerId', `beschreibung` = '$beschreibung', 
-         `projekt` = '$projektid', `teilprojekt` = '$teilprojektid', `prio` = '$prio', 
-         `stunden` = '$dauer', `abgabe_bis` = '$datum', `abgabe_bis_zeit` = '$zeit', 
-         `intervall_tage` = '$intervall_tage', `zeiterfassung_pflicht` = '$pflicht', 
-         `zeiterfassung_abrechnung` = '$abgerechnet', `emailerinnerung` = '$mailerinnerung', 
-         `emailerinnerung_tage` = '$anzahltage', `vorankuendigung` = '$countdown', 
-         `oeffentlich` = '$oeffentlich', `startseite` = '$startseite', `pinwand` = '$aufpinwand', 
-         `note_color` = '$farbe', `pinwand_id` = '$pinwand', `status` = '$status', `sonstiges` = '$notizen' 
-        WHERE `id` = '$sid'"
+      $this->app->DatabaseService->execute(
+        "UPDATE `aufgabe` SET `aufgabe`=:aufgabe, `adresse`=:adresse, `kunde`=:kunde,
+         `ansprechpartner_id`=:ansprechpartner_id, `beschreibung`=:beschreibung,
+         `projekt`=:projekt, `teilprojekt`=:teilprojekt, `prio`=:prio,
+         `stunden`=:stunden, `abgabe_bis`=:abgabe_bis, `abgabe_bis_zeit`=:abgabe_bis_zeit,
+         `intervall_tage`=:intervall_tage, `zeiterfassung_pflicht`=:pflicht,
+         `zeiterfassung_abrechnung`=:abgerechnet, `emailerinnerung`=:mailerinnerung,
+         `emailerinnerung_tage`=:anzahltage, `vorankuendigung`=:countdown,
+         `oeffentlich`=:oeffentlich, `startseite`=:startseite, `pinwand`=:aufpinwand,
+         `note_color`=:farbe, `pinwand_id`=:pinwand, `status`=:status, `sonstiges`=:notizen
+        WHERE `id`=:sid",
+        ['aufgabe' => $aufgabe, 'adresse' => $mitarbeiterid, 'kunde' => $kundenid,
+         'ansprechpartner_id' => $ansprechpartnerId, 'beschreibung' => $beschreibung,
+         'projekt' => $projektid, 'teilprojekt' => $teilprojektid, 'prio' => $prio,
+         'stunden' => $dauer, 'abgabe_bis' => $datum, 'abgabe_bis_zeit' => $zeit,
+         'intervall_tage' => $intervall_tage, 'pflicht' => $pflicht,
+         'abgerechnet' => $abgerechnet, 'mailerinnerung' => $mailerinnerung,
+         'anzahltage' => $anzahltage, 'countdown' => $countdown,
+         'oeffentlich' => $oeffentlich, 'startseite' => $startseite, 'aufpinwand' => $aufpinwand,
+         'farbe' => $farbe, 'pinwand' => $pinwand, 'status' => $status, 'notizen' => $notizen,
+         'sid' => $sid]
       );
 
 
       if($status === "abgeschlossen" && $abgeschlossentext!=""){
-        $to = $this->app->DB->Select("SELECT `email` FROM `adresse` WHERE `id` = '$mitarbeiterid' AND `geloescht` != 1 LIMIT 1");
-        $to_name = $this->app->DB->Select("SELECT `name` FROM `adresse` WHERE `id` = '$mitarbeiterid' AND `geloescht` != 1 LIMIT 1");
+        $to = $this->app->DatabaseService->selectValue("SELECT `email` FROM `adresse` WHERE `id`=:id AND `geloescht`!=1 LIMIT 1", ['id' => $mitarbeiterid]);
+        $to_name = $this->app->DatabaseService->selectValue("SELECT `name` FROM `adresse` WHERE `id`=:id AND `geloescht`!=1 LIMIT 1", ['id' => $mitarbeiterid]);
 
         if($this->app->erp->MailSend($this->app->erp->GetFirmaMail(),$this->app->erp->GetFirmaName(),$to,$to_name,"Aufgabe wurde als abgeschlossen markiert",$abgeschlossentext)){
           $msg .= "Die Aufgabe wurde als abgeschlossen markiert und wurde per Mail an $to gesendet!"."\n";
         }else{
           if($to==""){
-            $empfaenger = $this->app->DB->Select("SELECT a.name FROM `adresse` AS `a` LEFT JOIN `aufgabe` AS `auf` ON a.id = auf.adresse WHERE auf.id = '$sid' LIMIT 1");
+            $empfaenger = $this->app->DatabaseService->selectValue("SELECT a.name FROM `adresse` AS `a` LEFT JOIN `aufgabe` AS `auf` ON a.id = auf.adresse WHERE auf.id=:id LIMIT 1", ['id' => $sid]);
             $mail=" $empfaenger (Mailadresse von Mitarbeiter fehlt)";
           }else{
             $mail = $to;
@@ -1952,21 +1961,30 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
 
       return new JsonResponse(['status'=>1,'statusText'=>$msg]);
     }
-    $this->app->DB->Insert(
-      "INSERT INTO `aufgabe` 
-    (`aufgabe`, `adresse`, `kunde`, `ansprechpartner_id`, `beschreibung`, `projekt`, `teilprojekt`, 
-     `prio`, `stunden`, `abgabe_bis`, `abgabe_bis_zeit`, `intervall_tage`, `zeiterfassung_pflicht`, `zeiterfassung_abrechnung`, 
-     `emailerinnerung`, `emailerinnerung_tage`, `vorankuendigung`, 
-     `oeffentlich`, `startseite`, `pinwand`, `note_color`, `pinwand_id`, `status`, `sonstiges`, `angelegt_am`, 
-     `initiator`) 
-     VALUES ('$aufgabe', '$mitarbeiterid', '$kundenid', '$ansprechpartnerId', '$beschreibung', '$projektid', 
-             '$teilprojektid', '$prio', '$dauer', '$datum', '$zeit', '$intervall_tage', '$pflicht', '$abgerechnet',
-             '$mailerinnerung', '$anzahltage', '$countdown', '$oeffentlich', 
-                                                                                                                                                                                                                                                                                       '$startseite', '$aufpinwand', '$farbe', '$pinwand', '$status', '$notizen', CURDATE(), ".$this->app->User->GetAdresse().")");
+    $this->app->DatabaseService->insert(
+      "INSERT INTO `aufgabe`
+    (`aufgabe`, `adresse`, `kunde`, `ansprechpartner_id`, `beschreibung`, `projekt`, `teilprojekt`,
+     `prio`, `stunden`, `abgabe_bis`, `abgabe_bis_zeit`, `intervall_tage`, `zeiterfassung_pflicht`, `zeiterfassung_abrechnung`,
+     `emailerinnerung`, `emailerinnerung_tage`, `vorankuendigung`,
+     `oeffentlich`, `startseite`, `pinwand`, `note_color`, `pinwand_id`, `status`, `sonstiges`, `angelegt_am`,
+     `initiator`)
+     VALUES (:aufgabe, :adresse, :kunde, :ansprechpartner_id, :beschreibung, :projekt, :teilprojekt,
+             :prio, :stunden, :abgabe_bis, :abgabe_bis_zeit, :intervall_tage, :pflicht, :abgerechnet,
+             :mailerinnerung, :anzahltage, :countdown, :oeffentlich,
+             :startseite, :aufpinwand, :farbe, :pinwand, :status, :notizen, CURDATE(), :initiator)",
+      ['aufgabe' => $aufgabe, 'adresse' => $mitarbeiterid, 'kunde' => $kundenid,
+       'ansprechpartner_id' => $ansprechpartnerId, 'beschreibung' => $beschreibung,
+       'projekt' => $projektid, 'teilprojekt' => $teilprojektid, 'prio' => $prio,
+       'stunden' => $dauer, 'abgabe_bis' => $datum, 'abgabe_bis_zeit' => $zeit,
+       'intervall_tage' => $intervall_tage, 'pflicht' => $pflicht, 'abgerechnet' => $abgerechnet,
+       'mailerinnerung' => $mailerinnerung, 'anzahltage' => $anzahltage, 'countdown' => $countdown,
+       'oeffentlich' => $oeffentlich, 'startseite' => $startseite, 'aufpinwand' => $aufpinwand,
+       'farbe' => $farbe, 'pinwand' => $pinwand, 'status' => $status, 'notizen' => $notizen,
+       'initiator' => $this->app->User->GetAdresse()]);
 
     if($status === "abgeschlossen" && $abgeschlossentext!=""){
-      $to = $this->app->DB->Select("SELECT `email` FROM `adresse` WHERE `id` = '$mitarbeiterid' AND `geloescht` != 1 LIMIT 1");
-      $to_name = $this->app->DB->Select("SELECT `name` FROM `adresse` WHERE `id` = '$mitarbeiterid' AND `geloescht` != 1 LIMIT 1");
+      $to = $this->app->DatabaseService->selectValue("SELECT `email` FROM `adresse` WHERE `id`=:id AND `geloescht`!=1 LIMIT 1", ['id' => $mitarbeiterid]);
+      $to_name = $this->app->DatabaseService->selectValue("SELECT `name` FROM `adresse` WHERE `id`=:id AND `geloescht`!=1 LIMIT 1", ['id' => $mitarbeiterid]);
       if($this->app->erp->MailSend(
         $this->app->erp->GetFirmaMail(),$this->app->erp->GetFirmaName(),$to,$to_name,
         "Aufgabe wurde als abgeschlossen markiert",$abgeschlossentext)
@@ -1974,7 +1992,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
         $msg .= "Die Aufgabe wurde als abgeschlossen markiert und wurde per Mail an $to gesendet!"."\n";
       }else{
         if($to==""){
-          $empfaenger = $this->app->DB->Select("SELECT a.name FROM `adresse` AS `a` LEFT JOIN `aufgabe` AS `auf` ON a.id = auf.adresse WHERE auf.id = '$sid' LIMIT 1");
+          $empfaenger = $this->app->DatabaseService->selectValue("SELECT a.name FROM `adresse` AS `a` LEFT JOIN `aufgabe` AS `auf` ON a.id = auf.adresse WHERE auf.id=:id LIMIT 1", ['id' => $sid]);
           $mail=" $empfaenger (Mailadresse von Mitarbeiter fehlt)";
         }else{
           $mail = $to;
@@ -2176,11 +2194,11 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
 
     //$this->LogFile("sende an adresse ".$adresse);
 
-    $to = $this->app->DB->Select("SELECT email FROM adresse WHERE id='$adresse' AND geloescht!=1 LIMIT 1");
-    $to_name = $this->app->DB->Select("SELECT name FROM adresse WHERE id='$adresse' AND geloescht!=1 LIMIT 1");
+    $to = $this->app->DatabaseService->selectValue("SELECT email FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresse]);
+    $to_name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresse]);
 
-    $initiator_to = $this->app->DB->Select("SELECT email FROM adresse WHERE id='$adresse_initiator' AND geloescht!=1 LIMIT 1");
-    $initiator_to_name = $this->app->DB->Select("SELECT name FROM adresse WHERE id='$adresse_initiator' AND geloescht!=1 LIMIT 1");
+    $initiator_to = $this->app->DatabaseService->selectValue("SELECT email FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresse_initiator]);
+    $initiator_to_name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:id AND geloescht!=1 LIMIT 1", ['id' => $adresse_initiator]);
 
     //$this->LogFile("Sende Aufgabe $aufgabe an Email ".$to." und Initiator ".$initiator_to);
 

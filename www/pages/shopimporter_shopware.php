@@ -143,13 +143,13 @@ class Shopimporter_Shopware extends ShopimporterBase
     $adressId = $this->CatchRemoteCommand('data');
     $meldung = array();
 
-    $data = reset($this->app->DB->SelectArr("SELECT * FROM adresse WHERE id='$adressId'"));
+    $data = reset($this->app->DatabaseService->select("SELECT * FROM adresse WHERE id = :id", ['id' => (int)$adressId]));
 
     if($data['email']){
       $direktquery = 'filter[0][property]=email&filter[0][expression]==&filter[0][value]='.$data['email'];
       $adresseAusShop = $this->adapter->get('customers',[],$direktquery);
       $sprache = $data['sprache'];
-      $subshopid = $this->app->DB->Select("SELECT subshopkennung FROM shopexport_subshop WHERE shop='$this->shopid' and sprache='$sprache' and aktiv=1");
+      $subshopid = $this->app->DatabaseService->selectValue("SELECT subshopkennung FROM shopexport_subshop WHERE shop = :shop AND sprache = :sprache AND aktiv = 1", ['shop' => (int)$this->shopid, 'sprache' => $sprache]);
 
       $firma ='';
       if(strtolower($data['typ'])==='firma'){
@@ -182,9 +182,10 @@ class Shopimporter_Shopware extends ShopimporterBase
         $rechnungland = $data['land'];
       }
       $gruppenschluessel = '';
-      $gruppen = $this->app->DB->SelectArr("SELECT g.kennziffer FROM adresse_rolle ar
-        JOIN gruppen g ON ar.parameter = g.id 
-        WHERE ar.adresse = '$adressId'  AND ar.subjekt = 'Mitglied' AND ar.objekt = 'Gruppe'");
+      $gruppen = $this->app->DatabaseService->select(
+        "SELECT g.kennziffer FROM adresse_rolle ar JOIN gruppen g ON ar.parameter = g.id WHERE ar.adresse = :adresse AND ar.subjekt = 'Mitglied' AND ar.objekt = 'Gruppe'",
+        ['adresse' => (int)$adressId]
+      );
 
       if((!empty($gruppen)?count($gruppen):0)>0){
         foreach ($gruppen as $key => $value) {
@@ -275,13 +276,16 @@ class Shopimporter_Shopware extends ShopimporterBase
 
       foreach($ret as $v)
       {
-        $this->app->DB->Insert("INSERT INTO shopexport_getarticles (shop, nummer) VALUES ('$this->shopid', '".$this->app->DB->real_escape_string($v)."')");
+        $this->app->DatabaseService->execute(
+          "INSERT INTO shopexport_getarticles (shop, nummer) VALUES (:shop, :nummer)",
+          ['shop' => (int)$this->shopid, 'nummer' => $v]
+        );
       }
       $start +=$limit;
     }while(count($result['data']) === $limit);
 
 
-    $anzahl = $this->app->DB->Select("SELECT COUNT(id) FROM shopexport_getarticles WHERE shop=$this->shopid");
+    $anzahl = $this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM shopexport_getarticles WHERE shop = :shop", ['shop' => (int)$this->shopid]);
     $this->app->erp->SetKonfigurationValue('artikelimportanzahl_'.$this->shopid, $anzahl);
 
   }
@@ -289,7 +293,7 @@ class Shopimporter_Shopware extends ShopimporterBase
   public function ImportStorniereAuftrag()
   {
     $tmp = $this->CatchRemoteCommand('data');
-    $einstellungen = $this->app->DB->Select("SELECT einstellungen_json FROM shopexport WHERE id = '$this->shopid' LIMIT 1");
+    $einstellungen = $this->app->DatabaseService->selectValue("SELECT einstellungen_json FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$this->shopid]);
     if($einstellungen)$einstellungen = json_decode($einstellungen,true);
     $stornostatusid = $einstellungen['felder']['StorniertStatusID'];
 
@@ -302,7 +306,7 @@ class Shopimporter_Shopware extends ShopimporterBase
   {
     $this->shopid = $shopid;
     $this->data = $data;
-    $einstellungen = $this->app->DB->Select("SELECT einstellungen_json FROM shopexport WHERE id = '$shopid' LIMIT 1");
+    $einstellungen = $this->app->DatabaseService->selectValue("SELECT einstellungen_json FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$shopid]);
     if($einstellungen)$einstellungen = json_decode($einstellungen,true);
 
     $this->protokoll = $einstellungen['felder']['protokoll'];
@@ -311,7 +315,7 @@ class Shopimporter_Shopware extends ShopimporterBase
     $ImportShopwareApiUrl = $einstellungen['felder']['ImportShopwareApiUrl'];
     $this->useorderid = $einstellungen['felder']['useorderid'];
     $this->url = $ImportShopwareApiUrl;
-    $this->nurpreise = $this->app->DB->Select("SELECT nurpreise FROM shopexport WHERE id = '$shopid' LIMIT 1");
+    $this->nurpreise = $this->app->DatabaseService->selectValue("SELECT nurpreise FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$shopid]);
     $this->RootCategoryName = $einstellungen['felder']['RootCategoryName'];
     $useDigestAuth = !empty($einstellungen['felder']['useDigestAuth']);
 
@@ -590,26 +594,32 @@ class Shopimporter_Shopware extends ShopimporterBase
       foreach($tmp as $key=>$value)
       {
 
-        $checkid = $this->app->DB->Select("SELECT id FROM s_emarketing_partner WHERE idcode='".$value['ref']."' AND idcode!='' LIMIT 1");
+        $checkid = $this->app->DatabaseService->selectValue(
+          "SELECT id FROM s_emarketing_partner WHERE idcode = :idcode AND idcode != '' LIMIT 1",
+          ['idcode' => $value['ref']]
+        );
         if($checkid<=0)
         {
-          $this->app->DB->Insert("INSERT INTO s_emarketing_partner (id,idcode,datum,active,userID) VALUES ('','".$value['ref']."',NOW(),1,0)");
+          $this->app->DatabaseService->execute(
+            "INSERT INTO s_emarketing_partner (id,idcode,datum,active,userID) VALUES ('', :idcode, NOW(), 1, 0)",
+            ['idcode' => $value['ref']]
+          );
           $checkid = $this->app->DB->GetInsertID();
         }
 
         foreach($value as $column=>$cvalue)
-        { 
+        {
           switch($column)
           {
-            case "name": $this->app->DB->Update("UPDATE s_emarketing_partner SET company='$cvalue' WHERE id='$checkid' LIMIT 1");break;
-            case "netto": $this->app->DB->Update("UPDATE s_emarketing_partner SET percent='$cvalue' WHERE id='$checkid' LIMIT 1");break;
-            case "strasse": $this->app->DB->Update("UPDATE s_emarketing_partner SET street='$cvalue' WHERE id='$checkid' LIMIT 1");break;
-            case "email": $this->app->DB->Update("UPDATE s_emarketing_partner SET email='$cvalue' WHERE id='$checkid' LIMIT 1");break;
-            case "telefax": $this->app->DB->Update("UPDATE s_emarketing_partner SET fax='$cvalue' WHERE id='$checkid' LIMIT 1");break;
-            case "telefon": $this->app->DB->Update("UPDATE s_emarketing_partner SET phone='$cvalue' WHERE id='$checkid' LIMIT 1");break;
-            case "ort": $this->app->DB->Update("UPDATE s_emarketing_partner SET city='$cvalue' WHERE id='$checkid' LIMIT 1");break;
-            case "plz": $this->app->DB->Update("UPDATE s_emarketing_partner SET zipcode='$cvalue' WHERE id='$checkid' LIMIT 1");break;
-            case "land": $this->app->DB->Update("UPDATE s_emarketing_partner SET country='$cvalue' WHERE id='$checkid' LIMIT 1");break;
+            case "name": $this->app->DatabaseService->execute("UPDATE s_emarketing_partner SET company = :val WHERE id = :id LIMIT 1", ['val' => $cvalue, 'id' => (int)$checkid]);break;
+            case "netto": $this->app->DatabaseService->execute("UPDATE s_emarketing_partner SET percent = :val WHERE id = :id LIMIT 1", ['val' => $cvalue, 'id' => (int)$checkid]);break;
+            case "strasse": $this->app->DatabaseService->execute("UPDATE s_emarketing_partner SET street = :val WHERE id = :id LIMIT 1", ['val' => $cvalue, 'id' => (int)$checkid]);break;
+            case "email": $this->app->DatabaseService->execute("UPDATE s_emarketing_partner SET email = :val WHERE id = :id LIMIT 1", ['val' => $cvalue, 'id' => (int)$checkid]);break;
+            case "telefax": $this->app->DatabaseService->execute("UPDATE s_emarketing_partner SET fax = :val WHERE id = :id LIMIT 1", ['val' => $cvalue, 'id' => (int)$checkid]);break;
+            case "telefon": $this->app->DatabaseService->execute("UPDATE s_emarketing_partner SET phone = :val WHERE id = :id LIMIT 1", ['val' => $cvalue, 'id' => (int)$checkid]);break;
+            case "ort": $this->app->DatabaseService->execute("UPDATE s_emarketing_partner SET city = :val WHERE id = :id LIMIT 1", ['val' => $cvalue, 'id' => (int)$checkid]);break;
+            case "plz": $this->app->DatabaseService->execute("UPDATE s_emarketing_partner SET zipcode = :val WHERE id = :id LIMIT 1", ['val' => $cvalue, 'id' => (int)$checkid]);break;
+            case "land": $this->app->DatabaseService->execute("UPDATE s_emarketing_partner SET country = :val WHERE id = :id LIMIT 1", ['val' => $cvalue, 'id' => (int)$checkid]);break;
           }
         }
       }
@@ -1057,7 +1067,7 @@ class Shopimporter_Shopware extends ShopimporterBase
         return $parentid;
       }
 
-      $parentCategoryData = $this->app->DB->SelectRow("SELECT id,parent,bezeichnung AS name FROM artikelkategorien WHERE id<>'' AND id<>'0' AND id='".$categoryData['parent']."' LIMIT 1");
+      $parentCategoryData = $this->app->DatabaseService->selectRow("SELECT id,parent,bezeichnung AS name FROM artikelkategorien WHERE id <> '' AND id <> '0' AND id = :id LIMIT 1", ['id' => $categoryData['parent']]);
       if(empty($parentCategoryData)){
         return null;
       }
@@ -1093,7 +1103,7 @@ class Shopimporter_Shopware extends ShopimporterBase
     $anzahl = 0;
     $bilderarray = array();
     $ctmp = (!empty($tmp)?count($tmp):0);
-    $shopeinstellungen = $this->app->DB->SelectArr("SELECT * FROM shopexport WHERE id = '".$this->shopid."' AND aktiv = 1 LIMIT 1");
+    $shopeinstellungen = $this->app->DatabaseService->select("SELECT * FROM shopexport WHERE id = :id AND aktiv = 1 LIMIT 1", ['id' => (int)$this->shopid]);
     if(!empty($shopeinstellungen))
     {
       $shopeinstellungen = reset($shopeinstellungen);
@@ -2097,7 +2107,7 @@ class Shopimporter_Shopware extends ShopimporterBase
       $artikelid = $result['data']['id'];
       //Schritt 9:Übersetzung
       if(!$this->nurpreise){
-        $storestmp = $this->app->DB->SelectArr("SELECT subshopkennung, aktiv, sprache FROM shopexport_subshop WHERE shop = '$this->shopid' AND aktiv = 1");
+        $storestmp = $this->app->DatabaseService->select("SELECT subshopkennung, aktiv, sprache FROM shopexport_subshop WHERE shop = :shop AND aktiv = 1", ['shop' => (int)$this->shopid]);
         if(is_array($storestmp)){
           $dimensonIds = [];
           $dimensionValuesIds = [];
@@ -2124,7 +2134,10 @@ class Shopimporter_Shopware extends ShopimporterBase
 
           foreach ($storestmp as $key => $value){
             if($value['sprache'] !== 'deutsch'){
-              $iso = $this->app->DB->Select("SELECT iso FROM sprachen WHERE iso <> '' AND (iso='".$value['sprache']."' OR LOWER(bezeichnung_de)='".$value['sprache']."' OR LOWER(alias)='".$value['sprache']."' ) LIMIT 1");
+              $iso = $this->app->DatabaseService->selectValue(
+                "SELECT iso FROM sprachen WHERE iso <> '' AND (iso = :sprache1 OR LOWER(bezeichnung_de) = :sprache2 OR LOWER(alias) = :sprache3) LIMIT 1",
+                ['sprache1' => $value['sprache'], 'sprache2' => $value['sprache'], 'sprache3' => $value['sprache']]
+              );
               if($iso === 'DE' || empty($iso)){
                 continue;
               }
@@ -2442,7 +2455,7 @@ class Shopimporter_Shopware extends ShopimporterBase
   //get checksum list from onlineshop
   public function ImportGetAuftraegeAnzahl()
   {
-    $einstellungen = $this->app->DB->Select("SELECT einstellungen_json FROM shopexport WHERE id = '$this->shopid' LIMIT 1");
+    $einstellungen = $this->app->DatabaseService->selectValue("SELECT einstellungen_json FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$this->shopid]);
     if($einstellungen){
       $einstellungen = json_decode($einstellungen,true);
     }
@@ -2646,7 +2659,7 @@ class Shopimporter_Shopware extends ShopimporterBase
   // get checksum list from onlineshop
   public function ImportGetAuftrag()
   {
-    $einstellungen = $this->app->DB->Select("SELECT einstellungen_json FROM shopexport WHERE id = '$this->shopid' LIMIT 1");
+    $einstellungen = $this->app->DatabaseService->selectValue("SELECT einstellungen_json FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$this->shopid]);
     if($einstellungen)
     {
       $einstellungen = json_decode($einstellungen,true);

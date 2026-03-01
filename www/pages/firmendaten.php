@@ -323,13 +323,13 @@ class Firmendaten  {
       $dateiname = $this->app->Secure->GetPOST('dateiname');
       $color = $this->app->Secure->GetPOST('firmenfarbehell');
       $firmenhoherformularkontrast = (int)$this->app->Secure->GetPOST('firmenhoherformularkontrast');
-      $this->app->DB->Update("UPDATE firmendaten_werte SET wert = '$firmenhoherformularkontrast' WHERE name = 'firmenhoherformularkontrast'");
+      $this->app->DatabaseService->execute("UPDATE firmendaten_werte SET wert=:wert WHERE name='firmenhoherformularkontrast'", ['wert' => $firmenhoherformularkontrast]);
       if($color != '') {
         $colordunkel = $this->FarbeDunkel($color);
-        $this->app->DB->Update("UPDATE firmendaten_werte SET wert = '$colordunkel' WHERE name = 'firmenfarbedunkel'");
-        $this->app->DB->Update("UPDATE firmendaten_werte SET wert = '$color' WHERE name = 'firmenfarbehell'");
-        $this->app->DB->Update("UPDATE firmendaten SET firmenfarbedunkel = '$colordunkel'");
-        $this->app->DB->Update("UPDATE firmendaten SET firmenfarbehell = '$color'");
+        $this->app->DatabaseService->execute("UPDATE firmendaten_werte SET wert=:wert WHERE name='firmenfarbedunkel'", ['wert' => $colordunkel]);
+        $this->app->DatabaseService->execute("UPDATE firmendaten_werte SET wert=:wert WHERE name='firmenfarbehell'", ['wert' => $color]);
+        $this->app->DatabaseService->execute("UPDATE firmendaten SET firmenfarbedunkel=:wert", ['wert' => $colordunkel]);
+        $this->app->DatabaseService->execute("UPDATE firmendaten SET firmenfarbehell=:wert", ['wert' => $color]);
       }
 
       if($bild != '') {
@@ -337,7 +337,7 @@ class Firmendaten  {
         unset($bild);
         $encodedData = str_replace(' ','+',$data[1]);
         unset($data);
-        $this->app->DB->Update("UPDATE firmendaten SET firmenlogo = '$encodedData'");
+        $this->app->DatabaseService->execute("UPDATE firmendaten SET firmenlogo=:logo", ['logo' => $encodedData]);
         $this->app->DB->Update("UPDATE firmendaten_werte SET wert = 1 WHERE name = 'firmenlogoaktiv'");
         unset($encodedData);
       }
@@ -493,7 +493,7 @@ class Firmendaten  {
     if(!$id) {
       $id  = $this->app->DB->Select("SELECT MAX(firma) FROM firmendaten LIMIT 1");
     }
-    $logo = $this->app->DB->Select("SELECT logo FROM firmendaten WHERE firma='$id'");
+    $logo = $this->app->DatabaseService->selectValue("SELECT logo FROM firmendaten WHERE firma=:id", ['id' => $id]);
     $logo_type = $this->app->erp->Firmendaten('logo_type');
     $endung = str_replace('image/','',$logo_type);
 
@@ -514,13 +514,13 @@ class Firmendaten  {
     $cmd = $this->app->Secure->GetGET('cmd');
     switch ($cmd) {
       case 'briefpapier2':
-        $briefpapier = $this->app->DB->Select("SELECT briefpapier2 FROM firmendaten WHERE firma='$id'");
+        $briefpapier = $this->app->DatabaseService->selectValue("SELECT briefpapier2 FROM firmendaten WHERE firma=:id", ['id' => $id]);
         $filename = 'breifpapier2.pdf';
         break;
 
       case 'briefpapier1':
       default:
-        $briefpapier = $this->app->DB->Select("SELECT briefpapier FROM firmendaten WHERE firma='$id'");
+        $briefpapier = $this->app->DatabaseService->selectValue("SELECT briefpapier FROM firmendaten WHERE firma=:id", ['id' => $id]);
         $filename = 'breifpapier1.pdf';
         break;
     }
@@ -895,7 +895,7 @@ class Firmendaten  {
             $firmenlogo = $this->app->erp->uploadFileIntoDB($_FILES['firmenlogo']);
           }
 
-          $this->app->DB->Update("UPDATE firmendaten SET firmenlogo='{$firmenlogo['file']}' WHERE firma='$id'");
+          $this->app->DatabaseService->execute("UPDATE firmendaten SET firmenlogo=:logo WHERE firma=:id", ['logo' => $firmenlogo['file'], 'id' => $id]);
         }
         else{
           $error .= "$firmenlogo_error<br>";
@@ -912,7 +912,7 @@ class Firmendaten  {
           $data['briefpapier2vorhanden'] = 0;
           $this->app->erp->FirmendatenSet('logo_type',$logo['type']);
           $this->app->erp->FirmendatenSet('hintergrund','logo');
-          $this->app->DB->Update("UPDATE firmendaten SET logo='{$logo['image']}' WHERE firma='$id' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE firmendaten SET logo=:logo WHERE firma=:id LIMIT 1", ['logo' => $logo['image'], 'id' => $id]);
         }
         else{
           $error .= "$logo_error<br>";
@@ -937,7 +937,7 @@ class Firmendaten  {
           $data['hintergrund'] = 'briefpapier';
           $data['briefpapier2vorhanden'] = 1;
           $this->app->erp->FirmendatenSet('hintergrund','briefpapier');
-          $this->app->DB->Update("UPDATE firmendaten SET briefpapier2='{$briefpapier2['file']}' WHERE firma='$id'");
+          $this->app->DatabaseService->execute("UPDATE firmendaten SET briefpapier2=:file WHERE firma=:id", ['file' => $briefpapier2['file'], 'id' => $id]);
         }
         else{
           $error .= "$briefpapier2_error<br>";
@@ -954,7 +954,7 @@ class Firmendaten  {
           $data['hintergrund'] = 'briefpapier';
           $this->app->erp->FirmendatenSet('briefpapier_type',$briefpapier['type']);
           $this->app->erp->FirmendatenSet('hintergrund','briefpapier');
-          $this->app->DB->Update("UPDATE firmendaten SET briefpapier='{$briefpapier['file']}' WHERE firma='$id'");
+          $this->app->DatabaseService->execute("UPDATE firmendaten SET briefpapier=:file WHERE firma=:id", ['file' => $briefpapier['file'], 'id' => $id]);
         }
         else{
           $error .= "$briefpapier_error<br>";
@@ -996,10 +996,10 @@ class Firmendaten  {
 
       if($error=='')
       {
-        $vorhanden = $this->app->DB->Select("SELECT id FROM firmendaten WHERE firma='$id' LIMIT 1");
+        $vorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM firmendaten WHERE firma=:id LIMIT 1", ['id' => $id]);
 
         if(!is_numeric($vorhanden)) {
-          $this->app->DB->Insert("INSERT INTO firmendaten (firma) VALUES ('$id')");
+          $this->app->DatabaseService->insert("INSERT INTO firmendaten (firma) VALUES (:id)", ['id' => $id]);
         }
 
         // Update Bilder
@@ -1008,7 +1008,7 @@ class Firmendaten  {
 
         //suche projekt ID von abkuerzung
 
-        $data['projekt'] = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='{$data['projekt']}' LIMIT 1");
+        $data['projekt'] = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung=:abkuerzung LIMIT 1", ['abkuerzung' => $data['projekt']]);
 
         // wenn cloud hole data[lizenz] data[schluessel]
 
@@ -1300,7 +1300,7 @@ class Firmendaten  {
           }
         }
         
-        $this->app->DB->Update("UPDATE firma SET name='{$data['name']}', standardprojekt='{$data['projekt']}' WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE firma SET name=:name, standardprojekt=:projekt WHERE id=:id LIMIT 1", ['name' => $data['name'], 'projekt' => $data['projekt'], 'id' => $id]);
 
         $this->app->Tpl->Set('MESSAGE', "<div class=\"error2\">Ihre Daten wurden erfolgreich gespeichert.</div>");
         $this->FillFormFromDB($id); 
@@ -1394,7 +1394,7 @@ class Firmendaten  {
    */
   function fillFormFromDB($id)
   {
-    $vorhanden = $this->app->DB->Select("SELECT id FROM firmendaten WHERE firma='$id' LIMIT 1");
+    $vorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM firmendaten WHERE firma=:id LIMIT 1", ['id' => $id]);
 
     if(!is_numeric($vorhanden))
     {
@@ -1743,7 +1743,7 @@ class Firmendaten  {
       $this->app->Tpl->Set('ORT' , $data[0]['ort']);
       $this->app->Tpl->Set('STEUERNUMMER' , $data[0]['steuernummer']);
 
-      $data[0]['projekt'] = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='{$data[0]['projekt']}' LIMIT 1");
+      $data[0]['projekt'] = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id=:id LIMIT 1", ['id' => $data[0]['projekt']]);
       $this->app->Tpl->Set('PROJEKT' , $data[0]['projekt']);
 
       $this->app->Tpl->Set('STANDARDVERSANDDRUCKER' , $this->app->erp->GetSelectDrucker($data[0]['standardversanddrucker']));
