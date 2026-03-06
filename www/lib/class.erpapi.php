@@ -15616,12 +15616,10 @@ $( this ).dialog( "close" );
 
     $this->app->BuildNavigation = false;
     $this->app->Tpl->Set('TABTEXT', "Abschicken");
-    $docRow = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT status, adresse, projekt FROM `%s` WHERE id=%d LIMIT 1',
-        $typ,
-        (int) $id
-      )
+    $_safeAbschickenTyp = $this->app->DatabaseService->validateIdentifier($typ);
+    $docRow = $this->app->DatabaseService->selectRow(
+      "SELECT status, adresse, projekt FROM `{$_safeAbschickenTyp}` WHERE id = :id LIMIT 1",
+      ['id' => (int) $id]
     );
     $status = $docRow['status'];
     $adresse = $docRow['adresse'];
@@ -16552,14 +16550,12 @@ $( this ).dialog( "close" );
     }
     $parents[] = $artikel;
 
-    $stueckliste = $this->app->DB->SelectArr(
-      sprintf(
-        'SELECT DISTINCT s.artikel 
-        FROM rohstoffe AS s 
-        INNER JOIN artikel AS a ON s.artikel = a.id 
-        WHERE s.rohstoffvonartikel = %d AND a.geloescht <> 1',
-        $artikel
-      )
+    $stueckliste = $this->app->DatabaseService->select(
+      'SELECT DISTINCT s.artikel
+        FROM rohstoffe AS s
+        INNER JOIN artikel AS a ON s.artikel = a.id
+        WHERE s.rohstoffvonartikel = :artikel AND a.geloescht <> 1',
+      ['artikel' => (int) $artikel]
     );
     if (empty($stueckliste)) {
       return false;
@@ -16595,14 +16591,12 @@ $( this ).dialog( "close" );
     }
     $parents[] = $artikel;
 
-    $stueckliste = $this->app->DB->SelectArr(
-      sprintf(
-        'SELECT DISTINCT s.artikel 
-        FROM stueckliste AS s 
-        INNER JOIN artikel AS a ON s.artikel = a.id 
-        WHERE s.stuecklistevonartikel = %d AND a.geloescht <> 1',
-        $artikel
-      )
+    $stueckliste = $this->app->DatabaseService->select(
+      'SELECT DISTINCT s.artikel
+        FROM stueckliste AS s
+        INNER JOIN artikel AS a ON s.artikel = a.id
+        WHERE s.stuecklistevonartikel = :artikel AND a.geloescht <> 1',
+      ['artikel' => (int) $artikel]
     );
     if (empty($stueckliste)) {
       return false;
@@ -16644,21 +16638,19 @@ $( this ).dialog( "close" );
       return null;
     }
     if (empty($res)) {
-      $res = $this->app->DB->SelectRow(
-        sprintf('SELECT * FROM artikel WHERE id = %d LIMIT 1', $artikel)
+      $res = $this->app->DatabaseService->selectRow(
+        'SELECT * FROM artikel WHERE id = :id LIMIT 1',
+        ['id' => (int) $artikel]
       );
     }
     if (empty($res)) {
       return null;
     }
     if ($shop) {
-      $artikelarr = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT * FROM artikel_onlineshops 
-          WHERE artikel = %d AND aktiv = 1 AND shop = %d AND ausartikel = 0 LIMIT 1',
-          $artikel,
-          $shop
-        )
+      $artikelarr = $this->app->DatabaseService->selectRow(
+        'SELECT * FROM artikel_onlineshops
+          WHERE artikel = :artikel AND aktiv = 1 AND shop = :shop AND ausartikel = 0 LIMIT 1',
+        ['artikel' => (int) $artikel, 'shop' => (int) $shop]
       );
       if (!empty($artikelarr)) {
         foreach ($artikelarr as $k => $v) {
@@ -16669,11 +16661,9 @@ $( this ).dialog( "close" );
       }
       if ($wert == '' || $wert === 'lagerkorrekturwert') {
         if ($shopKorrekturwert === null) {
-          $shopKorrekturwert = $this->app->DB->SelectRow(
-            sprintf(
-              'SELECT lagerkorrekturwert,ueberschreibe_lagerkorrekturwert FROM shopexport WHERE id = %d',
-              $shop
-            )
+          $shopKorrekturwert = $this->app->DatabaseService->selectRow(
+            'SELECT lagerkorrekturwert,ueberschreibe_lagerkorrekturwert FROM shopexport WHERE id = :id',
+            ['id' => (int) $shop]
           );
         }
         if (!empty($shopKorrekturwert['ueberschreibe_lagerkorrekturwert'])) {
@@ -16707,19 +16697,15 @@ $( this ).dialog( "close" );
     if ($artikel <= 0) {
       return null;
     }
-    $shops = $this->app->DB->SelectArr(
-      sprintf(
-        'SELECT `shop`, `aktiv` FROM `artikel_onlineshops` WHERE `artikel` = %d',
-        $artikel
-      )
+    $shops = $this->app->DatabaseService->select(
+      'SELECT `shop`, `aktiv` FROM `artikel_onlineshops` WHERE `artikel` = :artikel',
+      ['artikel' => (int) $artikel]
     );
     if (empty($shops)) {
       if (empty($artikelarr)) {
-        $artikelarr = $this->app->DB->SelectRow(
-          sprintf(
-            'SELECT `shop`, `shop2`, `shop3` FROM `artikel` WHERE `id` = %d LIMIT 1',
-            $artikel
-          )
+        $artikelarr = $this->app->DatabaseService->selectRow(
+          'SELECT `shop`, `shop2`, `shop3` FROM `artikel` WHERE `id` = :id LIMIT 1',
+          ['id' => (int) $artikel]
         );
       }
       if (empty($artikelarr)) {
@@ -16946,18 +16932,16 @@ $( this ).dialog( "close" );
    */
   public function ImportUpdateZahlungsstatus($auftrag, $zahlungsstatus = 'bezahlt')
   {
-    $arr = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT a.shop, a.shopextid,s.modulename,s.shoptyp 
-        FROM auftrag AS a 
-        INNER JOIN shopexport AS s 
-            ON a.shop = s.id AND s.aktiv = 1 AND s.demomodus = 0 AND s.auftragabgleich = 1 
-            AND (s.shoptyp = 'intern' OR s.shoptyp = 'custom') 
-        LEFT JOIN shopexport_zahlungsstatus sz ON a.shopextid = sz.auftrag 
-        WHERE a.id = %d AND isnull(sz.id) AND a.shop <> 0 AND a.shopextid <> '' 
+    $arr = $this->app->DatabaseService->selectRow(
+      "SELECT a.shop, a.shopextid,s.modulename,s.shoptyp
+        FROM auftrag AS a
+        INNER JOIN shopexport AS s
+            ON a.shop = s.id AND s.aktiv = 1 AND s.demomodus = 0 AND s.auftragabgleich = 1
+            AND (s.shoptyp = 'intern' OR s.shoptyp = 'custom')
+        LEFT JOIN shopexport_zahlungsstatus sz ON a.shopextid = sz.auftrag
+        WHERE a.id = :id AND isnull(sz.id) AND a.shop <> 0 AND a.shopextid <> ''
         LIMIT 1",
-        $auftrag
-      )
+      ['id' => (int) $auftrag]
     );
     if (empty($arr)) {
       return;
@@ -16996,27 +16980,18 @@ $( this ).dialog( "close" );
             array('auftrag' => $arr['shopextid'], 'zahlungsstatus' => $zahlungsstatus)
           );
           if ($erg === 'ok') {
-            $this->app->DB->Insert(
-              sprintf(
-                "INSERT INTO shopexport_zahlungsstatus (shop, auftrag, status) 
-                VALUES  (%d,'%s','%s')",
-                $arr['shop'],
-                $this->app->DB->real_escape_string($arr['shopextid']),
-                $this->app->DB->real_escape_string($zahlungsstatus)
-              )
+            $this->app->DatabaseService->execute(
+              "INSERT INTO shopexport_zahlungsstatus (shop, auftrag, status) VALUES (:shop, :shopextid, :status)",
+              ['shop' => (int) $arr['shop'], 'shopextid' => $arr['shopextid'], 'status' => $zahlungsstatus]
             );
           }
           return;
         }
       }
     }
-    $this->app->DB->Insert(
-      sprintf(
-        "INSERT INTO shopexport_zahlungsstatus (shop, auftrag, status) 
-        VALUES (%d,'%s','')",
-        $arr['shop'],
-        $this->app->DB->real_escape_string($arr['shopextid'])
-      )
+    $this->app->DatabaseService->execute(
+      "INSERT INTO shopexport_zahlungsstatus (shop, auftrag, status) VALUES (:shop, :shopextid, '')",
+      ['shop' => (int) $arr['shop'], 'shopextid' => $arr['shopextid']]
     );
   }
 
@@ -17065,11 +17040,9 @@ $( this ).dialog( "close" );
       $this->app->stringcleaner->XMLArray_clean($warenkorb);
     }
     $explodieren = true;
-    $shopexportArr = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT * FROM shopexport WHERE id = %d LIMIT 1',
-        (int) $shop
-      )
+    $shopexportArr = $this->app->DatabaseService->selectRow(
+      'SELECT * FROM shopexport WHERE id = :id LIMIT 1',
+      ['id' => (int) $shop]
     );
 
     $angeboteanlegen = $shopexportArr['angeboteanlegen'];
@@ -17104,36 +17077,29 @@ $( this ).dialog( "close" );
     }
 
     if ($shopexportArr['lastschriftdatenueberschreiben'] && isset($warenkorb['bankverbindung']) && is_array($warenkorb['bankverbindung'])) {
-      $anweisung = array();
-      if (isset($warenkorb['bankverbindung']['inhaber'])) {
-        $anweisung[] = "inhaber='" . $this->app->DB->real_escape_string($warenkorb['bankverbindung']['inhaber']) . "'";
+      $bvSetParts = [];
+      $bvParams   = ['adresse' => (int) $adresse];
+      $bvMap = [
+        'inhaber'                => 'inhaber',
+        'bank'                   => 'bank',
+        'iban'                   => 'iban',
+        'bic'                    => 'swift',
+        'firmensepa'             => 'firmensepa',
+        'mandatsreferenzhinweis' => 'mandatsreferenzhinweis',
+        'mandatsreferenzdatum'   => 'mandatsreferenzdatum',
+        'mandatsreferenz'        => 'mandatsreferenz',
+      ];
+      foreach ($bvMap as $wkKey => $dbCol) {
+        if (isset($warenkorb['bankverbindung'][$wkKey])) {
+          $bvSetParts[] = "$dbCol = :bv_{$dbCol}";
+          $bvParams["bv_{$dbCol}"] = $warenkorb['bankverbindung'][$wkKey];
+        }
       }
-      if (isset($warenkorb['bankverbindung']['bank'])) {
-        $anweisung[] = "bank='" . $this->app->DB->real_escape_string($warenkorb['bankverbindung']['bank']) . "'";
-      }
-      if (isset($warenkorb['bankverbindung']['iban'])) {
-        $anweisung[] = "iban='" . $this->app->DB->real_escape_string($warenkorb['bankverbindung']['iban']) . "'";
-      }
-      if (isset($warenkorb['bankverbindung']['bic'])) {
-        $anweisung[] = "swift='" . $this->app->DB->real_escape_string($warenkorb['bankverbindung']['bic']) . "'";
-      }
-
-      if (isset($warenkorb['bankverbindung']['firmensepa'])) {
-        $anweisung[] = "firmensepa='" . $this->app->DB->real_escape_string($warenkorb['bankverbindung']['firmensepa']) . "'";
-      }
-      if (isset($warenkorb['bankverbindung']['mandatsreferenzhinweis'])) {
-        $anweisung[] = "mandatsreferenzhinweis='" . $this->app->DB->real_escape_string($warenkorb['bankverbindung']['mandatsreferenzhinweis']) . "'";
-      }
-      if (isset($warenkorb['bankverbindung']['mandatsreferenzdatum'])) {
-        $anweisung[] = "mandatsreferenzdatum='" . $this->app->DB->real_escape_string($warenkorb['bankverbindung']['mandatsreferenzdatum']) . "'";
-      }
-      if (isset($warenkorb['bankverbindung']['mandatsreferenz'])) {
-        $anweisung[] = "mandatsreferenz='" . $this->app->DB->real_escape_string($warenkorb['bankverbindung']['mandatsreferenz']) . "'";
-      }
-
-      if ((!empty($anweisung) ? count($anweisung) : 0) > 0) {
-        // $anweisung entries use real_escape_string above; this dynamic SET is safe
-        $this->app->DB->Update('UPDATE adresse SET ' . implode(', ', $anweisung) . ' WHERE id = ' . (int) $adresse);
+      if (!empty($bvSetParts)) {
+        $this->app->DatabaseService->execute(
+          'UPDATE adresse SET ' . implode(', ', $bvSetParts) . ' WHERE id = :adresse',
+          $bvParams
+        );
       }
     }
 
@@ -17219,16 +17185,27 @@ $( this ).dialog( "close" );
     $autoversandvonMapping = false;
     if ($versandartenmapping) {
       $extrasel = '';
-      $lieferung1 = $this->app->DB->real_escape_string($warenkorb['lieferung']);
-      $lieferung2 = $this->app->DB->real_escape_string($this->app->erp->ConvertForDBUTF8($warenkorb['lieferung']));
+      $lieferung1 = $warenkorb['lieferung'];
+      $lieferung2 = $this->app->erp->ConvertForDBUTF8($warenkorb['lieferung']);
       if ($lieferung2 !== '' && $lieferung2 != $lieferung1) {
-        $extrasel .= " OR versandart_shop = '$lieferung2' ";
+        $extrasel .= " OR versandart_shop = :lief2_extra ";
       }
-      $lieferung3 = $this->app->DB->real_escape_string($this->app->erp->ConvertForDB($warenkorb['lieferung']));
+      $lieferung3 = $this->app->erp->ConvertForDB($warenkorb['lieferung']);
       if ($lieferung3 !== '' && $lieferung3 != $lieferung1) {
-        $extrasel .= " OR versandart_shop = '$lieferung3' ";
+        $extrasel .= " OR versandart_shop = :lief3_extra ";
       }
-      $versandarten = $this->app->DB->SelectArr("SELECT * FROM shopexport_versandarten WHERE aktiv = 1 AND shop = '$shop' AND versandart_wawision <> '' AND (versandart_shop = '" . $this->app->DB->real_escape_string($warenkorb['lieferung']) . "' $extrasel)");
+      $versandartParams = ['shop' => (int) $shop, 'lieferung' => $lieferung1];
+      $versandartSql = "SELECT * FROM shopexport_versandarten WHERE aktiv = 1 AND shop = :shop AND versandart_wawision <> '' AND (versandart_shop = :lieferung";
+      if ($lieferung2 !== '' && $lieferung2 != $lieferung1) {
+        $versandartSql .= " OR versandart_shop = :lieferung2";
+        $versandartParams['lieferung2'] = $lieferung2;
+      }
+      if ($lieferung3 !== '' && $lieferung3 != $lieferung1) {
+        $versandartSql .= " OR versandart_shop = :lieferung3";
+        $versandartParams['lieferung3'] = $lieferung3;
+      }
+      $versandartSql .= ")";
+      $versandarten = $this->app->DatabaseService->select($versandartSql, $versandartParams);
       if (!empty($versandarten)) {
         $found = false;
         foreach ($versandarten as $vers) {
@@ -17298,9 +17275,9 @@ $( this ).dialog( "close" );
 
         }
       } else {
-        $checkversand = $this->app->DB->Select("SELECT id FROM shopexport_versandarten WHERE shop = '$shop' AND versandart_shop = '" . $this->app->DB->real_escape_string($warenkorb['lieferung']) . "' LIMIT 1");
+        $checkversand = $this->app->DatabaseService->selectValue("SELECT id FROM shopexport_versandarten WHERE shop = :shop AND versandart_shop = :versandart_shop LIMIT 1", ['shop' => (int) $shop, 'versandart_shop' => (string) $warenkorb['lieferung']]);
         if (!$checkversand) {
-          $this->app->DB->Insert("INSERT INTO shopexport_versandarten (shop, versandart_shop, aktiv) values ('$shop','" . $this->app->DB->real_escape_string($warenkorb['lieferung']) . "',0)");
+          $this->app->DatabaseService->execute("INSERT INTO shopexport_versandarten (shop, versandart_shop, aktiv) values (:shop, :versandart_shop, 0)", ['shop' => (int) $shop, 'versandart_shop' => (string) $warenkorb['lieferung']]);
         }
       }
     }
@@ -17351,15 +17328,21 @@ $( this ).dialog( "close" );
 
     $warenkorb['zahlungsweise'] = str_replace(array('&uuml;', '&Uuml;', '&auml;', '&Auml;', '&ouml;', '&Ouml;', '&szlig;'), array('ü', 'Ü', 'ä', 'Ä', 'ö', 'Ö', 'ß'), $warenkorb['zahlungsweise']);
     if ($zahlungsweisenmapping) {
-      $extrasel = "";
-      $zahlungsweise1 = $this->app->DB->real_escape_string($warenkorb['zahlungsweise']);
-      $zahlungsweise2 = $this->app->DB->real_escape_string($this->app->erp->ConvertForDBUTF8($warenkorb['zahlungsweise']));
-      if ($zahlungsweise2 !== '' && $zahlungsweise2 != $zahlungsweise1)
-        $extrasel .= " OR zahlweise_shop = '$zahlungsweise2' ";
-      $zahlungsweise3 = $this->app->DB->real_escape_string($this->app->erp->ConvertForDB($warenkorb['zahlungsweise']));
-      if ($zahlungsweise3 !== '' && $zahlungsweise3 != $zahlungsweise1)
-        $extrasel .= " OR zahlweise_shop = '$zahlungsweise3' ";
-      $shopexport_zahlweisen = $this->app->DB->SelectArr("SELECT * FROM shopexport_zahlweisen WHERE shop='$shop' AND aktiv = 1 AND zahlweise_wawision <> '' AND (zahlweise_shop = '" . $this->app->DB->real_escape_string($warenkorb['zahlungsweise']) . "' $extrasel )");
+      $zahlungsweise1 = $warenkorb['zahlungsweise'];
+      $zahlungsweise2 = $this->app->erp->ConvertForDBUTF8($warenkorb['zahlungsweise']);
+      $zahlungsweise3 = $this->app->erp->ConvertForDB($warenkorb['zahlungsweise']);
+      $zahlParams = ['shop' => (int) $shop, 'zw1' => $zahlungsweise1];
+      $zahlSql = "SELECT * FROM shopexport_zahlweisen WHERE shop = :shop AND aktiv = 1 AND zahlweise_wawision <> '' AND (zahlweise_shop = :zw1";
+      if ($zahlungsweise2 !== '' && $zahlungsweise2 != $zahlungsweise1) {
+        $zahlSql .= " OR zahlweise_shop = :zw2";
+        $zahlParams['zw2'] = $zahlungsweise2;
+      }
+      if ($zahlungsweise3 !== '' && $zahlungsweise3 != $zahlungsweise1) {
+        $zahlSql .= " OR zahlweise_shop = :zw3";
+        $zahlParams['zw3'] = $zahlungsweise3;
+      }
+      $zahlSql .= ")";
+      $shopexport_zahlweisen = $this->app->DatabaseService->select($zahlSql, $zahlParams);
       if (!$shopexport_zahlweisen) {
         if ($warenkorb['zahlungsweise'] == "secupay_creditcard")
           $warenkorb['zahlungsweise'] = "secupay";
@@ -17367,11 +17350,11 @@ $( this ).dialog( "close" );
           $warenkorb['zahlungsweise'] = "amazon";
         if ($warenkorb['zahlungsweise'] == 'sofort_sofortueberweisung')
           $warenkorb['zahlungsweise'] = 'sofortueberweisung';
-        $shopexport_zahlweisen = $this->app->DB->SelectArr("SELECT * FROM shopexport_zahlweisen WHERE aktiv = 1 AND shop='$shop' AND zahlweise_shop = '" . $this->app->DB->real_escape_string($warenkorb['zahlungsweise']) . "'");
+        $shopexport_zahlweisen = $this->app->DatabaseService->select("SELECT * FROM shopexport_zahlweisen WHERE aktiv = 1 AND shop = :shop AND zahlweise_shop = :zw", ['shop' => (int) $shop, 'zw' => $warenkorb['zahlungsweise']]);
         if (!$shopexport_zahlweisen) {
-          $checkzahl = $this->app->DB->Select("SELECT id FROM shopexport_zahlweisen WHERE shop = '$shop' and zahlweise_shop = '" . $this->app->DB->real_escape_string($warenkorb['zahlungsweise']) . "' LIMIT 1");
+          $checkzahl = $this->app->DatabaseService->selectValue("SELECT id FROM shopexport_zahlweisen WHERE shop = :shop AND zahlweise_shop = :zw LIMIT 1", ['shop' => (int) $shop, 'zw' => $warenkorb['zahlungsweise']]);
           if (!$checkzahl) {
-            $this->app->DB->Insert("INSERT INTO shopexport_zahlweisen (shop, zahlweise_shop, aktiv) values ('$shop','" . $this->app->DB->real_escape_string($warenkorb['zahlungsweise']) . "',0)");
+            $this->app->DatabaseService->execute("INSERT INTO shopexport_zahlweisen (shop, zahlweise_shop, aktiv) VALUES (:shop, :zw, 0)", ['shop' => (int) $shop, 'zw' => $warenkorb['zahlungsweise']]);
           }
         }
       }
@@ -17923,10 +17906,12 @@ $( this ).dialog( "close" );
     }
 
     if (isset($warenkorb['vertrieb'])) {
-      $this->app->DB->Update("UPDATE $doctype SET vertrieb = '" . $warenkorb['vertrieb'] . "' WHERE id = '$auftrag' LIMIT 1");
+      $_safeVtDoc = $this->app->DatabaseService->validateIdentifier($doctype);
+      $this->app->DatabaseService->execute("UPDATE `{$_safeVtDoc}` SET vertrieb = :vertrieb WHERE id = :id LIMIT 1", ['vertrieb' => $warenkorb['vertrieb'], 'id' => (int) $auftrag]);
     }
     if (isset($warenkorb['vertriebid']) && $warenkorb['vertriebid'] > 0) {
-      $this->app->DB->Update("UPDATE $doctype SET vertriebid = '" . $warenkorb['vertriebid'] . "' WHERE id = '$auftrag' LIMIT 1");
+      $_safeVtDoc2 = $this->app->DatabaseService->validateIdentifier($doctype);
+      $this->app->DatabaseService->execute("UPDATE `{$_safeVtDoc2}` SET vertriebid = :vertriebid WHERE id = :id LIMIT 1", ['vertriebid' => $warenkorb['vertriebid'], 'id' => (int) $auftrag]);
     }
 
     if (empty($warenkorb['steuerfrei']) && !empty($warenkorb['checksteuerfrei'])) {
@@ -18016,23 +18001,23 @@ $( this ).dialog( "close" );
     }
 
     if (isset($warenkorb['gutscheincode'])) {
-      $voucher = $this->app->DB->SelectRow(sprintf("SELECT v.id,v.agent_address_id, a.name AS agent_name, v.commission_rate, v.voucher_code FROM voucher v
-        JOIN adresse a ON a.id=v.agent_address_id
-        WHERE v.voucher_code<>'' AND v.voucher_code='%s' AND (v.project_id=0 OR v.project_id='%s') AND a.geloescht<>1 LIMIT 1",
-        $warenkorb['gutscheincode'],
-        $projekt
-      ));
+      $voucher = $this->app->DatabaseService->selectRow(
+        "SELECT v.id, v.agent_address_id, a.name AS agent_name, v.commission_rate, v.voucher_code FROM voucher v
+        JOIN adresse a ON a.id = v.agent_address_id
+        WHERE v.voucher_code <> '' AND v.voucher_code = :code AND (v.project_id = 0 OR v.project_id = :projekt) AND a.geloescht <> 1 LIMIT 1",
+        ['code' => $warenkorb['gutscheincode'], 'projekt' => (int) $projekt]
+      );
 
       if (!empty($voucher['id'])) {
-        $this->app->DB->Insert(sprintf("INSERT INTO commission_rate_receipt (doctype_id,doctype,commission_rate,notice) 
-            VALUES ('%s','%s','%s','%s')", $auftrag, $doctype, $voucher['commission_rate'], 'Kommission für Gutschein: ' . $voucher['voucher_code']));
-
-        $this->app->DB->Update(sprintf(
-          "UPDATE $doctype SET vertrieb='%s', vertriebid='%s' WHERE id=%s",
-          $voucher['agent_name'],
-          $voucher['agent_address_id'],
-          $auftrag
-        ));
+        $this->app->DatabaseService->execute(
+          "INSERT INTO commission_rate_receipt (doctype_id, doctype, commission_rate, notice) VALUES (:doctype_id, :doctype, :commission_rate, :notice)",
+          ['doctype_id' => (int) $auftrag, 'doctype' => $doctype, 'commission_rate' => $voucher['commission_rate'], 'notice' => 'Kommission für Gutschein: ' . $voucher['voucher_code']]
+        );
+        $_safeGutschDoc = $this->app->DatabaseService->validateIdentifier($doctype);
+        $this->app->DatabaseService->execute(
+          "UPDATE `{$_safeGutschDoc}` SET vertrieb = :vertrieb, vertriebid = :vertriebid WHERE id = :id",
+          ['vertrieb' => $voucher['agent_name'], 'vertriebid' => (int) $voucher['agent_address_id'], 'id' => (int) $auftrag]
+        );
       }
     }
 
@@ -18044,70 +18029,72 @@ $( this ).dialog( "close" );
       }
       if (!isset($warenkorb['articlelist'][$key]['ignorieren'])) {
         // wenn es das produkt in dem projekt gibt
-        $artikelimporteinzelngesetzt = $this->app->DB->Select("SELECT autoabgleicherlaubt FROM artikel WHERE nummer='{$value['articleid']}' AND projekt='$projekt' LIMIT 1");
+        $artikelimporteinzelngesetzt = $this->app->DatabaseService->selectValue("SELECT autoabgleicherlaubt FROM artikel WHERE nummer = :nummer AND projekt = :projekt LIMIT 1", ['nummer' => $value['articleid'], 'projekt' => (int) $projekt]);
 
         // pruefe ob auftrag auf anderes projekt gestellt werden muss
         if ($multiprojekt == "1") {
-          $artikelprojekt = $this->app->DB->Select("SELECT projekt FROM artikel WHERE nummer='{$value['articleid']}' LIMIT 1");// AND //TODO BENE
+          $artikelprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM artikel WHERE nummer = :nummer LIMIT 1", ['nummer' => $value['articleid']]);// AND //TODO BENE
           if ($artikelprojekt > 0) {
             $projekt = $artikelprojekt;
           }
         } else {
-          $artikelprojekt = $this->app->DB->Select("SELECT projekt FROM artikel WHERE nummer='{$value['articleid']}' AND projekt='$projekt' LIMIT 1");// AND //TODO BENE
+          $artikelprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM artikel WHERE nummer = :nummer AND projekt = :projekt LIMIT 1", ['nummer' => $value['articleid'], 'projekt' => (int) $projekt]);// AND //TODO BENE
         }
 
-        $zwangsprojekt = $this->app->DB->Select("SELECT shopzwangsprojekt FROM projekt WHERE id='$artikelprojekt' LIMIT 1");
+        $zwangsprojekt = $this->app->DatabaseService->selectValue("SELECT shopzwangsprojekt FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $artikelprojekt]);
 
         if ($zwangsprojekt == 1) {
-          $this->app->DB->Update("UPDATE $doctype SET projekt='$artikelprojekt' WHERE id='$auftrag'");
+          $_safeZwangDoc = $this->app->DatabaseService->validateIdentifier($doctype);
+          $this->app->DatabaseService->execute("UPDATE `{$_safeZwangDoc}` SET projekt = :projekt WHERE id = :id", ['projekt' => (int) $artikelprojekt, 'id' => (int) $auftrag]);
         }
 
         $extart = $shopexportArr['artikelnummernummerkreis'];
 
-        $eigenernummernkreis = $this->app->DB->Select("SELECT eigenernummernkreis FROM projekt WHERE id='$projekt' LIMIT 1");
-        //$j_id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='{$value[articleid]}' AND (shop='$shop' OR shop2='$shop' OR shop3='$shop') LIMIT 1");
+        $eigenernummernkreis = $this->app->DatabaseService->selectValue("SELECT eigenernummernkreis FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $projekt]);
+        //$j_id = lookup by shop-assigned artikel
 
         $j_id = null;
         if (!empty($value['fremdnummer'])) {
-          $j_id = $this->app->DB->Select("SELECT a.id FROM artikelnummer_fremdnummern af INNER JOIN artikel a on af.artikel = a.id WHERE af.nummer='{$value['fremdnummer']}' AND af.aktiv = 1 AND af.nummer <> '' AND (a.projekt='$projekt' OR af.shopid = '$shop') AND a.nummer <> 'DEL' AND IFNULL(a.geloescht,0) = 0 ORDER BY af.shopid = '$shop' DESC,IFNULL(a.intern_gesperrt,0) = 0 DESC, af.id LIMIT 1");
+          $j_id = $this->app->DatabaseService->selectValue(
+            "SELECT a.id FROM artikelnummer_fremdnummern af INNER JOIN artikel a ON af.artikel = a.id WHERE af.nummer = :nummer AND af.aktiv = 1 AND af.nummer <> '' AND (a.projekt = :projekt OR af.shopid = :shop) AND a.nummer <> 'DEL' AND IFNULL(a.geloescht,0) = 0 ORDER BY af.shopid = :shop2 DESC, IFNULL(a.intern_gesperrt,0) = 0 DESC, af.id LIMIT 1",
+            ['nummer' => $value['fremdnummer'], 'projekt' => (int) $projekt, 'shop' => (int) $shop, 'shop2' => (int) $shop]
+          );
         }
         if (empty($j_id)) {
           if ($multiprojekt == '1' || !$eigenernummernkreis) {
-            $j_id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='{$value['articleid']}' AND IFNULL(intern_gesperrt,0) = 0 AND IFNULL(geloescht,0) = 0 LIMIT 1");  //TODO BENE
+            $j_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer AND IFNULL(intern_gesperrt,0) = 0 AND IFNULL(geloescht,0) = 0 LIMIT 1", ['nummer' => $value['articleid']]);  //TODO BENE
           } else {
-            $j_id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='{$value['articleid']}' AND IFNULL(intern_gesperrt,0) = 0 AND IFNULL(geloescht,0) = 0 AND projekt='$projekt' LIMIT 1");  //TODO BENE
+            $j_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer AND IFNULL(intern_gesperrt,0) = 0 AND IFNULL(geloescht,0) = 0 AND projekt = :projekt LIMIT 1", ['nummer' => $value['articleid'], 'projekt' => (int) $projekt]);  //TODO BENE
           }
         }
 
         if (!$j_id) {
           if ($multiprojekt == '1' || !$eigenernummernkreis) {
-            $j_id = $this->app->DB->Select("SELECT id FROM artikel WHERE herstellernummer='{$value['articleid']}' AND nummer <> 'DEL' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1");  //TODO BENE
+            $j_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE herstellernummer = :nummer AND nummer <> 'DEL' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1", ['nummer' => $value['articleid']]);  //TODO BENE
           } else {
-            $j_id = $this->app->DB->Select("SELECT id FROM artikel WHERE herstellernummer='{$value['articleid']}' AND nummer <> 'DEL' AND projekt='$projekt' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1");  //TODO BENE
+            $j_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE herstellernummer = :nummer AND nummer <> 'DEL' AND projekt = :projekt AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1", ['nummer' => $value['articleid'], 'projekt' => (int) $projekt]);  //TODO BENE
           }
         }
         if (!$j_id) {
           if ($multiprojekt == '1' || !$eigenernummernkreis) {
-            $j_id = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='{$value['articleid']}' AND nummer <> 'DEL' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC  LIMIT 1");  //TODO BENE
+            $j_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE ean = :ean AND nummer <> 'DEL' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1", ['ean' => $value['articleid']]);  //TODO BENE
           } else {
-            $j_id = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='{$value['articleid']}' AND nummer <> 'DEL' AND projekt='$projekt' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC  LIMIT 1");  //TODO BENE
+            $j_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE ean = :ean AND nummer <> 'DEL' AND projekt = :projekt AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1", ['ean' => $value['articleid'], 'projekt' => (int) $projekt]);  //TODO BENE
           }
 
         }
 
         $check = false;
         if ($j_id) {
-          $check = $this->app->DB->Select("SELECT id FROM verkaufspreise WHERE artikel='$j_id'
-              AND (gueltig_bis='0000-00-00' OR gueltig_bis >=NOW()) AND ab_menge=1
-              AND ((objekt='Standard' AND adresse=0) OR (objekt='' AND adresse=0)) AND geloescht=0 LIMIT 1");
+          $check = $this->app->DatabaseService->selectValue(
+            "SELECT id FROM verkaufspreise WHERE artikel = :artikel AND (gueltig_bis = '0000-00-00' OR gueltig_bis >= NOW()) AND ab_menge = 1 AND ((objekt = 'Standard' AND adresse = 0) OR (objekt = '' AND adresse = 0)) AND geloescht = 0 LIMIT 1",
+            ['artikel' => (int) $j_id]
+          );
         }
 
 
-        if ($eigenernummernkreis) {
-          $j_umsatzsteuer = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id = '$j_id' LIMIT 1");
-        } else {
-          $j_umsatzsteuer = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id = '$j_id' LIMIT 1");
-        }
+        // Both branches identical — use single call
+        $j_umsatzsteuer = $this->app->DatabaseService->selectValue("SELECT umsatzsteuer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $j_id]);
 
         if ($artikelimport || ($artikelimporteinzeln && $artikelimporteinzelngesetzt)) {
           if (isset($value['umsatzsteuer'])) {
@@ -18124,22 +18111,22 @@ $( this ).dialog( "close" );
           if (isset($value['variante_von']) && $value['variante_von'] && $value['variante_von'] != $value['articleid']) {
             $value['variante_von'] = trim($value['variante_von']);
             if ($multiprojekt == '1' || !$eigenernummernkreis) {
-              $varj_id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='{$value['variante_von']}' AND IFNULL(geloescht,0) = 0 AND IFNULL(intern_gesperrt,0) = 0 LIMIT 1");
+              $varj_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer AND IFNULL(geloescht,0) = 0 AND IFNULL(intern_gesperrt,0) = 0 LIMIT 1", ['nummer' => $value['variante_von']]);
             } else {
-              $varj_id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='{$value['variante_von']}' AND IFNULL(geloescht,0) = 0 AND projekt='$projekt' AND IFNULL(intern_gesperrt,0) = 0 LIMIT 1");
+              $varj_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer AND IFNULL(geloescht,0) = 0 AND projekt = :projekt AND IFNULL(intern_gesperrt,0) = 0 LIMIT 1", ['nummer' => $value['variante_von'], 'projekt' => (int) $projekt]);
             }
             if (!$varj_id) {
               if ($multiprojekt == '1' || !$eigenernummernkreis) {
-                $varj_id = $this->app->DB->Select("SELECT id FROM artikel WHERE herstellernummer='{$value['variante_von']}' AND nummer <> 'DEL' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1");
+                $varj_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE herstellernummer = :nummer AND nummer <> 'DEL' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1", ['nummer' => $value['variante_von']]);
               } else {
-                $varj_id = $this->app->DB->Select("SELECT id FROM artikel WHERE herstellernummer='{$value['variante_von']}' AND nummer <> 'DEL' AND projekt='$projekt' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1");
+                $varj_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE herstellernummer = :nummer AND nummer <> 'DEL' AND projekt = :projekt AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1", ['nummer' => $value['variante_von'], 'projekt' => (int) $projekt]);
               }
             }
             if (!$varj_id) {
               if ($multiprojekt == '1' || !$eigenernummernkreis) {
-                $varj_id = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='{$value['variante_von']}' AND nummer <> 'DEL' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1");
+                $varj_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE ean = :ean AND nummer <> 'DEL' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1", ['ean' => $value['variante_von']]);
               } else {
-                $varj_id = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='{$value['variante_von']}' AND nummer <> 'DEL' AND projekt='$projekt' AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1");
+                $varj_id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE ean = :ean AND nummer <> 'DEL' AND projekt = :projekt AND IFNULL(geloescht,0) = 0 ORDER BY IFNULL(intern_gesperrt,0) = 0 DESC LIMIT 1", ['ean' => $value['variante_von'], 'projekt' => (int) $projekt]);
               }
             }
 
@@ -18185,8 +18172,8 @@ $( this ).dialog( "close" );
               $this->AddVerkaufspreis($varj_id, 1, 0, $value['varianteprice']);
               $value['articleid'] = $this->GetNextArtikelnummer("produkt", 1, $projekt);
             } else {
-              $warenkorb['articlelist'][$key]['lagerartikel'] = $this->app->DB->Select("SELECT lagerartikel FROM artikel WHERE id = '$varj_id' LIMIT 1");
-              $generierenummerbeioption = $this->app->DB->Select("SELECT generierenummerbeioption from artikel where id = '$varj_id' LIMIT 1");
+              $warenkorb['articlelist'][$key]['lagerartikel'] = $this->app->DatabaseService->selectValue("SELECT lagerartikel FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $varj_id]);
+              $generierenummerbeioption = $this->app->DatabaseService->selectValue("SELECT generierenummerbeioption FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $varj_id]);
               //$generierenummerbeioption = 1;
               if ($generierenummerbeioption) {
                 $value['generierenummerbeioption'] = true;
@@ -18268,7 +18255,8 @@ $( this ).dialog( "close" );
                 $warenkorb['articlelist']
               );
               if ($positionsteuersaetzeerlauben && !empty($warenkorb['steuersatz_ermaessigt']) && !isset($value['steuersatz'])) {
-                $this->app->DB->Update("UPDATE $doctype" . "_position SET steuersatz = " . $warenkorb['steuersatz_ermaessigt'] . " WHERE id = '$ap' LIMIT 1");
+                $_safeImpDoc1 = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+                $this->app->DatabaseService->execute("UPDATE `{$_safeImpDoc1}` SET steuersatz = :steuersatz WHERE id = :id LIMIT 1", ['steuersatz' => $warenkorb['steuersatz_ermaessigt'], 'id' => (int) $ap]);
               }
             } elseif ($j_umsatzsteuer === 'befreit') {
               $ap = $this->AddPositionManuellPreisNummer(
@@ -18303,7 +18291,8 @@ $( this ).dialog( "close" );
                 $warenkorb['articlelist']
               );
               if ($positionsteuersaetzeerlauben && !empty($warenkorb['steuersatz_normal']) && !isset($value['steuersatz'])) {
-                $this->app->DB->Update("UPDATE $doctype" . "_position SET steuersatz = " . $warenkorb['steuersatz_normal'] . " WHERE id = '$ap' LIMIT 1");
+                $_safeDTpos2 = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+                $this->app->DatabaseService->execute("UPDATE `{$_safeDTpos2}` SET steuersatz = :steuersatz WHERE id = :id LIMIT 1", ['steuersatz' => (float) $warenkorb['steuersatz_normal'], 'id' => (int) $ap]);
               }
             }
           }
@@ -18321,12 +18310,15 @@ $( this ).dialog( "close" );
           }
           if (!empty($ap)) {
             if (isset($value['webid'])) {
-              $this->app->DB->Update("UPDATE $doctype" . "_position SET webid = '" . $this->app->DB->real_escape_string($value['webid']) . "' WHERE id = '$ap' LIMIT 1");
+              $_safeDTwebid = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+              $this->app->DatabaseService->execute("UPDATE `{$_safeDTwebid}` SET webid = :webid WHERE id = :id LIMIT 1", ['webid' => $value['webid'], 'id' => (int) $ap]);
             }
-            $artap = $this->app->DB->Select("SELECT artikel FROM $doctype" . "_position WHERE id = '$ap' LIMIT 1");
+            $_safeDTartap = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+            $artap = $this->app->DatabaseService->selectValue("SELECT artikel FROM `{$_safeDTartap}` WHERE id = :id LIMIT 1", ['id' => (int) $ap]);
             $this->CopyArtikelVariante($artap, ($varj_id ? $varj_id : $artap), isset($value['options']) && !empty($value['options']) ? $value['options'] : (isset($value['anabregs_text']) ? $value['anabregs_text'] : ''));
             if ($positionsteuersaetzeerlauben && isset($value['steuersatz']) && is_numeric($value['steuersatz'])) {
-              $this->app->DB->Update("UPDATE $doctype" . "_position SET steuersatz = " . $value['steuersatz'] . " WHERE id = '$ap' LIMIT 1");
+              $_safeDTsteuers = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+              $this->app->DatabaseService->execute("UPDATE `{$_safeDTsteuers}` SET steuersatz = :steuersatz WHERE id = :id LIMIT 1", ['steuersatz' => (float) $value['steuersatz'], 'id' => (int) $ap]);
             }
             if (isset($value['anhang'])) {
               if (!is_array($value['anhang'])) {
@@ -18338,7 +18330,8 @@ $( this ).dialog( "close" );
               foreach ($value['anhang'] as $anhang) {
                 $dateiname = trim($anhang['name']);
                 if (empty($dateiname)) {
-                  $dateiname = $this->app->DB->Select("SELECT sort FROM $doctype" . "_position WHERE id=$ap");
+                  $_safeDTdatei = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+                  $dateiname = $this->app->DatabaseService->selectValue("SELECT sort FROM `{$_safeDTdatei}` WHERE id = :id", ['id' => (int) $ap]);
                 }
                 $typ = trim($anhang['typ']);
                 if (empty($typ)) {
@@ -18359,24 +18352,24 @@ $( this ).dialog( "close" );
           }
           if (!empty($value['variante_von']) && !empty($varj_id)) {
             if ($artap) {
-              $lieferant = $this->app->DB->Select("SELECT adresse FROM artikel WHERE id = '$varj_id' LIMIT 1");
+              $lieferant = $this->app->DatabaseService->selectValue("SELECT adresse FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $varj_id]);
               if ($lieferant) {
-                $this->app->DB->Update("UPDATE artikel set adresse = '$lieferant' WHERE id = '$artap' LIMIT 1");
+                $this->app->DatabaseService->execute("UPDATE artikel SET adresse = :adresse WHERE id = :id LIMIT 1", ['adresse' => (int) $lieferant, 'id' => (int) $artap]);
                 $this->AddEinkaufspreis($artap, 1, $lieferant, $value['articleid'], $value['name'], 0);
               }
-              $lagerpl = $this->app->DB->Select("SELECT lager_platz FROM artikel WHERE id = '$varj_id' LIMIT 1");
-              $produktion = $this->app->DB->Select("SELECT produktion FROM artikel WHERE id = '$varj_id' LIMIT 1");
+              $lagerpl = $this->app->DatabaseService->selectValue("SELECT lager_platz FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $varj_id]);
+              $produktion = $this->app->DatabaseService->selectValue("SELECT produktion FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $varj_id]);
               if ($produktion) {
-                $this->app->DB->Update("UPDATE artikel set produktion = '1' WHERE id = '$artap' LIMIT 1");
+                $this->app->DatabaseService->execute("UPDATE artikel SET produktion = 1 WHERE id = :id LIMIT 1", ['id' => (int) $artap]);
               }
-              $stueckliste = $this->app->DB->Select("SELECT stueckliste FROM artikel WHERE id = '$varj_id' LIMIT 1");
+              $stueckliste = $this->app->DatabaseService->selectValue("SELECT stueckliste FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $varj_id]);
               if ($stueckliste) {
-                $this->app->DB->Update("UPDATE artikel set stueckliste = '1' WHERE id = '$artap' LIMIT 1");
+                $this->app->DatabaseService->execute("UPDATE artikel SET stueckliste = 1 WHERE id = :id LIMIT 1", ['id' => (int) $artap]);
               }
               if ($lagerpl) {
-                $this->app->DB->Update("UPDATE artikel set lager_platz = '$lagerpl' WHERE id = '$artap' LIMIT 1");
+                $this->app->DatabaseService->execute("UPDATE artikel SET lager_platz = :lagerpl WHERE id = :id LIMIT 1", ['lagerpl' => $lagerpl, 'id' => (int) $artap]);
               }
-              $this->app->DB->Update("UPDATE artikel set variante = 1, variante_von = '$varj_id' WHERE id = '$artap' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE artikel SET variante = 1, variante_von = :varj_id WHERE id = :id LIMIT 1", ['varj_id' => (int) $varj_id, 'id' => (int) $artap]);
             }
           }
 
@@ -18396,7 +18389,7 @@ $( this ).dialog( "close" );
           }
         } else if ($check > 0) {
           // standardpreis aus wawision verwenden
-          $anummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id = '$j_id' LIMIT 1");
+          $anummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $j_id]);
           if (!empty($anummer)) {
             $value['articleid'] = $anummer;
           }
@@ -18421,7 +18414,8 @@ $( this ).dialog( "close" );
             $ap = $this->AddAuftragPositionNummer($auftrag, $value['articleid'], $value['quantity'], $projekt, "", true, $doctype, $warenkorb['articlelist'][$key]);
           }
           if (isset($value['webid'])) {
-            $this->app->DB->Update("UPDATE $doctype" . "_position SET webid = '" . $this->app->DB->real_escape_string($value['webid']) . "' WHERE id = '$ap' LIMIT 1");
+            $_safeDTwebid2 = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+            $this->app->DatabaseService->execute("UPDATE `{$_safeDTwebid2}` SET webid = :webid WHERE id = :id LIMIT 1", ['webid' => $value['webid'], 'id' => (int) $ap]);
           }
           $ueberspringe = true;
           foreach ($warenkorb['articlelist'] as $key2 => $value2) {
@@ -18446,16 +18440,15 @@ $( this ).dialog( "close" );
           }
         }
         if (!empty($ap) && !empty($value['artikeldaten'])) {
-          $artap = $this->app->DB->Select("SELECT artikel FROM $doctype" . "_position WHERE id = '$ap' LIMIT 1");
+          $_safeDTartap2 = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+          $artap = $this->app->DatabaseService->selectValue("SELECT artikel FROM `{$_safeDTartap2}` WHERE id = :id LIMIT 1", ['id' => (int) $ap]);
           unset($value['artikeldaten']['id'], $value['artikeldaten']['nummer']);
           foreach ($value['artikeldaten'] as $feldname => $wert) {
-            $query = sprintf(
-              "UPDATE artikel SET %s='%s' WHERE id=%d",
-              $this->app->DB->real_escape_string($feldname),
-              $this->app->DB->real_escape_string($wert),
-              $artap
-            );
-            $this->app->DB->Update($query);
+            // validate column name to prevent injection
+            $safeFieldname = preg_replace('/[^a-zA-Z0-9_]/', '', $feldname);
+            if ($safeFieldname !== '') {
+              $this->app->DatabaseService->execute("UPDATE artikel SET `$safeFieldname` = :wert WHERE id = :id", ['wert' => $wert, 'id' => (int) $artap]);
+            }
           }
         }
       }
@@ -18467,25 +18460,20 @@ $( this ).dialog( "close" );
         continue;
       }
       if (isset($item['parentInCart']) && !empty($warenkorb['articlelist'][$item['parentInCart']]['databaseId'])) {
-        $query = sprintf(
-          'UPDATE `%s_position` SET `explodiert` = 1 WHERE `id` = %d',
-          $doctype,
-          $warenkorb['articlelist'][$item['parentInCart']]['databaseId']
-        );
-        $this->app->DB->Update($query);
+        $_safeDTexp = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+        $this->app->DatabaseService->execute("UPDATE `{$_safeDTexp}` SET `explodiert` = 1 WHERE `id` = :id", ['id' => (int) $warenkorb['articlelist'][$item['parentInCart']]['databaseId']]);
         $commands[] = sprintf('`explodiert_parent` = %d', $warenkorb['articlelist'][$item['parentInCart']]['databaseId']);
       }
       if (!empty($item['hidePrice'])) {
         $commands[] = '`ohnepreis` = 1';
       }
       if (!empty($commands)) {
-        $query = sprintf(
-          'UPDATE `%s_position` SET %s WHERE `id` = %d',
-          $doctype,
-          implode(', ', $commands),
-          $item['databaseId']
+        // $commands contains only vetted literal column names + int values — safe
+        $_safeDTcmd = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+        $this->app->DatabaseService->execute(
+          "UPDATE `{$_safeDTcmd}` SET " . implode(', ', $commands) . " WHERE `id` = :id",
+          ['id' => (int) $item['databaseId']]
         );
-        $this->app->DB->Update($query);
       }
     }
 
@@ -18530,8 +18518,8 @@ $( this ).dialog( "close" );
       if ($warenkorb['zahlungsweise'] === 'nachnahme') {
         $artikelnachnahme = $shopexportArr['artikelnachnahme'];
         $artikelnachnahme_extraartikel = $shopexportArr['artikelnachnahme_extraartikel'];
-        $nachnahme = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$artikelnachnahme' LIMIT 1");
-        $umsatzsteuer_nachnahme = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id='$artikelnachnahme' LIMIT 1");
+        $nachnahme = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikelnachnahme]);
+        $umsatzsteuer_nachnahme = $this->app->DatabaseService->selectValue("SELECT umsatzsteuer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikelnachnahme]);
         $nachnahmepreis = $this->GetVerkaufspreis($artikelnachnahme, 1);
         if ($umsatzsteuer_nachnahme !== 'ermaessigt' && $umsatzsteuer_nachnahme !== 'befreit') {
           $umsatzsteuer_nachnahme = 'normal';
@@ -18552,7 +18540,8 @@ $( this ).dialog( "close" );
         if ($artikelnachnahme_extraartikel == 1) {
           $tmpposid = $this->AddPositionManuellPreis($doctype, $auftrag, $artikelnachnahme, 1, $nachnahme, $nachnahmepreis, $umsatzsteuer_nachnahme, 0, $waehrung);
           if ($tmpposid > 0) {
-            $this->app->DB->Update("UPDATE $doctype" . "_position SET keinrabatterlaubt=1 WHERE id='$tmpposid' LIMIT 1");
+            $_safeDTnach = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+            $this->app->DatabaseService->execute("UPDATE `{$_safeDTnach}` SET keinrabatterlaubt = 1 WHERE id = :id LIMIT 1", ['id' => (int) $tmpposid]);
             if (isset($warenkorb['nachnahmepreisnetto']) || isset($warenkorb['nachnahmepreis'])) {
               $nachnahmepreis = 0;
             }
@@ -18571,12 +18560,12 @@ $( this ).dialog( "close" );
       }
 
       if (empty($artikelporto)) {
-        if ($this->app->DB->Select("SELECT portoartikelanlegen FROM shopexport WHERE id = '$shop' LIMIT 1")) {
+        if ($this->app->DatabaseService->selectValue("SELECT portoartikelanlegen FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int) $shop])) {
           if ($warenkorb['versandkostennetto'] != 0 || $warenkorb['versandkostenbrutto'] != 0 || $portocheck == 1) {
             $portoartikelarr = array('projekt' => $projekt, 'porto' => 1, 'lagerartikel' => 0, 'name_de' => 'Porto', 'umsatzsteuer' => 'normal');
             $artikelporto = $this->app->erp->InsertUpdateArtikel($portoartikelarr);
             if ($artikelporto) {
-              $this->app->DB->Update("UPDATE shopexport SET artikelporto = '$artikelporto' WHERE id = '$shop' AND artikelporto = 0 LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE shopexport SET artikelporto = :artikelporto WHERE id = :id AND artikelporto = 0 LIMIT 1", ['artikelporto' => (int) $artikelporto, 'id' => (int) $shop]);
             }
           }
         } else {
@@ -18585,28 +18574,30 @@ $( this ).dialog( "close" );
           return (array("status" => false, "message" => $error_msg, "onlinebestellnummer" => $warenkorb['onlinebestellnummer']));
         }
       }
-      $umsatzsteuer_porto = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id='$artikelporto' LIMIT 1");
+      $umsatzsteuer_porto = $this->app->DatabaseService->selectValue("SELECT umsatzsteuer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikelporto]);
 
       $versandname = '';
       if (isset($warenkorb['kunde_sprache']) && $warenkorb['kunde_sprache']) {
         if ($warenkorb['kunde_sprache'] === 'englisch') {
-          $versandname = $this->app->DB->Select("SELECT name_en FROM artikel WHERE id = '$artikelporto'");
+          $versandname = $this->app->DatabaseService->selectValue("SELECT name_en FROM artikel WHERE id = :id", ['id' => (int) $artikelporto]);
         }
       } else {
-        if ($this->app->DB->Select("SELECT adr.id FROM $doctype auf INNER JOIN adresse adr ON auf.adresse = adr.id AND adr.sprache = 'englisch' WHERE auf.id = '$auftrag' LIMIT 1")) {
-          $versandname = $this->app->DB->Select("SELECT name_en FROM artikel WHERE id = '$artikelporto'");
+        $_safeDTlangvs = $this->app->DatabaseService->validateIdentifier($doctype);
+        if ($this->app->DatabaseService->selectValue("SELECT adr.id FROM `{$_safeDTlangvs}` auf INNER JOIN adresse adr ON auf.adresse = adr.id AND adr.sprache = 'englisch' WHERE auf.id = :id LIMIT 1", ['id' => (int) $auftrag])) {
+          $versandname = $this->app->DatabaseService->selectValue("SELECT name_en FROM artikel WHERE id = :id", ['id' => (int) $artikelporto]);
         }
       }
       if ($versandname === '') {
-        $versandname = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id = '$artikelporto'");
+        $versandname = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id", ['id' => (int) $artikelporto]);
       }
 
       $sprachen = $this->GetAdressSprachen();
-      $belegsprache = $this->app->DB->Select("SELECT sprache FROM $doctype WHERE id = '$auftrag'");
+      $_safeDTbl = $this->app->DatabaseService->validateIdentifier($doctype);
+      $belegsprache = $this->app->DatabaseService->selectValue("SELECT sprache FROM `{$_safeDTbl}` WHERE id = :id", ['id' => (int) $auftrag]);
       if (array_key_exists($belegsprache, $sprachen)) {
         $belegsprache = $sprachen[$belegsprache];
       }
-      $uebersetztername = $this->app->DB->Select("SELECT name FROM artikel_texte WHERE artikel='$artikelporto' AND sprache='$belegsprache' AND aktiv='1' AND (shop=0 OR shop='$shop') ORDER BY shop DESC LIMIT 1");
+      $uebersetztername = $this->app->DatabaseService->selectValue("SELECT name FROM artikel_texte WHERE artikel = :artikel AND sprache = :sprache AND aktiv = '1' AND (shop = 0 OR shop = :shop) ORDER BY shop DESC LIMIT 1", ['artikel' => (int) $artikelporto, 'sprache' => $belegsprache, 'shop' => (int) $shop]);
       if ($uebersetztername != '') {
         $versandname = $uebersetztername;
       }
@@ -18615,25 +18606,26 @@ $( this ).dialog( "close" );
       $rabattname = '';
       if (isset($warenkorb['kunde_sprache']) && $warenkorb['kunde_sprache']) {
         if ($warenkorb['kunde_sprache'] === 'englisch') {
-          $rabattname = (String) $this->app->DB->Select("SELECT name_en FROM artikel WHERE id = '$rabattartikel'");
+          $rabattname = (String) $this->app->DatabaseService->selectValue("SELECT name_en FROM artikel WHERE id = :id", ['id' => (int) $rabattartikel]);
         }
       } else {
-        if ($this->app->DB->Select("SELECT adr.id FROM $doctype auf INNER JOIN adresse adr ON auf.adresse = adr.id AND adr.sprache = 'englisch' WHERE auf.id = '$auftrag' LIMIT 1")) {
-          $rabattname = (String) $this->app->DB->Select("SELECT name_en FROM artikel WHERE id = '$rabattartikel'");
+        $_safeDTlangr = $this->app->DatabaseService->validateIdentifier($doctype);
+        if ($this->app->DatabaseService->selectValue("SELECT adr.id FROM `{$_safeDTlangr}` auf INNER JOIN adresse adr ON auf.adresse = adr.id AND adr.sprache = 'englisch' WHERE auf.id = :id LIMIT 1", ['id' => (int) $auftrag])) {
+          $rabattname = (String) $this->app->DatabaseService->selectValue("SELECT name_en FROM artikel WHERE id = :id", ['id' => (int) $rabattartikel]);
         }
       }
       if ($rabattname === '') {
-        $rabattname = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id = '$rabattartikel'");
+        $rabattname = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id", ['id' => (int) $rabattartikel]);
       }
-      $uebersetztername = $this->app->DB->Select("SELECT name FROM artikel_texte WHERE artikel='$rabattartikel' AND sprache='$belegsprache' AND aktiv='1' AND (shop=0 OR shop='$shop') ORDER BY shop DESC LIMIT 1");
+      $uebersetztername = $this->app->DatabaseService->selectValue("SELECT name FROM artikel_texte WHERE artikel = :artikel AND sprache = :sprache AND aktiv = '1' AND (shop = 0 OR shop = :shop) ORDER BY shop DESC LIMIT 1", ['artikel' => (int) $rabattartikel, 'sprache' => $belegsprache, 'shop' => (int) $shop]);
       if ($uebersetztername != '') {
         $rabattname = $uebersetztername;
       }
 
-      $umsatzsteuer_rabatt = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id='$rabattartikel' LIMIT 1");
+      $umsatzsteuer_rabatt = $this->app->DatabaseService->selectValue("SELECT umsatzsteuer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $rabattartikel]);
 
 
-      $rabattsteuer = $this->app->DB->Select("SELECT artikelrabattsteuer FROM shopexport WHERE id = '$shop' LIMIT 1");
+      $rabattsteuer = $this->app->DatabaseService->selectValue("SELECT artikelrabattsteuer FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int) $shop]);
       if ($this->app->DB->error()) {
         $rabattsteuer = -1;
       }
@@ -18666,20 +18658,25 @@ $( this ).dialog( "close" );
         }
       }
       if ($rabattsteuer >= 0) {
-        $this->app->DB->Update("UPDATE $doctype" . "_position SET steuersatz = '$rabattsteuer' WHERE id = '$tmpposid' LIMIT 1");
+        $_safeDTrabs = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+        $this->app->DatabaseService->execute("UPDATE `{$_safeDTrabs}` SET steuersatz = :steuersatz WHERE id = :id LIMIT 1", ['steuersatz' => (float) $rabattsteuer, 'id' => (int) $tmpposid]);
       }
       if (isset($warenkorb['rabattsteuer']) && is_numeric($warenkorb['rabattsteuer'])) {
-        $this->app->DB->Update("UPDATE $doctype" . "_position SET steuersatz = '" . $warenkorb['rabattsteuer'] . "' WHERE id = '$tmpposid' LIMIT 1");
+        $_safeDTrabss = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+        $this->app->DatabaseService->execute("UPDATE `{$_safeDTrabss}` SET steuersatz = :steuersatz WHERE id = :id LIMIT 1", ['steuersatz' => (float) $warenkorb['rabattsteuer'], 'id' => (int) $tmpposid]);
         if ($warenkorb['rabattsteuer'] > 0) {
-          $ermaessigt = !empty($warenkorb['steuersatz_ermaessigt']) ? $warenkorb['steuersatz_ermaessigt'] : $this->app->DB->Select("SELECT steuersatz_ermaessigt FROM $doctype WHERE id = $auftrag");
-          $normal = !empty($warenkorb['steuersatz_normal']) ? $warenkorb['steuersatz_normal'] : $this->app->DB->Select("SELECT steuersatz_normal FROM $doctype WHERE id = $auftrag");
+          $_safeDTrse = $this->app->DatabaseService->validateIdentifier($doctype);
+          $ermaessigt = !empty($warenkorb['steuersatz_ermaessigt']) ? $warenkorb['steuersatz_ermaessigt'] : $this->app->DatabaseService->selectValue("SELECT steuersatz_ermaessigt FROM `{$_safeDTrse}` WHERE id = :id", ['id' => (int) $auftrag]);
+          $normal = !empty($warenkorb['steuersatz_normal']) ? $warenkorb['steuersatz_normal'] : $this->app->DatabaseService->selectValue("SELECT steuersatz_normal FROM `{$_safeDTrse}` WHERE id = :id", ['id' => (int) $auftrag]);
+          $_safeDTrstpos = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
           if ($warenkorb['rabattsteuer'] == $ermaessigt) {
-            $this->app->DB->Update("UPDATE $doctype" . "_position SET umsatzsteuer = 'ermaessigt' WHERE id = '$tmpposid' LIMIT 1");
+            $this->app->DatabaseService->execute("UPDATE `{$_safeDTrstpos}` SET umsatzsteuer = 'ermaessigt' WHERE id = :id LIMIT 1", ['id' => (int) $tmpposid]);
           } elseif ($warenkorb['rabattsteuer'] == $normal) {
-            $this->app->DB->Update("UPDATE $doctype" . "_position SET umsatzsteuer = 'normal' WHERE id = '$tmpposid' LIMIT 1");
+            $this->app->DatabaseService->execute("UPDATE `{$_safeDTrstpos}` SET umsatzsteuer = 'normal' WHERE id = :id LIMIT 1", ['id' => (int) $tmpposid]);
           }
         } elseif ($warenkorb['rabattsteuer'] == 0) {
-          $this->app->DB->Update("UPDATE $doctype" . "_position SET umsatzsteuer = 'befreit' WHERE id = '$tmpposid' LIMIT 1");
+          $_safeDTrabsb = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+          $this->app->DatabaseService->execute("UPDATE `{$_safeDTrabsb}` SET umsatzsteuer = 'befreit' WHERE id = :id LIMIT 1", ['id' => (int) $tmpposid]);
         }
       }
       if ($umsatzsteuer_porto !== 'ermaessigt') {
@@ -18728,7 +18725,8 @@ $( this ).dialog( "close" );
               );
             }
             if ($tmpposid) {
-              $this->app->DB->Update("UPDATE $doctype" . "_position SET steuersatz = " . $warenkorb['versandkostensteuersatz'] . " WHERE id = " . $tmpposid);
+              $_safeDTvks = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+              $this->app->DatabaseService->execute("UPDATE `{$_safeDTvks}` SET steuersatz = :steuersatz WHERE id = :id", ['steuersatz' => (float) $warenkorb['versandkostensteuersatz'], 'id' => (int) $tmpposid]);
             }
           } elseif ($umsatzsteuer_porto2 === 'ermaessigt') {
             if ($artikelnachnahme_extraartikel == '1') {
@@ -18756,7 +18754,8 @@ $( this ).dialog( "close" );
                 $waehrung
               );
               if ($umsatzsteuer_porto2 !== $umsatzsteuer_porto) {
-                $this->app->DB->Update("UPDATE $doctype" . "_position SET umsatzsteuer = 'ermaessigt' WHERE id = " . $tmpposid);
+                $_safeDTportoe = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+                $this->app->DatabaseService->execute("UPDATE `{$_safeDTportoe}` SET umsatzsteuer = 'ermaessigt' WHERE id = :id", ['id' => (int) $tmpposid]);
               }
             }
           } elseif ($umsatzsteuer_porto === 'befreit') {
@@ -18812,7 +18811,8 @@ $( this ).dialog( "close" );
                 $waehrung
               );
               if ($umsatzsteuer_porto2 !== $umsatzsteuer_porto) {
-                $this->app->DB->Update("UPDATE $doctype" . "_position SET umsatzsteuer = 'normal' WHERE id = " . $tmpposid);
+                $_safeDTporton = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+                $this->app->DatabaseService->execute("UPDATE `{$_safeDTporton}` SET umsatzsteuer = 'normal' WHERE id = :id", ['id' => (int) $tmpposid]);
               }
             }
           }
@@ -18822,27 +18822,32 @@ $( this ).dialog( "close" );
       // wenn versandkostennbrutto = 0 und versandkostennetto > 0 TODO neu ausrechnen
 
       if ($tmpposid > 0) {
-        $this->app->DB->Update("UPDATE $doctype" . "_position SET keinrabatterlaubt=1 WHERE id='$tmpposid' LIMIT 1");
+        $_safeDTkrp = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+        $this->app->DatabaseService->execute("UPDATE `{$_safeDTkrp}` SET keinrabatterlaubt = 1 WHERE id = :id LIMIT 1", ['id' => (int) $tmpposid]);
         if (isset($warenkorb['versandkostenbeschreibung'])) {
-          $this->app->DB->Update("UPDATE $doctype" . "_position SET beschreibung='" . $this->app->DB->real_escape_string($warenkorb['versandkostenbeschreibung']) . "' WHERE id='$tmpposid' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE `{$_safeDTkrp}` SET beschreibung = :beschreibung WHERE id = :id LIMIT 1", ['beschreibung' => $warenkorb['versandkostenbeschreibung'], 'id' => (int) $tmpposid]);
         }
       }
     }
 
     if ($waehrung && $waehrung !== 'EUR') {
-      $this->app->DB->Update("UPDATE $doctype" . "_position SET waehrung='$waehrung' WHERE $doctype='$auftrag' ");
+      $_safeDTwae = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+      $_safeDTwaedoc = $this->app->DatabaseService->validateIdentifier($doctype);
+      $this->app->DatabaseService->execute("UPDATE `{$_safeDTwae}` SET waehrung = :waehrung WHERE `{$_safeDTwaedoc}` = :auftrag", ['waehrung' => $waehrung, 'auftrag' => (int) $auftrag]);
     }
 
     $shoptyp = '';
 
     if (isset($warenkorb['wawisionpreise']) && $warenkorb['wawisionpreise']) {
-      $wpositionen = $this->app->DB->SelectArr("SELECT * FROM $doctype" . "_position WHERE auftrag = '$auftrag'");
+      $_safeDTww = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+      $_safeDTwwdoc = $this->app->DatabaseService->validateIdentifier($doctype);
+      $wpositionen = $this->app->DatabaseService->select("SELECT * FROM `{$_safeDTww}` WHERE auftrag = :auftrag", ['auftrag' => (int) $auftrag]);
       if (!empty($wpositionen)) {
-        $adresse = $this->app->DB->Select("SELECT adresse FROM $doctype WHERE id = '$auftrag' LIMIT 1");
+        $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$_safeDTwwdoc}` WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
         foreach ($wpositionen as $wpos) {
           $pr = $this->GetVerkaufspreis($wpos['artikel'], $wpos['menge'], $adresse);
           if ($pr) {
-            $this->app->DB->Update("UPDATE $doctype" . "_position SET preis = '$pr' WHERE id = '" . $wpos['id'] . "' LIMIT 1");
+            $this->app->DatabaseService->execute("UPDATE `{$_safeDTww}` SET preis = :preis WHERE id = :id LIMIT 1", ['preis' => $pr, 'id' => (int) $wpos['id']]);
           }
         }
       }
@@ -19291,9 +19296,9 @@ $( this ).dialog( "close" );
     $this->app->DB->Insert("INSERT INTO lager_bewegung (lager_platz, artikel, menge,vpe, eingang,zeit,referenz, bearbeiter,projekt,firma,logdatei,bestand,paketannahme,doctype,doctypeid)
         VALUES('$regal','$artikel','$menge','$vpe','1',NOW(),'$referenz:$grund','" . $this->app->User->GetName() . "','$projekt','" . $this->app->User->GetFirma() . "',NOW(),'$bestand','$paketannahme','$doctype','$doctypeid')");
 
-    $this->app->DB->Update("UPDATE lager_seriennummern SET lager_platz='$regal',zwischenlagerid='0' WHERE zwischenlagerid='$zwischenlagerid'");
-    $this->app->DB->Update("UPDATE lager_mindesthaltbarkeitsdatum SET lager_platz='$regal',zwischenlagerid='0' WHERE zwischenlagerid='$zwischenlagerid'");
-    $this->app->DB->Update("UPDATE lager_charge SET lager_platz='$regal',zwischenlagerid='0' WHERE zwischenlagerid='$zwischenlagerid'");
+    $this->app->DatabaseService->execute("UPDATE lager_seriennummern SET lager_platz = :regal, zwischenlagerid = 0 WHERE zwischenlagerid = :zid", ['regal' => (int) $regal, 'zid' => (int) $zwischenlagerid]);
+    $this->app->DatabaseService->execute("UPDATE lager_mindesthaltbarkeitsdatum SET lager_platz = :regal, zwischenlagerid = 0 WHERE zwischenlagerid = :zid", ['regal' => (int) $regal, 'zid' => (int) $zwischenlagerid]);
+    $this->app->DatabaseService->execute("UPDATE lager_charge SET lager_platz = :regal, zwischenlagerid = 0 WHERE zwischenlagerid = :zid", ['regal' => (int) $regal, 'zid' => (int) $zwischenlagerid]);
 
     $menge_db = $zwischenlagerRow['menge'];
     if ($menge_db - $menge > 0) {
@@ -21233,19 +21238,30 @@ $( this ).dialog( "close" );
           $summe_im_lager = $batchStorage;
         }
       }
-      $artikel_reserviert = round($this->app->DB->Select("SELECT SUM(menge) FROM lager_reserviert WHERE artikel='" . $artikel . "' AND (datum>=NOW() OR datum='0000-00-00')"), $this->GetLagerNachkommastellen());
+      $artikel_reserviert = round((float) $this->app->DatabaseService->selectValue("SELECT SUM(menge) FROM lager_reserviert WHERE artikel = :artikel AND (datum>=NOW() OR datum='0000-00-00')", ['artikel' => (int) $artikel]), $this->GetLagerNachkommastellen());
     }
 
     // wenn es reservierungen fuer den Auftrag  gibt
     if ($objekt != '') {
       // auftrag reservierungen
-      $artikel_fuer_adresse_reserviert = round($this->app->DB->Select("SELECT SUM(menge) 
-        FROM lager_reserviert
-          WHERE artikel='" . $artikel . "' " . ($adresse > 0 ? " AND adresse='$adresse'" : '') . " AND ((objekt='$objekt' AND parameter='$parameter')" . ($objekt === 'lieferschein' && $auftrag > 0 ? " OR (objekt='auftrag' AND parameter = '$auftrag') " : '') . ") AND (datum>=NOW() OR datum='0000-00-00')"), $this->GetLagerNachkommastellen());
+      $_resrvSql = "SELECT SUM(menge) FROM lager_reserviert WHERE artikel = :artikel AND ((objekt = :objekt AND parameter = :parameter)" . ($objekt === 'lieferschein' && $auftrag > 0 ? " OR (objekt='auftrag' AND parameter = :auftrag)" : '') . ") AND (datum>=NOW() OR datum='0000-00-00')";
+      $_resrvParams = ['artikel' => (int) $artikel, 'objekt' => (string) $objekt, 'parameter' => (string) $parameter];
+      if ($adresse > 0) {
+        $_resrvSql = "SELECT SUM(menge) FROM lager_reserviert WHERE artikel = :artikel AND adresse = :adresse AND ((objekt = :objekt AND parameter = :parameter)" . ($objekt === 'lieferschein' && $auftrag > 0 ? " OR (objekt='auftrag' AND parameter = :auftrag)" : '') . ") AND (datum>=NOW() OR datum='0000-00-00')";
+        $_resrvParams['adresse'] = (int) $adresse;
+      }
+      if ($objekt === 'lieferschein' && $auftrag > 0) {
+        $_resrvParams['auftrag'] = (string) $auftrag;
+      }
+      $artikel_fuer_adresse_reserviert = round((float) $this->app->DatabaseService->selectValue($_resrvSql, $_resrvParams), $this->GetLagerNachkommastellen());
     } else {
-      $artikel_fuer_adresse_reserviert = round($this->app->DB->Select("SELECT SUM(menge) 
-        FROM lager_reserviert
-          WHERE artikel='" . $artikel . "' " . ($adresse > 0 ? " AND adresse='$adresse'" : '') . " AND (datum>=NOW() OR datum='0000-00-00') AND objekt!='lieferschein'"), $this->GetLagerNachkommastellen());
+      $_resrvSql2 = "SELECT SUM(menge) FROM lager_reserviert WHERE artikel = :artikel AND (datum>=NOW() OR datum='0000-00-00') AND objekt!='lieferschein'";
+      $_resrvParams2 = ['artikel' => (int) $artikel];
+      if ($adresse > 0) {
+        $_resrvSql2 = "SELECT SUM(menge) FROM lager_reserviert WHERE artikel = :artikel AND adresse = :adresse AND (datum>=NOW() OR datum='0000-00-00') AND objekt!='lieferschein'";
+        $_resrvParams2['adresse'] = (int) $adresse;
+      }
+      $artikel_fuer_adresse_reserviert = round((float) $this->app->DatabaseService->selectValue($_resrvSql2, $_resrvParams2), $this->GetLagerNachkommastellen());
     }
 
     if (round(($summe_im_lager - ($artikel_reserviert - $artikel_fuer_adresse_reserviert)), 8) >= round($menge, 8)) {
@@ -22765,7 +22781,7 @@ $( this ).dialog( "close" );
 
   function GetVorgaenger($projekt, $disableid = "")
   {
-    $user = $this->app->DB->SelectArr("SELECT * FROM arbeitspaket WHERE projekt='" . $projekt . "' AND id!='$disableid' AND art!='material'");
+    $user = $this->app->DatabaseService->select("SELECT * FROM arbeitspaket WHERE projekt = :projekt AND id != :disableid AND art != 'material'", ['projekt' => (int) $projekt, 'disableid' => (int) $disableid]);
     $tpl[0] = "keinen";
     for ($i = 0; $i < (!empty($user) ? count($user) : 0); $i++) {
       $tpl[$user[$i]['id']] = $user[$i]['aufgabe'];
@@ -28403,7 +28419,7 @@ $( this ).dialog( "close" );
       } else {
         // externe nummer holen
         // TODO pruefen ob es im Projekt ueberladen gehoert
-        $eigenernummernkreis = $this->app->DB->Select("SELECT eigenernummernkreis FROM projekt WHERE id='$projekt' LIMIT 1");
+        $eigenernummernkreis = $this->app->DatabaseService->selectValue("SELECT eigenernummernkreis FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $projekt]);
         if ($eigenernummernkreis == "1") {
           $neue_nummer = $this->app->DB->Select("SELECT next_artikelnummer FROM projekt WHERE id='$projekt' LIMIT 1");
           if ($this->app->DB->Select("SELECT id FROM artikel WHERE nummer = '" . $this->app->DB->real_escape_string($neue_nummer) . "' LIMIT 1"))
@@ -32184,8 +32200,8 @@ $( this ).dialog( "close" );
 
   function CopyProjektDaten($fromid, $toid, $data = null)
   {
-    $id = $fromid;
-    $newid = $toid;
+    $id = (int) $fromid;
+    $newid = (int) $toid;
 
     $arbeitspakete = $this->app->DB->SelectArr("SELECT id,vorgaenger FROM arbeitspaket WHERE projekt = '$id'");
 
@@ -32212,7 +32228,7 @@ $( this ).dialog( "close" );
           $alteNeueIds[$arbeitspaket['id']] = $newpaket;
           $idtoid[$arbeitspaket['id']] = $newpaket;
           $newidtoold[$newpaket] = $arbeitspaket['id'];
-          $this->app->DB->Update("UPDATE arbeitspaket SET status = 'offen', abgabedatum = '0000-00-00', startdatum = '0000-00-00', projekt = '$newid' WHERE id = '$newpaket' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE arbeitspaket SET status = 'offen', abgabedatum = '0000-00-00', startdatum = '0000-00-00', projekt = :newid WHERE id = :newpaket LIMIT 1", ['newid' => (int) $newid, 'newpaket' => (int) $newpaket]);
         }
       }
       foreach ($arbeitspakete as $arbeitspaket) {
@@ -32232,8 +32248,8 @@ $( this ).dialog( "close" );
           $do = false;
         if ($do) {
           $newartikel = $this->app->DB->MysqlCopyRow('projekt_artikel', 'id', $art['id']);
-          $this->app->DB->Update("UPDATE projekt_artikel SET projekt = '$newid' WHERE id = '$newartikel' LIMIT 1");
-          $this->app->DB->Update("UPDATE projekt_artikel SET teilprojekt = '" . $newidtoold[$art['teilprojekt']] . "' WHERE id = '$newartikel' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE projekt_artikel SET projekt = :newid WHERE id = :newartikel LIMIT 1", ['newid' => (int) $newid, 'newartikel' => (int) $newartikel]);
+          $this->app->DatabaseService->execute("UPDATE projekt_artikel SET teilprojekt = :teilprojekt WHERE id = :newartikel LIMIT 1", ['teilprojekt' => (int) $newidtoold[$art['teilprojekt']], 'newartikel' => (int) $newartikel]);
           $idtoidart[$art['id']] = $newpaket;
         }
       }
@@ -32245,7 +32261,7 @@ $( this ).dialog( "close" );
       unset($idtoidart);
       unset($artikel);
     }
-    $adressrollen = $this->app->DB->SelectArr("SELECT id FROM adresse_rolle WHERE projekt = '$id' AND objekt like 'Projekt' AND (bis = '0000-00-00' OR bis >= date(now()))");
+    $adressrollen = $this->app->DatabaseService->select("SELECT id FROM adresse_rolle WHERE projekt = :id AND objekt like 'Projekt' AND (bis = '0000-00-00' OR bis >= date(now()))", ['id' => (int) $id]);
     if ($adressrollen) {
       foreach ($adressrollen as $rolle) {
         $do = true;
@@ -32253,17 +32269,12 @@ $( this ).dialog( "close" );
           $do = false;
         if ($do) {
           $newrolle = $this->app->DB->MysqlCopyRow('adresse_rolle', 'id', $rolle['id']);
-          $this->app->DB->Update("UPDATE adresse_rolle SET projekt = '$newid' , parameter = '$newid' WHERE id = '$newrolle' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE adresse_rolle SET projekt = :newid, parameter = :newid2 WHERE id = :newrolle LIMIT 1", ['newid' => (int) $newid, 'newid2' => (int) $newid, 'newrolle' => (int) $newrolle]);
         }
       }
       unset($adressrollen);
     }
-    $aufgaben = $this->app->DB->SelectArr("SELECT a.id, a.aufgabe, ap.aufgabe AS teilprojekt, adr.name as mitarbeiter, a.status
-                                               FROM aufgabe a 
-                                               LEFT JOIN projekt p ON p.id=a.projekt 
-                                               LEFT JOIN adresse adr ON a.adresse=adr.id 
-                                               LEFT JOIN arbeitspaket ap ON ap.id=a.teilprojekt
-                                               WHERE a.projekt = '$id'");
+    $aufgaben = $this->app->DatabaseService->select("SELECT a.id, a.aufgabe, ap.aufgabe AS teilprojekt, adr.name as mitarbeiter, a.status FROM aufgabe a LEFT JOIN projekt p ON p.id=a.projekt LEFT JOIN adresse adr ON a.adresse=adr.id LEFT JOIN arbeitspaket ap ON ap.id=a.teilprojekt WHERE a.projekt = :id", ['id' => (int) $id]);
 
     if ($aufgaben) {
       foreach ($aufgaben as $aufgabe) {
@@ -32272,8 +32283,8 @@ $( this ).dialog( "close" );
           $do = false;
         if ($do) {
           $newaufgabe = $this->app->DB->MysqlCopyRow('aufgabe', 'id', $aufgabe['id']);
-          $this->app->DB->Update("UPDATE aufgabe SET projekt = '$newid', angelegt_am = CURDATE() WHERE id = '$newaufgabe' LIMIT 1");
-          $altesTeilprojekt = $this->app->DB->Select("SELECT teilprojekt FROM aufgabe WHERE id = '$newaufgabe' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE aufgabe SET projekt = :newid, angelegt_am = CURDATE() WHERE id = :newaufgabe LIMIT 1", ['newid' => (int) $newid, 'newaufgabe' => (int) $newaufgabe]);
+          $altesTeilprojekt = $this->app->DatabaseService->selectValue("SELECT teilprojekt FROM aufgabe WHERE id = :id LIMIT 1", ['id' => (int) $newaufgabe]);
           if ($altesTeilprojekt != '' && $altesTeilprojekt > 0) {
             if (is_array($alteNeueIds)) {
               if ($alteNeueIds[$altesTeilprojekt] > 0) {
@@ -32772,22 +32783,18 @@ $( this ).dialog( "close" );
       }
 
       //liefername  lieferland  lieferstrasse   lieferort   lieferplz   lieferadresszusatz
-      $this->app->DB->Update("UPDATE lieferschein SET name='{$tmparrliefer[0]['liefername']}', abteilung='{$tmparrliefer[0]['lieferabteilung']}',
-              unterabteilung='{$tmparrliefer[0]['lieferunterabteilung']}',strasse='{$tmparrliefer[0]['lieferstrasse']}',titel='{$tmparrliefer[0]['liefertitel']}',
-              email='{$tmparrliefer[0]['lieferemail']}',
-              adresszusatz='{$tmparrliefer[0]['lieferadresszusatz']}', plz='{$tmparrliefer[0]['lieferplz']}',ort='{$tmparrliefer[0]['lieferort']}',land='{$tmparrliefer[0]['lieferland']}',ansprechpartner='{$tmparrliefer[0]['lieferansprechpartner']}' WHERE id='$newid' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE lieferschein SET name = :name, abteilung = :abteilung, unterabteilung = :unterabteilung, strasse = :strasse, titel = :titel, email = :email, adresszusatz = :adresszusatz, plz = :plz, ort = :ort, land = :land, ansprechpartner = :ansprechpartner WHERE id = :id LIMIT 1", ['name' => (string) $tmparrliefer[0]['liefername'], 'abteilung' => (string) $tmparrliefer[0]['lieferabteilung'], 'unterabteilung' => (string) $tmparrliefer[0]['lieferunterabteilung'], 'strasse' => (string) $tmparrliefer[0]['lieferstrasse'], 'titel' => (string) $tmparrliefer[0]['liefertitel'], 'email' => (string) $tmparrliefer[0]['lieferemail'], 'adresszusatz' => (string) $tmparrliefer[0]['lieferadresszusatz'], 'plz' => (string) $tmparrliefer[0]['lieferplz'], 'ort' => (string) $tmparrliefer[0]['lieferort'], 'land' => (string) $tmparrliefer[0]['lieferland'], 'ansprechpartner' => (string) $tmparrliefer[0]['lieferansprechpartner'], 'id' => (int) $newid]);
       if ($tmparrliefer[0]['liefergln'] != "")
-        $this->app->DB->Update("UPDATE lieferschein SET gln = '{$tmparrliefer[0]['liefergln']}' WHERE id = '$newid' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE lieferschein SET gln = :gln WHERE id = :id LIMIT 1", ['gln' => (string) $tmparrliefer[0]['liefergln'], 'id' => (int) $newid]);
       if ($tmparrliefer[0]['lieferbundesstaat'] != '') {
-        $this->app->DB->Update("UPDATE `lieferschein` SET `bundesstaat` = '{$tmparrliefer[0]['lieferbundesstaat']}' WHERE `id` = '{$newid}' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE `lieferschein` SET `bundesstaat` = :bundesstaat WHERE `id` = :id LIMIT 1", ['bundesstaat' => (string) $tmparrliefer[0]['lieferbundesstaat'], 'id' => (int) $newid]);
       }
     }
 
     //lieferadresse wenn packstation
     if ($versandart == "packstation") {
       //packstation_inhaber   packstation_station         packstation_ident   packstation_plz   packstation_ort
-      $this->app->DB->Update("UPDATE lieferschein SET name='{$tmparrliefer[0]['packstation_inhaber']}', unterabteilung='',strasse='Packstation Nr. {$tmparrliefer[0]['packstation_station']}', adresszusatz='{$tmparrliefer[0]['packstation_ident']}',
-              plz='{$tmparrliefer[0]['packstation_plz']}',ort='{$tmparrliefer[0]['packstation_ort']}' WHERE id='$newid' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE lieferschein SET name = :name, unterabteilung = '', strasse = :strasse, adresszusatz = :adresszusatz, plz = :plz, ort = :ort WHERE id = :id LIMIT 1", ['name' => (string) $tmparrliefer[0]['packstation_inhaber'], 'strasse' => 'Packstation Nr. ' . (string) $tmparrliefer[0]['packstation_station'], 'adresszusatz' => (string) $tmparrliefer[0]['packstation_ident'], 'plz' => (string) $tmparrliefer[0]['packstation_plz'], 'ort' => (string) $tmparrliefer[0]['packstation_ort'], 'id' => (int) $newid]);
     }
 
     $portosorts = null;
@@ -33536,10 +33543,9 @@ $( this ).dialog( "close" );
 
     $anfrageid = $orderArr['anfrageid'];
     $adresseid = $orderArr['adresse'];
-    $abweichende_rechnungsadresse = $this->app->DB->Select("SELECT abweichende_rechnungsadresse
-            FROM adresse WHERE id='$adresseid' LIMIT 1");
+    $abweichende_rechnungsadresse = $this->app->DatabaseService->selectValue("SELECT abweichende_rechnungsadresse FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $adresseid]);
     if ($anfrageid > 0) {
-      $this->app->DB->Update("UPDATE anfrage SET status='abgerechnet',schreibschutz='0' WHERE id='$anfrageid'");
+      $this->app->DatabaseService->execute("UPDATE anfrage SET status='abgerechnet', schreibschutz='0' WHERE id = :id", ['id' => (int) $anfrageid]);
     }
     // pruefe ob auftrag status=angelegt, dann vergebe belegnr
     $status = $orderArr['status'];
@@ -33677,7 +33683,7 @@ $( this ).dialog( "close" );
     $this->RechnungNeuberechnen($newid);
     //summe zahlungseingaenge
     $summe_zahlungseingaenge = 0;
-    $rechnungssumme = $this->app->DB->Select("SELECT `soll` FROM `rechnung` WHERE `id` = '{$newid}' LIMIT 1");
+    $rechnungssumme = $this->app->DatabaseService->selectValue("SELECT `soll` FROM `rechnung` WHERE `id` = :id LIMIT 1", ['id' => (int) $newid]);
 
     //if(($arr[0][zahlungsweise]=="vorkasse" || $arr[0][zahlungsweise]=="paypal" || $arr[0][zahlungsweise]=="kreditkarte") &&  $summe_zahlungseingaenge >= $rechnungssumme)
     if ($summe_zahlungseingaenge > 0) {
@@ -33685,29 +33691,16 @@ $( this ).dialog( "close" );
         "SELECT SUM(`ist`) FROM `rechnung` WHERE `auftragid` = {$id} AND `id` != {$newid}"
       );
       if ($summe_zahlungseingaenge >= $rechnungssumme) {
-        $this->app->DB->Update("UPDATE `rechnung` SET `ist` = `soll`, `zahlungsstatus` = 'bezahlt' WHERE `id` = '{$newid}'");
+        $this->app->DatabaseService->execute("UPDATE `rechnung` SET `ist` = `soll`, `zahlungsstatus` = 'bezahlt' WHERE `id` = :id", ['id' => (int) $newid]);
       } elseif ($summe_zahlungseingaenge > 0) {
-        $lastDate = $this->app->DB->Select(
-          "SELECT MAX(k.buchung) 
-              FROM `kontoauszuege_zahlungseingang` AS `ke` 
-              INNER JOIN `kontoauszuege` AS `k` ON ke.kontoauszuege = k.id 
-              WHERE ke.`objekt` = 'auftrag' AND ke.`parameter` = '{$id}' "
-        );
-        $invoice = $this->app->DB->SelectRow(
-          "SELECT `skontobetrag`, `zahlungszielskonto`, `zahlungszieltageskonto`, 
-                DATE_SUB(`datum`, INTERVAL `zahlungszieltageskonto` DAY) <= '{$lastdate}' AS `skonto_ok`
-              FROM `rechnung` WHERE `id`= '{$newid}'"
-        );
+        $lastDate = $this->app->DatabaseService->selectValue("SELECT MAX(k.buchung) FROM `kontoauszuege_zahlungseingang` AS `ke` INNER JOIN `kontoauszuege` AS `k` ON ke.kontoauszuege = k.id WHERE ke.`objekt` = 'auftrag' AND ke.`parameter` = :id", ['id' => (string) $id]);
+        $invoice = $this->app->DatabaseService->selectRow("SELECT `skontobetrag`, `zahlungszielskonto`, `zahlungszieltageskonto`, DATE_SUB(`datum`, INTERVAL `zahlungszieltageskonto` DAY) <= :lastdate AS `skonto_ok` FROM `rechnung` WHERE `id` = :id", ['lastdate' => (string) $lastDate, 'id' => (int) $newid]);
         if (!empty($invoice['skonto_ok'])) {
           $minimumPayed = !empty($invoice['skontobetrag'])
             ? $invoice['skontobetrag'] : $rechnungssumme * (100 - $invoice['zahlungszielskonto']) / 100;
 
           if ($summe_zahlungseingaenge >= $minimumPayed) {
-            $this->app->DB->Update(
-              "UPDATE `rechnung` 
-                  SET `ist` = '{$summe_zahlungseingaenge}', `zahlungsstatus` = 'bezahlt' 
-                  WHERE `id` = '{$newid}'"
-            );
+            $this->app->DatabaseService->execute("UPDATE `rechnung` SET `ist` = :ist, `zahlungsstatus` = 'bezahlt' WHERE `id` = :id", ['ist' => (float) $summe_zahlungseingaenge, 'id' => (int) $newid]);
           }
         }
       }
@@ -33751,11 +33744,11 @@ $( this ).dialog( "close" );
 
   function WeiterfuehrenAngebotZuAuftrag($id)
   {
-    $anfrageid = $this->app->DB->Select("SELECT anfrageid FROM angebot WHERE id='$id' LIMIT 1");
-    $adresseid = $this->app->DB->Select("SELECT adresse FROM angebot WHERE id='$id' LIMIT 1");
+    $anfrageid = $this->app->DatabaseService->selectValue("SELECT anfrageid FROM angebot WHERE id = :id LIMIT 1", ['id' => (int) $id]);
+    $adresseid = $this->app->DatabaseService->selectValue("SELECT adresse FROM angebot WHERE id = :id LIMIT 1", ['id' => (int) $id]);
 
     if ($anfrageid > 0)
-      $this->app->DB->Update("UPDATE anfrage SET status='beauftrag',schreibschutz='0' WHERE id='$anfrageid' AND status!='abgeschlossen' AND status!='abgerechnet'");
+      $this->app->DatabaseService->execute("UPDATE anfrage SET status='beauftrag', schreibschutz='0' WHERE id = :id AND status != 'abgeschlossen' AND status != 'abgerechnet'", ['id' => (int) $anfrageid]);
 
     //angebot aus offene Angebote entfernen
     $this->app->DB->Insert("INSERT INTO auftrag (id) VALUES ('')");
@@ -35055,12 +35048,14 @@ $( this ).dialog( "close" );
             }
           } else {
             if ($check_porto == "1") {
-              $this->app->DB->Update("UPDATE " . $art . "_position SET rabattsync='1',keinrabatterlaubt='" . ($rabatteportofestschreiben ? '1' : '0') . "',rabatt='0' WHERE id='" . $artikelarr[$i]['id'] . "' LIMIT 1");
+              $_safeRabArt = $this->app->DatabaseService->validateIdentifier($art);
+              $this->app->DatabaseService->execute("UPDATE `{$_safeRabArt}_position` SET rabattsync = 1, keinrabatterlaubt = :kein, rabatt = 0 WHERE id = :id LIMIT 1", ['kein' => ($rabatteportofestschreiben ? 1 : 0), 'id' => (int) $artikelarr[$i]['id']]);
               $artikelarr[$i]['keinrabatterlaubt'] = $rabatteportofestschreiben ? '1' : '0';
               $artikelarr[$i]['rabattsync'] = 1;
               $artikelarr[$i]['rabatt'] = 0;
             } elseif ($check_keinrabatterlaubt == "1") {
-              $this->app->DB->Update("UPDATE " . $art . "_position SET rabattsync='1',keinrabatterlaubt='1',rabatt='0' WHERE id='" . $artikelarr[$i]['id'] . "' LIMIT 1");
+              $_safeRabArt2 = $this->app->DatabaseService->validateIdentifier($art);
+              $this->app->DatabaseService->execute("UPDATE `{$_safeRabArt2}_position` SET rabattsync = 1, keinrabatterlaubt = 1, rabatt = 0 WHERE id = :id LIMIT 1", ['id' => (int) $artikelarr[$i]['id']]);
               $artikelarr[$i]['keinrabatterlaubt'] = 1;
               $artikelarr[$i]['rabattsync'] = 1;
               $artikelarr[$i]['rabatt'] = 0;
@@ -37516,7 +37511,7 @@ $( this ).dialog( "close" );
       }
     }
     if (!$error) {
-      $ds = $this->app->DB->SelectArr("SELECT id,objekt, parameter FROM datei_stichwoerter WHERE datei = '$id' AND objekt like 'Artikel' AND parameter <> '' AND parameter <> '0'");
+      $ds = $this->app->DatabaseService->select("SELECT id, objekt, parameter FROM datei_stichwoerter WHERE datei = :id AND objekt like 'Artikel' AND parameter <> '' AND parameter <> '0'", ['id' => (int) $id]);
       $this->app->DB->Delete("DELETE FROM datei_stichwoerter WHERE datei = '$id'");
       if ($ds) {
         foreach ($ds as $d) {
@@ -38415,12 +38410,12 @@ $( this ).dialog( "close" );
     if ($produktion) {
     } else if ($stueckliste == 1)// && $juststueckliste!=1)
     {
-      $eka = $this->app->DB->SelectArr("SELECT preis, waehrung FROM einkaufspreise WHERE artikel='$id' AND adresse='$adresse' AND ab_menge<='$menge' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = '$waehrung' DESC, waehrung = '', ab_menge DESC LIMIT 1");
+      $eka = $this->app->DatabaseService->select("SELECT preis, waehrung FROM einkaufspreise WHERE artikel = :id AND adresse = :adresse AND ab_menge <= :menge AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = :waehrung DESC, waehrung = '', ab_menge DESC LIMIT 1", ['id' => (int) $id, 'adresse' => (int) $adresse, 'menge' => (float) $menge, 'waehrung' => (string) $waehrung]);
       if (!$eka) {
-        $eka = $this->app->DB->SelectArr("SELECT preis, waehrung FROM einkaufspreise WHERE artikel='$id' AND ab_menge<='$menge' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = '$waehrung' DESC, waehrung = '', ab_menge DESC LIMIT 1");
+        $eka = $this->app->DatabaseService->select("SELECT preis, waehrung FROM einkaufspreise WHERE artikel = :id AND ab_menge <= :menge AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = :waehrung DESC, waehrung = '', ab_menge DESC LIMIT 1", ['id' => (int) $id, 'menge' => (float) $menge, 'waehrung' => (string) $waehrung]);
       }
       if (!$eka) {
-        $eka = $this->app->DB->SelectArr("SELECT preis, waehrung FROM einkaufspreise WHERE artikel='$id' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = '$waehrung' DESC, waehrung = '', ab_menge LIMIT 1");
+        $eka = $this->app->DatabaseService->select("SELECT preis, waehrung FROM einkaufspreise WHERE artikel = :id AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = :waehrung DESC, waehrung = '', ab_menge LIMIT 1", ['id' => (int) $id, 'waehrung' => (string) $waehrung]);
       }
       if ($eka && $eka[0]['preis'] != 0) {
         if ($eka[0]['waehrung'] == '') {
