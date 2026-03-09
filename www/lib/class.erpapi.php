@@ -463,9 +463,9 @@ class erpAPI
       $colsa[] = "'$doctype' as art";
     }
 
-    $checkfields = $this->app->DB->SelectRow("SELECT * FROM $doctype LIMIT 1");
+    $checkfields = $this->app->DatabaseService->selectRow(sprintf("SELECT * FROM `%s` LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)));
     $checkfieldsposition = $doctype === 'verbindlichkeit'
-      ? null : $this->app->DB->SelectRow("SELECT * FROM " . $doctype . "_position LIMIT 1");
+      ? null : $this->app->DatabaseService->selectRow(sprintf("SELECT * FROM `%s` LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype . '_position')));
     foreach ($arr as $v) {
       if (strpos($v, 'beleg_') === 0) {
         $k = substr($v, 6);
@@ -865,21 +865,23 @@ class erpAPI
       return;
     }
 
-    $check = $this->app->DB->SelectRow(
-      "SELECT hn.id 
-    FROM `hook_navigation` AS `hn` 
-    WHERE hn.module = '" . $this->app->DB->real_escape_string($module) . "' AND hn.action = '" . $this->app->DB->real_escape_string($action) . "' 
-    ORDER by hn.aktiv DESC 
-    LIMIT 1"
+    $check = $this->app->DatabaseService->selectRow(
+      "SELECT hn.id
+    FROM `hook_navigation` AS `hn`
+    WHERE hn.module = :module AND hn.action = :action
+    ORDER by hn.aktiv DESC
+    LIMIT 1",
+      ['module' => (string) $module, 'action' => (string) $action]
     );
     if (!empty($check) && $check['id'] == 0) {
       $this->repairNullIds('hook_navigation');
-      $check = $this->app->DB->SelectRow(
-        "SELECT hn.id 
-      FROM `hook_navigation` AS `hn` 
-      WHERE hn.module = '" . $this->app->DB->real_escape_string($module) . "' AND hn.action = '" . $this->app->DB->real_escape_string($action) . "' 
-      ORDER by hn.aktiv DESC 
-      LIMIT 1"
+      $check = $this->app->DatabaseService->selectRow(
+        "SELECT hn.id
+      FROM `hook_navigation` AS `hn`
+      WHERE hn.module = :module AND hn.action = :action
+      ORDER by hn.aktiv DESC
+      LIMIT 1",
+        ['module' => (string) $module, 'action' => (string) $action]
       );
     }
     if ($check) {
@@ -1381,9 +1383,7 @@ class erpAPI
     );
     if (!empty($old)) {
       foreach ($old as $v) {
-        $oldarr[
-          $this->app->DB->real_escape_string($v['name'])
-        ] = array('id' => $v['id'], 'wert' => $v['wert'], 'maxid' => $v['maxid']);
+        $oldarr[$v['name']] = array('id' => $v['id'], 'wert' => $v['wert'], 'maxid' => $v['maxid']);
       }
     }
 
@@ -1392,54 +1392,31 @@ class erpAPI
         continue;
       }
 
-      $nameForDb = $k;
-      $valueForDb = $v;
-      if ($escape) {
-        $nameForDb = $this->app->DB->real_escape_string($k);
-        $valueForDb = $this->app->DB->real_escape_string($v);
-      }
       $check = !empty($oldarr[$k]) ? $oldarr[$k]['id'] : 0;
       $new = null;
       if (!$check) {
-        $this->app->DB->Insert(
-          sprintf(
-            "INSERT INTO `shopexport_artikel` (shopid, artikel, `name`,wert) 
-              VALUES (%d,%d,'%s','%s')",
-            $shop,
-            $artikel,
-            $nameForDb,
-            $valueForDb
-          )
+        $this->app->DatabaseService->execute(
+          "INSERT INTO `shopexport_artikel` (shopid, artikel, `name`, wert) VALUES (:shopid, :artikel, :name, :wert)",
+          ['shopid' => (int) $shop, 'artikel' => (int) $artikel, 'name' => (string) $k, 'wert' => (string) $v]
         );
 
         $new = $this->app->DB->GetInsertID();
       }
 
       if ($check && (!empty($new) || $oldarr[$k]['wert'] != $v)) {
-        $this->app->DB->Delete(
-          sprintf(
-            "DELETE FROM `shopexport_artikel` 
-              WHERE `artikel` = %d AND `shopid` = %d AND `name` = '%s' AND `id` <> %d",
-            $artikel,
-            $shop,
-            $nameForDb,
-            $check
-          )
+        $this->app->DatabaseService->execute(
+          "DELETE FROM `shopexport_artikel` WHERE `artikel` = :artikel AND `shopid` = :shopid AND `name` = :name AND `id` <> :id",
+          ['artikel' => (int) $artikel, 'shopid' => (int) $shop, 'name' => (string) $k, 'id' => (int) $check]
         );
 
-        $this->app->DB->Update(
-          "UPDATE shopexport_artikel SET bearbeiter = '$bearbeiter', wert = '$valueForDb' WHERE id = '$check' LIMIT 1"
+        $this->app->DatabaseService->execute(
+          "UPDATE shopexport_artikel SET bearbeiter = :bearbeiter, wert = :wert WHERE id = :id LIMIT 1",
+          ['bearbeiter' => (string) $bearbeiter, 'wert' => (string) $v, 'id' => (int) $check]
         );
       } elseif ($check && $oldarr[$k]['id'] != $oldarr[$k]['maxid']) {
-        $this->app->DB->Delete(
-          sprintf(
-            "DELETE FROM `shopexport_artikel` 
-              WHERE `artikel` = %d AND `shopid` = %d AND `name` = '%s' AND `id` <> %d",
-            $artikel,
-            $shop,
-            $nameForDb,
-            $check
-          )
+        $this->app->DatabaseService->execute(
+          "DELETE FROM `shopexport_artikel` WHERE `artikel` = :artikel AND `shopid` = :shopid AND `name` = :name AND `id` <> :id",
+          ['artikel' => (int) $artikel, 'shopid' => (int) $shop, 'name' => (string) $k, 'id' => (int) $check]
         );
       }
 
@@ -1829,7 +1806,6 @@ class erpAPI
   {
     $parameter = (int) $parameter;
     $beep = (int) $beep;
-    $objekt = $this->app->DB->real_escape_string($objekt);
     if ($delete == true) {
       if (!empty($objekt) && !empty($parameter))
         $this->app->DatabaseService->execute(
@@ -1850,8 +1826,6 @@ class erpAPI
     $gruppe = (int) $gruppe;
     $prio = (int) $prio;
     $ablaufzeit = (int) $ablaufzeit;
-    $bezeichnung = $this->app->DB->real_escape_string($bezeichnung);
-    $nachricht = $this->app->DB->real_escape_string($nachricht);
     $this->app->DatabaseService->execute(
       "INSERT INTO boxnachrichten (user, gruppe, bezeichnung, nachricht, prio, ablaufzeit, objekt, parameter, beep) VALUES (:user, :gruppe, :bezeichnung, :nachricht, :prio, :ablaufzeit, :objekt, :parameter, :beep)",
       ['user' => (int) $user, 'gruppe' => (int) $gruppe, 'bezeichnung' => (string) $bezeichnung, 'nachricht' => (string) $nachricht, 'prio' => (int) $prio, 'ablaufzeit' => (int) $ablaufzeit, 'objekt' => (string) $objekt, 'parameter' => (int) $parameter, 'beep' => (int) $beep]
@@ -1917,7 +1891,7 @@ class erpAPI
     if (!empty($this->sprachen) && !empty($this->sprachen[$type]) && !empty($this->sprachen[$type][$id])) {
       return $this->sprachen[$type][$id];
     }
-    $docArr = $this->app->DB->SelectRow(sprintf('SELECT sprache, adresse FROM `%s` WHERE id = %d', $type, $id));
+    $docArr = $this->app->DatabaseService->selectRow(sprintf('SELECT sprache, adresse FROM `%s` WHERE id = :id LIMIT 1', $this->app->DatabaseService->validateIdentifier($type)), ['id' => (int) $id]);
     $sprache = !empty($docArr) ? $docArr['sprache'] : $this->app->DatabaseService->selectValue(
       sprintf("SELECT sprache FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($type)),
       ['id' => (int) $id]
@@ -1941,8 +1915,11 @@ class erpAPI
 
   public function GetSpracheBelegPosition($type, $id)
   {
-    $sql = "SELECT beleg.id FROM " . $type . " beleg INNER JOIN " . $type . "_position pos ON pos." . $type . " = beleg.id WHERE pos.id = " . $id . " LIMIT 1";
-    $beleg = $this->app->DB->Select($sql);
+    $safeType = $this->app->DatabaseService->validateIdentifier($type);
+    $beleg = $this->app->DatabaseService->selectValue(
+      sprintf("SELECT beleg.id FROM `%s` beleg INNER JOIN `%s` pos ON pos.`%s` = beleg.id WHERE pos.id = :id LIMIT 1", $safeType, $safeType . '_position', $safeType),
+      ['id' => (int) $id]
+    );
     $sprache = $this->GetSpracheBeleg($type, $beleg);
     return ($sprache);
   }
@@ -3432,28 +3409,22 @@ class erpAPI
         )
       );
       if (!empty($order)) {
-        $country = $this->app->DB->Select(
-          sprintf(
-            "SELECT adr.land 
-            FROM lager_platz AS lp 
+        $firmLand = (string) $this->app->erp->Firmendaten('land');
+        $storageLocationsInt = array_map('intval', array_unique($storageLocations));
+        $country = $this->app->DatabaseService->selectValue(
+          "SELECT adr.land
+            FROM lager_platz AS lp
             INNER JOIN lager AS l ON lp.lager = l.id
-            INNER JOIN adresse adr ON IF(l.adresse > 0, l.adresse, lp.adresse) = adr.id 
-               AND adr.land <> '' AND adr.land <> '%s' 
-            WHERE lp.id IN (%s)
+            INNER JOIN adresse adr ON IF(l.adresse > 0, l.adresse, lp.adresse) = adr.id
+               AND adr.land <> '' AND adr.land <> :land
+            WHERE lp.id IN (" . implode(',', $storageLocationsInt) . ")
             LIMIT 1",
-            $this->app->DB->real_escape_string($this->app->erp->Firmendaten('land')),
-            implode(',', array_unique($storageLocations))
-          )
+          ['land' => $firmLand]
         );
         if (!empty($country)) {
-          $this->app->DB->Update(
-            sprintf(
-              "UPDATE auftrag 
-              SET storage_country = '%s', zuarchivieren = 0, schreibschutz = 0
-              WHERE id = %d AND storage_country = ''",
-              $this->app->DB->real_escape_string($country),
-              $order['id']
-            )
+          $this->app->DatabaseService->execute(
+            "UPDATE auftrag SET storage_country = :country, zuarchivieren = 0, schreibschutz = 0 WHERE id = :id AND storage_country = ''",
+            ['country' => (string) $country, 'id' => (int) $order['id']]
           );
           if ($this->app->DB->affected_rows() > 0) {
             $this->app->erp->ANABREGSNeuberechnen($order['id'], 'auftrag');
@@ -3461,25 +3432,14 @@ class erpAPI
               $this->app->erp->PDFArchivieren('auftrag', $order['id'], true);
             }
 
-            $invoice = $this->app->DB->SelectRow(
-              sprintf(
-                "SELECT id,storage_country, schreibschutz  
-                FROM rechnung 
-                WHERE auftragid = %d AND status <> 'storniert' 
-                ORDER BY id DESC 
-                LIMIT 1",
-                $order['id']
-              )
+            $invoice = $this->app->DatabaseService->selectRow(
+              "SELECT id, storage_country, schreibschutz FROM rechnung WHERE auftragid = :id AND status <> 'storniert' ORDER BY id DESC LIMIT 1",
+              ['id' => (int) $order['id']]
             );
             if (!empty($invoice) && empty($invoice['storage_country'])) {
-              $this->app->DB->Update(
-                sprintf(
-                  "UPDATE rechnung 
-                  SET storage_country = '%s', zuarchivieren = 0, schreibschutz = 0 
-                  WHERE id = %d AND storage_country = ''",
-                  $this->app->DB->real_escape_string($country),
-                  $invoice['id']
-                )
+              $this->app->DatabaseService->execute(
+                "UPDATE rechnung SET storage_country = :country, zuarchivieren = 0, schreibschutz = 0 WHERE id = :id AND storage_country = ''",
+                ['country' => (string) $country, 'id' => (int) $invoice['id']]
               );
               $this->app->erp->ANABREGSNeuberechnen($invoice['id'], 'rechnung');
               if ($invoice['schreibschutz']) {
@@ -3977,7 +3937,7 @@ title: 'Abschicken',
 
         } else {
           // schauen ob es zahlungsweise gibt
-          $zahlungsweisetext = $this->Beschriftung("zahlungsweise_freitext_" . $this->app->DB->Select("SELECT id FROM zahlungsweisen WHERE type='" . $zahlungsweise . "' AND aktiv='1' AND type!='' LIMIT 1"));
+          $zahlungsweisetext = $this->Beschriftung("zahlungsweise_freitext_" . $this->app->DatabaseService->selectValue("SELECT id FROM zahlungsweisen WHERE type = :type AND aktiv = '1' AND type != '' LIMIT 1", ['type' => (string) $zahlungsweise]));
           if ($zahlungsweisetext == "") {
             $zahlungsweisetext = $this->app->DatabaseService->selectValue(
             "SELECT freitext FROM zahlungsweisen WHERE type = :type AND aktiv = '1' AND type != '' LIMIT 1",
@@ -18853,11 +18813,11 @@ $( this ).dialog( "close" );
       }
     }
     if (!empty($artikelimport)) {
-      $this->app->DB->Update("UPDATE $doctype" . "_position set rabatt = 0, keinrabatterlaubt = 1, grundrabatt = 0, rabattsync = 1 WHERE $doctype = '$auftrag'");
+      $this->app->DatabaseService->execute(sprintf("UPDATE `%s` SET rabatt = 0, keinrabatterlaubt = 1, grundrabatt = 0, rabattsync = 1 WHERE `%s` = :auftrag", $this->app->DatabaseService->validateIdentifier($doctype . '_position'), $this->app->DatabaseService->validateIdentifier($doctype)), ['auftrag' => (int) $auftrag]);
     }
     if (!empty($rabattpositionen)) {
       foreach ($rabattpositionen as $key => $value) {
-        $this->app->DB->Update("UPDATE $doctype" . "_position SET rabatt='$value' WHERE id='$key'");
+        $this->app->DatabaseService->execute(sprintf("UPDATE `%s` SET rabatt = :rabatt WHERE id = :id", $this->app->DatabaseService->validateIdentifier($doctype . '_position')), ['rabatt' => (string) $value, 'id' => (int) $key]);
       }
     }
 
@@ -18878,32 +18838,27 @@ $( this ).dialog( "close" );
 
       $this->AuftragNeuberechnen($auftrag);
       $this->AuftragEinzelnBerechnen($auftrag);
-      $this->app->DB->Update("
-    UPDATE auftrag a 
-    INNER JOIN adresse adr ON a.lieferant = adr.id 
-    SET a.lieferantkdrnummer = if(a.lieferantennummer <> '',a.lieferantennummer,adr.lieferantennummer)
-    WHERE a.lieferantkdrnummer = '' AND a.lieferantenauftrag = 1 AND a.id = '$auftrag'
-    ");
-      $this->app->DB->Update("
-    UPDATE auftrag a 
-    INNER JOIN adresse adr ON a.adresse = adr.id 
-    SET a.lieferantkdrnummer = if(a.kundennummer <> '',a.kundennummer, adr.kundennummer)
-    WHERE a.lieferantkdrnummer = '' AND a.lieferantenauftrag = 0 AND a.id = '$auftrag'
-    ");
+      $this->app->DatabaseService->execute(
+        "UPDATE auftrag a INNER JOIN adresse adr ON a.lieferant = adr.id SET a.lieferantkdrnummer = if(a.lieferantennummer <> '',a.lieferantennummer,adr.lieferantennummer) WHERE a.lieferantkdrnummer = '' AND a.lieferantenauftrag = 1 AND a.id = :id",
+        ['id' => (int) $auftrag]
+      );
+      $this->app->DatabaseService->execute(
+        "UPDATE auftrag a INNER JOIN adresse adr ON a.adresse = adr.id SET a.lieferantkdrnummer = if(a.kundennummer <> '',a.kundennummer, adr.kundennummer) WHERE a.lieferantkdrnummer = '' AND a.lieferantenauftrag = 0 AND a.id = :id",
+        ['id' => (int) $auftrag]
+      );
       if (!empty($warenkorb['auftragsstatus'])) {
         if ($warenkorb['auftragsstatus'] === 'abgeschlossen') {
-          $this->app->DB->Update("UPDATE auftrag SET status = 'abgeschlossen', schreibschutz = 1 WHERE id = '$auftrag' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE auftrag SET status = 'abgeschlossen', schreibschutz = 1 WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
         }
         if ($warenkorb['auftragsstatus'] === 'unbezahlt') {
-          $this->app->DB->Insert("INSERT INTO shopimport_checkorder (shop_id, order_id, ext_order) VALUES ('$shop','$auftrag','" . $warenkorb['auftrag'] . "')");
+          $this->app->DatabaseService->execute("INSERT INTO shopimport_checkorder (shop_id, order_id, ext_order) VALUES (:shop, :auftrag, :ext_order)", ['shop' => (int) $shop, 'auftrag' => (int) $auftrag, 'ext_order' => (string) $warenkorb['auftrag']]);
           $this->app->erp->AuftragProtokoll($auftrag, 'Kaufabwicklung noch nicht abgeschlossen');
         }
       }
 
-      $this->app->DB->Update(
-        "UPDATE artikel art 
-      INNER JOIN auftrag_position ap ON art.id = ap.artikel AND ap.auftrag = '$auftrag' 
-      SET art.cache_lagerplatzinhaltmenge = -999"
+      $this->app->DatabaseService->execute(
+        "UPDATE artikel art INNER JOIN auftrag_position ap ON art.id = ap.artikel AND ap.auftrag = :auftrag SET art.cache_lagerplatzinhaltmenge = -999",
+        ['auftrag' => (int) $auftrag]
       );
       $this->app->DB->Update(
         sprintf(
@@ -18921,14 +18876,14 @@ $( this ).dialog( "close" );
           (int) $shop
         )
       );
-      if ($this->app->DB->Select("SELECT gesamtbetragfestsetzen FROM shopexport WHERE id = '$shop' LIMIT 1")) {
-        $gesamtsumme = $this->app->DB->Select("SELECT gesamtsumme FROM auftrag WHERE id = '$auftrag' LIMIT 1");
+      if ($this->app->DatabaseService->selectValue("SELECT gesamtbetragfestsetzen FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int) $shop])) {
+        $gesamtsumme = $this->app->DatabaseService->selectValue("SELECT gesamtsumme FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
         if (abs($gesamtsumme - $warenkorb['gesamtsumme']) <= $differenz) {
-          $this->app->DB->Update("UPDATE auftrag SET extsoll = '" . $warenkorb['gesamtsumme'] . "', gesamtsumme = '" . $warenkorb['gesamtsumme'] . "' WHERE id = '$auftrag' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE auftrag SET extsoll = :extsoll, gesamtsumme = :gesamtsumme WHERE id = :id LIMIT 1", ['extsoll' => (string) $warenkorb['gesamtsumme'], 'gesamtsumme' => (string) $warenkorb['gesamtsumme'], 'id' => (int) $auftrag]);
         }
       }
       if (!empty($warenkorb['bestelldatum']) && strtotime($warenkorb['bestelldatum']) > 1) {
-        $this->app->DB->Update("UPDATE auftrag SET datum = '" . $this->app->DB->real_escape_string($warenkorb['bestelldatum']) . "' WHERE belegnr <> '' AND id = " . $auftrag);
+        $this->app->DatabaseService->execute("UPDATE auftrag SET datum = :datum WHERE belegnr <> '' AND id = :id", ['datum' => (string) $warenkorb['bestelldatum'], 'id' => (int) $auftrag]);
       }
       if (
         !$autoversandvonMapping &&
@@ -18975,7 +18930,7 @@ $( this ).dialog( "close" );
       $this->AngebotNeuberechnen($auftrag);
       $this->BelegFreigabe('angebot', $auftrag);
       if (!empty($warenkorb['bestelldatum']) && strtotime($warenkorb['bestelldatum']) > 1) {
-        $this->app->DB->Update("UPDATE angebot SET datum = '" . $this->app->DB->real_escape_string($warenkorb['bestelldatum']) . "' WHERE id = " . $auftrag);
+        $this->app->DatabaseService->execute("UPDATE angebot SET datum = :datum WHERE id = :id", ['datum' => (string) $warenkorb['bestelldatum'], 'id' => (int) $auftrag]);
       }
     }
 
@@ -19121,9 +19076,9 @@ $( this ).dialog( "close" );
         ['id' => $ustprf_id]
 
       );
-        $this->app->DB->Insert('INSERT INTO ustprf_protokoll (ustprf_id, zeit, bemerkung, bearbeiter)  VALUES (' . $ustprf_id . ',"' . date("Y-m-d H:i:s") . '","UST g&uuml;ltig aber Name, Ort oder PLZ wird anders geschrieben", "' . $this->app->User->GetName() . '")');
+        $this->app->DatabaseService->execute('INSERT INTO ustprf_protokoll (ustprf_id, zeit, bemerkung, bearbeiter) VALUES (:uid, :zeit, :bemerkung, :bearbeiter)', ['uid' => (int) $ustprf_id, 'zeit' => date("Y-m-d H:i:s"), 'bemerkung' => 'UST g&uuml;ltig aber Name, Ort oder PLZ wird anders geschrieben', 'bearbeiter' => (string) $this->app->User->GetName()]);
       } else
-        $this->app->DB->Insert('INSERT INTO ustprf_protokoll (ustprf_id, zeit, bemerkung, bearbeiter)  VALUES (' . $ustprf_id . ',"' . date("Y-m-d H:i:s") . '","' . $UstStatus['ERROR_CODE'] . '(' . $msg . ')", "' . $this->app->User->GetName() . '")');
+        $this->app->DatabaseService->execute('INSERT INTO ustprf_protokoll (ustprf_id, zeit, bemerkung, bearbeiter) VALUES (:uid, :zeit, :bemerkung, :bearbeiter)', ['uid' => (int) $ustprf_id, 'zeit' => date("Y-m-d H:i:s"), 'bemerkung' => $UstStatus['ERROR_CODE'] . '(' . $msg . ')', 'bearbeiter' => (string) $this->app->User->GetName()]);
 
     } else if ($UstStatus == 1) {
 
@@ -19132,11 +19087,11 @@ $( this ).dialog( "close" );
 
       // jetzt brief bestellen!
       $UstStatus = $this->CheckUst("DE263136143", $ust, $firmenname, $ort, $strasse, $plz, $druck = "ja");
-      $this->app->DB->Insert('INSERT INTO ustprf_protokoll (ustprf_id, zeit, bemerkung, bearbeiter)  VALUES (' . $ustprf_id . ',"' . date("Y-m-d H:i:s") . '","Online-Abfrage OK + Brief bestellt", "' . $this->app->User->GetName() . '")');
-      $this->app->DB->Update('UPDATE ustprf SET datum_online=NOW(), status="erfolgreich" WHERE id=' . $ustprf_id . '');
+      $this->app->DatabaseService->execute('INSERT INTO ustprf_protokoll (ustprf_id, zeit, bemerkung, bearbeiter) VALUES (:uid, :zeit, :bemerkung, :bearbeiter)', ['uid' => (int) $ustprf_id, 'zeit' => date("Y-m-d H:i:s"), 'bemerkung' => 'Online-Abfrage OK + Brief bestellt', 'bearbeiter' => (string) $this->app->User->GetName()]);
+      $this->app->DatabaseService->execute('UPDATE ustprf SET datum_online=NOW(), status="erfolgreich" WHERE id = :id', ['id' => (int) $ustprf_id]);
     } else {
-      $this->app->DB->Insert('INSERT INTO ustprf_protokoll (ustprf_id, zeit, bemerkung, bearbeiter)  VALUES (' . $ustprf_id . ',"' . date("Y-m-d H:i:s") . '","' . $UstStatus . '", "' . $this->app->User->GetName() . '")');
-      $this->app->DB->Update('UPDATE ustprf SET datum_online=NOW(), status="allgemeiner fehler" WHERE id=' . $ustprf_id . '');
+      $this->app->DatabaseService->execute('INSERT INTO ustprf_protokoll (ustprf_id, zeit, bemerkung, bearbeiter) VALUES (:uid, :zeit, :bemerkung, :bearbeiter)', ['uid' => (int) $ustprf_id, 'zeit' => date("Y-m-d H:i:s"), 'bemerkung' => (string) $UstStatus, 'bearbeiter' => (string) $this->app->User->GetName()]);
+      $this->app->DatabaseService->execute('UPDATE ustprf SET datum_online=NOW(), status="allgemeiner fehler" WHERE id = :id', ['id' => (int) $ustprf_id]);
     }
 
     return $result;
@@ -19168,13 +19123,11 @@ $( this ).dialog( "close" );
       return null;
     }
     $zid = (int) $zid;
-    $this->app->DB->Insert("INSERT INTO lager_charge (artikel,menge,lager_platz,datum,internebemerkung,charge,zwischenlagerid) 
-      VALUES ('$artikel','$menge','$lagerplatz','$datum','$internebemerkung','$charge','$zid')");
-    $this->app->DB->Insert("INSERT INTO chargen_log (artikel,lager_platz,eingang,bezeichnung,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid, is_interim) 
-      VALUES ('$artikel','$lagerplatz','1','$charge',NOW()," . $this->app->User->GetAdresse() . ",'$menge','$internebemerkung','$doctype','$doctypeid'," . (int) $isInterim . ")");
+    $this->app->DatabaseService->execute("INSERT INTO lager_charge (artikel,menge,lager_platz,datum,internebemerkung,charge,zwischenlagerid) VALUES (:artikel, :menge, :lagerplatz, :datum, :internebemerkung, :charge, :zid)", ['artikel' => (int) $artikel, 'menge' => (string) $menge, 'lagerplatz' => (int) $lagerplatz, 'datum' => (string) $datum, 'internebemerkung' => (string) $internebemerkung, 'charge' => (string) $charge, 'zid' => (int) $zid]);
+    $this->app->DatabaseService->execute("INSERT INTO chargen_log (artikel,lager_platz,eingang,bezeichnung,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,is_interim) VALUES (:artikel, :lagerplatz, 1, :charge, NOW(), :adresse, :menge, :internebemerkung, :doctype, :doctypeid, :is_interim)", ['artikel' => (int) $artikel, 'lagerplatz' => (int) $lagerplatz, 'charge' => (string) $charge, 'adresse' => (int) $this->app->User->GetAdresse(), 'menge' => (string) $menge, 'internebemerkung' => (string) $internebemerkung, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'is_interim' => (int) $isInterim]);
     $id = $this->app->DB->GetInsertID();
-    $bestand = $this->app->DB->Select("SELECT ifnull(sum(menge),0) FROM lager_charge WHERE artikel = '$artikel' AND lager_platz = '$lagerplatz' AND charge = '$charge'");
-    $this->app->DB->Update("UPDATE chargen_log SET bestand = '$bestand' WHERE id = '$id' LIMIT 1");
+    $bestand = $this->app->DatabaseService->selectValue("SELECT ifnull(sum(menge),0) FROM lager_charge WHERE artikel = :artikel AND lager_platz = :lagerplatz AND charge = :charge", ['artikel' => (int) $artikel, 'lagerplatz' => (int) $lagerplatz, 'charge' => (string) $charge]);
+    $this->app->DatabaseService->execute("UPDATE chargen_log SET bestand = :bestand WHERE id = :id LIMIT 1", ['bestand' => (string) $bestand, 'id' => (int) $id]);
     return $id;
   }
 
@@ -19188,13 +19141,12 @@ $( this ).dialog( "close" );
       $mhd = date('Y-m-d');
     }
     $zid = (int) $zid;
-    $this->app->DB->Insert("INSERT INTO lager_mindesthaltbarkeitsdatum (artikel,menge,lager_platz,datum,internebemerkung,charge,zwischenlagerid,mhddatum) VALUES ('$artikel','$menge','$lagerplatz',NOW(),'$internebemerkung','$charge','$zid','$mhd')");
-    $bestand = (float) $this->app->DB->Select("SELECT ifnull(sum(menge),0) FROM lager_mindesthaltbarkeitsdatum WHERE artikel = '$artikel' AND lager_platz = '$lagerplatz' AND mhddatum = '$mhd' AND ifnull(charge,'') = '$charge' ");
-    $this->app->DB->Insert("INSERT INTO mhd_log (artikel,lager_platz,eingang,mhddatum,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse,is_interim) 
-      VALUES ('$artikel','$lagerplatz','1','$mhd',NOW()," . $this->app->User->GetAdresse() . ",'$menge','$internebemerkung','$doctype','$doctypeid','$bestand','$adresse'," . (int) $isInterim . ")");
+    $this->app->DatabaseService->execute("INSERT INTO lager_mindesthaltbarkeitsdatum (artikel,menge,lager_platz,datum,internebemerkung,charge,zwischenlagerid,mhddatum) VALUES (:artikel, :menge, :lagerplatz, NOW(), :internebemerkung, :charge, :zid, :mhd)", ['artikel' => (int) $artikel, 'menge' => (string) $menge, 'lagerplatz' => (int) $lagerplatz, 'internebemerkung' => (string) $internebemerkung, 'charge' => (string) $charge, 'zid' => (int) $zid, 'mhd' => (string) $mhd]);
+    $bestand = (float) $this->app->DatabaseService->selectValue("SELECT ifnull(sum(menge),0) FROM lager_mindesthaltbarkeitsdatum WHERE artikel = :artikel AND lager_platz = :lagerplatz AND mhddatum = :mhd AND ifnull(charge,'') = :charge", ['artikel' => (int) $artikel, 'lagerplatz' => (int) $lagerplatz, 'mhd' => (string) $mhd, 'charge' => (string) $charge]);
+    $this->app->DatabaseService->execute("INSERT INTO mhd_log (artikel,lager_platz,eingang,mhddatum,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse,is_interim) VALUES (:artikel, :lagerplatz, 1, :mhd, NOW(), :adresse_mitarbeiter, :menge, :internebemerkung, :doctype, :doctypeid, :bestand, :adresse, :is_interim)", ['artikel' => (int) $artikel, 'lagerplatz' => (int) $lagerplatz, 'mhd' => (string) $mhd, 'adresse_mitarbeiter' => (int) $this->app->User->GetAdresse(), 'menge' => (string) $menge, 'internebemerkung' => (string) $internebemerkung, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'bestand' => (string) $bestand, 'adresse' => (int) $adresse, 'is_interim' => (int) $isInterim]);
     $insid = $this->app->DB->GetInsertID();
     if ($charge != '') {
-      $this->app->DB->Update("UPDATE mhd_log SET charge = '$charge' WHERE id = '$insid' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE mhd_log SET charge = :charge WHERE id = :id LIMIT 1", ['charge' => (string) $charge, 'id' => (int) $insid]);
     }
 
     return $insid;
@@ -19208,7 +19160,7 @@ $( this ).dialog( "close" );
     }
     $zid = (int) $zid;
     $this->LagerArtikelZusammenfassen($artikel, $lagerplatz);
-    $this->app->DB->Insert("INSERT INTO lager_charge (artikel,menge,lager_platz,datum,internebemerkung,charge,zwischenlagerid) VALUES ('$artikel','$menge','$lagerplatz','$datum','$internebemerkung','$charge','$zid')");
+    $this->app->DatabaseService->execute("INSERT INTO lager_charge (artikel,menge,lager_platz,datum,internebemerkung,charge,zwischenlagerid) VALUES (:artikel, :menge, :lagerplatz, :datum, :internebemerkung, :charge, :zid)", ['artikel' => (int) $artikel, 'menge' => (string) $menge, 'lagerplatz' => (int) $lagerplatz, 'datum' => (string) $datum, 'internebemerkung' => (string) $internebemerkung, 'charge' => (string) $charge, 'zid' => (int) $zid]);
     $this->app->erp->LagerEinlagern($artikel, $menge, $lagerplatz, $projekt, $internebemerkung, "", "", $doctype, $doctypeid, 0, 0, $adresse);
 
     $this->Chargenlog($artikel, $lagerplatz, 1, $charge, $menge, $internebemerkung, $doctype, $doctypeid, $adresse, 0, $isInterim);
@@ -19226,14 +19178,14 @@ $( this ).dialog( "close" );
       return 0;
     }
 
-    $this->app->DB->Insert("INSERT INTO lager_mindesthaltbarkeitsdatum (artikel,menge,lager_platz,datum,internebemerkung,charge,zwischenlagerid,mhddatum) VALUES ('$artikel','$menge','$lagerplatz',NOW(),'$internebemerkung','$charge','$zid','$mhd')");
+    $this->app->DatabaseService->execute("INSERT INTO lager_mindesthaltbarkeitsdatum (artikel,menge,lager_platz,datum,internebemerkung,charge,zwischenlagerid,mhddatum) VALUES (:artikel, :menge, :lagerplatz, NOW(), :internebemerkung, :charge, :zid, :mhd)", ['artikel' => (int) $artikel, 'menge' => (string) $menge, 'lagerplatz' => (int) $lagerplatz, 'internebemerkung' => (string) $internebemerkung, 'charge' => (string) $charge, 'zid' => (int) $zid, 'mhd' => (string) $mhd]);
 
     if (empty($lagerplatz)) {
       return 0;
     }
 
     if ($menge > 0) {
-      $this->app->DB->Insert("INSERT INTO lager_platz_inhalt (artikel,menge,lager_platz) VALUES ($artikel','$menge','$lagerplatz')");
+      $this->app->DatabaseService->execute("INSERT INTO lager_platz_inhalt (artikel, menge, lager_platz) VALUES (:artikel, :menge, :lagerplatz)", ['artikel' => (int) $artikel, 'menge' => (string) $menge, 'lagerplatz' => (int) $lagerplatz]);
     }
 
     if ($charge != '') {
@@ -19242,9 +19194,7 @@ $( this ).dialog( "close" );
     $bestand = $this->ArtikelImLagerPlatz($artikel, $lagerplatz);
     $vpe = '';
     $projekt = 0;
-    $this->app->DB->Insert("INSERT INTO lager_bewegung (lager_platz, artikel, menge,vpe, eingang,zeit,referenz, bearbeiter,projekt,firma,logdatei,bestand,doctype,doctypeid)
-        VALUES('$lagerplatz','$artikel','$menge','$vpe','1',NOW(),'MHD eingelagert $charge','" . $this->app->User->GetName() . "',
-          '$projekt','" . $this->app->User->GetFirma() . "',NOW(),'$bestand','$doctype','$doctypeid')");
+    $this->app->DatabaseService->execute("INSERT INTO lager_bewegung (lager_platz, artikel, menge, vpe, eingang, zeit, referenz, bearbeiter, projekt, firma, logdatei, bestand, doctype, doctypeid) VALUES (:lagerplatz, :artikel, :menge, :vpe, 1, NOW(), :referenz, :bearbeiter, :projekt, :firma, NOW(), :bestand, :doctype, :doctypeid)", ['lagerplatz' => (int) $lagerplatz, 'artikel' => (int) $artikel, 'menge' => (string) $menge, 'vpe' => (string) $vpe, 'referenz' => 'MHD eingelagert ' . $charge, 'bearbeiter' => (string) $this->app->User->GetName(), 'projekt' => (int) $projekt, 'firma' => (string) $this->app->User->GetFirma(), 'bestand' => (string) $bestand, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid]);
     $insId = $this->app->DB->GetInsertID();
     $this->LagerArtikelZusammenfassen($artikel, $lagerplatz);
 
@@ -19258,10 +19208,9 @@ $( this ).dialog( "close" );
       return 0;
     }
     if ($adresse == 0 && $doctypeid != 0 && $doctype != '') {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
+      $adresse = (int) $this->app->DatabaseService->selectValue(sprintf("SELECT adresse FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)), ['id' => (int) $doctypeid]);
     }
-    $this->app->DB->Insert("INSERT INTO seriennummern_log (artikel,lager_platz,eingang,bezeichnung,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid, adresse) 
-    VALUES ('$artikel','$lagerplatz',$eingang,'$seriennummer',NOW()," . $this->app->User->GetAdresse() . ",1,'$internebemerkung','$doctype','$doctypeid','$adresse')");
+    $this->app->DatabaseService->execute("INSERT INTO seriennummern_log (artikel,lager_platz,eingang,bezeichnung,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,adresse) VALUES (:artikel, :lagerplatz, :eingang, :seriennummer, NOW(), :adresse_mitarbeiter, 1, :internebemerkung, :doctype, :doctypeid, :adresse)", ['artikel' => (int) $artikel, 'lagerplatz' => (int) $lagerplatz, 'eingang' => (int) $eingang, 'seriennummer' => (string) $seriennummer, 'adresse_mitarbeiter' => (int) $this->app->User->GetAdresse(), 'internebemerkung' => (string) $internebemerkung, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'adresse' => (int) $adresse]);
 
     return (int) $this->app->DB->GetInsertID();
   }
@@ -19288,13 +19237,11 @@ $( this ).dialog( "close" );
     $bestellung = $zwischenlagerRow['parameter'];
     $paketannahme = $zwischenlagerRow['paketannahme'];
 
-    $this->app->DB->Insert("INSERT INTO lager_platz_inhalt (lager_platz,artikel,menge,vpe,bearbeiter,bestellung,projekt,firma,logdatei)
-        VALUES ('$regal','$artikel','$menge','$vpe','" . $this->app->User->GetName() . "','$bestellung','$projekt','" . $this->app->User->GetFirma() . "',NOW())");
+    $this->app->DatabaseService->execute("INSERT INTO lager_platz_inhalt (lager_platz,artikel,menge,vpe,bearbeiter,bestellung,projekt,firma,logdatei) VALUES (:regal, :artikel, :menge, :vpe, :bearbeiter, :bestellung, :projekt, :firma, NOW())", ['regal' => (int) $regal, 'artikel' => (int) $artikel, 'menge' => (string) $menge, 'vpe' => (string) $vpe, 'bearbeiter' => (string) $this->app->User->GetName(), 'bestellung' => (int) $bestellung, 'projekt' => (int) $projekt, 'firma' => (string) $this->app->User->GetFirma()]);
 
     $bestand = $this->ArtikelImLagerPlatz($artikel, $regal);
     // Bewegung
-    $this->app->DB->Insert("INSERT INTO lager_bewegung (lager_platz, artikel, menge,vpe, eingang,zeit,referenz, bearbeiter,projekt,firma,logdatei,bestand,paketannahme,doctype,doctypeid)
-        VALUES('$regal','$artikel','$menge','$vpe','1',NOW(),'$referenz:$grund','" . $this->app->User->GetName() . "','$projekt','" . $this->app->User->GetFirma() . "',NOW(),'$bestand','$paketannahme','$doctype','$doctypeid')");
+    $this->app->DatabaseService->execute("INSERT INTO lager_bewegung (lager_platz, artikel, menge, vpe, eingang, zeit, referenz, bearbeiter, projekt, firma, logdatei, bestand, paketannahme, doctype, doctypeid) VALUES (:regal, :artikel, :menge, :vpe, 1, NOW(), :referenz, :bearbeiter, :projekt, :firma, NOW(), :bestand, :paketannahme, :doctype, :doctypeid)", ['regal' => (int) $regal, 'artikel' => (int) $artikel, 'menge' => (string) $menge, 'vpe' => (string) $vpe, 'referenz' => $referenz . ':' . $grund, 'bearbeiter' => (string) $this->app->User->GetName(), 'projekt' => (int) $projekt, 'firma' => (string) $this->app->User->GetFirma(), 'bestand' => (string) $bestand, 'paketannahme' => (int) $paketannahme, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid]);
 
     $this->app->DatabaseService->execute("UPDATE lager_seriennummern SET lager_platz = :regal, zwischenlagerid = 0 WHERE zwischenlagerid = :zid", ['regal' => (int) $regal, 'zid' => (int) $zwischenlagerid]);
     $this->app->DatabaseService->execute("UPDATE lager_mindesthaltbarkeitsdatum SET lager_platz = :regal, zwischenlagerid = 0 WHERE zwischenlagerid = :zid", ['regal' => (int) $regal, 'zid' => (int) $zwischenlagerid]);
@@ -19303,9 +19250,9 @@ $( this ).dialog( "close" );
     $menge_db = $zwischenlagerRow['menge'];
     if ($menge_db - $menge > 0) {
       $tmp = $menge_db - $menge;
-      $this->app->DB->Update("UPDATE zwischenlager SET menge='$tmp' WHERE id='$zwischenlagerid' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE zwischenlager SET menge = :menge WHERE id = :id LIMIT 1", ['menge' => (string) $tmp, 'id' => (int) $zwischenlagerid]);
     } else {
-      $this->app->DB->Update("DELETE FROM zwischenlager WHERE id='$zwischenlagerid' LIMIT 1");
+      $this->app->DatabaseService->execute("DELETE FROM zwischenlager WHERE id = :id LIMIT 1", ['id' => (int) $zwischenlagerid]);
     }
     $this->LagerArtikelZusammenfassen($artikel);
   }
@@ -19572,8 +19519,8 @@ $( this ).dialog( "close" );
 
   function ChargenMHDAuslagern($artikel, $menge, $lagerplatztyp, $lpid, $typ, $wert, $fifo = 0, $projekt = 0, $grund = "", $doctype = "", $doctypeid)
   {
-    $mindesthaltbarkeitsdatum = $this->app->DB->Select("SELECT mindesthaltbarkeitsdatum FROM artikel WHERE id = '$artikel' LIMIT 1");
-    $chargenverwaltung = $this->app->DB->Select("SELECT chargenverwaltung FROM artikel WHERE id = '$artikel' LIMIT 1");
+    $mindesthaltbarkeitsdatum = $this->app->DatabaseService->selectValue("SELECT mindesthaltbarkeitsdatum FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikel]);
+    $chargenverwaltung = $this->app->DatabaseService->selectValue("SELECT chargenverwaltung FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikel]);
     $subwhere = '';
     $join = '';
     $sperrlagerWhere = ' lp.sperrlager <> 1 ';
@@ -19583,22 +19530,22 @@ $( this ).dialog( "close" );
     switch ($lagerplatztyp) {
       case 'lagerplatz':
         if ($lpid) {
-          $subwhere = " AND c.lager_platz = '$lpid' ";
+          $subwhere = " AND c.lager_platz = " . (int) $lpid . " ";
         }
         break;
       case 'lager':
         if ($lpid) {
-          $join = " INNER JOIN lager_platz lp ON c.lager_platz = lp.id AND lp.lager = '$lpid' AND  " . $sperrlagerWhere;
+          $join = " INNER JOIN lager_platz lp ON c.lager_platz = lp.id AND lp.lager = " . (int) $lpid . " AND  " . $sperrlagerWhere;
         }
         break;
       case 'projektlager':
         if ($projekt) {
-          $join = " INNER JOIN lager_platz lp ON c.lager_platz = lp.id AND lp.projekt = '$projekt' AND " . $sperrlagerWhere;
+          $join = " INNER JOIN lager_platz lp ON c.lager_platz = lp.id AND lp.projekt = " . (int) $projekt . " AND " . $sperrlagerWhere;
         }
         break;
       case "poslager":
         if ($lpid) {
-          $join = " INNER JOIN lager_platz lp ON c.lager_platz = lp.id AND lp.lager = '$lpid' AND lp.poslager = 1";
+          $join = " INNER JOIN lager_platz lp ON c.lager_platz = lp.id AND lp.lager = " . (int) $lpid . " AND lp.poslager = 1";
         }
         break;
     }
@@ -19622,7 +19569,7 @@ $( this ).dialog( "close" );
           $mhdcharge = "";
         }
 
-        $checkarr = $this->app->DB->SelectArr("SELECT c.* FROM lager_mindesthaltbarkeitsdatum c $join WHERE c.artikel = '$artikel' $subwhere ORDER BY mhddatum = '$mhd' DESC, " . ($mhdcharge != '' ? "charge= '$mdhcharge' DESC," : "") . " mhddatum,charge, id ");
+        $checkarr = $this->app->DB->SelectArr(sprintf("SELECT c.* FROM lager_mindesthaltbarkeitsdatum c %s WHERE c.artikel = %d %s ORDER BY mhddatum = '%s' DESC, %s mhddatum,charge, id", $join, (int) $artikel, $subwhere, $this->app->DB->real_escape_string($mhd), ($mhdcharge != '' ? "charge= '" . $this->app->DB->real_escape_string($mhdcharge) . "' DESC," : "")));
         if ($checkarr) {
           $nochmenge = $menge;
           foreach ($checkarr as $c) {
@@ -19633,19 +19580,19 @@ $( this ).dialog( "close" );
             if ($nochmenge >= $c['menge']) {
               if ($doctype == 'produktion')
                 $this->AddBaugruppenChargeMHD($doctypeid, $artikel, $c['menge'], $c['charge'], $c['mhddatum']);
-              $this->app->DB->Delete("DELETE FROM `lager_mindesthaltbarkeitsdatum` WHERE id = '" . $c['id'] . "' LIMIT 1");
+              $this->app->DatabaseService->execute("DELETE FROM `lager_mindesthaltbarkeitsdatum` WHERE id = :id LIMIT 1", ['id' => (int) $c['id']]);
               if ($chargenverwaltung) {
-                $checkchargen = $this->app->DB->SelectArr("SELECT * FROM lager_charge WHERE artikel = '$artikel' AND lager_platz = '$lager_platz' AND charge = '" . $c['charge'] . "' ORDER BY id ");
+                $checkchargen = $this->app->DatabaseService->select("SELECT * FROM lager_charge WHERE artikel = :artikel AND lager_platz = :lager_platz AND charge = :charge ORDER BY id", ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz, 'charge' => (string) $c['charge']]);
                 if ($checkchargen) {
                   $cnochmenge = $c['menge'];
                   foreach ($checkchargen as $cc) {
                     if ($cnochmenge <= 0)
                       break;
                     if ($cc['menge'] <= $cnochmenge) {
-                      $this->app->DB->Delete("DELETE FROM lager_charge WHERE id = '" . $cc['id'] . "' LIMIT 1");
+                      $this->app->DatabaseService->execute("DELETE FROM lager_charge WHERE id = :id LIMIT 1", ['id' => (int) $cc['id']]);
                       $cnochmenge -= $cc['menge'];
                     } else {
-                      $this->app->DB->Update("UPDATE lager_mindesthaltbarkeitsdatum SET menge = menge - '" . $cnochmenge . "' WHERE  id = '" . $cc['id'] . "' LIMIT 1");
+                      $this->app->DatabaseService->execute("UPDATE lager_mindesthaltbarkeitsdatum SET menge = menge - :menge WHERE id = :id LIMIT 1", ['menge' => (string) $cnochmenge, 'id' => (int) $cc['id']]);
                       break;
                     }
                   }
@@ -19655,19 +19602,19 @@ $( this ).dialog( "close" );
             } else {
               if ($doctype == 'produktion')
                 $this->AddBaugruppenChargeMHD($doctypeid, $artikel, $nochmenge, $c['charge'], $c['mhddatum']);
-              $this->app->DB->Update("UPDATE lager_charge SET menge = menge - '" . $nochmenge . "' WHERE  id = '" . $c['id'] . "' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE lager_charge SET menge = menge - :menge WHERE id = :id LIMIT 1", ['menge' => (string) $nochmenge, 'id' => (int) $c['id']]);
               if ($chargenverwaltung) {
-                $checkchargen = $this->app->DB->SelectArr("SELECT * FROM lager_charge WHERE artikel = '$artikel' AND lager_platz = '$lager_platz' AND charge = '" . $c['charge'] . "' ORDER BY id ");
+                $checkchargen = $this->app->DatabaseService->select("SELECT * FROM lager_charge WHERE artikel = :artikel AND lager_platz = :lager_platz AND charge = :charge ORDER BY id", ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz, 'charge' => (string) $c['charge']]);
                 if ($checkchargen) {
                   $cnochmenge = $nochmenge;
                   foreach ($checkchargen as $cc) {
                     if ($cnochmenge <= 0)
                       break;
                     if ($cc['menge'] <= $cnochmenge) {
-                      $this->app->DB->Delete("DELETE FROM lager_charge WHERE id = '" . $cc['id'] . "' LIMIT 1");
+                      $this->app->DatabaseService->execute("DELETE FROM lager_charge WHERE id = :id LIMIT 1", ['id' => (int) $cc['id']]);
                       $cnochmenge -= $cc['menge'];
                     } else {
-                      $this->app->DB->Update("UPDATE lager_mindesthaltbarkeitsdatum SET menge = menge - '" . $cnochmenge . "' WHERE  id = '" . $cc['id'] . "' LIMIT 1");
+                      $this->app->DatabaseService->execute("UPDATE lager_mindesthaltbarkeitsdatum SET menge = menge - :menge WHERE id = :id LIMIT 1", ['menge' => (string) $cnochmenge, 'id' => (int) $cc['id']]);
                       break;
                     }
                   }
@@ -19685,7 +19632,7 @@ $( this ).dialog( "close" );
         if (!$chargenverwaltung)
           return false;
 
-        $checkarr = $this->app->DB->SelectArr("SELECT c.* FROM lager_charge c $join WHERE c.artikel = '$artikel' $subwhere ORDER BY charge = '$wert' DESC, charge, id ");
+        $checkarr = $this->app->DB->SelectArr(sprintf("SELECT c.* FROM lager_charge c %s WHERE c.artikel = %d %s ORDER BY charge = '%s' DESC, charge, id", $join, (int) $artikel, $subwhere, $this->app->DB->real_escape_string($wert)));
         if ($checkarr) {
           $nochmenge = $menge;
           foreach ($checkarr as $c) {
@@ -19696,12 +19643,12 @@ $( this ).dialog( "close" );
             if ($c['menge'] <= $nochmenge) {
               if ($doctype == 'produktion')
                 $this->AddBaugruppenChargeMHD($doctypeid, $artikel, $c['menge'], $c['charge']);
-              $this->app->DB->Delete("DELETE FROM lager_charge WHERE id = '" . $c['id'] . "' LIMIT 1");
+              $this->app->DatabaseService->execute("DELETE FROM lager_charge WHERE id = :id LIMIT 1", ['id' => (int) $c['id']]);
               $nochmenge -= $c['menge'];
             } else {
               if ($doctype == 'produktion')
                 $this->AddBaugruppenChargeMHD($doctypeid, $artikel, $nochmenge, $c['charge']);
-              $this->app->DB->Update("UPDATE lager_charge SET menge = menge - $nochmenge WHERE id = '" . $c['id'] . "' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE lager_charge SET menge = menge - :menge WHERE id = :id LIMIT 1", ['menge' => (string) $nochmenge, 'id' => (int) $c['id']]);
               $nochmenge = 0;
               break;
             }
@@ -19718,16 +19665,12 @@ $( this ).dialog( "close" );
     if (!$data) {
       return;
     }
-    $first = true;
-    $sql = "INSERT INTO beleg_chargesnmhd (doctype,doctypeid,pos,type,wert,menge, type2, wert2, lagerplatz) VALUES ";
     foreach ($data as $k => $v) {
-      if (!$first) {
-        $sql .= ', ';
-      }
-      $sql .= " ('$doctype','$doctypeid','$pos','" . $v['type'] . "','" . $v['wert'] . "','" . $v['menge'] . "','" . $v['type2'] . "','" . $v['wert2'] . "','$lager_platz') ";
-      $first = false;
+      $this->app->DatabaseService->execute(
+        "INSERT INTO beleg_chargesnmhd (doctype,doctypeid,pos,type,wert,menge,type2,wert2,lagerplatz) VALUES (:doctype, :doctypeid, :pos, :type, :wert, :menge, :type2, :wert2, :lagerplatz)",
+        ['doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'pos' => (int) $pos, 'type' => (string) $v['type'], 'wert' => (string) $v['wert'], 'menge' => (string) $v['menge'], 'type2' => (string) $v['type2'], 'wert2' => (string) $v['wert2'], 'lagerplatz' => (int) $lager_platz]
+      );
     }
-    $this->app->DB->Insert($sql);
   }
 
   function CreateBelegPositionMHDCHARGESRN($doctype, $doctypeid, $pos, $type, $wert, $menge = 1, $type2 = "", $wert2 = "", $lager_platz = 0, $internebemerkung = '')
@@ -19735,19 +19678,19 @@ $( this ).dialog( "close" );
     if ($type === 'sn' && $menge == 0) {
       $menge = 1;
     }
-    $this->app->DB->Insert(
-      "INSERT INTO beleg_chargesnmhd (doctype,doctypeid,pos,type,wert,menge, type2, wert2) VALUES 
-        ('$doctype','$doctypeid','$pos','$type','$wert','$menge','$type2','$wert2')"
+    $this->app->DatabaseService->execute(
+      "INSERT INTO beleg_chargesnmhd (doctype,doctypeid,pos,type,wert,menge,type2,wert2) VALUES (:doctype, :doctypeid, :pos, :type, :wert, :menge, :type2, :wert2)",
+      ['doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'pos' => (int) $pos, 'type' => (string) $type, 'wert' => (string) $wert, 'menge' => (string) $menge, 'type2' => (string) $type2, 'wert2' => (string) $wert2]
     );
     $ind = $this->app->DB->GetInsertID();
     if ($lager_platz) {
-      $this->app->DB->Update("UPDATE beleg_chargesnmhd set lagerplatz = '" . $lager_platz . "' WHERE id = '$ind' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE beleg_chargesnmhd SET lagerplatz = :lagerplatz WHERE id = :id LIMIT 1", ['lagerplatz' => (int) $lager_platz, 'id' => (int) $ind]);
     }
     if ($internebemerkung != '') {
-      $this->app->DB->Update("UPDATE beleg_chargesnmhd set internebemerkung = '" . $this->app->DB->real_escape_string($internebemerkung) . "' WHERE id = '$ind' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE beleg_chargesnmhd SET internebemerkung = :internebemerkung WHERE id = :id LIMIT 1", ['internebemerkung' => (string) $internebemerkung, 'id' => (int) $ind]);
     }
     if ($type === 'sn') {
-      $this->app->erp->SeriennummernLog($this->app->DB->Select("SELECT artikel FROM $doctype" . "_position WHERE id = '$pos' LIMIT 1"), $lager_platz, $wert, 0, "", 0, "", "", $doctype, $doctypeid);
+      $this->app->erp->SeriennummernLog($this->app->DatabaseService->selectValue(sprintf("SELECT artikel FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype . '_position')), ['id' => (int) $pos]), $lager_platz, $wert, 0, "", 0, "", "", $doctype, $doctypeid);
     }
     return $ind;
   }
@@ -19761,15 +19704,23 @@ $( this ).dialog( "close" );
       return false;
     }
     if (!$adresse && $doctype != '' && $doctypeid > 0) {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
+      $adresse = (int) $this->app->DatabaseService->selectValue(sprintf("SELECT adresse FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)), ['id' => (int) $doctypeid]);
     }
     if ($lager_chargenid) {
-      $arr = $this->app->DB->SelectArr("SELECT id, lager_platz, menge, charge,mhddatum FROM lager_mindesthaltbarkeitsdatum WHERE id = '$lager_chargenid' AND artikel = '$artikel' LIMIT 1");
+      $arr = $this->app->DatabaseService->select("SELECT id, lager_platz, menge, charge, mhddatum FROM lager_mindesthaltbarkeitsdatum WHERE id = :chargenid AND artikel = :artikel LIMIT 1", ['chargenid' => (int) $lager_chargenid, 'artikel' => (int) $artikel]);
     } else {
-      $arr = $this->app->DB->SelectArr("SELECT id, lager_platz, menge, charge,mhddatum FROM lager_mindesthaltbarkeitsdatum 
-        WHERE artikel = '$artikel' AND lager_platz = '$lager_platz'
-        " . ($mhddatum != '' ? " AND mhddatum = '$mhddatum'" : '') . "  
-        " . ($charge != '' ? " AND charge = '$charge'" : '') . " AND menge > 0");
+      $sql = "SELECT id, lager_platz, menge, charge, mhddatum FROM lager_mindesthaltbarkeitsdatum WHERE artikel = :artikel AND lager_platz = :lager_platz";
+      $params = ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz];
+      if ($mhddatum != '') {
+        $sql .= " AND mhddatum = :mhddatum";
+        $params['mhddatum'] = (string) $mhddatum;
+      }
+      if ($charge != '') {
+        $sql .= " AND charge = :charge";
+        $params['charge'] = (string) $charge;
+      }
+      $sql .= " AND menge > 0";
+      $arr = $this->app->DatabaseService->select($sql, $params);
     }
     if (!$arr) {
       return false;
@@ -19780,10 +19731,10 @@ $( this ).dialog( "close" );
       }
       if ($menge >= $v['menge']) {
         $menge -= $v['menge'];
-        $this->app->DB->Delete("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE id = '" . $v['id'] . "' LIMIT 1");
+        $this->app->DatabaseService->execute("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE id = :id LIMIT 1", ['id' => (int) $v['id']]);
         $this->MHDLog($artikel, $v['lager_platz'], 0, $v['mhddatum'], $v['menge'], $internebemerkung, $doctype, $doctypeid, $v['charge']);
       } else {
-        $this->app->DB->Update("UPDATE lager_mindesthaltbarkeitsdatum SET menge = menge - $menge WHERE id = '" . $v['id'] . "' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE lager_mindesthaltbarkeitsdatum SET menge = menge - :menge WHERE id = :id LIMIT 1", ['menge' => (string) $menge, 'id' => (int) $v['id']]);
         $this->MHDLog($artikel, $v['lager_platz'], 0, $v['mhddatum'], $menge, $internebemerkung, $doctype, $doctypeid, $v['charge']);
         return true;
       }
@@ -19801,12 +19752,12 @@ $( this ).dialog( "close" );
       return false;
     }
     if (!$adresse && $doctype != '' && $doctypeid > 0) {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
+      $adresse = (int) $this->app->DatabaseService->selectValue(sprintf("SELECT adresse FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)), ['id' => (int) $doctypeid]);
     }
     if ($lager_chargenid) {
-      $arr = $this->app->DB->SelectArr("SELECT id, lager_platz, menge, charge FROM lager_charge WHERE id = '$lager_chargenid' AND artikel = '$artikel' LIMIT 1");
+      $arr = $this->app->DatabaseService->select("SELECT id, lager_platz, menge, charge FROM lager_charge WHERE id = :chargenid AND artikel = :artikel LIMIT 1", ['chargenid' => (int) $lager_chargenid, 'artikel' => (int) $artikel]);
     } else {
-      $arr = $this->app->DB->SelectArr("SELECT id, lager_platz, menge, charge FROM lager_charge WHERE artikel = '$artikel' AND lager_platz = '$lager_platz' AND charge = '$charge' AND menge > 0");
+      $arr = $this->app->DatabaseService->select("SELECT id, lager_platz, menge, charge FROM lager_charge WHERE artikel = :artikel AND lager_platz = :lager_platz AND charge = :charge AND menge > 0", ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz, 'charge' => (string) $charge]);
     }
     if (!$arr) {
       return false;
@@ -19817,10 +19768,10 @@ $( this ).dialog( "close" );
       }
       if ($menge >= $v['menge']) {
         $menge -= $v['menge'];
-        $this->app->DB->Delete("DELETE FROM lager_charge WHERE id = '" . $v['id'] . "' LIMIT 1");
+        $this->app->DatabaseService->execute("DELETE FROM lager_charge WHERE id = :id LIMIT 1", ['id' => (int) $v['id']]);
         $this->Chargenlog($artikel, $v['lager_platz'], 0, $charge, $v['menge'], $internebemerkung, $doctype, $doctypeid, $adresse, 0, $isInterim);
       } else {
-        $this->app->DB->Update("UPDATE lager_charge SET menge = menge - $menge WHERE id = '" . $v['id'] . "' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE lager_charge SET menge = menge - :menge WHERE id = :id LIMIT 1", ['menge' => (string) $menge, 'id' => (int) $v['id']]);
         $this->Chargenlog($artikel, $v['lager_platz'], 0, $charge, $menge, $internebemerkung, $doctype, $doctypeid, $adresse, 0, $isInterim);
         return true;
       }
@@ -19834,20 +19785,18 @@ $( this ).dialog( "close" );
       return null;
     }
     if (!$adresse && $doctype != '' && $doctypeid > 0) {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
+      $adresse = (int) $this->app->DatabaseService->selectValue(sprintf("SELECT adresse FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)), ['id' => (int) $doctypeid]);
     }
-    $internebemerkung = $this->app->DB->real_escape_string($internebemerkung);
-    $bestand = $this->app->DB->Select("SELECT ifnull(sum(menge),0) FROM lager_charge WHERE artikel = '$artikel' AND lager_platz = '$lager_platz' AND charge = '$charge'");
+    $bestand = $this->app->DatabaseService->selectValue("SELECT ifnull(sum(menge),0) FROM lager_charge WHERE artikel = :artikel AND lager_platz = :lager_platz AND charge = :charge", ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz, 'charge' => (string) $charge]);
     $this->RunHook('chargenlog_bestand', 4, $artikel, $lager_platz, $charge, $bestand);
     if ($chargen_log_id) {
-      $chargen_log_id = $this->app->DB->Select("SELECT id FROM chargen_log WHERE id='$chargen_log_id' AND eingang = '$eingang' AND artikel = '$artikel' AND charge = '$charge' AND doctype = '$doctype' AND doctypeid = '$doctypeid' AND adresse = '$adresse' LIMIT 1");
+      $chargen_log_id = $this->app->DatabaseService->selectValue("SELECT id FROM chargen_log WHERE id = :id AND eingang = :eingang AND artikel = :artikel AND charge = :charge AND doctype = :doctype AND doctypeid = :doctypeid AND adresse = :adresse LIMIT 1", ['id' => (int) $chargen_log_id, 'eingang' => (int) $eingang, 'artikel' => (int) $artikel, 'charge' => (string) $charge, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'adresse' => (int) $adresse]);
     }
     if ($chargen_log_id) {
-      $this->app->DB->Update("UPDATE chargen_log SET menge = menge + $menge, bestand = '$bestand' WHERE id = '$chargen_log_id' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE chargen_log SET menge = menge + :menge, bestand = :bestand WHERE id = :id LIMIT 1", ['menge' => (string) $menge, 'bestand' => (string) $bestand, 'id' => (int) $chargen_log_id]);
       return $chargen_log_id;
     }
-    $this->app->DB->Insert("INSERT INTO chargen_log (artikel,lager_platz,eingang,bezeichnung,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse,is_interim) 
-            VALUES ('$artikel','$lager_platz','$eingang','" . $charge . "',NOW()," . (int) $this->app->User->GetAdresse() . ",'" . $menge . "','$internebemerkung','$doctype','$doctypeid','$bestand','$adresse'," . (int) $isInterim . ")");
+    $this->app->DatabaseService->execute("INSERT INTO chargen_log (artikel,lager_platz,eingang,bezeichnung,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse,is_interim) VALUES (:artikel, :lager_platz, :eingang, :charge, NOW(), :adresse_mitarbeiter, :menge, :internebemerkung, :doctype, :doctypeid, :bestand, :adresse, :is_interim)", ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz, 'eingang' => (int) $eingang, 'charge' => (string) $charge, 'adresse_mitarbeiter' => (int) $this->app->User->GetAdresse(), 'menge' => (string) $menge, 'internebemerkung' => (string) $internebemerkung, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'bestand' => (string) $bestand, 'adresse' => (int) $adresse, 'is_interim' => (int) $isInterim]);
     return $this->app->DB->GetInsertID();
   }
 
@@ -19857,24 +19806,16 @@ $( this ).dialog( "close" );
       return;
     }
     if (!$adresse && $doctype != '' && $doctypeid > 0) {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
+      $adresse = (int) $this->app->DatabaseService->selectValue(sprintf("SELECT adresse FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)), ['id' => (int) $doctypeid]);
     }
-    $internebemerkung = $this->app->DB->real_escape_string($internebemerkung);
-    $sql = "INSERT INTO chargen_log (artikel,lager_platz,eingang,bezeichnung,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse) VALUES ";
-    $first = true;
     $useradresse = 0;
     if (isset($this->app->User) && $this->app->User && method_exists($this->app->User, 'GetAdresse')) {
       $useradresse = $this->app->User->GetAdresse();
     }
     foreach ($data as $k => $v) {
       $this->RunHook('chargenlog_bestand', 4, $artikel, $lager_platz, $data[$k]['charge'], $data[$k]['bestand']);
-      if (!$first) {
-        $sql .= ', ';
-      }
-      $sql .= " ('$artikel','$lager_platz','$eingang','" . $data[$k]['charge'] . "',NOW()," . $useradresse . ",'" . $data[$k]['menge'] . "','$internebemerkung','$doctype','$doctypeid','" . $data[$k]['bestand'] . "','$adresse') ";
-      $first = false;
+      $this->app->DatabaseService->execute("INSERT INTO chargen_log (artikel,lager_platz,eingang,bezeichnung,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse) VALUES (:artikel, :lager_platz, :eingang, :charge, NOW(), :useradresse, :menge, :internebemerkung, :doctype, :doctypeid, :bestand, :adresse)", ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz, 'eingang' => (int) $eingang, 'charge' => (string) $data[$k]['charge'], 'useradresse' => (int) $useradresse, 'menge' => (string) $data[$k]['menge'], 'internebemerkung' => (string) $internebemerkung, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'bestand' => (string) $data[$k]['bestand'], 'adresse' => (int) $adresse]);
     }
-    $this->app->DB->Insert($sql);
   }
 
   function MHDLog($artikel, $lager_platz, $eingang, $mhd, $menge, $internebemerkung = '', $doctype = '', $doctypeid = 0, $charge = '', $adresse = 0, $isInterim = 0)
@@ -19883,16 +19824,14 @@ $( this ).dialog( "close" );
       return;
     }
     if (!$adresse && $doctype != '' && $doctypeid > 0) {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
+      $adresse = (int) $this->app->DatabaseService->selectValue(sprintf("SELECT adresse FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)), ['id' => (int) $doctypeid]);
     }
-    $internebemerkung = $this->app->DB->real_escape_string($internebemerkung);
-    $bestand = $this->app->DB->Select("SELECT ifnull(sum(menge),0) FROM lager_mindesthaltbarkeitsdatum WHERE artikel = '$artikel' AND lager_platz = '$lager_platz' AND mhddatum = '$mhd' AND ifnull(charge,'') = '$charge'");
+    $bestand = $this->app->DatabaseService->selectValue("SELECT ifnull(sum(menge),0) FROM lager_mindesthaltbarkeitsdatum WHERE artikel = :artikel AND lager_platz = :lager_platz AND mhddatum = :mhd AND ifnull(charge,'') = :charge", ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz, 'mhd' => (string) $mhd, 'charge' => (string) $charge]);
     $this->RunHook('mhdlog_bestand', 4, $artikel, $lager_platz, $mhd, $bestand);
-    $this->app->DB->Insert("INSERT INTO mhd_log (artikel,lager_platz,eingang,mhddatum,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse,is_interim) 
-            VALUES ('$artikel','$lager_platz','$eingang','" . $mhd . "',NOW()," . (int) $this->app->User->GetAdresse() . ",'" . $menge . "','$internebemerkung','$doctype','$doctypeid','$bestand','$adresse'," . (int) $isInterim . ")");
+    $this->app->DatabaseService->execute("INSERT INTO mhd_log (artikel,lager_platz,eingang,mhddatum,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse,is_interim) VALUES (:artikel, :lager_platz, :eingang, :mhd, NOW(), :adresse_mitarbeiter, :menge, :internebemerkung, :doctype, :doctypeid, :bestand, :adresse, :is_interim)", ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz, 'eingang' => (int) $eingang, 'mhd' => (string) $mhd, 'adresse_mitarbeiter' => (int) $this->app->User->GetAdresse(), 'menge' => (string) $menge, 'internebemerkung' => (string) $internebemerkung, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'bestand' => (string) $bestand, 'adresse' => (int) $adresse, 'is_interim' => (int) $isInterim]);
     $insid = $this->app->DB->GetInsertID();
     if ($charge != '') {
-      $this->app->DB->Update("UPDATE mhd_log SET charge = '$charge' WHERE id = '$insid' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE mhd_log SET charge = :charge WHERE id = :id LIMIT 1", ['charge' => (string) $charge, 'id' => (int) $insid]);
     }
   }
 
@@ -19901,17 +19840,10 @@ $( this ).dialog( "close" );
     if (empty($data)) {
       return;
     }
-    $sql = "INSERT INTO mhd_log (artikel,lager_platz,eingang,mhddatum,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse,charge) VALUES ";
-    $first = true;
     foreach ($data as $k => $v) {
       $this->RunHook('mhdlog_bestand', 4, $artikel, $lager_platz, $data[$k]['mhd'], $data[$k]['bestand']);
-      if (!$first) {
-        $sql .= ', ';
-      }
-      $sql .= "('$artikel','$lager_platz','$eingang','" . $data[$k]['mhd'] . "',NOW()," . (int) $this->app->User->GetAdresse() . ",'" . $data[$k]['menge'] . "','$internebemerkung','$doctype','$doctypeid','" . $data[$k]['bestand'] . "','$adresse','" . $data[$k]['charge'] . "')";
-      $first = false;
+      $this->app->DatabaseService->execute("INSERT INTO mhd_log (artikel,lager_platz,eingang,mhddatum,zeit,adresse_mitarbeiter,menge,internebemerkung,doctype,doctypeid,bestand,adresse,charge) VALUES (:artikel, :lager_platz, :eingang, :mhd, NOW(), :adresse_mitarbeiter, :menge, :internebemerkung, :doctype, :doctypeid, :bestand, :adresse, :charge)", ['artikel' => (int) $artikel, 'lager_platz' => (int) $lager_platz, 'eingang' => (int) $eingang, 'mhd' => (string) $data[$k]['mhd'], 'adresse_mitarbeiter' => (int) $this->app->User->GetAdresse(), 'menge' => (string) $data[$k]['menge'], 'internebemerkung' => (string) $internebemerkung, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'bestand' => (string) $data[$k]['bestand'], 'adresse' => (int) $adresse, 'charge' => (string) $data[$k]['charge']]);
     }
-    $this->app->DB->Insert($sql);
   }
 
   public function removeBatchFromStock($articleId, $storageLocationId, $batch, $amount, $comment = '', $doctype = '', $doctypeid = 0, $docPosId = '')
@@ -19955,9 +19887,9 @@ $( this ).dialog( "close" );
           break;
         }
         if ($v['menge'] <= $toRemove) {
-          $this->app->DB->Update("UPDATE lager_charge SET menge = 0 WHERE id='" . $v['id'] . "' AND menge = '" . $v['menge'] . "' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE lager_charge SET menge = 0 WHERE id = :id AND menge = :menge LIMIT 1", ['id' => (int) $v['id'], 'menge' => (string) $v['menge']]);
           if ($this->app->DB->affected_rows() > 0) {
-            $this->app->DB->Delete("DELETE FROM lager_charge WHERE id='" . $v['id'] . "' AND id > 0 LIMIT 1");
+            $this->app->DatabaseService->execute("DELETE FROM lager_charge WHERE id = :id AND id > 0 LIMIT 1", ['id' => (int) $v['id']]);
             if (!isset($chargen_log_arr['C' . $v['charge']])) {
               $chargen_log_arr['C' . $v['charge']] = array('menge' => 0, 'bestand' => 0);
             }
@@ -19967,9 +19899,9 @@ $( this ).dialog( "close" );
             break;
           }
         } elseif ($toRemove > 0) {
-          $this->app->DB->Update("UPDATE lager_charge SET menge = menge - $toRemove WHERE id='" . $v['id'] . "' AND menge >= '$toRemove' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE lager_charge SET menge = menge - :toRemove WHERE id = :id AND menge >= :toRemove2 LIMIT 1", ['toRemove' => (string) $toRemove, 'id' => (int) $v['id'], 'toRemove2' => (string) $toRemove]);
           if ($this->app->DB->affected_rows() > 0) {
-            $this->app->DB->Delete("DELETE FROM lager_charge WHERE id='" . $v['id'] . "' AND id > 0 AND menge <= 0 LIMIT 1");
+            $this->app->DatabaseService->execute("DELETE FROM lager_charge WHERE id = :id AND id > 0 AND menge <= 0 LIMIT 1", ['id' => (int) $v['id']]);
             if (!isset($chargen_log_arr['C' . $v['charge']])) {
               $chargen_log_arr['C' . $v['charge']] = array('menge' => 0, 'bestand' => 0);
             }
@@ -19982,11 +19914,11 @@ $( this ).dialog( "close" );
       }
       if ($chargen_log_arr) {
         $chargensqla = null;
-        $bestandsql = "SELECT sum(menge) as bestand, charge FROM lager_charge WHERE  artikel='$articleId' AND lager_platz='$storageLocationId' AND menge > 0 ";
+        $bestandsql = sprintf("SELECT sum(menge) as bestand, charge FROM lager_charge WHERE artikel = %d AND lager_platz = %d AND menge > 0", (int) $articleId, (int) $storageLocationId);
         foreach ($chargen_log_arr as $chargenkey => $arr) {
-          $chargensqla[] = "'" . substr($chargenkey, 1) . "'";
+          $chargensqla[] = "'" . $this->app->DB->real_escape_string(substr($chargenkey, 1)) . "'";
         }
-        $bestandsql .= " AND ifnull(charge,'') in (" . implode(', ', $chargensqla) . ")  GROUP BY  charge";
+        $bestandsql .= " AND ifnull(charge,'') in (" . implode(', ', $chargensqla) . ") GROUP BY charge";
         $query = $this->app->DB->Query($bestandsql);
         if ($query) {
           while ($row = $this->app->DB->Fetch_Assoc($query)) {
@@ -20017,9 +19949,8 @@ $( this ).dialog( "close" );
 
   function LagerAuslagernRegalMHDCHARGESRN($artikel, $regal, $menge, $projekt, $grund, $importer = "", $dokumenttyp = "", $dokumentid = "", $dokumentposid = "", $chargenauslagern = 1, $mhdauslagern = 1, $seriennummernauslagern = 1)
   {
-    $grundescaped = $this->app->DB->real_escape_string($grund);
     if ($this->Verbrauchslagervorhanden()) {
-      $verbrauchslager = $this->app->DB->Select("SELECT verbrauchslager FROM lager_platz WHERE id = '$regal' LIMIT 1");
+      $verbrauchslager = $this->app->DatabaseService->selectValue("SELECT verbrauchslager FROM lager_platz WHERE id = :id LIMIT 1", ['id' => (int) $regal]);
       if ($verbrauchslager)
         $this->LagerArtikelZusammenfassen($artikel, $regal);
     }
@@ -20082,17 +20013,17 @@ $( this ).dialog( "close" );
             }
             $charge_menge = 0;
             if ($v['menge'] <= $mhd_menge) {
-              $this->app->DB->Update("UPDATE lager_mindesthaltbarkeitsdatum SET menge = 0 WHERE id='" . $v['id'] . "' AND menge = '" . $v['menge'] . "' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE lager_mindesthaltbarkeitsdatum SET menge = 0 WHERE id = :id AND menge = :menge LIMIT 1", ['id' => (int) $v['id'], 'menge' => (string) $v['menge']]);
               if ($this->app->DB->affected_rows() > 0) {
                 $mhd_menge = round($mhd_menge - $v['menge'], 8);
-                $this->app->DB->Delete("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE id='" . $v['id'] . "' AND id > 0 LIMIT 1");
+                $this->app->DatabaseService->execute("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE id = :id AND id > 0 LIMIT 1", ['id' => (int) $v['id']]);
                 if (!isset($mhd_log_arr[$v['mhddatum']]) || !isset($mhd_log_arr[$v['mhddatum']]['C' . $v['charge']])) {
                   $mhd_log_arr[$v['mhddatum']]['C' . $v['charge']] = array('menge' => 0, 'bestand' => 0);
                 }
                 $mhd_log_arr[$v['mhddatum']]['C' . $v['charge']]['menge'] += $v['menge'];
 
                 if ($chargenverwaltung) {
-                  $stockedout = (float) $this->removeBatchFromStock($artikel, $regal, $v['charge'], $v['menge'], $grundescaped, $dokumenttyp, $dokumentid, $dokumentposid);
+                  $stockedout = (float) $this->removeBatchFromStock($artikel, $regal, $v['charge'], $v['menge'], $grund, $dokumenttyp, $dokumentid, $dokumentposid);
                   $charge_menge = round($charge_menge - $stockedout, 7);
                 }
 
@@ -20100,15 +20031,15 @@ $( this ).dialog( "close" );
                 break;
               }
             } elseif ($mhd_menge > 0) {
-              $this->app->DB->Update("UPDATE lager_mindesthaltbarkeitsdatum SET menge = menge - $mhd_menge WHERE id='" . $v['id'] . "' AND menge >= '$mhd_menge' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE lager_mindesthaltbarkeitsdatum SET menge = menge - :menge WHERE id = :id AND menge >= :menge2 LIMIT 1", ['menge' => (string) $mhd_menge, 'id' => (int) $v['id'], 'menge2' => (string) $mhd_menge]);
               if ($this->app->DB->affected_rows() > 0) {
-                $this->app->DB->Delete("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE id='" . $v['id'] . "' AND id > 0 AND menge <= 0 LIMIT 1");
+                $this->app->DatabaseService->execute("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE id = :id AND id > 0 AND menge <= 0 LIMIT 1", ['id' => (int) $v['id']]);
                 if (!isset($mhd_log_arr[$v['mhddatum']]) || !isset($mhd_log_arr[$v['mhddatum']]['C' . $v['charge']])) {
                   $mhd_log_arr[$v['mhddatum']]['C' . $v['charge']] = array('menge' => 0, 'bestand' => 0);
                 }
                 $mhd_log_arr[$v['mhddatum']]['C' . $v['charge']]['menge'] += $mhd_menge;
                 if ($chargenverwaltung) {
-                  $stockedout = (float) $this->removeBatchFromStock($artikel, $regal, $v['charge'], $mhd_menge, $grundescaped, $dokumenttyp, $dokumentid, $dokumentposid);
+                  $stockedout = (float) $this->removeBatchFromStock($artikel, $regal, $v['charge'], $mhd_menge, $grund, $dokumenttyp, $dokumentid, $dokumentposid);
                   $charge_menge = round($charge_menge - $stockedout, 7);
                 }
                 $mhd_menge = 0;
@@ -20119,7 +20050,7 @@ $( this ).dialog( "close" );
           if ($mhd_log_arr) {
             $mhdsqla = null;
             $chargensqla = null;
-            $bestandsql = "SELECT sum(menge) as bestand, mhddatum, charge FROM lager_mindesthaltbarkeitsdatum WHERE  artikel='$artikel' AND lager_platz='$regal' AND menge > 0 ";
+            $bestandsql = sprintf("SELECT sum(menge) as bestand, mhddatum, charge FROM lager_mindesthaltbarkeitsdatum WHERE artikel = %d AND lager_platz = %d AND menge > 0", (int) $artikel, (int) $regal);
             foreach ($mhd_log_arr as $mhdkey => $arr) {
               $mhdsqla[] = "'" . $mhdkey . "'";
               foreach ($arr as $chargenkey => $arr2) {
@@ -20145,7 +20076,7 @@ $( this ).dialog( "close" );
               }
             }
             unset($mhd_log_arr);
-            $this->MHDLogArray($artikel, $regal, 0, $data, $grundescaped, $dokumenttyp, $dokumentid);
+            $this->MHDLogArray($artikel, $regal, 0, $data, $grund, $dokumenttyp, $dokumentid);
             unset($data);
             if ($dokumentid) {
               $this->CreateBelegPositionMHDCHARGESRNArr($dokumenttyp, $dokumentid, $dokumentposid, $data2, $regal);
@@ -20183,9 +20114,9 @@ $( this ).dialog( "close" );
               break;
             }
             if ($v['menge'] <= $charge_menge) {
-              $this->app->DB->Update("UPDATE lager_charge SET menge = 0 WHERE id='" . $v['id'] . "' AND menge = '" . $v['menge'] . "' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE lager_charge SET menge = 0 WHERE id = :id AND menge = :menge LIMIT 1", ['id' => (int) $v['id'], 'menge' => (string) $v['menge']]);
               if ($this->app->DB->affected_rows() > 0) {
-                $this->app->DB->Delete("DELETE FROM lager_charge WHERE id='" . $v['id'] . "' AND id > 0 LIMIT 1");
+                $this->app->DatabaseService->execute("DELETE FROM lager_charge WHERE id = :id AND id > 0 LIMIT 1", ['id' => (int) $v['id']]);
                 if (!isset($chargen_log_arr['C' . $v['charge']])) {
                   $chargen_log_arr['C' . $v['charge']] = array('menge' => 0, 'bestand' => 0);
                 }
@@ -20195,9 +20126,9 @@ $( this ).dialog( "close" );
                 break;
               }
             } elseif ($charge_menge > 0) {
-              $this->app->DB->Update("UPDATE lager_charge SET menge = menge - $charge_menge WHERE id='" . $v['id'] . "' AND menge >= '$charge_menge' LIMIT 1");
+              $this->app->DatabaseService->execute("UPDATE lager_charge SET menge = menge - :menge WHERE id = :id AND menge >= :menge2 LIMIT 1", ['menge' => (string) $charge_menge, 'id' => (int) $v['id'], 'menge2' => (string) $charge_menge]);
               if ($this->app->DB->affected_rows() > 0) {
-                $this->app->DB->Delete("DELETE FROM lager_charge WHERE id='" . $v['id'] . "' AND id > 0 AND menge <= 0 LIMIT 1");
+                $this->app->DatabaseService->execute("DELETE FROM lager_charge WHERE id = :id AND id > 0 AND menge <= 0 LIMIT 1", ['id' => (int) $v['id']]);
                 if (!isset($chargen_log_arr['C' . $v['charge']])) {
                   $chargen_log_arr['C' . $v['charge']] = array('menge' => 0, 'bestand' => 0);
                 }
@@ -20209,11 +20140,11 @@ $( this ).dialog( "close" );
           }
           if ($chargen_log_arr) {
             $chargensqla = null;
-            $bestandsql = "SELECT sum(menge) as bestand, charge FROM lager_charge WHERE  artikel='$artikel' AND lager_platz='$regal' AND menge > 0 ";
+            $bestandsql = sprintf("SELECT sum(menge) as bestand, charge FROM lager_charge WHERE artikel = %d AND lager_platz = %d AND menge > 0", (int) $artikel, (int) $regal);
             foreach ($chargen_log_arr as $chargenkey => $arr) {
-              $chargensqla[] = "'" . substr($chargenkey, 1) . "'";
+              $chargensqla[] = "'" . $this->app->DB->real_escape_string(substr($chargenkey, 1)) . "'";
             }
-            $bestandsql .= " AND ifnull(charge,'') in (" . implode(', ', $chargensqla) . ")  GROUP BY  charge";
+            $bestandsql .= " AND ifnull(charge,'') in (" . implode(', ', $chargensqla) . ") GROUP BY charge";
             $query = $this->app->DB->Query($bestandsql);
             if ($query) {
               while ($row = $this->app->DB->Fetch_Assoc($query)) {
@@ -20229,7 +20160,7 @@ $( this ).dialog( "close" );
               $data2[] = array('type' => 'charge', 'wert' => substr($chargenkey, 1), 'menge' => $arr['menge'], 'type2' => '', 'wert2' => '');
             }
             unset($chargen_log_arr);
-            $this->ChargenLogArray($artikel, $regal, 0, $data, $grundescaped, $dokumenttyp, $dokumentid);
+            $this->ChargenLogArray($artikel, $regal, 0, $data, $grund, $dokumenttyp, $dokumentid);
             unset($data);
             if ($dokumentid) {
               $this->CreateBelegPositionMHDCHARGESRNArr($dokumenttyp, $dokumentid, $dokumentposid, $data2, $regal);
@@ -20337,31 +20268,29 @@ $( this ).dialog( "close" );
       return;
     }
     if (!$adresse && $doctypeid && $doctype != '') {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
+      $adresse = (int) $this->app->DatabaseService->selectValue(sprintf("SELECT adresse FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)), ['id' => (int) $doctypeid]);
     }
     //$this->LagerArtikelZusammenfassen($artikel);
     $vpe = 'einzeln';
     $username = 'Import';
     if ($importer != 1) {
-      $username = $this->app->DB->real_escape_string($this->app->User->GetName());
+      $username = $this->app->User->GetName();
     }
 
     if ($menge > 0 && is_numeric($menge)) {
       // inhalt buchen
-      $this->app->DB->Insert("INSERT INTO lager_platz_inhalt (id,lager_platz,artikel,menge,vpe,bearbeiter,bestellung,projekt,firma,logdatei)
-          VALUES ('','$regal','$artikel','$menge','$vpe','" . $username . "','','$projekt','',NOW())");
+      $this->app->DatabaseService->execute("INSERT INTO lager_platz_inhalt (lager_platz,artikel,menge,vpe,bearbeiter,bestellung,projekt,firma,logdatei) VALUES (:regal, :artikel, :menge, :vpe, :username, '', :projekt, '', NOW())", ['regal' => (int) $regal, 'artikel' => (int) $artikel, 'menge' => (string) $menge, 'vpe' => (string) $vpe, 'username' => (string) $username, 'projekt' => (int) $projekt]);
       $insid = $this->app->DB->GetInsertID();
       $bestand = $this->ArtikelImLagerPlatz($artikel, $regal);
       // Bewegung
       if ($vpeid) {
         $grund .= $this->GetVPEBezeichnung($vpeid);
       }
-      $this->app->DB->Insert("INSERT INTO lager_bewegung (id,lager_platz, artikel, menge,vpe, eingang,zeit,referenz, bearbeiter,projekt,firma,logdatei,bestand,paketannahme,doctype,doctypeid, permanenteinventur, adresse)
-          VALUES('','$regal','$artikel','$menge','$vpe','1',NOW(),'$grund','" . $username . "','$projekt','',NOW(),'$bestand','$paketannahme','$doctype','$doctypeid', '$permanenteinventur','$adresse')");
+      $this->app->DatabaseService->execute("INSERT INTO lager_bewegung (lager_platz, artikel, menge, vpe, eingang, zeit, referenz, bearbeiter, projekt, firma, logdatei, bestand, paketannahme, doctype, doctypeid, permanenteinventur, adresse) VALUES (:regal, :artikel, :menge, :vpe, 1, NOW(), :grund, :username, :projekt, '', NOW(), :bestand, :paketannahme, :doctype, :doctypeid, :permanenteinventur, :adresse)", ['regal' => (int) $regal, 'artikel' => (int) $artikel, 'menge' => (string) $menge, 'vpe' => (string) $vpe, 'grund' => (string) $grund, 'username' => (string) $username, 'projekt' => (int) $projekt, 'bestand' => (string) $bestand, 'paketannahme' => (string) $paketannahme, 'doctype' => (string) $doctype, 'doctypeid' => (int) $doctypeid, 'permanenteinventur' => (string) $permanenteinventur, 'adresse' => (int) $adresse]);
       if ($vpeid)
-        $this->app->DB->Update("UPDATE lager_platz_inhalt SET lager_platz_vpe = '$vpeid' WHERE id = '$insid' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE lager_platz_inhalt SET lager_platz_vpe = :vpeid WHERE id = :id LIMIT 1", ['vpeid' => (int) $vpeid, 'id' => (int) $insid]);
       $this->LagerArtikelZusammenfassen($artikel, $regal);
-      $this->app->DB->Update("UPDATE artikel SET cache_lagerplatzinhaltmenge = -999, `laststorage_changed` = NOW() WHERE id = '$artikel' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE artikel SET cache_lagerplatzinhaltmenge = -999, `laststorage_changed` = NOW() WHERE id = :id LIMIT 1", ['id' => (int) $artikel]);
       $this->app->DB->Update(
         sprintf(
           'UPDATE artikel_onlineshops SET storage_cache = -999, pseudostorage_cache = -999 WHERE artikel = %d',
@@ -20377,15 +20306,19 @@ $( this ).dialog( "close" );
 
   function CreateLagerPlatzInhaltVPE($artikel, $menge, $gewicht, $laenge, $breite, $hoehe, $menge2 = 0, $gewicht2 = 0, $laenge2 = 0, $breite2 = 0, $hoehe2 = 0)
   {
-    $check = $this->app->DB->Select("SELECT id FROM `lager_platz_vpe` WHERE artikel = '$artikel' AND menge = '$menge' AND gewicht = '$gewicht' AND breite = '$breite' AND 
-    hoehe = '$hoehe' " . ($menge2 <= 1 ? " AND (menge2 = '0' OR menge2 = 1) " : " AND menge2 = '$menge2' ") . " AND gewicht2 = '$gewicht' AND breite2 = '$breite' AND 
-    hoehe2 = '$hoehe' LIMIT 1
-    ");
+    $sql = "SELECT id FROM `lager_platz_vpe` WHERE artikel = :artikel AND menge = :menge AND gewicht = :gewicht AND breite = :breite AND hoehe = :hoehe AND gewicht2 = :gewicht AND breite2 = :breite AND hoehe2 = :hoehe";
+    $params = ['artikel' => (int) $artikel, 'menge' => (string) $menge, 'gewicht' => (string) $gewicht, 'breite' => (string) $breite, 'hoehe' => (string) $hoehe];
+    if ($menge2 <= 1) {
+      $sql .= " AND (menge2 = '0' OR menge2 = 1)";
+    } else {
+      $sql .= " AND menge2 = :menge2";
+      $params['menge2'] = (string) $menge2;
+    }
+    $sql .= " LIMIT 1";
+    $check = $this->app->DatabaseService->selectValue($sql, $params);
     if ($check)
       return $check;
-    $this->app->DB->Insert("INSERT INTO `lager_platz_vpe` (artikel, menge, gewicht, laenge, breite, hoehe, menge2, gewicht2, laenge2, breite2, hoehe2 )
-    VALUES ('$artikel', '$menge', '$gewicht', '$laenge', '$breite', '$hoehe', '$menge2', '$gewicht2', '$laenge2', '$breite2', '$hoehe2')
-    ");
+    $this->app->DatabaseService->execute("INSERT INTO `lager_platz_vpe` (artikel, menge, gewicht, laenge, breite, hoehe, menge2, gewicht2, laenge2, breite2, hoehe2) VALUES (:artikel, :menge, :gewicht, :laenge, :breite, :hoehe, :menge2, :gewicht2, :laenge2, :breite2, :hoehe2)", ['artikel' => (int) $artikel, 'menge' => (string) $menge, 'gewicht' => (string) $gewicht, 'laenge' => (string) $laenge, 'breite' => (string) $breite, 'hoehe' => (string) $hoehe, 'menge2' => (string) $menge2, 'gewicht2' => (string) $gewicht2, 'laenge2' => (string) $laenge2, 'breite2' => (string) $breite2, 'hoehe2' => (string) $hoehe2]);
     return $this->app->DB->GetInsertID();
   }
 
@@ -20402,17 +20335,22 @@ $( this ).dialog( "close" );
     // all einzeln buchungen in einem Baum zusammenfassen
 
     if ($artikel > 0) {
-      $result = $this->app->DB->SelectArr("SELECT lager_platz,SUM(menge) as gesamt,projekt,max(firma) as firma,max(inventur) as inventur, min(id) as minid,lager_platz_vpe FROM lager_platz_inhalt WHERE artikel='$artikel' " . ($regal ? " AND lager_platz = '$regal' " : '') . " GROUP by lager_platz,lager_platz_vpe  having count(id) > 1");
-      //echo "DELETE FROM lager_platz_inhalt WHERE artikel='".$artikel."';";
+      $sql = "SELECT lager_platz, SUM(menge) as gesamt, projekt, max(firma) as firma, max(inventur) as inventur, min(id) as minid, lager_platz_vpe FROM lager_platz_inhalt WHERE artikel = :artikel";
+      $params = ['artikel' => (int) $artikel];
+      if ($regal) {
+        $sql .= " AND lager_platz = :regal";
+        $params['regal'] = (int) $regal;
+      }
+      $sql .= " GROUP BY lager_platz, lager_platz_vpe HAVING count(id) > 1";
+      $result = $this->app->DatabaseService->select($sql, $params);
       if ($result) {
         $cresult = (!empty($result) ? count($result) : 0);
         for ($i = 0; $i < $cresult; $i++) {
-          $this->app->DB->Delete("DELETE FROM lager_platz_inhalt WHERE  artikel='$artikel' AND lager_platz = '" . $result[$i]['lager_platz'] . "' AND lager_platz_vpe = '" . $result[$i]['lager_platz_vpe'] . "' ");
+          $this->app->DatabaseService->execute("DELETE FROM lager_platz_inhalt WHERE artikel = :artikel AND lager_platz = :lager_platz AND lager_platz_vpe = :lager_platz_vpe", ['artikel' => (int) $artikel, 'lager_platz' => (int) $result[$i]['lager_platz'], 'lager_platz_vpe' => (int) $result[$i]['lager_platz_vpe']]);
           if (empty($result[$i]['lager_platz'])) {
             continue;
           }
-          $this->app->DB->Insert("INSERT INTO lager_platz_inhalt (id,lager_platz,artikel,menge,projekt,firma,inventur,lager_platz_vpe) VALUES ('" . $result[$i]['minid'] . "','" . $result[$i]['lager_platz'] . "','$artikel',
-            '" . $result[$i]['gesamt'] . "','" . $result[$i]['projekt'] . "','" . $result[$i]['firma'] . "'," . (is_null($result[$i]['inventur']) ? "NULL" : "'" . $result[$i]['inventur'] . "'") . ",'" . $result[$i]['lager_platz_vpe'] . "')");
+          $this->app->DatabaseService->execute("INSERT INTO lager_platz_inhalt (id,lager_platz,artikel,menge,projekt,firma,inventur,lager_platz_vpe) VALUES (:minid, :lager_platz, :artikel, :gesamt, :projekt, :firma, :inventur, :lager_platz_vpe)", ['minid' => (int) $result[$i]['minid'], 'lager_platz' => (int) $result[$i]['lager_platz'], 'artikel' => (int) $artikel, 'gesamt' => (string) $result[$i]['gesamt'], 'projekt' => (int) $result[$i]['projekt'], 'firma' => (string) $result[$i]['firma'], 'inventur' => $result[$i]['inventur'], 'lager_platz_vpe' => (int) $result[$i]['lager_platz_vpe']]);
         }
       }
     }
@@ -20422,40 +20360,26 @@ $( this ).dialog( "close" );
       //$this->app->DB->Delete("DELETE lager_platz_inhalt FROM lager_platz_inhalt WHERE (menge<='0' and (isnull(inventur) or inventur <= 0)) or menge < 0");
     }
     if ($this->Verbrauchslagervorhanden()) {
-      if ($regal && $this->app->DB->Select("SELECT verbrauchslager FROM lager_platz WHERE id = '$regal' LIMIT 1")) {
-        $this->app->DB->Delete("DELETE lager_platz_inhalt FROM lager_platz_inhalt INNER JOIN lager_platz ON lager_platz.id=lager_platz_inhalt.lager_platz
-            WHERE lager_platz.verbrauchslager='1' AND lager_platz.id = '$regal'");
-        //WHERE lager_platz_inhalt.artikel='".$artikel."' AND lager_platz.verbrauchslager='1'");
+      if ($regal && $this->app->DatabaseService->selectValue("SELECT verbrauchslager FROM lager_platz WHERE id = :id LIMIT 1", ['id' => (int) $regal])) {
+        $this->app->DatabaseService->execute("DELETE lager_platz_inhalt FROM lager_platz_inhalt INNER JOIN lager_platz ON lager_platz.id=lager_platz_inhalt.lager_platz WHERE lager_platz.verbrauchslager='1' AND lager_platz.id = :id", ['id' => (int) $regal]);
 
-        $this->app->DB->Delete("DELETE lager_charge FROM lager_charge INNER JOIN lager_platz ON lager_platz.id=lager_charge.lager_platz
-            WHERE lager_platz.verbrauchslager='1' AND lager_platz.id = '$regal'");
+        $this->app->DatabaseService->execute("DELETE lager_charge FROM lager_charge INNER JOIN lager_platz ON lager_platz.id=lager_charge.lager_platz WHERE lager_platz.verbrauchslager='1' AND lager_platz.id = :id", ['id' => (int) $regal]);
 
-        $this->app->DB->Delete("DELETE lager_seriennummern FROM lager_seriennummern
-            INNER JOIN lager_platz ON lager_platz.id=lager_seriennummern.lager_platz
-            WHERE lager_platz.verbrauchslager='1' AND lager_platz.id = '$regal'");
+        $this->app->DatabaseService->execute("DELETE lager_seriennummern FROM lager_seriennummern INNER JOIN lager_platz ON lager_platz.id=lager_seriennummern.lager_platz WHERE lager_platz.verbrauchslager='1' AND lager_platz.id = :id", ['id' => (int) $regal]);
 
-        $this->app->DB->Delete("DELETE lager_mindesthaltbarkeitsdatum FROM lager_mindesthaltbarkeitsdatum
-          LEFT JOIN lager_platz ON lager_platz.id=lager_mindesthaltbarkeitsdatum.lager_platz
-          WHERE lager_platz.verbrauchslager='1' AND lager_platz.id = '$regal'");
+        $this->app->DatabaseService->execute("DELETE lager_mindesthaltbarkeitsdatum FROM lager_mindesthaltbarkeitsdatum LEFT JOIN lager_platz ON lager_platz.id=lager_mindesthaltbarkeitsdatum.lager_platz WHERE lager_platz.verbrauchslager='1' AND lager_platz.id = :id", ['id' => (int) $regal]);
 
       } else {
 
         // loesche verbrauchslager
         // aber ebenfalls chargen, seriennummern und mhd
-        $this->app->DB->Delete("DELETE lager_platz_inhalt FROM lager_platz_inhalt INNER JOIN lager_platz ON lager_platz.id=lager_platz_inhalt.lager_platz
-            WHERE lager_platz.verbrauchslager='1'");
-        //WHERE lager_platz_inhalt.artikel='".$artikel."' AND lager_platz.verbrauchslager='1'");
+        $this->app->DatabaseService->execute("DELETE lager_platz_inhalt FROM lager_platz_inhalt INNER JOIN lager_platz ON lager_platz.id=lager_platz_inhalt.lager_platz WHERE lager_platz.verbrauchslager='1'", []);
 
-        $this->app->DB->Delete("DELETE lager_charge FROM lager_charge INNER JOIN lager_platz ON lager_platz.id=lager_charge.lager_platz
-            WHERE lager_platz.verbrauchslager='1'");
+        $this->app->DatabaseService->execute("DELETE lager_charge FROM lager_charge INNER JOIN lager_platz ON lager_platz.id=lager_charge.lager_platz WHERE lager_platz.verbrauchslager='1'", []);
 
-        $this->app->DB->Delete("DELETE lager_seriennummern FROM lager_seriennummern
-            INNER JOIN lager_platz ON lager_platz.id=lager_seriennummern.lager_platz
-            WHERE lager_platz.verbrauchslager='1'");
+        $this->app->DatabaseService->execute("DELETE lager_seriennummern FROM lager_seriennummern INNER JOIN lager_platz ON lager_platz.id=lager_seriennummern.lager_platz WHERE lager_platz.verbrauchslager='1'", []);
 
-        $this->app->DB->Delete("DELETE lager_mindesthaltbarkeitsdatum FROM lager_mindesthaltbarkeitsdatum
-            LEFT JOIN lager_platz ON lager_platz.id=lager_mindesthaltbarkeitsdatum.lager_platz
-            WHERE lager_platz.verbrauchslager='1'");
+        $this->app->DatabaseService->execute("DELETE lager_mindesthaltbarkeitsdatum FROM lager_mindesthaltbarkeitsdatum LEFT JOIN lager_platz ON lager_platz.id=lager_mindesthaltbarkeitsdatum.lager_platz WHERE lager_platz.verbrauchslager='1'", []);
       }
     }
     $this->app->erp->ProzessUnlock($fp);
@@ -20478,11 +20402,9 @@ $( this ).dialog( "close" );
     if ($summe_im_lager <= 0) {
       return 0;
     }
-    $artikel_reserviert = (float) $this->app->DB->Select(
-      "SELECT SUM(lr.menge) 
-        FROM `lager_reserviert` AS `lr`
-        WHERE lr.artikel = '{$artikel}' 
-        AND (lr.datum >= NOW() OR lr.datum='0000-00-00')"
+    $artikel_reserviert = (float) $this->app->DatabaseService->selectValue(
+      "SELECT SUM(lr.menge) FROM `lager_reserviert` AS `lr` WHERE lr.artikel = :artikel AND (lr.datum >= NOW() OR lr.datum='0000-00-00')",
+      ['artikel' => (int) $artikel]
     );
 
     $restmenge = $summe_im_lager - $artikel_reserviert;
@@ -20625,7 +20547,7 @@ $( this ).dialog( "close" );
       return 0;
     }
 
-    $artikel = $this->app->DB->SelectArr("SELECT s.* FROM stueckliste s INNER JOIN artikel a ON s.artikel = a.id WHERE s.stuecklistevonartikel='$id' AND s.art!='it' AND a.lagerartikel = 1 and (a.geloescht = 0 OR a.geloescht IS NULL)");
+    $artikel = $this->app->DatabaseService->select("SELECT s.* FROM stueckliste s INNER JOIN artikel a ON s.artikel = a.id WHERE s.stuecklistevonartikel = :id AND s.art != 'it' AND a.lagerartikel = 1 AND (a.geloescht = 0 OR a.geloescht IS NULL)", ['id' => (int) $id]);
 
     if (empty($artikel)) {
       return 0;
@@ -20637,26 +20559,20 @@ $( this ).dialog( "close" );
     $cartikel = !empty($artikel) ? count($artikel) : 0;
     for ($i = 0; $i < $cartikel; $i++) {
       $artikelid = $artikel[$i]['artikel'];
-      $mengeimlage = (float) $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id=lpi.lager_platz 
-        WHERE lpi.artikel='$artikelid' AND lp.sperrlager!=1");
-      $mengereserviert = (float) $this->app->DB->Select("SELECT ifnull(SUM(menge),0) FROM lager_reserviert WHERE artikel='$artikelid'");
-      $mengeoffen = $modus == 1 ? 0 : (float) $this->app->DB->Select(
-        "SELECT ifnull(SUM(ap.menge),0)
-        FROM `auftrag_position` AS `ap`
-        INNER JOIN `auftrag` AS `a` ON a.id = ap.auftrag
-        WHERE ap.artikel='{$artikelid}' AND a.status='freigegeben'"
+      $mengeimlage = (float) $this->app->DatabaseService->selectValue("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id=lpi.lager_platz WHERE lpi.artikel = :artikel AND lp.sperrlager != 1", ['artikel' => (int) $artikelid]);
+      $mengereserviert = (float) $this->app->DatabaseService->selectValue("SELECT ifnull(SUM(menge),0) FROM lager_reserviert WHERE artikel = :artikel", ['artikel' => (int) $artikelid]);
+      $mengeoffen = $modus == 1 ? 0 : (float) $this->app->DatabaseService->selectValue(
+        "SELECT ifnull(SUM(ap.menge),0) FROM `auftrag_position` AS `ap` INNER JOIN `auftrag` AS `a` ON a.id = ap.auftrag WHERE ap.artikel = :artikel AND a.status = 'freigegeben'",
+        ['artikel' => (int) $artikelid]
       );
       $mengefrei = $mengeimlage - ($mengeoffen > $mengereserviert ? $mengeoffen : $mengereserviert);
 
       if ($projektlager) {
-        $mengeimlagerprojekt = (float) $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id=lpi.lager_platz  INNER JOIN lager `lag` ON lp.lager = `lag`.id AND `lag`.projekt = '$projektlager' AND `lag`.geloescht <> 1
-          WHERE lpi.artikel='$artikelid' AND lp.sperrlager!=1");
-        $mengereserviertprojekt = (float) $this->app->DB->Select("SELECT ifnull(SUM(r.menge),0) FROM lager_reserviert r INNER JOIN auftrag a ON r.parameter = a.id AND r.objekt = 'auftrag' AND a.status = 'freigegeben' WHERE r.artikel='$artikelid' AND a.projekt = '$projektlager' ");
-        $mengeoffenprojekt = $modus == 1 ? 0 : (float) $this->app->DB->Select(
-          "SELECT ifnull(SUM(ap.menge),0)
-          FROM `auftrag_position` AS `ap`
-          INNER JOIN `auftrag` AS `a` ON a.id = ap.auftrag
-          WHERE ap.artikel='{$artikelid}' AND a.status='freigegeben' AND a.projekt = '{$projektlager}'"
+        $mengeimlagerprojekt = (float) $this->app->DatabaseService->selectValue("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi INNER JOIN lager_platz lp ON lp.id=lpi.lager_platz INNER JOIN lager `lag` ON lp.lager = `lag`.id AND `lag`.projekt = :projektlager AND `lag`.geloescht <> 1 WHERE lpi.artikel = :artikel AND lp.sperrlager != 1", ['projektlager' => (int) $projektlager, 'artikel' => (int) $artikelid]);
+        $mengereserviertprojekt = (float) $this->app->DatabaseService->selectValue("SELECT ifnull(SUM(r.menge),0) FROM lager_reserviert r INNER JOIN auftrag a ON r.parameter = a.id AND r.objekt = 'auftrag' AND a.status = 'freigegeben' WHERE r.artikel = :artikel AND a.projekt = :projektlager", ['artikel' => (int) $artikelid, 'projektlager' => (int) $projektlager]);
+        $mengeoffenprojekt = $modus == 1 ? 0 : (float) $this->app->DatabaseService->selectValue(
+          "SELECT ifnull(SUM(ap.menge),0) FROM `auftrag_position` AS `ap` INNER JOIN `auftrag` AS `a` ON a.id = ap.auftrag WHERE ap.artikel = :artikel AND a.status = 'freigegeben' AND a.projekt = :projektlager",
+          ['artikel' => (int) $artikelid, 'projektlager' => (int) $projektlager]
         );
         $mengefreiprojekt = $mengeimlage - ($mengeoffenprojekt > $mengereserviertprojekt ? $mengeoffenprojekt : $mengereserviertprojekt);
         if ($mengefreiprojekt < $mengefrei) {
@@ -20765,12 +20681,9 @@ $( this ).dialog( "close" );
    */
   public function getStorageCacheInfosByShopId(int $shopId, int $articleId)
   {
-    return $this->app->DB->SelectRow(
-      "SELECT `storage_cache`, `pseudostorage_cache`, `last_storage_transfer`,
-       HOUR(TIMEDIFF(NOW(), `last_storage_transfer`)) AS `last_storage_transfer_hours`
-      FROM `artikel_onlineshops` 
-      WHERE `shop` = '{$shopId}' AND `artikel` = '{$articleId}' AND `storage_cache` IS NOT NULL
-      LIMIT 1"
+    return $this->app->DatabaseService->selectRow(
+      "SELECT `storage_cache`, `pseudostorage_cache`, `last_storage_transfer`, HOUR(TIMEDIFF(NOW(), `last_storage_transfer`)) AS `last_storage_transfer_hours` FROM `artikel_onlineshops` WHERE `shop` = :shopId AND `artikel` = :articleId AND `storage_cache` IS NOT NULL LIMIT 1",
+      ['shopId' => (int) $shopId, 'articleId' => (int) $articleId]
     );
   }
 
@@ -20784,11 +20697,9 @@ $( this ).dialog( "close" );
    */
   public function isArticleShopCacheDifferent(int $shopId, int $articleId, int $sellable, int $pseudoStorage): bool
   {
-    $storageCache = $this->app->DB->SelectRow(
-      "SELECT `storage_cache`, `pseudostorage_cache` 
-        FROM `artikel_onlineshops` 
-        WHERE `shop` = '{$shopId}' AND `artikel` = '{$articleId}' AND `storage_cache` IS NOT NULL
-        LIMIT 1"
+    $storageCache = $this->app->DatabaseService->selectRow(
+      "SELECT `storage_cache`, `pseudostorage_cache` FROM `artikel_onlineshops` WHERE `shop` = :shopId AND `artikel` = :articleId AND `storage_cache` IS NOT NULL LIMIT 1",
+      ['shopId' => (int) $shopId, 'articleId' => (int) $articleId]
     );
     if (empty($storageCache)) {
       return true;
@@ -20816,9 +20727,7 @@ $( this ).dialog( "close" );
     if (!is_numeric($artikelid) || $artikelid <= 0) {
       return '';
     }
-    $lagerartikel = $this->app->DB->SelectArr(
-      "SELECT * FROM `artikel` WHERE `id` = '{$artikelid}' LIMIT 1"
-    );
+    $lagerartikel = $this->app->DatabaseService->select("SELECT * FROM `artikel` WHERE `id` = :id LIMIT 1", ['id' => (int) $artikelid]);
     if (empty($lagerartikel)) {
       return '';
     }
@@ -22728,8 +22637,7 @@ $( this ).dialog( "close" );
   function GetSelectDokumentKunde($typ, $adresse, $select)
   {
     $typ_bezeichnung = ucfirst($typ);
-    $result = $this->app->DB->SelectArr("SELECT CONCAT('$typ_bezeichnung ',if(status='angelegt','ENTWURF',belegnr),' (Status: ',status,') vom ',DATE_FORMAT(datum,'%d.%m.%Y')) as
-        result,id  FROM $typ WHERE adresse='$adresse' ORDER by datum DESC");
+    $result = $this->app->DatabaseService->select(sprintf("SELECT CONCAT('%s ',if(status='angelegt','ENTWURF',belegnr),' (Status: ',status,') vom ',DATE_FORMAT(datum,'%%d.%%m.%%Y')) as result, id FROM `%s` WHERE adresse = :adresse ORDER by datum DESC", $this->app->DB->real_escape_string($typ_bezeichnung), $this->app->DatabaseService->validateIdentifier($typ)), ['adresse' => (int) $adresse]);
     if (empty($result)) {
       return '';
     }
@@ -22760,12 +22668,12 @@ $( this ).dialog( "close" );
 
   function GetSelectAnsprechpartner($adresse, $selected = "")
   {
-    $first = $this->app->DB->Select("SELECT CONCAT(ansprechpartner,' &lt;',email,'&gt;') FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
-    $firstname = $this->app->DB->Select("SELECT ansprechpartner FROM adresse WHERE id='$adresse' LIMIT 1");
+    $first = $this->app->DatabaseService->selectValue("SELECT CONCAT(ansprechpartner,' &lt;',email,'&gt;') FROM adresse WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => (int) $adresse]);
+    $firstname = $this->app->DatabaseService->selectValue("SELECT ansprechpartner FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $adresse]);
     if ($firstname == "")
-      $first = $this->app->DB->Select("SELECT CONCAT(name,' &lt;',email,'&gt;') FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
+      $first = $this->app->DatabaseService->selectValue("SELECT CONCAT(name,' &lt;',email,'&gt;') FROM adresse WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => (int) $adresse]);
 
-    $others = $this->app->DB->SelectArr("SELECT id, CONCAT(name,' (',bereich,')',' &lt;',email,'&gt;') as name FROM ansprechpartner WHERE adresse='$adresse'");
+    $others = $this->app->DatabaseService->select("SELECT id, CONCAT(name,' (',bereich,')',' &lt;',email,'&gt;') as name FROM ansprechpartner WHERE adresse = :adresse", ['adresse' => (int) $adresse]);
 
     $tpl = "<option value=\"0\">$first</option>";
 
@@ -38244,7 +38152,7 @@ $( this ).dialog( "close" );
 
   function WebmailSetReadStatus($mailid, $boolean)
   {
-    $this->app->DB->Update("UPDATE emailbackup_mails SET gelesen = " . ($boolean ? 1 : 0) . " WHERE id = $mailid");
+    $this->app->DatabaseService->execute("UPDATE emailbackup_mails SET gelesen = :gelesen WHERE id = :id", ['gelesen' => ($boolean ? 1 : 0), 'id' => (int) $mailid]);
   }
 
   function checkPDF($file, $maxSize = 0, $x = 0, $y = 0)
@@ -38431,12 +38339,12 @@ $( this ).dialog( "close" );
       return $this->GetEinkaufspreisStuecklisteWaehrung($id, $waehrung);
     }
 
-    $eka = $this->app->DB->SelectArr("SELECT preis, waehrung FROM einkaufspreise WHERE artikel='$id' AND adresse='$adresse' AND ab_menge<='$menge' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = '$waehrung' DESC, waehrung = '', ab_menge DESC LIMIT 1");
+    $eka = $this->app->DatabaseService->select("SELECT preis, waehrung FROM einkaufspreise WHERE artikel = :id AND adresse = :adresse AND ab_menge <= :menge AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = :waehrung DESC, waehrung = '', ab_menge DESC LIMIT 1", ['id' => (int) $id, 'adresse' => (int) $adresse, 'menge' => (float) $menge, 'waehrung' => (string) $waehrung]);
     if (!$eka) {
-      $eka = $this->app->DB->SelectArr("SELECT preis, waehrung FROM einkaufspreise WHERE artikel='$id' AND ab_menge<='$menge' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = '$waehrung' DESC, waehrung = '', ab_menge DESC LIMIT 1");
+      $eka = $this->app->DatabaseService->select("SELECT preis, waehrung FROM einkaufspreise WHERE artikel = :id AND ab_menge <= :menge AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = :waehrung DESC, waehrung = '', ab_menge DESC LIMIT 1", ['id' => (int) $id, 'menge' => (float) $menge, 'waehrung' => (string) $waehrung]);
     }
     if (!$eka) {
-      $eka = $this->app->DB->SelectArr("SELECT preis, waehrung FROM einkaufspreise WHERE artikel='$id' AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0 ORDER BY waehrung = '$waehrung' DESC, waehrung = '', ab_menge LIMIT 1");
+      $eka = $this->app->DatabaseService->select("SELECT preis, waehrung FROM einkaufspreise WHERE artikel = :id AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0 ORDER BY waehrung = :waehrung DESC, waehrung = '', ab_menge LIMIT 1", ['id' => (int) $id, 'waehrung' => (string) $waehrung]);
     }
     if (!$eka) {
       return 0;
@@ -38454,15 +38362,14 @@ $( this ).dialog( "close" );
 
   function GetEinkaufspreisArr($id, $menge, $adresse, $waehrung = "EUR", $auchpreisegrmenge = false)
   {
-    $ek = $this->app->DB->SelectRow("SELECT * FROM einkaufspreise WHERE artikel='$id' AND adresse='$adresse' AND ab_menge<='$menge' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER by waehrung = '$waehrung' DESC, waehrung = '' DESC, ab_menge DESC LIMIT 1");
+    $ek = $this->app->DatabaseService->selectRow("SELECT * FROM einkaufspreise WHERE artikel = :id AND adresse = :adresse AND ab_menge <= :menge AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER by waehrung = :waehrung DESC, waehrung = '' DESC, ab_menge DESC LIMIT 1", ['id' => (int) $id, 'adresse' => (int) $adresse, 'menge' => (float) $menge, 'waehrung' => (string) $waehrung]);
     if (!$ek && $auchpreisegrmenge)
-      $ek = $this->app->DB->SelectRow("SELECT * FROM einkaufspreise WHERE artikel='$id' AND adresse='$adresse' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER by waehrung = '$waehrung' DESC, waehrung = '' DESC, ab_menge ASC LIMIT 1");
+      $ek = $this->app->DatabaseService->selectRow("SELECT * FROM einkaufspreise WHERE artikel = :id AND adresse = :adresse AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER by waehrung = :waehrung DESC, waehrung = '' DESC, ab_menge ASC LIMIT 1", ['id' => (int) $id, 'adresse' => (int) $adresse, 'waehrung' => (string) $waehrung]);
     if (!$ek)
       return;
 
     if ($ek['preis'] <= 0) {
-      $ek2 = $this->app->DB->SelectRow("SELECT * FROM einkaufspreise WHERE artikel='$id' AND adresse='$adresse'
-              AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0 ORDER by waehrung = '$waehrung' DESC, waehrung = '' DESC,preis LIMIT 1");
+      $ek2 = $this->app->DatabaseService->selectRow("SELECT * FROM einkaufspreise WHERE artikel = :id AND adresse = :adresse AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0 ORDER by waehrung = :waehrung DESC, waehrung = '' DESC, preis LIMIT 1", ['id' => (int) $id, 'adresse' => (int) $adresse, 'waehrung' => (string) $waehrung]);
       if ($ek2)
         return $ek2;
     }
@@ -38472,7 +38379,7 @@ $( this ).dialog( "close" );
   function GetEinkaufspreis($id, $menge, $adresse = "")
   {
     // wenn produktionsartikel
-    $prodStueckliste = $this->app->DB->SelectRow("SELECT produktion, stueckliste FROM artikel WHERE id='$id' LIMIT 1");
+    $prodStueckliste = $this->app->DatabaseService->selectRow("SELECT produktion, stueckliste FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $id]);
     $produktion = $prodStueckliste['produktion'];
     $stueckliste = $prodStueckliste['stueckliste'];
 
@@ -38481,14 +38388,12 @@ $( this ).dialog( "close" );
     {
       $ek = $this->GetEinkaufspreisStueckliste($id);
     } else {
-      $ek = $this->app->DB->Select("SELECT preis FROM einkaufspreise WHERE artikel='$id' AND adresse='$adresse' AND ab_menge<='$menge' AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0 ORDER by ab_menge DESC LIMIT 1");
+      $ek = $this->app->DatabaseService->selectValue("SELECT preis FROM einkaufspreise WHERE artikel = :id AND adresse = :adresse AND ab_menge <= :menge AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0 ORDER by ab_menge DESC LIMIT 1", ['id' => (int) $id, 'adresse' => (string) $adresse, 'menge' => (float) $menge]);
       if ($ek <= 0) {
-        $ek = $this->app->DB->Select("SELECT preis FROM einkaufspreise WHERE artikel='$id' AND ab_menge<='$menge'
-                AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0 ORDER by preis LIMIT 1");
+        $ek = $this->app->DatabaseService->selectValue("SELECT preis FROM einkaufspreise WHERE artikel = :id AND ab_menge <= :menge AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0 ORDER by preis LIMIT 1", ['id' => (int) $id, 'menge' => (float) $menge]);
 
         if ($ek <= 0) {
-          $ek = $this->app->DB->Select("SELECT MIN(preis) FROM einkaufspreise WHERE artikel='$id'
-                  AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0 ");
+          $ek = $this->app->DatabaseService->selectValue("SELECT MIN(preis) FROM einkaufspreise WHERE artikel = :id AND (gueltig_bis>=NOW() OR ifnull(gueltig_bis,'0000-00-00')='0000-00-00') AND geloescht=0", ['id' => (int) $id]);
         }
       }
     }
@@ -38509,7 +38414,7 @@ $( this ).dialog( "close" );
 
   function GetGruppen($adresse)
   {
-    $tmp = $this->app->DB->SelectArr("SELECT * FROM adresse_rolle WHERE adresse='$adresse' AND (bis > NOW() OR ifnull(bis,'0000-00-00')='0000-00-00') AND parameter > 0 AND objekt='Gruppe'");
+    $tmp = $this->app->DatabaseService->select("SELECT * FROM adresse_rolle WHERE adresse = :adresse AND (bis > NOW() OR ifnull(bis,'0000-00-00')='0000-00-00') AND parameter > 0 AND objekt = 'Gruppe'", ['adresse' => (int) $adresse]);
     if (empty($tmp)) {
       return null;
     }
@@ -38548,17 +38453,20 @@ $( this ).dialog( "close" );
     $gruppenarr = $this->GetGruppen($adresse);
     $sql_erweiterung = '';
     if (!empty($gruppenarr)) {
-      $sql_erweiterung .= ' OR v.gruppe IN (' . implode(', ', $gruppenarr) . ') ';
+      $sql_erweiterung .= ' OR v.gruppe IN (' . implode(', ', array_map('intval', $gruppenarr)) . ') ';
     }
+    $artikelIntISVK = (int) $artikel;
+    $adresseIntISVK = (int) $adresse;
+    $mengeFloatISVK = (float) $menge;
     if (!$guenstigste_vk) {
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= '$menge' AND
-              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= curdate() OR v.gueltig_ab = '0000-00-00') AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse')
-              ORDER by ab_menge ASC, preis DESC LIMIT 1");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= curdate() OR v.gueltig_ab = '0000-00-00') AND v.artikel = :artikel AND v.adresse = :adresse
+              ORDER by ab_menge ASC, preis DESC LIMIT 1", ['menge' => $mengeFloatISVK, 'artikel' => $artikelIntISVK, 'adresse' => $adresseIntISVK]);
     }
     if (empty($vkarr)) {
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= '$menge' AND
-              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= curdate() OR v.gueltig_ab = '0000-00-00') AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse' $sql_erweiterung)
-              ORDER by ab_menge ASC, preis DESC LIMIT 1");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= curdate() OR v.gueltig_ab = '0000-00-00') AND v.artikel = :artikel AND (v.adresse = :adresse $sql_erweiterung)
+              ORDER by ab_menge ASC, preis DESC LIMIT 1", ['menge' => $mengeFloatISVK, 'artikel' => $artikelIntISVK, 'adresse' => $adresseIntISVK]);
     }
 
     if (empty($vkarr)) {
@@ -38584,11 +38492,13 @@ $( this ).dialog( "close" );
   {
     $waehrungorig = $waehrung;
     $sqlwaehrung = "";
+    $rabattFloat = (float) $rabatt;
+    $waehrungSafe = $this->app->DB->real_escape_string((string) $waehrung);
     if ($waehrung <> '') {
       if ($waehrung == 'EUR') {
-        $sqlwaehrung = " AND (v.waehrung = '$waehrung' OR v.waehrung = '') ";
+        $sqlwaehrung = " AND (v.waehrung = '$waehrungSafe' OR v.waehrung = '') ";
       } else {
-        $sqlwaehrung = " AND v.waehrung = '$waehrung' ";
+        $sqlwaehrung = " AND v.waehrung = '$waehrungSafe' ";
       }
     }
     $sqlwaehrung2 = $sqlwaehrung;
@@ -38597,39 +38507,37 @@ $( this ).dialog( "close" );
     $vkarr = null;
     $guenstigste_vk = $this->Firmendaten('guenstigste_vk');
 
-    $keinrabatterlaubt = $this->app->DB->Select("SELECT keinrabatterlaubt FROM artikel WHERE id='" . $artikel . "' LIMIT 1");
+    $keinrabatterlaubt = $this->app->DatabaseService->selectValue("SELECT keinrabatterlaubt FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikel]);
 
     $gruppenarray = $this->GetGruppen($adresse);
+    $sql_erweiterung = '';
     if ($gruppenarray) {
-      if ((!empty($gruppenarray) ? count($gruppenarray) : 0) > 0)
-        $sql_erweiterung = " OR ";
-      for ($gi = 0; $gi < (!empty($gruppenarray) ? count($gruppenarray) : 0); $gi++) {
-        $sql_erweiterung .= " gruppe='" . $gruppenarray[$gi] . "' ";
-
-        if ($gi < (!empty($gruppenarray) ? count($gruppenarray) : 0) - 1)
-          $sql_erweiterung .= " OR ";
-
+      $gruppen_ids = array_map('intval', $gruppenarray);
+      if (!empty($gruppen_ids)) {
+        $sql_erweiterung = ' OR gruppe IN (' . implode(',', $gruppen_ids) . ') ';
       }
     }
 
     if (is_null($rabatt)) {
-      $rabatt = 0;
+      $rabattFloat = 0.0;
     }
 
+    $artikelInt = (int) $artikel;
+    $adresseInt = (int) $adresse;
     if (!$guenstigste_vk) {
-      $vkarr = $this->app->DB->SelectArr("SELECT v.*,if((v.adresse > 0 OR v.gruppe > 0),v.preis,(v.preis*(100-$rabatt))/100.0) as rabattpreis FROM verkaufspreise v WHERE
-              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') $sqlwaehrung2 AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse' AND v.art='Kunde') ORDER by rabattpreis ASC");
+      $vkarr = $this->app->DatabaseService->select("SELECT v.*,if((v.adresse > 0 OR v.gruppe > 0),v.preis,(v.preis*(100-$rabattFloat))/100.0) as rabattpreis FROM verkaufspreise v WHERE
+              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') $sqlwaehrung2 AND v.artikel = :artikel AND (v.adresse = :adresse AND v.art='Kunde') ORDER by rabattpreis ASC", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
       if (!$vkarr) {
-        $vkarr = $this->app->DB->SelectArr("SELECT v.*,if((v.adresse > 0 OR v.gruppe > 0),v.preis,(v.preis*(100-$rabatt))/100.0) as rabattpreis FROM verkaufspreise v WHERE
-              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') $sqlwaehrung2 AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse' $sql_erweiterung ) ORDER by rabattpreis ASC");
+        $vkarr = $this->app->DatabaseService->select("SELECT v.*,if((v.adresse > 0 OR v.gruppe > 0),v.preis,(v.preis*(100-$rabattFloat))/100.0) as rabattpreis FROM verkaufspreise v WHERE
+              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') $sqlwaehrung2 AND v.artikel = :artikel AND (v.adresse = :adresse $sql_erweiterung) ORDER by rabattpreis ASC", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
       }
 
     }
     if (!$vkarr) {
       // reinsortieren
-      $vkarr = $this->app->DB->SelectArr("SELECT v.*,if((v.adresse > 0 OR v.gruppe > 0),v.preis,(v.preis*(100-$rabatt))/100.0) as rabattpreis FROM verkaufspreise v WHERE
-              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00')  AND v.artikel='" . $artikel . "' $sqlwaehrung2 AND (v.adresse='$adresse' $sql_erweiterung OR
-                ((v.adresse='' OR v.adresse='0') AND v.art='Kunde')) ORDER by rabattpreis ASC");
+      $vkarr = $this->app->DatabaseService->select("SELECT v.*,if((v.adresse > 0 OR v.gruppe > 0),v.preis,(v.preis*(100-$rabattFloat))/100.0) as rabattpreis FROM verkaufspreise v WHERE
+              (v.gueltig_bis > NOW() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') AND v.artikel = :artikel $sqlwaehrung2 AND (v.adresse = :adresse $sql_erweiterung OR
+                ((v.adresse='' OR v.adresse='0') AND v.art='Kunde')) ORDER by rabattpreis ASC", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
     }
 
     $letzter_preis = 0;
@@ -38678,15 +38586,17 @@ $( this ).dialog( "close" );
    */
   public function getVerkaufspreisGruppeArr($artikel, $menge, $gruppe, $waehrung = null)
   {
-    $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <='$menge' AND
-            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND v.gruppe='$gruppe' AND v.art='Gruppe'
-            " . ($waehrung === null ? '' : " AND v.waehrung = '$waehrung' ") . "
-            ORDER by ab_menge DESC, preis ASC");
+    $waehrungSafeGrp = $waehrung !== null ? $this->app->DB->real_escape_string((string) $waehrung) : null;
+    $sqlWaehrungGrp = $waehrungSafeGrp !== null ? " AND v.waehrung = '$waehrungSafeGrp' " : '';
+    $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND v.gruppe = :gruppe AND v.art='Gruppe'
+            $sqlWaehrungGrp
+            ORDER by ab_menge DESC, preis ASC", ['menge' => (float) $menge, 'artikel' => (int) $artikel, 'gruppe' => (int) $gruppe]);
     if (!$vkarr && ($menge < 1)) {
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <=1 AND
-            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND v.gruppe='$gruppe' AND v.art='Gruppe'
-            " . ($waehrung === null ? '' : " AND v.waehrung = '$waehrung' ") . "
-            ORDER by ab_menge DESC, preis ASC");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
+            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND v.gruppe = :gruppe AND v.art='Gruppe'
+            $sqlWaehrungGrp
+            ORDER by ab_menge DESC, preis ASC", ['artikel' => (int) $artikel, 'gruppe' => (int) $gruppe]);
     }
     if (empty($vkarr)) {
       return null;
@@ -38712,13 +38622,13 @@ $( this ).dialog( "close" );
   {
     $vkarr = null;
     if ($gruppe) {
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <='$menge' AND
-            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND v.gruppe='$gruppe' AND v.art='Gruppe'
-            ORDER by ab_menge DESC, preis ASC");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND v.gruppe = :gruppe AND v.art='Gruppe'
+            ORDER by ab_menge DESC, preis ASC", ['menge' => (float) $menge, 'artikel' => (int) $artikel, 'gruppe' => (int) $gruppe]);
       if (!$vkarr && ($menge < 1))
-        $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <=1 AND
-            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND v.gruppe='$gruppe' AND v.art='Gruppe'
-            ORDER by ab_menge DESC, preis ASC");
+        $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
+            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND v.gruppe = :gruppe AND v.art='Gruppe'
+            ORDER by ab_menge DESC, preis ASC", ['artikel' => (int) $artikel, 'gruppe' => (int) $gruppe]);
     }
     if (!$vkarr) {
       return $this->GetVerkaufspreis($artikel, $menge, 0, $waehrung);
@@ -38750,14 +38660,14 @@ $( this ).dialog( "close" );
 
   function GetVerkaufspreisKunde($artikel, $menge, $adresse = 0, $waehrung = 'EUR', $returnarr = false)
   {
-    $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <='$menge' AND
-            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND v.adresse='$adresse' AND v.art='Kunde'
-            ORDER by ab_menge DESC, preis ASC");
+    $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND v.adresse = :adresse AND v.art='Kunde'
+            ORDER by ab_menge DESC, preis ASC", ['menge' => (float) $menge, 'artikel' => (int) $artikel, 'adresse' => (int) $adresse]);
 
     if (!$vkarr && ($menge < 1))
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <=1 AND
-            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND v.adresse='$adresse' AND v.art='Kunde'
-            ORDER by ab_menge DESC, preis ASC");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
+            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= curdate() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND v.adresse = :adresse AND v.art='Kunde'
+            ORDER by ab_menge DESC, preis ASC", ['artikel' => (int) $artikel, 'adresse' => (int) $adresse]);
 
     $letzte_menge = -1;  //$vkarr[0][ab_menge];
     $letzter_preis = 99999999999;
@@ -38796,35 +38706,39 @@ $( this ).dialog( "close" );
     $guenstigste_vk = $this->Firmendaten('guenstigste_vk');
     $gruppenarr = $this->GetGruppen($adresse);
     $cgruppenarr = !empty($gruppenarr) ? count($gruppenarr) : 0;
+    $sql_erweiterung = '';
     for ($i = 0; $i < $cgruppenarr; $i++) {
       if ($gruppenarr[$i] > 0)
-        $sql_erweiterung .= " OR gruppe='" . $gruppenarr[$i] . "' ";
+        $sql_erweiterung .= ' OR gruppe=' . (int) $gruppenarr[$i];
     }
+    $artikelInt = (int) $artikel;
+    $adresseInt = (int) $adresse;
+    $mengeFloat = (float) $menge;
     if (!$guenstigste_vk) {
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <='$menge' AND
-              (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse' AND v.art='Kunde') ORDER by preis ASC, ab_menge DESC");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+              (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND (v.adresse = :adresse AND v.art='Kunde') ORDER by preis ASC, ab_menge DESC", ['menge' => $mengeFloat, 'artikel' => $artikelInt, 'adresse' => $adresseInt]);
 
       if (!$vkarr && ($menge < 1))
-        $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
-              (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse' AND v.art='Kunde') ORDER by preis ASC, ab_menge DESC");
+        $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
+              (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND (v.adresse = :adresse AND v.art='Kunde') ORDER by preis ASC, ab_menge DESC", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
 
       if (!$vkarr) {
-        $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <='$menge' AND
-                (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse' $sql_erweiterung) ORDER by ab_menge DESC, preis ASC");
+        $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+                (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND (v.adresse = :adresse $sql_erweiterung) ORDER by ab_menge DESC, preis ASC", ['menge' => $mengeFloat, 'artikel' => $artikelInt, 'adresse' => $adresseInt]);
         if (!$vkarr && ($menge < 1))
-          $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <=1 AND
-                (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse' $sql_erweiterung) ORDER by ab_menge DESC, preis ASC");
+          $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
+                (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND (v.adresse = :adresse $sql_erweiterung) ORDER by ab_menge DESC, preis ASC", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
       }
 
     }
     if (!$vkarr) {
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <='$menge' AND
-            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse' $sql_erweiterung  OR
-              ((v.adresse='' OR v.adresse='0') AND v.art='Kunde')) ORDER by ab_menge DESC, preis ASC");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND (v.adresse = :adresse $sql_erweiterung OR
+              ((v.adresse='' OR v.adresse='0') AND v.art='Kunde')) ORDER by ab_menge DESC, preis ASC", ['menge' => $mengeFloat, 'artikel' => $artikelInt, 'adresse' => $adresseInt]);
       if (!$vkarr && ($menge < 1))
-        $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <=1 AND
-            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' AND (v.adresse='$adresse' $sql_erweiterung  OR
-              ((v.adresse='' OR v.adresse='0') AND v.art='Kunde')) ORDER by ab_menge DESC, preis ASC");
+        $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
+            (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel AND (v.adresse = :adresse $sql_erweiterung OR
+              ((v.adresse='' OR v.adresse='0') AND v.art='Kunde')) ORDER by ab_menge DESC, preis ASC", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
     }
 
     $letzte_menge = -1;  //$vkarr[0][ab_menge];
@@ -38844,7 +38758,7 @@ $( this ).dialog( "close" );
 
   function GetVerkaufspreisBrutto($artikel, $menge, $adresse = 0, $waehrung = 'EUR', &$returnwaehrung = '')
   {
-    $tmp = $this->app->DB->SelectArr("SELECT *,nummer as artikelnummer, name_de as artikel_name_de FROM artikel WHERE id='$artikel' LIMIT 1");
+    $tmp = $this->app->DatabaseService->select("SELECT *,nummer as artikelnummer, name_de as artikel_name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikel]);
     $projekt = $tmp[0]['projekt'];
     if ($tmp[0]['umsatzsteuer'] == "ermaessigt")
       $steuer = ($this->GetStandardSteuersatzErmaessigt($projekt) + 100) / 100.0;
@@ -38857,22 +38771,23 @@ $( this ).dialog( "close" );
 
   function GetSteuersatzBelegpos($doctype, $doctypeid, $pos)
   {
-    $arr = $this->app->DB->SelectArr("SELECT steuersatz, umsatzsteuer, artikel FROM $doctype" . "_position WHERE id = '$pos' LIMIT 1");
+    $safeDoctype = $this->app->DatabaseService->validateIdentifier($doctype);
+    $arr = $this->app->DatabaseService->select(sprintf("SELECT steuersatz, umsatzsteuer, artikel FROM `%s` WHERE id = :pos LIMIT 1", $safeDoctype . '_position'), ['pos' => (int) $pos]);
     if ($arr) {
       if (!is_null($arr[0]['steuersatz']) && $arr[0]['steuersatz'] >= 0)
         return $arr[0]['steuersatz'];
       if ($arr[0]['umsatzsteuer'] == 'befreit')
         return 0;
       if ($arr[0]['umsatzsteuer'] == 'ermaessigt')
-        return (float) $this->app->DB->Select("SELECT steuersatz_ermaessigt FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
+        return (float) $this->app->DatabaseService->selectValue(sprintf("SELECT steuersatz_ermaessigt FROM `%s` WHERE id = :id LIMIT 1", $safeDoctype), ['id' => (int) $doctypeid]);
       if ($arr[0]['umsatzsteuer'] != '')
-        return (float) $this->app->DB->Select("SELECT steuersatz_normal FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
-      $umsatzsteuer = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id = '" . $arr[0]['artikel'] . "' LIMIT 1");
+        return (float) $this->app->DatabaseService->selectValue(sprintf("SELECT steuersatz_normal FROM `%s` WHERE id = :id LIMIT 1", $safeDoctype), ['id' => (int) $doctypeid]);
+      $umsatzsteuer = $this->app->DatabaseService->selectValue("SELECT umsatzsteuer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $arr[0]['artikel']]);
       if ($umsatzsteuer == 'befreit')
         return 0;
       if ($umsatzsteuer == 'ermaessigt')
-        return (float) $this->app->DB->Select("SELECT steuersatz_ermaessigt FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
-      return (float) $this->app->DB->Select("SELECT steuersatz_normal FROM $doctype WHERE id = '$doctypeid' LIMIT 1");
+        return (float) $this->app->DatabaseService->selectValue(sprintf("SELECT steuersatz_ermaessigt FROM `%s` WHERE id = :id LIMIT 1", $safeDoctype), ['id' => (int) $doctypeid]);
+      return (float) $this->app->DatabaseService->selectValue(sprintf("SELECT steuersatz_normal FROM `%s` WHERE id = :id LIMIT 1", $safeDoctype), ['id' => (int) $doctypeid]);
     }
   }
 
@@ -38884,10 +38799,11 @@ $( this ).dialog( "close" );
       $firmendatenwaehrung = 'EUR';
     if ($waehrung == '')
       $waehrung = $firmendatenwaehrung;
+    $waehrungSafeVK = $this->app->DB->real_escape_string((string) $waehrung);
     if ($waehrung == $firmendatenwaehrung) {
-      $extrasql = " AND (v.waehrung = '$waehrung' OR v.waehrung = '') ";
+      $extrasql = " AND (v.waehrung = '$waehrungSafeVK' OR v.waehrung = '') ";
     } else {
-      $extrasql = " AND v.waehrung = '$waehrung' ";
+      $extrasql = " AND v.waehrung = '$waehrungSafeVK' ";
     }
 
     $extrasql2 = $extrasql;
@@ -38901,44 +38817,47 @@ $( this ).dialog( "close" );
     if ($gruppenarr) {
       for ($i = 0; $i < (!empty($gruppenarr) ? count($gruppenarr) : 0); $i++) {
         if ($gruppenarr[$i] > 0)
-          $sql_erweiterung .= " OR gruppe='" . $gruppenarr[$i] . "' ";
+          $sql_erweiterung .= ' OR gruppe=' . (int) $gruppenarr[$i];
       }
     }
+    $artikelInt = (int) $artikel;
+    $adresseInt = (int) $adresse;
+    $mengeFloat = (float) $menge;
     if (!$guenstigste_vk) {
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <='$menge' AND
-              (v.gueltig_bis >= CURDATE() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') AND v.artikel='" . $artikel . "' $extrasql2 AND (v.adresse='$adresse' AND v.art='Kunde') ORDER by ab_menge DESC, preis ASC");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+              (v.gueltig_bis >= CURDATE() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') AND v.artikel = :artikel $extrasql2 AND (v.adresse = :adresse AND v.art='Kunde') ORDER by ab_menge DESC, preis ASC", ['menge' => $mengeFloat, 'artikel' => $artikelInt, 'adresse' => $adresseInt]);
 
       if (!$vkarr && ($menge < 1))
-        $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
-              (v.gueltig_bis >= CURDATE() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') AND v.artikel='" . $artikel . "' $extrasql2 AND (v.adresse='$adresse' AND v.art='Kunde') ORDER by ab_menge DESC, preis ASC");
+        $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
+              (v.gueltig_bis >= CURDATE() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') AND v.artikel = :artikel $extrasql2 AND (v.adresse = :adresse AND v.art='Kunde') ORDER by ab_menge DESC, preis ASC", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
 
       if (!$vkarr) {
-        $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <='$menge' AND
-                (v.gueltig_bis >= CURDATE() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') AND v.artikel='" . $artikel . "' $extrasql2 AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
-              ((v.adresse='$adresse') AND v.art='Kunde')) ORDER by ab_menge DESC, preis ASC");
+        $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+                (v.gueltig_bis >= CURDATE() OR v.gueltig_bis='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab='0000-00-00') AND v.artikel = :artikel $extrasql2 AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
+              (v.adresse = :adresse AND v.art='Kunde')) ORDER by ab_menge DESC, preis ASC", ['menge' => $mengeFloat, 'artikel' => $artikelInt, 'adresse' => $adresseInt]);
         if (!$varr && ($menge < 1)) {
-          $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
-                  (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' $extrasql2 AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
-                ((v.adresse='$adresse') AND v.art='Kunde')) ORDER by ab_menge DESC, preis ASC");
+          $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
+                  (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel $extrasql2 AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
+                (v.adresse = :adresse AND v.art='Kunde')) ORDER by ab_menge DESC, preis ASC", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
         }
       }
     }
     if (!$vkarr) {
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <='$menge' AND
-              (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' $extrasql  AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
-              ((v.adresse='' OR v.adresse='0' OR v.adresse='$adresse') AND v.art='Kunde')) ORDER by preis ASC, ab_menge DESC");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= :menge AND
+              (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel $extrasql AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
+              ((v.adresse='' OR v.adresse='0' OR v.adresse = :adresse) AND v.art='Kunde')) ORDER by preis ASC, ab_menge DESC", ['menge' => $mengeFloat, 'artikel' => $artikelInt, 'adresse' => $adresseInt]);
 
       if (!$vkarr && ($menge < 1)) {
-        $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE v.ab_menge <=1 AND
-                (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' $extrasql AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
-                ((v.adresse='' OR v.adresse='0' OR v.adresse='$adresse') AND v.art='Kunde')) ORDER by preis ASC, ab_menge DESC");
+        $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE v.ab_menge <= 1 AND
+                (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel $extrasql AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
+                ((v.adresse='' OR v.adresse='0' OR v.adresse = :adresse) AND v.art='Kunde')) ORDER by preis ASC, ab_menge DESC", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
       }
     }
 
     if (!$vkarr && $auchpreisegrmenge) {
-      $vkarr = $this->app->DB->SelectArr("SELECT * FROM verkaufspreise v WHERE 
-              (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel='" . $artikel . "' $extrasql AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
-              ((v.adresse='' OR v.adresse='0' OR v.adresse='$adresse') AND v.art='Kunde')) ORDER by ab_menge ASC LIMIT 1");
+      $vkarr = $this->app->DatabaseService->select("SELECT * FROM verkaufspreise v WHERE
+              (v.gueltig_bis >= CURDATE() OR ifnull(v.gueltig_bis,'0000-00-00')='0000-00-00') AND (v.gueltig_ab <= CURDATE() OR ifnull(v.gueltig_ab,'0000-00-00')='0000-00-00') AND v.artikel = :artikel $extrasql AND ((v.art <> 'Kunde' AND (0 $sql_erweiterung )) OR
+              ((v.adresse='' OR v.adresse='0' OR v.adresse = :adresse) AND v.art='Kunde')) ORDER by ab_menge ASC LIMIT 1", ['artikel' => $artikelInt, 'adresse' => $adresseInt]);
     } else {
       $auchpreisegrmenge = false;
     }
@@ -38975,11 +38894,11 @@ $( this ).dialog( "close" );
     //Falls Einkaufspreis definiert
 
     $menge = 1;
-    $eka = $this->app->DB->SelectArr("SELECT preis, waehrung FROM einkaufspreise WHERE artikel='$id' AND adresse='$adresse' AND ab_menge<='$menge' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = '$waehrung' DESC, waehrung = '', ab_menge DESC, preis " . ($max ? 'DESC' : 'ASC') . " LIMIT 1");
+    $eka = $this->app->DatabaseService->select("SELECT preis, waehrung FROM einkaufspreise WHERE artikel = :id AND adresse = :adresse AND ab_menge <= :menge AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = :waehrung DESC, waehrung = '', ab_menge DESC, preis " . ($max ? 'DESC' : 'ASC') . " LIMIT 1", ['id' => (int) $id, 'adresse' => (int) $adresse, 'menge' => (float) $menge, 'waehrung' => (string) $waehrung]);
     if (!$eka)
-      $eka = $this->app->DB->SelectArr("SELECT preis, waehrung FROM einkaufspreise WHERE artikel='$id' AND ab_menge<='$menge' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = '$waehrung' DESC, waehrung = '', ab_menge DESC LIMIT 1");
+      $eka = $this->app->DatabaseService->select("SELECT preis, waehrung FROM einkaufspreise WHERE artikel = :id AND ab_menge <= :menge AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = :waehrung DESC, waehrung = '', ab_menge DESC LIMIT 1", ['id' => (int) $id, 'menge' => (float) $menge, 'waehrung' => (string) $waehrung]);
     if (!$eka)
-      $eka = $this->app->DB->SelectArr("SELECT preis, waehrung FROM einkaufspreise WHERE artikel='$id' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = '$waehrung' DESC, waehrung = '', ab_menge DESC LIMIT 1");
+      $eka = $this->app->DatabaseService->select("SELECT preis, waehrung FROM einkaufspreise WHERE artikel = :id AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER BY waehrung = :waehrung DESC, waehrung = '', ab_menge DESC LIMIT 1", ['id' => (int) $id, 'waehrung' => (string) $waehrung]);
     $originalwaehrung = $eka[0]['waehrung'];
     $originalpreis = $eka[0]['preis'];
     if ($eka[0]['waehrung'] == $waehrung)
@@ -38990,38 +38909,35 @@ $( this ).dialog( "close" );
 
 
 
+    $waehrungSafeStatW = $this->app->DB->real_escape_string((string) $waehrung);
+    $idIntStatW = (int) $id;
     $sql = "SELECT FORMAT(
             SUM(
-              
-                (
-                  SELECT e.preis * 
-                  
-                  if(e.waehrung != '',ifnull(
-                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrung' AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrung' AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
-                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrung' AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrung' AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
 
-                  ) 
-                  FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') ORDER BY waehrung = '$waehrung' DESC, waehrung = '' DESC, preis " . ($min ? 'ASC' : 'DESC') . " LIMIT 1
-                
+                (
+                  SELECT e.preis *
+
+                  if(e.waehrung != '',ifnull(
+                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeStatW' AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeStatW' AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
+                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeStatW' AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeStatW' AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
+
+                  )
+                  FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') ORDER BY waehrung = '$waehrungSafeStatW' DESC, waehrung = '' DESC, preis " . ($min ? 'ASC' : 'DESC') . " LIMIT 1
+
                 )
-              
+
               *s.menge)
             ,2)
               FROM stueckliste s
               LEFT JOIN artikel a ON a.id=s.artikel
-              WHERE s.stuecklistevonartikel='$id'";
+              WHERE s.stuecklistevonartikel=$idIntStatW";
 
     $preis = $this->app->DB->Select($sql);
     //Kein Einkaufspreis definiert => Stückliste
 
-    $sql = "SELECT s.artikel
-              FROM stueckliste s
-              LEFT JOIN artikel a ON a.id=s.artikel
-              WHERE s.stuecklistevonartikel='$id' and a.stueckliste = '1'
-        ";
-    $startikel = $this->app->DB->SelectArr($sql);
+    $startikel = $this->app->DatabaseService->select("SELECT s.artikel FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id and a.stueckliste = '1'", ['id' => $idIntStatW]);
     if ($startikel) {
       foreach ($startikel as $art)
         $preis += $this->GetEinkaufspreisStatistikWaehrung($art['artikel'], $waehrung, $max, $lvl + 1);
@@ -39037,22 +38953,23 @@ $( this ).dialog( "close" );
     if ($lvl > 5)
       return 0;
     //Falls Einkaufspreis definiert
+    $idInt = (int) $id;
     if ($max) {
-      $ep = $this->app->DB->Select("SELECT FORMAT(MAX(e.preis),2) FROM einkaufspreise e where e.artikel = $id AND (e.objekt='Standard' OR e.objekt='')");
+      $ep = $this->app->DatabaseService->selectValue("SELECT FORMAT(MAX(e.preis),2) FROM einkaufspreise e where e.artikel = :id AND (e.objekt='Standard' OR e.objekt='')", ['id' => $idInt]);
       if ($ep)
         return $ep;
     } else {
-      $ep = $this->app->DB->Select("SELECT FORMAT(MIN(e.preis),2) FROM einkaufspreise e where e.artikel = $id AND (e.objekt='Standard' OR e.objekt='')");
+      $ep = $this->app->DatabaseService->selectValue("SELECT FORMAT(MIN(e.preis),2) FROM einkaufspreise e where e.artikel = :id AND (e.objekt='Standard' OR e.objekt='')", ['id' => $idInt]);
       if ($ep)
         return $ep;
     }
     //Kein Einkaufspreis definiert => Stückliste
     if ($max) {
       $preis_max = 0;
-      $ids = $this->app->DB->SelectArr("SELECT s.artikel from stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel='$id' and a.stueckliste != '1' ");
+      $ids = $this->app->DatabaseService->select("SELECT s.artikel from stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id and a.stueckliste != '1'", ['id' => $idInt]);
       if ($ids) {
         foreach ($ids as $v)
-          $subwherea[] = $v['artikel'];
+          $subwherea[] = (int) $v['artikel'];
         $swhere = " (a.id = " . implode(' OR a.id = ', $subwherea) . ")";
         $sql = "
 
@@ -39063,28 +38980,15 @@ $( this ).dialog( "close" );
             ";
         $preis_max = $this->app->DB->Select($sql);
       }
-      $sql = "SELECT s.artikel
-                FROM stueckliste s
-                LEFT JOIN artikel a ON a.id=s.artikel
-                WHERE s.stuecklistevonartikel='$id' and a.stueckliste = '1'
-          ";
-      $startikel = $this->app->DB->SelectArr($sql);
+      $startikel = $this->app->DatabaseService->select("SELECT s.artikel FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id and a.stueckliste = '1'", ['id' => $idInt]);
       if ($startikel) {
         foreach ($startikel as $art)
           $preis_max += $this->GetEinkaufspreisStatistik($art['artikel'], $max, $lvl + 1);
       }
       return $preis_max;
     }
-    $sql = "              SELECT format( SUM(if (ep>0,ep,vp)),2)
-              from (SELECT MIN(e.preis) as ep, MIN(v.preis) vp FROM artikel a left join einkaufspreise e on a.id = e.artikel left join verkaufspreise v on a.id = v.artikel
-            WHERE a.id in ( SELECT s.artikel from stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel='$id' and a.stueckliste != '1') ) q";
-    $preis = $this->app->DB->Select($sql);
-    $sql = "SELECT s.artikel
-              FROM stueckliste s
-              LEFT JOIN artikel a ON a.id=s.artikel
-              WHERE s.stuecklistevonartikel='$id' and a.stueckliste = '1'
-        ";
-    $startikel = $this->app->DB->SelectArr($sql);
+    $preis = $this->app->DatabaseService->selectValue("SELECT format( SUM(if (ep>0,ep,vp)),2) from (SELECT MIN(e.preis) as ep, MIN(v.preis) vp FROM artikel a left join einkaufspreise e on a.id = e.artikel left join verkaufspreise v on a.id = v.artikel WHERE a.id in ( SELECT s.artikel from stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id and a.stueckliste != '1') ) q", ['id' => $idInt]);
+    $startikel = $this->app->DatabaseService->select("SELECT s.artikel FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id and a.stueckliste = '1'", ['id' => $idInt]);
     if ($startikel) {
       foreach ($startikel as $art)
         $preis += $this->GetEinkaufspreisStatistik($art['artikel'], $max, $lvl + 1);
@@ -39097,54 +39001,56 @@ $( this ).dialog( "close" );
   {
     if ($waehrung == '')
       $waehrung = 'EUR';
-    $sql = "SELECT 
+    $waehrungSafeSLW = $this->app->DB->real_escape_string((string) $waehrung);
+    $idIntSLW = (int) $id;
+    $sql = "SELECT
             SUM(
-              
-                (
-                  SELECT e.preis * 
-                  
-                  if(e.waehrung != '',ifnull(
-                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrung' AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrung' AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
-                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrung' AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrung' AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
 
-                  ) 
-                  FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis >= CURDATE() OR ifnull(e.gueltig_bis, '0000-00-00') = '0000-00-00') ORDER BY waehrung = '$waehrung' DESC, waehrung = '' DESC, preis " . ($min ? 'ASC' : 'DESC') . " LIMIT 1
-                
+                (
+                  SELECT e.preis *
+
+                  if(e.waehrung != '',ifnull(
+                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeSLW' AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeSLW' AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
+                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeSLW' AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeSLW' AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
+
+                  )
+                  FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis >= CURDATE() OR ifnull(e.gueltig_bis, '0000-00-00') = '0000-00-00') ORDER BY waehrung = '$waehrungSafeSLW' DESC, waehrung = '' DESC, preis " . ($min ? 'ASC' : 'DESC') . " LIMIT 1
+
                 )
-              
+
               *s.menge)
-            
+
               FROM stueckliste s
               LEFT JOIN artikel a ON a.id=s.artikel
-              WHERE s.stuecklistevonartikel='$id'";
+              WHERE s.stuecklistevonartikel=$idIntSLW";
 
 
     $preis_max = round((float) $this->app->DB->Select($sql), 2);
 
-    $sql = "SELECT 
+    $sql = "SELECT
             SUM(
-              
-                (
-                  SELECT e.preis * 
-                  
-                  if(e.waehrung != '',ifnull(
-                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrung' AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrung' AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
-                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrung' AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrung' AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
 
-                  ) 
-                  FROM verkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis >= CURDATE() OR ifnull(e.gueltig_bis, '0000-00-00') = '0000-00-00') ORDER BY waehrung = '$waehrung' DESC, waehrung = '' DESC, preis " . ($min ? 'ASC' : 'DESC') . " LIMIT 1
-                
+                (
+                  SELECT e.preis *
+
+                  if(e.waehrung != '',ifnull(
+                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeSLW' AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeSLW' AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
+                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeSLW' AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeSLW' AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
+
+                  )
+                  FROM verkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis >= CURDATE() OR ifnull(e.gueltig_bis, '0000-00-00') = '0000-00-00') ORDER BY waehrung = '$waehrungSafeSLW' DESC, waehrung = '' DESC, preis " . ($min ? 'ASC' : 'DESC') . " LIMIT 1
+
                 )
-              
+
               *s.menge)
-            
+
               FROM stueckliste s
               LEFT JOIN artikel a ON a.id=s.artikel
-              WHERE s.stuecklistevonartikel='$id' AND a.stueckliste = 1";
+              WHERE s.stuecklistevonartikel=$idIntSLW AND a.stueckliste = 1";
 
     return round($preis_max + (float) $this->app->DB->Select($sql), 2);
 
@@ -39152,36 +39058,30 @@ $( this ).dialog( "close" );
 
   function GetEinkaufspreisStueckliste($id, $max = false)
   {
-    $sql = "SELECT SUM(
+    $idIntSL = (int) $id;
+    $preis_max = $this->app->DatabaseService->selectValue("SELECT SUM(
               (SELECT MAX(e.preis) FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.gueltig_bis>=NOW() OR e.gueltig_bis='0000-00-00') AND e.geloescht=0)*s.menge)
               FROM stueckliste s
               LEFT JOIN artikel a ON a.id=s.artikel
-              WHERE s.stuecklistevonartikel='$id'";
+              WHERE s.stuecklistevonartikel = :id", ['id' => $idIntSL]);
 
-    $preis_max = $this->app->DB->Select($sql);
-
-    $sql = "SELECT SUM(
+    $preis_max = $preis_max + $this->app->DatabaseService->selectValue("SELECT SUM(
             (SELECT MAX(v.preis) FROM verkaufspreise v WHERE v.artikel=s.artikel AND a.stueckliste=1 AND (v.objekt='Standard' OR v.objekt=''))*s.menge)
             FROM stueckliste s
             LEFT JOIN artikel a ON a.id=s.artikel
-            WHERE s.stuecklistevonartikel='$id'";
+            WHERE s.stuecklistevonartikel = :id", ['id' => $idIntSL]);
 
-    $preis_max = $preis_max + $this->app->DB->Select($sql);
-
-    $sql = "SELECT SUM(
+    $preis = $this->app->DatabaseService->selectValue("SELECT SUM(
             (SELECT MIN(e.preis) FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.gueltig_bis>=NOW() OR e.gueltig_bis='0000-00-00') AND e.geloescht=0)*s.menge)
             FROM stueckliste s
             LEFT JOIN artikel a ON a.id=s.artikel
-            WHERE s.stuecklistevonartikel='$id'";
+            WHERE s.stuecklistevonartikel = :id", ['id' => $idIntSL]);
 
-    $preis = $this->app->DB->Select($sql);
-    $sql = "SELECT SUM(
+    $preis = $preis + $this->app->DatabaseService->selectValue("SELECT SUM(
             (SELECT MIN(v.preis) FROM verkaufspreise v WHERE v.artikel=s.artikel AND a.stueckliste=1 AND (v.objekt='Standard' OR v.objekt=''))*s.menge)
             FROM stueckliste s
             LEFT JOIN artikel a ON a.id=s.artikel
-            WHERE s.stuecklistevonartikel='$id'";
-
-    $preis = $preis + $this->app->DB->Select($sql);
+            WHERE s.stuecklistevonartikel = :id", ['id' => $idIntSL]);
 
     if ($max)
       return $preis_max;
@@ -39540,14 +39440,14 @@ $( this ).dialog( "close" );
 
   function CheckArtikel($id)
   {
-    $standardlieferant = $this->app->DB->Select("SELECT adresse FROM artikel WHERE id='$id' LIMIT 1");
-    $standardlieferant_ek = $this->app->DB->Select("SELECT adresse FROM einkaufspreise WHERE artikel='$id' AND geloescht!=1 AND standard=1 LIMIT 1");
+    $idIntCA = (int) $id;
+    $standardlieferant = (int) $this->app->DatabaseService->selectValue("SELECT adresse FROM artikel WHERE id = :id LIMIT 1", ['id' => $idIntCA]);
+    $standardlieferant_ek = (int) $this->app->DatabaseService->selectValue("SELECT adresse FROM einkaufspreise WHERE artikel = :id AND geloescht!=1 AND standard=1 LIMIT 1", ['id' => $idIntCA]);
     if ($standardlieferant <= 0 || ($standardlieferant_ek != $standardlieferant && $standardlieferant > 0 && $standardlieferant_ek > 0)) {
-      $standardlieferant = $this->app->DB->Select("SELECT adresse FROM einkaufspreise WHERE artikel='$id' AND geloescht!=1
-              AND (gueltig_bis='0000-00-00' OR gueltig_bis >= NOW()) ORDER by standard DESC LIMIT 1");
+      $standardlieferant = (int) $this->app->DatabaseService->selectValue("SELECT adresse FROM einkaufspreise WHERE artikel = :id AND geloescht!=1 AND (gueltig_bis='0000-00-00' OR gueltig_bis >= NOW()) ORDER by standard DESC LIMIT 1", ['id' => $idIntCA]);
 
       if ($standardlieferant > 0) {
-        $this->app->DB->Update("UPDATE artikel SET adresse='$standardlieferant' WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE artikel SET adresse = :adresse WHERE id = :id LIMIT 1", ['adresse' => $standardlieferant, 'id' => $idIntCA]);
       }
     }
   }
@@ -39685,7 +39585,7 @@ $( this ).dialog( "close" );
 
   function pdfmirrorZuArchiv($id)
   {
-    $checkmirror = $this->app->DB->SelectRow("SELECT p.* FROM pdfmirror_md5pool p WHERE id = '$id' LIMIT 1");
+    $checkmirror = $this->app->DatabaseService->selectRow("SELECT p.* FROM pdfmirror_md5pool p WHERE id = :id LIMIT 1", ['id' => (int) $id]);
     if ($checkmirror) {
       $filegroup = @filegroup($this->app->Conf->WFuserdata);
       $fileowner = @fileowner($this->app->Conf->WFuserdata);
@@ -39706,7 +39606,7 @@ $( this ).dialog( "close" );
       $dateia = explode('_', $path_parts['filename'], ($checkmirror['checksum'] ? 4 : 3));
       $belegnummer = $dateia[($checkmirror['checksum'] ? 3 : 2)];
       if (strlen($belegnummer) < 3 && !is_numeric($belegnummer)) {
-        $belegnr = $this->app->DB->Select("SELECT belegnr FROM " . $this->app->DB->real_escape_string(strtolower($checkmirror['table_name'])) . " WHERE id = '" . $checkmirror['table_id'] . "' LIMIT 1");
+        $belegnr = $this->app->DatabaseService->selectValue(sprintf("SELECT belegnr FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier(strtolower($checkmirror['table_name']))), ['id' => (int) $checkmirror['table_id']]);
         if ($belegnr)
           $belegnummer .= $belegnr;
 
@@ -39754,23 +39654,26 @@ $( this ).dialog( "close" );
         if($filegroup && $filegroup != filegroup($dir_archiv."/".$datei))chgrp($dir_archiv."/".$datei, $filegroup);        */
       }
 
-      $this->app->DB->Insert("INSERT INTO pdfarchiv (zeitstempel,checksum, table_id, table_name, bearbeiter, erstesoriginal, dateiname,doctypeorig, belegnummer)
-      values ('" . $checkmirror['zeitstempel'] . "','" . $this->app->DB->real_escape_string($checkmirror['checksum']) . "','" . $this->app->DB->real_escape_string($checkmirror['table_id']) . "','" . $this->app->DB->real_escape_string($checkmirror['table_name']) . "','" . $this->app->DB->real_escape_string($checkmirror['bearbeiter']) . "','" . $checkmirror['erstesoriginal'] . "',
-
-      '" . $datei . "','" . $this->app->DB->real_escape_string($doctyporig) . "','" . $this->app->DB->real_escape_string($belegnummer) . "')
-
-      ");
+      $this->app->DatabaseService->execute(
+        "INSERT INTO pdfarchiv (zeitstempel, checksum, table_id, table_name, bearbeiter, erstesoriginal, dateiname, doctypeorig, belegnummer) VALUES (:zeitstempel, :checksum, :table_id, :table_name, :bearbeiter, :erstesoriginal, :dateiname, :doctypeorig, :belegnummer)",
+        [
+          'zeitstempel'   => (string) $checkmirror['zeitstempel'],
+          'checksum'      => (string) $checkmirror['checksum'],
+          'table_id'      => (int) $checkmirror['table_id'],
+          'table_name'    => (string) $checkmirror['table_name'],
+          'bearbeiter'    => (string) $checkmirror['bearbeiter'],
+          'erstesoriginal'=> (int) $checkmirror['erstesoriginal'],
+          'dateiname'     => (string) $datei,
+          'doctypeorig'   => (string) $doctyporig,
+          'belegnummer'   => (string) $belegnummer,
+        ]
+      );
       if ($this->app->DB->error()) {
-        throw new Exception("SQL Error: " . $this->app->DB->error() . " SQL: INSERT INTO pdfarchiv (zeitstempel,checksum, table_id, table_name, bearbeiter, erstesoriginal, dateiname,doctypeorig, belegnummer)
-      values ('" . $checkmirror['zeitstempel'] . "','" . $this->app->DB->real_escape_string($checkmirror['checksum']) . "','" . $this->app->DB->real_escape_string($checkmirror['table_id']) . "','" . $this->app->DB->real_escape_string($checkmirror['table_name']) . "','" . $this->app->DB->real_escape_string($checkmirror['bearbeiter']) . "','" . $checkmirror['erstesoriginal'] . "',
-
-      '" . $datei . "','" . $this->app->DB->real_escape_string($doctyporig) . "','" . $this->app->DB->real_escape_string($belegnummer) . "')
-
-      ");
+        throw new Exception("SQL Error: " . $this->app->DB->error() . " SQL: INSERT INTO pdfarchiv");
       }
       $newid = $this->app->DB->GetInsertID();
       if ($newid)
-        $this->app->DB->Update("UPDATE pdfmirror_md5pool set pdfarchiv_id = '$newid' WHERE id = '$id' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE pdfmirror_md5pool SET pdfarchiv_id = :newid WHERE id = :id LIMIT 1", ['newid' => (int) $newid, 'id' => (int) $id]);
       return $newid;
     }
     return false;
@@ -39966,12 +39869,13 @@ $( this ).dialog( "close" );
 
   function CheckboxEntwurfsmodus($doctype, $id)
   {
-    $datumentwurf = $this->app->DB->Select("SELECT datum FROM $doctype WHERE id='$id' LIMIT 1");
+    $safeCheckboxDoctype = $this->app->DatabaseService->validateIdentifier($doctype);
+    $datumentwurf = $this->app->DatabaseService->selectValue(sprintf("SELECT datum FROM `%s` WHERE id = :id LIMIT 1", $safeCheckboxDoctype), ['id' => (int) $id]);
     $datumentwurf = str_replace('-', '', $datumentwurf);
     if ($datumentwurf == date('Ymd')) {
       return '';
     }
-    $anzeigedatum = $this->app->DB->Select("SELECT DATE_FORMAT(datum,'%d.%m.%Y') FROM $doctype WHERE id='$id' LIMIT 1");
+    $anzeigedatum = $this->app->DatabaseService->selectValue(sprintf("SELECT DATE_FORMAT(datum,'%%d.%%m.%%Y') FROM `%s` WHERE id = :id LIMIT 1", $safeCheckboxDoctype), ['id' => (int) $id]);
 
     $check = $this->app->User->GetParameter($doctype . "_create_entwurfsdatumuebernehmen");
     $extra = "<input type=\"checkbox\" value=\"1\" " . ($check == "1" ? "checked" : "") . " name=\"" . $doctype . "_create_entwurfsdatumuebernehmen\" id=\"" . $doctype . "_create_entwurfsdatumuebernehmen\">&nbsp;Entwurfsdatum vom <strong>$anzeigedatum</strong> übernehmen";
