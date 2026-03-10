@@ -790,19 +790,17 @@ class erpAPI
    */
   public function repairNullIds($table, $uniqeCol = 'name')
   {
-    $doppelteids = $this->app->DB->SelectArr(
-      sprintf(
-        'SELECT `id`, count(*) as `co` FROM `%s` GROUP BY `id` HAVING COUNT(*) > 1',
-        $table
-      )
+    $validTable = $this->app->DatabaseService->validateIdentifier($table);
+    $doppelteids = $this->app->DatabaseService->select(
+      sprintf('SELECT `id`, count(*) as `co` FROM `%s` GROUP BY `id` HAVING COUNT(*) > 1', $validTable)
     );
     if (empty($doppelteids)) {
-      $this->CheckAlterTable(sprintf("ALTER TABLE `%s` ADD PRIMARY KEY(`id`);", $table));
-      $maxid = 1 + (int) $this->app->DB->Select(sprintf("SELECT max(id) FROM `%s`", $table));
+      $this->CheckAlterTable(sprintf("ALTER TABLE `%s` ADD PRIMARY KEY(`id`);", $validTable));
+      $maxid = 1 + (int) $this->app->DatabaseService->selectValue(sprintf("SELECT max(id) FROM `%s`", $validTable));
       $this->CheckAlterTable(
         sprintf(
           "ALTER TABLE `%s` MODIFY `id` int(11) NOT NULL AUTO_INCREMENT,AUTO_INCREMENT=%d",
-          $table,
+          $validTable,
           $maxid
         )
       );
@@ -810,49 +808,37 @@ class erpAPI
     }
 
     foreach ($doppelteids as $val) {
-      $maxid = 1 + (int) $this->app->DB->Select(
-        sprintf("SELECT max(id) FROM `%s`", $table)
+      $maxid = 1 + (int) $this->app->DatabaseService->selectValue(
+        sprintf("SELECT max(id) FROM `%s`", $validTable)
       );
       if (empty($uniqeCol)) {
         for ($i = 1; $i <= $val['co']; $i++) {
-          $this->app->DB->Update(
-            sprintf(
-              'UPDATE `%s` 
-            SET `id` = %d WHERE `id` = %d 
-            LIMIT 1',
-              $table,
-              $maxid,
-              $val['id']
-            )
+          $this->app->DatabaseService->update(
+            sprintf('UPDATE `%s` SET `id` = :newid WHERE `id` = :oldid LIMIT 1', $validTable),
+            ['newid' => (int) $maxid, 'oldid' => (int) $val['id']]
           );
         }
         continue;
       }
-      $doppelte = $this->app->DB->SelectArr(
-        sprintf('SELECT * FROM `%s` WHERE id = %d', $table, $val['id'])
+      $validUniqeCol = $this->app->DatabaseService->validateIdentifier($uniqeCol);
+      $doppelte = $this->app->DatabaseService->select(
+        sprintf('SELECT * FROM `%s` WHERE id = :id', $validTable),
+        ['id' => (int) $val['id']]
       );
       foreach ($doppelte as $row) {
-        $this->app->DB->Update(
-          sprintf(
-            "UPDATE `%s` 
-          SET id = %d WHERE id = %d AND `%s` = '%s' 
-          LIMIT 1",
-            $table,
-            $maxid,
-            $val['id'],
-            $uniqeCol,
-            $val[$uniqeCol]
-          )
+        $this->app->DatabaseService->update(
+          sprintf("UPDATE `%s` SET id = :newid WHERE id = :oldid AND `%s` = :colval LIMIT 1", $validTable, $validUniqeCol),
+          ['newid' => (int) $maxid, 'oldid' => (int) $val['id'], 'colval' => (string) $val[$uniqeCol]]
         );
         $maxid++;
       }
     }
-    $this->CheckAlterTable(sprintf("ALTER TABLE `%s` ADD PRIMARY KEY(`id`);", $table));
-    $maxid = 1 + (int) $this->app->DB->Select(sprintf("SELECT max(id) FROM `%s`", $table));
+    $this->CheckAlterTable(sprintf("ALTER TABLE `%s` ADD PRIMARY KEY(`id`);", $validTable));
+    $maxid = 1 + (int) $this->app->DatabaseService->selectValue(sprintf("SELECT max(id) FROM `%s`", $validTable));
     $this->CheckAlterTable(
       sprintf(
         "ALTER TABLE `%s` MODIFY `id` int(11) NOT NULL AUTO_INCREMENT,AUTO_INCREMENT=%d",
-        $table,
+        $validTable,
         $maxid
       )
     );
@@ -11883,12 +11869,7 @@ title: 'Abschicken',
                 $just_stueckliste = 0;
                 $lagerartikel = 1;
                 $this->app->DatabaseService->execute("UPDATE auftrag_position SET artikel = :artikel, nummer = :nummer WHERE id = :id", ['artikel' => (int) $preproducedpartlist, 'nummer' => (string) $preproducednummer, 'id' => (int) $artikel_position_id]);
-                $this->app->DB->Update(
-                  sprintf(
-                    'UPDATE `artikel` SET `laststorage_changed` = NOW() WHERE `id` = %d',
-                    $preproducedpartlist
-                  )
-                );
+                $this->app->DatabaseService->update('UPDATE `artikel` SET `laststorage_changed` = NOW() WHERE `id` = :id', ['id' => (int) $preproducedpartlist]);
                 $order_obj = $this->app->erp->LoadModul('auftrag');
                 if (!empty($order_obj) && method_exists($order_obj, 'removeExplodedArticles')) {
                   $order_obj->removeExplodedArticles($auftrag, $artikel_position_id);
@@ -11906,19 +11887,9 @@ title: 'Abschicken',
                 $preproducedart['id'] = $this->app->DB->InsertArr('auftrag_position', 'id', $preproducedart, true);
                 $sort++;
                 $this->app->DatabaseService->execute("UPDATE auftrag_position SET menge = menge - :menge, sort = :sort WHERE id = :id", ['menge' => $partlistsellable, 'sort' => (int) $sort, 'id' => (int) $artikel_position_id]);
-                $this->app->DB->Update(
-                  sprintf(
-                    'UPDATE `artikel` SET `laststorage_changed` = NOW() WHERE `id` = %d',
-                    $preproducedpartlist
-                  )
-                );
+                $this->app->DatabaseService->update('UPDATE `artikel` SET `laststorage_changed` = NOW() WHERE `id` = :id', ['id' => (int) $preproducedpartlist]);
               }
-              $this->app->DB->Update(
-                sprintf(
-                  'UPDATE `artikel` SET `laststorage_changed` = NOW() WHERE `id` = %d',
-                  $artikel
-                )
-              );
+              $this->app->DatabaseService->update('UPDATE `artikel` SET `laststorage_changed` = NOW() WHERE `id` = :id', ['id' => (int) $artikel]);
             }
           }
           //$artikel_von_stueckliste = $this->app->DB->SelectArr("SELECT * FROM stueckliste WHERE stuecklistevonartikel='$artikel' AND art!='it' AND art!='bt'");
@@ -18695,14 +18666,9 @@ $( this ).dialog( "close" );
 
     // wenn reservierung aktiviert ist
     if ($doctype !== 'angebot') {
-      $reservierung = $this->app->DB->Select(
-        sprintf(
-          "SELECT pr.reservierung 
-        FROM `projekt` AS `pr` 
-        INNER JOIN `auftrag` AS `o` ON o.projekt = pr.id 
-        WHERE o.id = %d LIMIT 1",
-          $auftrag
-        )
+      $reservierung = $this->app->DatabaseService->selectValue(
+        "SELECT pr.reservierung FROM `projekt` AS `pr` INNER JOIN `auftrag` AS `o` ON o.projekt = pr.id WHERE o.id = :auftrag LIMIT 1",
+        ['auftrag' => (int) $auftrag]
       );
       if ((int) $reservierung >= 1) {
         $this->AuftragReservieren($auftrag);
@@ -18732,21 +18698,16 @@ $( this ).dialog( "close" );
         "UPDATE artikel art INNER JOIN auftrag_position ap ON art.id = ap.artikel AND ap.auftrag = :auftrag SET art.cache_lagerplatzinhaltmenge = -999",
         ['auftrag' => (int) $auftrag]
       );
-      $this->app->DB->Update(
-        sprintf(
-          'UPDATE artikel_onlineshops AS ao
+      $this->app->DatabaseService->update(
+        'UPDATE artikel_onlineshops AS ao
         INNER JOIN auftrag_position AS ap ON ao.artikel = ap.artikel
-        SET ao.storage_cache = -999, ao.pseudostorage_cache = -999 
-        WHERE ao.shop = %d AND ap.auftrag = %d',
-          $shop,
-          $auftrag
-        )
+        SET ao.storage_cache = -999, ao.pseudostorage_cache = -999
+        WHERE ao.shop = :shop AND ap.auftrag = :auftrag',
+        ['shop' => (int) $shop, 'auftrag' => (int) $auftrag]
       );
-      $differenz = $this->app->DB->Select(
-        sprintf(
-          'SELECT gesamtbetragfestsetzendifferenz FROM shopexport WHERE id = %d LIMIT 1',
-          (int) $shop
-        )
+      $differenz = $this->app->DatabaseService->selectValue(
+        'SELECT gesamtbetragfestsetzendifferenz FROM shopexport WHERE id = :id LIMIT 1',
+        ['id' => (int) $shop]
       );
       if ($this->app->DatabaseService->selectValue("SELECT gesamtbetragfestsetzen FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int) $shop])) {
         $gesamtsumme = $this->app->DatabaseService->selectValue("SELECT gesamtsumme FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int) $auftrag]);
@@ -18759,29 +18720,17 @@ $( this ).dialog( "close" );
       }
       if (
         !$autoversandvonMapping &&
-        $this->app->DB->Select(
-          sprintf(
-            'SELECT pr.deactivateautoshipping 
-          FROM auftrag a 
-          INNER JOIN projekt AS pr ON a.projekt = pr.id 
-          WHERE a.id = %d AND a.autoversand = 1',
-            $auftrag
-          )
+        $this->app->DatabaseService->selectValue(
+          'SELECT pr.deactivateautoshipping FROM auftrag a INNER JOIN projekt AS pr ON a.projekt = pr.id WHERE a.id = :auftrag AND a.autoversand = 1',
+          ['auftrag' => (int) $auftrag]
         )
       ) {
-        $this->app->DB->Update(
-          sprintf(
-            'UPDATE auftrag SET autoversand = 0 WHERE id = %d',
-            $auftrag
-          )
-        );
+        $this->app->DatabaseService->update('UPDATE auftrag SET autoversand = 0 WHERE id = :id', ['id' => (int) $auftrag]);
       }
       if (!empty($warenkorb['gesamtsumme'])) {
-        $gesamtsumme = $this->app->DB->Select(
-          sprintf(
-            'SELECT gesamtsumme FROM auftrag WHERE id = %d LIMIT 1',
-            $auftrag
-          )
+        $gesamtsumme = $this->app->DatabaseService->selectValue(
+          'SELECT gesamtsumme FROM auftrag WHERE id = :id LIMIT 1',
+          ['id' => (int) $auftrag]
         );
         if (
           $gesamtsumme != 0 &&
@@ -18789,12 +18738,7 @@ $( this ).dialog( "close" );
             round((float) $warenkorb['gesamtsumme'] - (float) $gesamtsumme, 2)
           ) > round((float) $differenz, 2)
         ) {
-          $this->app->DB->Update(
-            sprintf(
-              'UPDATE auftrag SET autoversand = 0 WHERE id = %d LIMIT 1',
-              (int) $auftrag
-            )
-          );
+          $this->app->DatabaseService->update('UPDATE auftrag SET autoversand = 0 WHERE id = :id LIMIT 1', ['id' => (int) $auftrag]);
           $this->AuftragProtokoll($auftrag, 'Online-Shop Differenz erkannt');
         }
       }
@@ -19504,7 +19448,7 @@ $( this ).dialog( "close" );
         if (!$chargenverwaltung)
           return false;
 
-        $checkarr = $this->app->DB->SelectArr(sprintf("SELECT c.* FROM lager_charge c %s WHERE c.artikel = %d %s ORDER BY charge = '%s' DESC, charge, id", $join, (int) $artikel, $subwhere, $this->app->DB->real_escape_string($wert)));
+        $checkarr = $this->app->DatabaseService->select(sprintf("SELECT c.* FROM lager_charge c %s WHERE c.artikel = :artikel %s ORDER BY charge = :wert DESC, charge, id", $join, $subwhere), ['artikel' => (int) $artikel, 'wert' => (string) $wert]);
         if ($checkarr) {
           $nochmenge = $menge;
           foreach ($checkarr as $c) {
@@ -20261,15 +20205,13 @@ $( this ).dialog( "close" );
   // pruefe ob es artikel noch im lager gibt bzw. ob es eine reservierung gibt
   function LagerFreieMenge($artikel, $mitautolagersperre = false, $standardlager = 0, $projektlager = 0)
   {
-    $summe_im_lager = (float) $this->app->DB->Select(
-      sprintf(
-        "SELECT SUM(li.menge) 
-        FROM `lager_platz_inhalt` AS `li` 
-        LEFT JOIN lager_platz AS lp ON lp.id=li.lager_platz 
-        WHERE li.artikel = %d
+    $summe_im_lager = (float) $this->app->DatabaseService->selectValue(
+      "SELECT SUM(li.menge)
+        FROM `lager_platz_inhalt` AS `li`
+        LEFT JOIN lager_platz AS lp ON lp.id=li.lager_platz
+        WHERE li.artikel = :artikel
         AND lp.sperrlager!='1'" . ($mitautolagersperre ? ' AND lp.autolagersperre != 1' : ''),
-        $artikel
-      )
+      ['artikel' => (int) $artikel]
     );
     if ($summe_im_lager <= 0) {
       return 0;
@@ -20285,43 +20227,34 @@ $( this ).dialog( "close" );
     }
 
     if ($standardlager > 0) {
-      $summe_im_lager_standard = (float) $this->app->DB->Select(
-        sprintf(
-          "SELECT SUM(li.menge) 
-        FROM `lager_platz_inhalt` AS `li` 
-        INNER JOIN `lager_platz` AS `lp` ON lp.id=li.lager_platz AND lp.lager = %d 
-        WHERE li.artikel = %d
+      $summe_im_lager_standard = (float) $this->app->DatabaseService->selectValue(
+        "SELECT SUM(li.menge)
+        FROM `lager_platz_inhalt` AS `li`
+        INNER JOIN `lager_platz` AS `lp` ON lp.id=li.lager_platz AND lp.lager = :lager
+        WHERE li.artikel = :artikel
         AND lp.sperrlager != '1'" . ($mitautolagersperre ? ' AND lp.autolagersperre != 1' : ''),
-          $standardlager,
-          $artikel
-        )
+        ['lager' => (int) $standardlager, 'artikel' => (int) $artikel]
       );
       if ($summe_im_lager_standard <= 0) {
         return 0;
       }
 
-      $artikelReserviertAuftrag = (float) $this->app->DB->Select(
-        sprintf(
-          "SELECT SUM(lr.menge) 
+      $artikelReserviertAuftrag = (float) $this->app->DatabaseService->selectValue(
+        "SELECT SUM(lr.menge)
           FROM `lager_reserviert` AS `lr`
           INNER JOIN `auftrag` AS `o` ON lr.objekt LIKE 'auftrag' AND lr.parameter = o.id
-            AND o.standardlager = %d AND o.status = 'freigegeben'
-          WHERE lr.artikel = %d AND (lr.datum>=NOW() OR lr.datum='0000-00-00')",
-          $standardlager,
-          $artikel
-        )
+            AND o.standardlager = :lager AND o.status = 'freigegeben'
+          WHERE lr.artikel = :artikel AND (lr.datum>=NOW() OR lr.datum='0000-00-00')",
+        ['lager' => (int) $standardlager, 'artikel' => (int) $artikel]
       );
 
-      $artikelReserviertProduktion = (float) $this->app->DB->Select(
-        sprintf(
-          "SELECT SUM(lr.menge) 
+      $artikelReserviertProduktion = (float) $this->app->DatabaseService->selectValue(
+        "SELECT SUM(lr.menge)
           FROM `lager_reserviert` AS `lr`
           INNER JOIN `produktion` AS `p` ON lr.objekt LIKE 'produktion' AND lr.parameter = p.id
-            AND p.standardlager = %d AND p.status IN ('freigegeben', 'gestartet')
-          WHERE lr.artikel = %d AND (lr.datum>=NOW() OR lr.datum='0000-00-00')",
-          $standardlager,
-          $artikel
-        )
+            AND p.standardlager = :lager AND p.status IN ('freigegeben', 'gestartet')
+          WHERE lr.artikel = :artikel AND (lr.datum>=NOW() OR lr.datum='0000-00-00')",
+        ['lager' => (int) $standardlager, 'artikel' => (int) $artikel]
       );
 
       $summe_im_lager_standard -= ($artikelReserviertAuftrag + $artikelReserviertProduktion);
@@ -20333,45 +20266,36 @@ $( this ).dialog( "close" );
         return $summe_im_lager_standard;
       }
     } elseif ($projektlager > 0) {
-      $summe_im_lager_projekt = (float) $this->app->DB->Select(
-        sprintf(
-          "SELECT SUM(li.menge) 
-        FROM `lager_platz_inhalt` AS `li` 
-        INNER JOIN `lager_platz` AS `lp` ON lp.id=li.lager_platz 
-        INNER JOIN `lager` AS `l` ON lp.lager = l.id AND l.projekt = %d
-        WHERE li.artikel=%d
+      $summe_im_lager_projekt = (float) $this->app->DatabaseService->selectValue(
+        "SELECT SUM(li.menge)
+        FROM `lager_platz_inhalt` AS `li`
+        INNER JOIN `lager_platz` AS `lp` ON lp.id=li.lager_platz
+        INNER JOIN `lager` AS `l` ON lp.lager = l.id AND l.projekt = :projekt
+        WHERE li.artikel = :artikel
         AND lp.sperrlager!='1'" . ($mitautolagersperre ? ' AND lp.autolagersperre != 1' : ''),
-          $projektlager,
-          $artikel
-        )
+        ['projekt' => (int) $projektlager, 'artikel' => (int) $artikel]
       );
 
       if ($summe_im_lager_projekt <= 0) {
         return 0;
       }
 
-      $artikelReserviertProjektAuftrag = (float) $this->app->DB->Select(
-        sprintf(
-          "SELECT SUM(lr.menge) 
+      $artikelReserviertProjektAuftrag = (float) $this->app->DatabaseService->selectValue(
+        "SELECT SUM(lr.menge)
           FROM `lager_reserviert` AS `lr`
           INNER JOIN `auftrag` AS `o` ON lr.objekt LIKE 'auftrag' AND lr.parameter = o.id
-            AND o.projekt = %d AND o.status = 'freigegeben'
-          WHERE lr.artikel = %d AND (lr.datum>=NOW() OR lr.datum='0000-00-00')",
-          $projektlager,
-          $artikel
-        )
+            AND o.projekt = :projekt AND o.status = 'freigegeben'
+          WHERE lr.artikel = :artikel AND (lr.datum>=NOW() OR lr.datum='0000-00-00')",
+        ['projekt' => (int) $projektlager, 'artikel' => (int) $artikel]
       );
 
-      $artikelReserviertProjektProduktion = (float) $this->app->DB->Select(
-        sprintf(
-          "SELECT SUM(lr.menge) 
+      $artikelReserviertProjektProduktion = (float) $this->app->DatabaseService->selectValue(
+        "SELECT SUM(lr.menge)
           FROM `lager_reserviert` AS `lr`
           INNER JOIN `produktion` AS `p` ON lr.objekt LIKE 'produktion' AND lr.parameter = p.id
-            AND p.projekt = %d AND p.status IN ('freigegeben', 'gestartet')
-          WHERE lr.artikel = %d AND (lr.datum>=NOW() OR lr.datum='0000-00-00')",
-          $projektlager,
-          $artikel
-        )
+            AND p.projekt = :projekt AND p.status IN ('freigegeben', 'gestartet')
+          WHERE lr.artikel = :artikel AND (lr.datum>=NOW() OR lr.datum='0000-00-00')",
+        ['projekt' => (int) $projektlager, 'artikel' => (int) $artikel]
       );
 
       $summe_im_lager_projekt -= ($artikelReserviertProjektAuftrag + $artikelReserviertProjektProduktion);
@@ -20618,11 +20542,12 @@ $( this ).dialog( "close" );
       if (!empty($shopByIds[$shop])) {
         $shopArr = $shopByIds[$shop];
       } else {
-        $shopArr = $this->app->DB->SelectRow(
-          "SELECT `id`, `projekt`, `lagergrundlage`, `lagerkorrekturwert`, `ueberschreibe_lagerkorrekturwert` 
-          FROM `shopexport` 
-          WHERE `id` = '{$shop}' AND `aktiv` = 1
-          LIMIT 1"
+        $shopArr = $this->app->DatabaseService->selectRow(
+          "SELECT `id`, `projekt`, `lagergrundlage`, `lagerkorrekturwert`, `ueberschreibe_lagerkorrekturwert`
+          FROM `shopexport`
+          WHERE `id` = :shop AND `aktiv` = 1
+          LIMIT 1",
+          ['shop' => (int) $shop]
         );
       }
       if (empty($shopArr) && empty($this->app->DB->error())) {
@@ -20754,17 +20679,18 @@ $( this ).dialog( "close" );
 
       if ((is_array($result) && $result instanceof ArticleExportResult ? $result->success : false) || $result === 1) {
         $cacheQuantity = (int) $verkaufbare_menge_korrektur + (int) $pseudolager;
-        $this->app->DB->Update(
-          "UPDATE `artikel` SET `cache_lagerplatzinhaltmenge` = '{$cacheQuantity}'
-              WHERE `id`= '{$lagerartikel[$ij]['id']}' LIMIT 1"
+        $this->app->DatabaseService->update(
+          "UPDATE `artikel` SET `cache_lagerplatzinhaltmenge` = :cache WHERE `id` = :id LIMIT 1",
+          ['cache' => (int) $cacheQuantity, 'id' => (int) $lagerartikel[$ij]['id']]
         );
       }
 
 
     }
 
-    $this->app->DB->Update(
-      "UPDATE `artikel` SET `laststorage_sync` = NOW() WHERE `id` = {$artikelid}"
+    $this->app->DatabaseService->update(
+      "UPDATE `artikel` SET `laststorage_sync` = NOW() WHERE `id` = :id",
+      ['id' => (int) $artikelid]
     );
 
     return $message;
@@ -20777,26 +20703,22 @@ $( this ).dialog( "close" );
     $projektlager = 0;
     $standardlager = 0;
     if ($parameter > 0 && ($objekt === 'auftrag' || $objekt === 'lieferschein')) {
-      $docArr = $this->app->DB->SelectRow(sprintf('SELECT * FROM `%s` WHERE id=%d LIMIT 1', $objekt, (int) $parameter));
+      $validObjekt = $this->app->DatabaseService->validateIdentifier($objekt);
+      $docArr = $this->app->DatabaseService->selectRow(sprintf('SELECT * FROM `%s` WHERE id = :id LIMIT 1', $validObjekt), ['id' => (int) $parameter]);
       $projekt = $docArr['projekt'];
       $auftrag = $parameter;
       if ($objekt === 'lieferschein') {
         $auftrag = $docArr['auftragid'];
       }
       if ($projekt > 0) {
-        $projectArr = $this->app->DB->SelectRow(
-          sprintf(
-            'SELECT projektlager, standardlager,kommissionierverfahren FROM projekt WHERE id=%d',
-            $projekt
-          )
-        );
+        $projectArr = $this->app->DatabaseService->selectRow('SELECT projektlager, standardlager, kommissionierverfahren FROM projekt WHERE id = :id', ['id' => (int) $projekt]);
         $kommissionierverfahren = $projectArr['kommissionierverfahren'];
         $projektbevorzugteslager = $projectArr['standardlager'];
         if (
           !($kommissionierverfahren === 'lieferscheinlager' ||
             $kommissionierverfahren === 'lieferscheinlagerscan' ||
             $kommissionierverfahren === 'lieferscheinscan' ||
-            $kommissionierverfahren === 'lieferschein') || $this->app->DB->Select('SELECT IFNULL(COUNT(id),0) FROM lager') <= 1
+            $kommissionierverfahren === 'lieferschein') || $this->app->DatabaseService->selectValue('SELECT IFNULL(COUNT(id),0) FROM lager') <= 1
         ) {
           $standardlager = 0;
         } else {
@@ -20804,21 +20726,16 @@ $( this ).dialog( "close" );
           if ($objekt === 'auftrag' || $objekt === 'lieferschein') {
             $standardlager = $docArr['standardlager'];
           } else {
-            $standardlager = $this->app->DB->Select(sprintf('SELECT standardlager FROM auftrag WHERE id = %d LIMIT 1', (int) $auftrag));
+            $standardlager = $this->app->DatabaseService->selectValue('SELECT standardlager FROM auftrag WHERE id = :id LIMIT 1', ['id' => (int) $auftrag]);
           }
-          if ($standardlager && !$this->app->DB->Select(sprintf('SELECT id FROM lager WHERE id = %d LIMIT 1', (int) $standardlager))) {
-            $standardlager = $this->app->DB->Select(sprintf('SELECT id FROM lager WHERE id = %d LIMIT 1', (int) $docArr['standardlager']));
+          if ($standardlager && !$this->app->DatabaseService->selectValue('SELECT id FROM lager WHERE id = :id LIMIT 1', ['id' => (int) $standardlager])) {
+            $standardlager = $this->app->DatabaseService->selectValue('SELECT id FROM lager WHERE id = :id LIMIT 1', ['id' => (int) $docArr['standardlager']]);
           }
         }
       }
     }
 
-    $articleArr = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT chargenverwaltung, mindesthaltbarkeitsdatum,seriennummern FROM artikel WHERE id = %d LIMIT 1',
-        $artikel
-      )
-    );
+    $articleArr = $this->app->DatabaseService->selectRow('SELECT chargenverwaltung, mindesthaltbarkeitsdatum, seriennummern FROM artikel WHERE id = :id LIMIT 1', ['id' => (int) $artikel]);
 
     $isBestBefore = !empty($articleArr['mindesthaltbarkeitsdatum']);
     $isBatch = !empty($articleArr['chargenverwaltung']);
@@ -20831,31 +20748,25 @@ $( this ).dialog( "close" );
     if ($standardlager > 0) // Standardlager beleg
     {
       $summe_im_lager = round(
-        $this->app->DB->Select(
-          sprintf(
-            "SELECT IFNULL(SUM(li.menge),0) 
-            FROM lager_platz_inhalt AS li 
-            INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz 
-            INNER JOIN lager AS lag ON lag.id=lp.lager 
-            WHERE li.artikel= %d AND lp.autolagersperre!=1 AND lp.sperrlager!= 1  AND lag.id=%d",
-            (int) $artikel,
-            (int) $standardlager
-          )
+        (float) $this->app->DatabaseService->selectValue(
+          "SELECT IFNULL(SUM(li.menge),0)
+            FROM lager_platz_inhalt AS li
+            INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz
+            INNER JOIN lager AS lag ON lag.id=lp.lager
+            WHERE li.artikel = :artikel AND lp.autolagersperre!=1 AND lp.sperrlager!= 1 AND lag.id = :lager",
+          ['artikel' => (int) $artikel, 'lager' => (int) $standardlager]
         ),
         $this->GetLagerNachkommastellen()
       );
       if ($summe_im_lager > 0 && $isBestBefore) {
         $bestBeforeStorage = round(
-          $this->app->DB->Select(
-            sprintf(
-              "SELECT IFNULL(SUM(li.menge),0) 
-            FROM lager_mindesthaltbarkeitsdatum AS li 
-            INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz 
-            INNER JOIN lager AS lag ON lag.id=lp.lager 
-            WHERE li.artikel= %d AND lp.autolagersperre!=1 AND lp.sperrlager!= 1  AND lag.id=%d",
-              (int) $artikel,
-              (int) $standardlager
-            )
+          (float) $this->app->DatabaseService->selectValue(
+            "SELECT IFNULL(SUM(li.menge),0)
+            FROM lager_mindesthaltbarkeitsdatum AS li
+            INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz
+            INNER JOIN lager AS lag ON lag.id=lp.lager
+            WHERE li.artikel = :artikel AND lp.autolagersperre!=1 AND lp.sperrlager!= 1 AND lag.id = :lager",
+            ['artikel' => (int) $artikel, 'lager' => (int) $standardlager]
           ),
           $this->GetLagerNachkommastellen()
         );
@@ -20864,16 +20775,13 @@ $( this ).dialog( "close" );
         }
       } elseif ($summe_im_lager > 0 && $isBatch) {
         $batchStorage = round(
-          $this->app->DB->Select(
-            sprintf(
-              "SELECT IFNULL(SUM(li.menge),0) 
-            FROM lager_charge AS li 
-            INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz 
-            INNER JOIN lager AS lag ON lag.id=lp.lager 
-            WHERE li.artikel= %d AND lp.autolagersperre!=1 AND lp.sperrlager!= 1  AND lag.id=%d",
-              (int) $artikel,
-              (int) $standardlager
-            )
+          (float) $this->app->DatabaseService->selectValue(
+            "SELECT IFNULL(SUM(li.menge),0)
+            FROM lager_charge AS li
+            INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz
+            INNER JOIN lager AS lag ON lag.id=lp.lager
+            WHERE li.artikel = :artikel AND lp.autolagersperre!=1 AND lp.sperrlager!= 1 AND lag.id = :lager",
+            ['artikel' => (int) $artikel, 'lager' => (int) $standardlager]
           ),
           $this->GetLagerNachkommastellen()
         );
@@ -20883,58 +20791,46 @@ $( this ).dialog( "close" );
       }
 
       $artikel_reserviert = round(
-        $this->app->DB->Select(
-          sprintf(
-            "SELECT SUM(menge) 
-              FROM lager_reserviert 
-              WHERE artikel=%d AND (datum>=NOW() OR datum='0000-00-00')",
-            (int) $artikel
-          )
+        (float) $this->app->DatabaseService->selectValue(
+          "SELECT SUM(menge) FROM lager_reserviert WHERE artikel = :artikel AND (datum>=NOW() OR datum='0000-00-00')",
+          ['artikel' => (int) $artikel]
         ),
         $this->GetLagerNachkommastellen()
       );
       $summe_im_lager_gesamt = round(
-        $this->app->DB->Select(
-          sprintf(
-            "SELECT SUM(li.menge) 
-              FROM lager_platz_inhalt AS li 
-              LEFT JOIN lager_platz lp ON lp.id=li.lager_platz WHERE li.artikel= %d
+        (float) $this->app->DatabaseService->selectValue(
+          "SELECT SUM(li.menge)
+              FROM lager_platz_inhalt AS li
+              LEFT JOIN lager_platz lp ON lp.id=li.lager_platz WHERE li.artikel = :artikel
               AND lp.autolagersperre!=1 AND lp.sperrlager!=1",
-            $artikel
-          )
+          ['artikel' => (int) $artikel]
         ),
         $this->GetLagerNachkommastellen()
       );
     } elseif ($projektlager > 0) // Projektlager
     {
       $summe_im_lager = round(
-        $this->app->DB->Select(
-          sprintf(
-            "SELECT SUM(li.menge) 
-              FROM lager_platz_inhalt AS li 
-              INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz 
-              INNER JOIN lager AS lag ON lag.id=lp.lager 
-              WHERE li.artikel=%d
-        AND lp.autolagersperre!=1 AND lp.sperrlager!= 1 AND lag.projekt=%d",
-            (int) $artikel,
-            (int) $projekt
-          )
+        (float) $this->app->DatabaseService->selectValue(
+          "SELECT SUM(li.menge)
+              FROM lager_platz_inhalt AS li
+              INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz
+              INNER JOIN lager AS lag ON lag.id=lp.lager
+              WHERE li.artikel = :artikel
+        AND lp.autolagersperre!=1 AND lp.sperrlager!= 1 AND lag.projekt = :projekt",
+          ['artikel' => (int) $artikel, 'projekt' => (int) $projekt]
         ),
         $this->GetLagerNachkommastellen()
       );
       if ($summe_im_lager > 0 && $isBestBefore) {
         $bestBeforeStorage = round(
-          $this->app->DB->Select(
-            sprintf(
-              "SELECT SUM(li.menge) 
-              FROM lager_mindesthaltbarkeitsdatum AS li 
-              INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz 
-              INNER JOIN lager AS lag ON lag.id=lp.lager 
-              WHERE li.artikel=%d
-        AND lp.autolagersperre!=1 AND lp.sperrlager!= 1 AND lag.projekt=%d",
-              (int) $artikel,
-              (int) $projekt
-            )
+          (float) $this->app->DatabaseService->selectValue(
+            "SELECT SUM(li.menge)
+              FROM lager_mindesthaltbarkeitsdatum AS li
+              INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz
+              INNER JOIN lager AS lag ON lag.id=lp.lager
+              WHERE li.artikel = :artikel
+        AND lp.autolagersperre!=1 AND lp.sperrlager!= 1 AND lag.projekt = :projekt",
+            ['artikel' => (int) $artikel, 'projekt' => (int) $projekt]
           ),
           $this->GetLagerNachkommastellen()
         );
@@ -20943,17 +20839,14 @@ $( this ).dialog( "close" );
         }
       } elseif ($summe_im_lager > 0 && $isBatch) {
         $batchStorage = round(
-          $this->app->DB->Select(
-            sprintf(
-              "SELECT SUM(li.menge) 
-              FROM lager_charge AS li 
-              INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz 
-              INNER JOIN lager AS lag ON lag.id=lp.lager 
-              WHERE li.artikel=%d
-        AND lp.autolagersperre!=1 AND lp.sperrlager!= 1 AND lag.projekt=%d",
-              (int) $artikel,
-              (int) $projekt
-            )
+          (float) $this->app->DatabaseService->selectValue(
+            "SELECT SUM(li.menge)
+              FROM lager_charge AS li
+              INNER JOIN lager_platz AS lp ON lp.id=li.lager_platz
+              INNER JOIN lager AS lag ON lag.id=lp.lager
+              WHERE li.artikel = :artikel
+        AND lp.autolagersperre!=1 AND lp.sperrlager!= 1 AND lag.projekt = :projekt",
+            ['artikel' => (int) $artikel, 'projekt' => (int) $projekt]
           ),
           $this->GetLagerNachkommastellen()
         );
@@ -20961,41 +20854,34 @@ $( this ).dialog( "close" );
           $summe_im_lager = $batchStorage;
         }
       }
-      $artikel_reserviert = round($this->app->DB->Select("SELECT SUM(menge) 
-        FROM lager_reserviert WHERE artikel='" . $artikel . "' AND projekt='$projekt' AND (datum>=NOW() OR datum='0000-00-00')"), $this->GetLagerNachkommastellen());
+      $artikel_reserviert = round((float) $this->app->DatabaseService->selectValue("SELECT SUM(menge) FROM lager_reserviert WHERE artikel = :artikel AND projekt = :projekt AND (datum>=NOW() OR datum='0000-00-00')", ['artikel' => (int) $artikel, 'projekt' => (int) $projekt]), $this->GetLagerNachkommastellen());
     } else { // Normal
       $summe_im_lager = round(
-        $this->app->DB->Select(
-          sprintf(
-            "SELECT SUM(li.menge)
+        (float) $this->app->DatabaseService->selectValue(
+          "SELECT SUM(li.menge)
               FROM lager_platz_inhalt AS li
               INNER JOIN lager_platz lp ON lp.id = li.lager_platz
               INNER JOIN lager l ON lp.lager = l.id
               WHERE
-                li.artikel= %d
+                li.artikel = :artikel
               AND
-                ((l.id = %d) OR (%d = 0))
+                ((l.id = :lager) OR (:lager2 = 0))
               AND
-                lp.autolagersperre!=1 
+                lp.autolagersperre!=1
               AND
                 lp.sperrlager!=1",
-            $artikel,
-            $projektbevorzugteslager,
-            $projektbevorzugteslager
-          )
+          ['artikel' => (int) $artikel, 'lager' => (int) $projektbevorzugteslager, 'lager2' => (int) $projektbevorzugteslager]
         ),
         $this->GetLagerNachkommastellen()
       );
       if ($summe_im_lager > 0 && $isBestBefore) {
         $bestBeforeStorage = round(
-          $this->app->DB->Select(
-            sprintf(
-              "SELECT SUM(li.menge) 
-              FROM lager_mindesthaltbarkeitsdatum AS li 
-              LEFT JOIN lager_platz AS lp ON lp.id=li.lager_platz WHERE li.artikel= %d
+          (float) $this->app->DatabaseService->selectValue(
+            "SELECT SUM(li.menge)
+              FROM lager_mindesthaltbarkeitsdatum AS li
+              LEFT JOIN lager_platz AS lp ON lp.id=li.lager_platz WHERE li.artikel = :artikel
               AND lp.autolagersperre!=1 AND lp.sperrlager!=1",
-              $artikel
-            )
+            ['artikel' => (int) $artikel]
           ),
           $this->GetLagerNachkommastellen()
         );
@@ -21004,14 +20890,12 @@ $( this ).dialog( "close" );
         }
       } elseif ($summe_im_lager > 0 && $isBatch) {
         $batchStorage = round(
-          $this->app->DB->Select(
-            sprintf(
-              "SELECT SUM(li.menge) 
-              FROM lager_charge AS li 
-              LEFT JOIN lager_platz AS lp ON lp.id=li.lager_platz WHERE li.artikel= %d
+          (float) $this->app->DatabaseService->selectValue(
+            "SELECT SUM(li.menge)
+              FROM lager_charge AS li
+              LEFT JOIN lager_platz AS lp ON lp.id=li.lager_platz WHERE li.artikel = :artikel
               AND lp.autolagersperre!=1 AND lp.sperrlager!=1",
-              $artikel
-            )
+            ['artikel' => (int) $artikel]
           ),
           $this->GetLagerNachkommastellen()
         );
@@ -21066,16 +20950,14 @@ $( this ).dialog( "close" );
 
     if ($objekt === 'auftrag' && $artikel_fuer_adresse_reserviert > 0) {
       if ($summe_im_lager >= $artikel_fuer_adresse_reserviert) {
-        $gesamte_menge_im_auftrag = $this->app->DB->Select("SELECT SUM(menge-geliefert_menge) 
-            FROM auftrag_position WHERE auftrag='$parameter' AND artikel='$artikel'");
+        $gesamte_menge_im_auftrag = $this->app->DatabaseService->selectValue("SELECT SUM(menge-geliefert_menge) FROM auftrag_position WHERE auftrag = :parameter AND artikel = :artikel", ['parameter' => (int) $parameter, 'artikel' => (int) $artikel]);
         if ($artikel_fuer_adresse_reserviert >= $menge && $artikel_fuer_adresse_reserviert >= $gesamte_menge_im_auftrag && $summe_im_lager >= $gesamte_menge_im_auftrag) {
           return true;
         }
       }
     } elseif ($objekt === 'lieferschein' && $artikel_fuer_adresse_reserviert > 0) {
       if ($summe_im_lager >= $artikel_fuer_adresse_reserviert) {
-        $gesamte_menge_im_auftrag = $this->app->DB->Select("SELECT SUM(menge-geliefert) 
-            FROM lieferschein_position WHERE lieferschein='$parameter' AND artikel='$artikel'");
+        $gesamte_menge_im_auftrag = $this->app->DatabaseService->selectValue("SELECT SUM(menge-geliefert) FROM lieferschein_position WHERE lieferschein = :parameter AND artikel = :artikel", ['parameter' => (int) $parameter, 'artikel' => (int) $artikel]);
         if ($artikel_fuer_adresse_reserviert >= $menge && $artikel_fuer_adresse_reserviert >= $gesamte_menge_im_auftrag && $summe_im_lager >= $gesamte_menge_im_auftrag) {
           return true;
         }
@@ -24055,7 +23937,7 @@ $( this ).dialog( "close" );
         $module = $this->app->Secure->GetGET("module");
 
         if ($module == "adresse") {
-          $check = $this->app->DB->Select("SELECT id FROM dokumente_send WHERE dokument='brieffax' AND geloescht=0 AND versendet=0 ORDER by id DESC LIMIT 1");
+          $check = $this->app->DatabaseService->selectValue("SELECT id FROM dokumente_send WHERE dokument='brieffax' AND geloescht=0 AND versendet=0 ORDER by id DESC LIMIT 1");
         } else {
           $check = $this->app->DatabaseService->selectValue("SELECT id FROM dokumente_send WHERE dokument=:typ AND parameter=:id AND geloescht=0 AND versendet=0 ORDER by id DESC LIMIT 1", ['typ' => $typ, 'id' => $id]); // GEHT bei BE RE LS
         }
@@ -29586,114 +29468,36 @@ $( this ).dialog( "close" );
           $this->Protokoll(strtoupper($typ) . " BELEG $belegnr");
 
         $anzahlStellen = ($this->app->erp->Firmendaten('viernachkommastellen_belege') ? 4 : 2);
+        $validTyp = $this->app->DatabaseService->validateIdentifier($typ);
+        $validTypPos = $this->app->DatabaseService->validateIdentifier($typ . '_position');
+        $angebotFilter = ($typ === 'angebot') ? " AND ap.optional <> 1 AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1),0))" : "";
         if ($preisberechnung == 3) {
-          if ($typ === 'angebot') {
-            $einnahmen = $this->app->DB->Select(
-              sprintf(
-                "SELECT SUM(ap.menge*ROUND(ap.preis*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)),%d))
-                  FROM `%s` auf 
-                  INNER JOIN `%s` ap ON ap.`%s`=auf.id  
-                  WHERE auf.id=%d AND ap.optional <> 1 AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1),0))",
-                $anzahlStellen,
-                $typ,
-                $typ . '_position',
-                $typ,
-                (int) $id
-              )
-            );
-          } else {
-            $einnahmen = $this->app->DB->Select(
-              sprintf(
-                "SELECT SUM(ap.menge*ROUND(ap.preis*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)),%d))
-                  FROM `%s` auf 
-                  INNER JOIN `%s` ap ON ap.`%s`=auf.id 
-                  WHERE auf.id=%d",
-                $anzahlStellen,
-                $typ,
-                $typ . '_position',
-                $typ,
-                (int) $id
-              )
-            );
-          }
+          $einnahmen = $this->app->DatabaseService->selectValue(
+            sprintf("SELECT SUM(ap.menge*ROUND(ap.preis*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)),%d)) FROM `%s` auf INNER JOIN `%s` ap ON ap.`%s`=auf.id WHERE auf.id = :id%s",
+              (int) $anzahlStellen, $validTyp, $validTypPos, $validTyp, $angebotFilter),
+            ['id' => (int) $id]
+          );
         } elseif ($preisberechnung == 1) {
-
-          if ($typ === 'angebot') {
-            $einnahmen = $this->app->DB->Select(
-              sprintf(
-                "SELECT SUM(ROUND(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)),%d))
-                  FROM `%s` auf 
-                  INNER JOIN `%s` ap ON ap.`%s`=auf.id  
-                  WHERE auf.id=%d AND ap.optional <> 1 AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1),0))",
-                $anzahlStellen,
-                $typ,
-                $typ . '_position',
-                $typ,
-                (int) $id
-              )
-            );
-          } else {
-            $einnahmen = $this->app->DB->Select(
-              sprintf(
-                "SELECT SUM(ROUND(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)),%d))
-                  FROM `%s` auf 
-                  INNER JOIN `%s` ap ON ap.`%s`=auf.id 
-                  WHERE auf.id=%d",
-                $anzahlStellen,
-                $typ,
-                $typ . '_position',
-                $typ,
-                (int) $id
-              )
-            );
-          }
+          $einnahmen = $this->app->DatabaseService->selectValue(
+            sprintf("SELECT SUM(ROUND(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)),%d)) FROM `%s` auf INNER JOIN `%s` ap ON ap.`%s`=auf.id WHERE auf.id = :id%s",
+              (int) $anzahlStellen, $validTyp, $validTypPos, $validTyp, $angebotFilter),
+            ['id' => (int) $id]
+          );
         } else {
-          if ($typ === 'angebot') {
-            $einnahmen = $this->app->DB->Select(
-              sprintf(
-                "SELECT SUM(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)))
-                  FROM `%s` auf 
-                  INNER JOIN `%s` ap ON ap.`%s`=auf.id  
-                  WHERE auf.id=%d AND ap.optional <> 1 AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1),0))",
-                $typ,
-                $typ . '_position',
-                $typ,
-                (int) $id
-              )
-            );
-          } else {
-            $einnahmen = $this->app->DB->Select(
-              sprintf(
-                "SELECT SUM(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1)))
-                  FROM `%s` auf 
-                  INNER JOIN `%s` ap ON ap.`%s`=auf.id 
-                  WHERE auf.id=%d",
-                $typ,
-                $typ . '_position',
-                $typ,
-                (int) $id
-              )
-            );
-          }
+          $einnahmen = $this->app->DatabaseService->selectValue(
+            sprintf("SELECT SUM(ap.preis*ap.menge*(IF(ap.rabatt > 0, (100-ap.rabatt)/100, 1))) FROM `%s` auf INNER JOIN `%s` ap ON ap.`%s`=auf.id WHERE auf.id = :id%s",
+              $validTyp, $validTypPos, $validTyp, $angebotFilter),
+            ['id' => (int) $id]
+          );
         }
 
 
-        $this->app->DB->Update(
+        $this->app->DatabaseService->update(
           sprintf(
-            "UPDATE `%s` 
-               SET deckungsbeitragcalc=1,
-                   deckungsbeitrag=%f,
-                   erloes_netto=%f,
-                   umsatz_netto=%f
-               WHERE id= %d 
-               LIMIT 1"
-            ,
-            $typ,
-            (float) $deckungsbeitragprozent,
-            (float) $deckungsbeitrag,
-            (float) $einnahmen,
-            (int) $id
-          )
+            "UPDATE `%s` SET deckungsbeitragcalc=1, deckungsbeitrag = :db, erloes_netto = :erloes, umsatz_netto = :umsatz WHERE id = :id LIMIT 1",
+            $validTyp
+          ),
+          ['db' => (float) $deckungsbeitragprozent, 'erloes' => (float) $deckungsbeitrag, 'umsatz' => (float) $einnahmen, 'id' => (int) $id]
         );
       }
     }
@@ -29767,7 +29571,8 @@ $( this ).dialog( "close" );
     if ($id <= 0 || empty($beleg) || $this->app->erp->Firmendaten('schnellanlegen_ohnefreigabe') != '1') {
       return;
     }
-    $doc = $this->app->DB->SelectRow(sprintf('SELECT `projekt`, `status`, `belegnr` FROM `%s` WHERE `id` = %d', $beleg, $id));
+    $validBeleg = $this->app->DatabaseService->validateIdentifier($beleg);
+    $doc = $this->app->DatabaseService->selectRow(sprintf('SELECT `projekt`, `status`, `belegnr` FROM `%s` WHERE `id` = :id', $validBeleg), ['id' => (int) $id]);
     if (
       empty($doc)
       || ($doc['status'] === 'freigegeben' && (string) $doc['belegnr'] !== '0' && (string) $doc['belegnr'] !== '')
@@ -29826,7 +29631,8 @@ $( this ).dialog( "close" );
     if ($id <= 0 || empty($beleg)) {
       return;
     }
-    $doc = $this->app->DB->SelectRow(sprintf('SELECT `projekt`, `status`, `belegnr` FROM `%s` WHERE `id` = %d', $beleg, $id));
+    $validBeleg = $this->app->DatabaseService->validateIdentifier($beleg);
+    $doc = $this->app->DatabaseService->selectRow(sprintf('SELECT `projekt`, `status`, `belegnr` FROM `%s` WHERE `id` = :id', $validBeleg), ['id' => (int) $id]);
     if (
       empty($doc)
       || ($doc['status'] === 'freigegeben' && (string) $doc['belegnr'] !== '0' && (string) $doc['belegnr'] !== '')
@@ -30804,8 +30610,7 @@ $( this ).dialog( "close" );
 
   function CreateAufgabe($adresse, $aufgabe, $kunde = 0)
   {
-    $this->app->DB->Insert("INSERT INTO aufgabe (id,adresse,initiator,aufgabe,status,kunde) 
-          VALUES ('','$adresse','" . $this->app->User->GetAdresse() . "','$aufgabe','offen','$kunde')");
+    $this->app->DatabaseService->insert("INSERT INTO aufgabe (id,adresse,initiator,aufgabe,status,kunde) VALUES ('', :adresse, :initiator, :aufgabe, 'offen', :kunde)", ['adresse' => (string) $adresse, 'initiator' => (string) $this->app->User->GetAdresse(), 'aufgabe' => (string) $aufgabe, 'kunde' => (string) $kunde]);
     return $this->app->DB->GetInsertID();
   }
 
@@ -31007,28 +30812,38 @@ $( this ).dialog( "close" );
     $projekt = $this->GetCreateProjekt($adresse);
     $standardlager = $this->app->DatabaseService->selectValue("SELECT standardlager FROM projekt WHERE id = :id LIMIT 1", [':id' => $projekt]);
 
-    $firma = $this->app->DB->Select("SELECT MAX(f.id) FROM firma f INNER JOIN firmendaten fd ON f.id = fd.firma LIMIT 1");
+    $firma = $this->app->DatabaseService->selectValue("SELECT MAX(f.id) FROM firma f INNER JOIN firmendaten fd ON f.id = fd.firma LIMIT 1");
     if (!$firma)
-      $firma = $this->app->DB->Select("SELECT max(id) FROM firma LIMIT 1");
+      $firma = $this->app->DatabaseService->selectValue("SELECT max(id) FROM firma LIMIT 1");
     if (!$firma)
-      $firma = $this->app->DB->Select("SELECT MAX(id) FROM firma LIMIT 1");
+      $firma = $this->app->DatabaseService->selectValue("SELECT MAX(id) FROM firma LIMIT 1");
 
-    if ($this->StandardZahlungsweise($projekt) == "rechnung") {
-      $this->app->DB->Insert("INSERT INTO auftrag (id,datum,bearbeiter,firma,belegnr,autoversand,zahlungsweise,zahlungszieltage,
+    $zahlungsweise = $this->StandardZahlungsweise($projekt);
+    if ($zahlungsweise == "rechnung") {
+      $this->app->DatabaseService->insert("INSERT INTO auftrag (id,datum,bearbeiter,firma,belegnr,autoversand,zahlungsweise,zahlungszieltage,
           zahlungszieltageskonto,zahlungszielskonto,status,projekt,adresse,ohne_briefpapier)
-            VALUES ('',NOW(),'','','$belegmax',1,'" . $this->StandardZahlungsweise($projekt) . "',
-              '" . $this->ZahlungsZielTage($projekt) . "',
-              '" . $this->ZahlungsZielTageSkonto($projekt) . "',
-              '" . $this->ZahlungsZielSkonto($projekt) . "',
-              'angelegt','$projekt','$adresse','" . $ohnebriefpapier . "')");
+            VALUES ('',NOW(),'','',:belegmax,1,:zahlungsweise,
+              :zahlungszieltage,
+              :zahlungszieltageskonto,
+              :zahlungszielskonto,
+              'angelegt',:projekt,:adresse,:ohnebriefpapier)", [
+        'belegmax' => (string) $belegmax, 'zahlungsweise' => (string) $zahlungsweise,
+        'zahlungszieltage' => (string) $this->ZahlungsZielTage($projekt),
+        'zahlungszieltageskonto' => (string) $this->ZahlungsZielTageSkonto($projekt),
+        'zahlungszielskonto' => (string) $this->ZahlungsZielSkonto($projekt),
+        'projekt' => (string) $projekt, 'adresse' => (string) $adresse, 'ohnebriefpapier' => (string) $ohnebriefpapier
+      ]);
     } else {
-      $this->app->DB->Insert("INSERT INTO auftrag (id,datum,bearbeiter,firma,belegnr,autoversand,zahlungsweise,zahlungszieltage,
+      $this->app->DatabaseService->insert("INSERT INTO auftrag (id,datum,bearbeiter,firma,belegnr,autoversand,zahlungsweise,zahlungszieltage,
           zahlungszieltageskonto,zahlungszielskonto,status,projekt,adresse,ohne_briefpapier)
-            VALUES ('',NOW(),'','','$belegmax',1,'" . $this->StandardZahlungsweise($projekt) . "',
+            VALUES ('',NOW(),'','',:belegmax,1,:zahlungsweise,
               '0',
               '0',
               '0',
-              'angelegt','$projekt','$adresse','" . $ohnebriefpapier . "')");
+              'angelegt',:projekt,:adresse,:ohnebriefpapier)", [
+        'belegmax' => (string) $belegmax, 'zahlungsweise' => (string) $zahlungsweise,
+        'projekt' => (string) $projekt, 'adresse' => (string) $adresse, 'ohnebriefpapier' => (string) $ohnebriefpapier
+      ]);
     }
 
     $id = $this->app->DB->GetInsertID();
@@ -31467,7 +31282,7 @@ $( this ).dialog( "close" );
             $neuerartikel['bestandalternativartikel'] = $this->app->DatabaseService->selectValue("SELECT bestandalternativartikel FROM artikel WHERE id = :id LIMIT 1", ['id' => $artikel]);
             if ($this->app->DatabaseService->selectValue("SELECT unikatbeikopie FROM artikel WHERE id = :id LIMIT 1", ['id' => $artikel]))
               $neuerartikel['unikat'] = 1;
-            $this->app->DB->Insert("INSERT INTO artikel (id) VALUES ('')");
+            $this->app->DatabaseService->insert("INSERT INTO artikel (id) VALUES ('')");
             $neuerartikel['id'] = $this->app->DB->GetInsertID();
             $neuerartikelid = $this->InsertUpdateArtikel($neuerartikel);
             $this->CopyArtikelVariante($neuerartikelid, $artikel, isset($value['options']) && !empty($value['options']) ? $value['options'] : (isset($value['anabregs_text']) ? $value['anabregs_text'] : ''));
@@ -31522,7 +31337,7 @@ $( this ).dialog( "close" );
                         'shop' => $shop,
                         'firma' => (isset($this->app->User) ? $this->app->User->GetFirma() : 1)
                       );
-                      $this->app->DB->Insert("INSERT INTO artikel (id) VALUES ('')");
+                      $this->app->DatabaseService->insert("INSERT INTO artikel (id) VALUES ('')");
                       $artdatas['id'] = $this->app->DB->GetInsertID();
                       $sneueid = $this->InsertUpdateArtikel($artdatas);
                       $sort = 1 + (int) $this->app->DatabaseService->selectValue("SELECT max(sort) FROM stueckliste WHERE stuecklistevonartikel = :id", ['id' => $neuerartikelid]);
@@ -31856,29 +31671,44 @@ $( this ).dialog( "close" );
     $belegmax = "";
 
     $angebotersatz_standard = $this->Firmendaten("angebotersatz_standard");
-    if ($this->StandardZahlungsweise($projekt) == "rechnung") {
-      $this->app->DB->Insert("INSERT INTO angebot (id,datum,gueltigbis,bearbeiter,usereditid,vertrieb,firma,belegnr,autoversand,zahlungsweise,
+    $zahlungsweise = $this->StandardZahlungsweise($projekt);
+    $angebotTage = (int) $this->Firmendaten("angebot_anzahltage") > 0 ? (int) $this->Firmendaten("angebot_anzahltage") : 28;
+    if ($zahlungsweise == "rechnung") {
+      $this->app->DatabaseService->insert("INSERT INTO angebot (id,datum,gueltigbis,bearbeiter,usereditid,vertrieb,firma,belegnr,autoversand,zahlungsweise,
           zahlungszieltage,
           zahlungszieltageskonto,
           zahlungszielskonto,
           status,projekt,adresse,ohne_briefpapier,abweichendebezeichnung )
-            VALUES ('',NOW(), DATE_ADD(curdate(), INTERVAL " . ((int) $this->Firmendaten("angebot_anzahltage") > 0 ? (int) $this->Firmendaten("angebot_anzahltage") : 28) . " DAY),'','$usereditid','','" . $this->app->User->GetFirma() . "','$belegmax',1,'" . $this->StandardZahlungsweise($projekt) . "',
-              '" . $this->ZahlungsZielTage($projekt) . "',
-              '" . $this->ZahlungsZielTageSkonto($projekt) . "',
-              '" . $this->ZahlungsZielSkonto($projekt) . "',
-              'angelegt','$projekt','$adresse','" . $ohnebriefpapier . "','$angebotersatz_standard')");
+            VALUES ('',NOW(), DATE_ADD(curdate(), INTERVAL " . (int) $angebotTage . " DAY),'',:usereditid,'',:firma,:belegmax,1,:zahlungsweise,
+              :zahlungszieltage,
+              :zahlungszieltageskonto,
+              :zahlungszielskonto,
+              'angelegt',:projekt,:adresse,:ohnebriefpapier,:angebotersatz)", [
+        'usereditid' => (string) $usereditid, 'firma' => (string) $this->app->User->GetFirma(),
+        'belegmax' => (string) $belegmax, 'zahlungsweise' => (string) $zahlungsweise,
+        'zahlungszieltage' => (string) $this->ZahlungsZielTage($projekt),
+        'zahlungszieltageskonto' => (string) $this->ZahlungsZielTageSkonto($projekt),
+        'zahlungszielskonto' => (string) $this->ZahlungsZielSkonto($projekt),
+        'projekt' => (string) $projekt, 'adresse' => (string) $adresse,
+        'ohnebriefpapier' => (string) $ohnebriefpapier, 'angebotersatz' => (string) $angebotersatz_standard
+      ]);
 
     } else {
-      $this->app->DB->Insert("INSERT INTO angebot (id,datum,gueltigbis,bearbeiter,usereditid,vertrieb,firma,belegnr,autoversand,zahlungsweise,
+      $this->app->DatabaseService->insert("INSERT INTO angebot (id,datum,gueltigbis,bearbeiter,usereditid,vertrieb,firma,belegnr,autoversand,zahlungsweise,
           zahlungszieltage,
           zahlungszieltageskonto,
           zahlungszielskonto,
           status,projekt,adresse,ohne_briefpapier,abweichendebezeichnung )
-            VALUES ('',NOW(), DATE_ADD(curdate(), INTERVAL " . ((int) $this->Firmendaten("angebot_anzahltage") > 0 ? (int) $this->Firmendaten("angebot_anzahltage") : 28) . " DAY),'','$usereditid','','1','$belegmax',1,'" . $this->StandardZahlungsweise($projekt) . "',
+            VALUES ('',NOW(), DATE_ADD(curdate(), INTERVAL " . (int) $angebotTage . " DAY),'',:usereditid,'','1',:belegmax,1,:zahlungsweise,
               '0',
               '0',
               '0',
-              'angelegt','$projekt','$adresse','" . $ohnebriefpapier . "','$angebotersatz_standard')");
+              'angelegt',:projekt,:adresse,:ohnebriefpapier,:angebotersatz)", [
+        'usereditid' => (string) $usereditid,
+        'belegmax' => (string) $belegmax, 'zahlungsweise' => (string) $zahlungsweise,
+        'projekt' => (string) $projekt, 'adresse' => (string) $adresse,
+        'ohnebriefpapier' => (string) $ohnebriefpapier, 'angebotersatz' => (string) $angebotersatz_standard
+      ]);
     }
 
     $id = $this->app->DB->GetInsertID();
@@ -32140,7 +31970,8 @@ $( this ).dialog( "close" );
     if ($doctypeid <= 0 || !is_numeric($doctypeid) || empty($doctype) || !is_string($doctype) || strpos($doctype, '`') !== false) {
       return;
     }
-    return 1 + (int) $this->app->DB->Select('SELECT ifnull(max(sort),0) FROM `' . $doctype . '` WHERE id = ' . $doctypeid);
+    $validDoctype = $this->app->DatabaseService->validateIdentifier($doctype);
+    return 1 + (int) $this->app->DatabaseService->selectValue(sprintf('SELECT ifnull(max(sort),0) FROM `%s` WHERE id = :id', $validDoctype), ['id' => (int) $doctypeid]);
   }
 
 
@@ -32383,7 +32214,7 @@ $( this ).dialog( "close" );
     }
     $this->CheckFreifelder('retoure', $newid);
     $this->CopyBelegZwischenpositionen('retoure', $id, 'retoure', $newid);
-    $this->app->DB->Update("UPDATE retoure_position SET geliefert=0, abgerechnet=0 WHERE retoure='$newid'");
+    $this->app->DatabaseService->update("UPDATE retoure_position SET geliefert=0, abgerechnet=0 WHERE retoure = :retoure", ['retoure' => (int) $newid]);
 
     $this->SchnellFreigabe("retoure", $newid);
     return $newid;
@@ -32403,7 +32234,7 @@ $( this ).dialog( "close" );
     if ($belegpositionen) {
       $cpos = !empty($belegpositionen) ? count($belegpositionen) : 0;
       for ($i = 0; $i < $cpos; $i++) {
-        $this->app->DB->Insert('INSERT INTO beleg_zwischenpositionen (id) VALUES (NULL)');
+        $this->app->DatabaseService->insert('INSERT INTO beleg_zwischenpositionen (id) VALUES (NULL)');
         $newposid = $this->app->DB->GetInsertID();
         $belegpositionen[$i]['doctypeid'] = $newid;
         $belegpositionen[$i]['doctype'] = $newtyp;
@@ -32417,7 +32248,7 @@ $( this ).dialog( "close" );
   {
 
     // kopiere eintraege aus angebot_position
-    $this->app->DB->Insert("INSERT INTO angebot (id) VALUES ('')");
+    $this->app->DatabaseService->insert("INSERT INTO angebot (id) VALUES ('')");
     $newid = $this->app->DB->GetInsertID();
     $arr = $this->app->DatabaseService->selectRow("SELECT NOW() as datum,projekt,anfrage,bodyzusatz,freitext,adresse,name,abteilung,unterabteilung,strasse,adresszusatz,plz,ort,land,ustid,email,telefon,telefax,betreff,kundennummer,versandart,vertrieb,zahlungsweise,zahlungszieltage,ust_befreit,lieferdatum,DATE_ADD(curdate(),INTERVAL " . ((int) $this->app->erp->Firmendaten("angebot_anzahltage") > 0 ? (int) $this->app->erp->Firmendaten("angebot_anzahltage") : 28) . " DAY) as gueltigbis,'angelegt' as status,rabatt,rabatt1,rabatt2,rabatt3,rabatt4,rabatt5,gruppe,vertriebid,bearbeiterid,provision,provision_summe,typ,aktion,titel,ansprechpartner,anschreiben,keinsteuersatz,
             zahlungszieltageskonto,standardlager,zahlungszielskonto,firma,abweichendelieferadresse,liefername,lieferabteilung,lieferunterabteilung,
@@ -33015,7 +32846,7 @@ $( this ).dialog( "close" );
     $pos = $this->app->DatabaseService->select("SELECT * FROM lieferschein_position WHERE lieferschein = :id ORDER BY sort", ['id' => (int) $id]);
     $cpos = !empty($pos) ? count($pos) : 0;
     for ($i = 0; $i < $cpos; $i++) {
-      $this->app->DB->Insert("INSERT INTO rechnung_position (id) VALUES('')");
+      $this->app->DatabaseService->insert("INSERT INTO rechnung_position (id) VALUES('')");
       $newposid = $this->app->DB->GetInsertID();
       $lieferscheinzurechnung[$pos[$i]['id']] = $newposid;
       if (!empty($pos[$i]['explodiert_parent'])) {
@@ -33062,7 +32893,7 @@ $( this ).dialog( "close" );
       $portopositionen = $this->app->DatabaseService->select("SELECT ap.* FROM auftrag_position ap INNER JOIN artikel art ON ap.artikel = art.id AND art.porto = 1 AND ap.auftrag = :auftragid ORDER BY ap.sort", ['auftragid' => (int) $arr[0]['auftragid']]);
       if ($portopositionen) {
         foreach ($portopositionen as $portopos) {
-          $this->app->DB->Insert("INSERT INTO rechnung_position (id) VALUES('')");
+          $this->app->DatabaseService->insert("INSERT INTO rechnung_position (id) VALUES('')");
           $newposid = $this->app->DB->GetInsertID();
           $sort = 1 + (int) $this->app->DatabaseService->selectValue("SELECT IFNULL(MAX(sort),0) FROM rechnung_position WHERE rechnung = :newid", ['newid' => (int) $newid]);
           $portopos['sort'] = $sort;
@@ -33197,7 +33028,7 @@ $( this ).dialog( "close" );
 
     $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM anfrage WHERE id = :id LIMIT 1", ['id' => (int) $id]);
     //angebot aus offene Angebote entfernen
-    $this->app->DB->Insert("INSERT INTO angebot (id) VALUES ('')");
+    $this->app->DatabaseService->insert("INSERT INTO angebot (id) VALUES ('')");
     $newid = $this->app->DB->GetInsertID();
 
     if ($this->Firmendaten('dateienweiterfuehren')) {
@@ -33393,7 +33224,7 @@ $( this ).dialog( "close" );
     $cpos = !empty($pos) ? count($pos) : 0;
     $auftragzurechnung = [];
     for ($i = 0; $i < $cpos; $i++) {
-      $this->app->DB->Insert("INSERT INTO rechnung_position (id) VALUES('')");
+      $this->app->DatabaseService->insert("INSERT INTO rechnung_position (id) VALUES('')");
       $newposid = $this->app->DB->GetInsertID();
       $auftragzurechnung[$pos[$i]['id']] = $newposid;
       $pos[$i]['rechnung'] = $newid;
@@ -33529,7 +33360,7 @@ $( this ).dialog( "close" );
       $this->app->DatabaseService->execute("UPDATE anfrage SET status='beauftrag', schreibschutz='0' WHERE id = :id AND status != 'abgeschlossen' AND status != 'abgerechnet'", ['id' => (int) $anfrageid]);
 
     //angebot aus offene Angebote entfernen
-    $this->app->DB->Insert("INSERT INTO auftrag (id) VALUES ('')");
+    $this->app->DatabaseService->insert("INSERT INTO auftrag (id) VALUES ('')");
     $newid = $this->app->DB->GetInsertID();
 
     if ($this->Firmendaten('dateienweiterfuehren')) {
@@ -34046,14 +33877,16 @@ $( this ).dialog( "close" );
 
             if ($check > 0) {
               // wenn schon etwas reserviert ist
-              $this->app->DB->Update("UPDATE lager_reserviert SET menge = menge + '$zu_reservieren' WHERE
-                      artikel='$artikel'
-                      AND objekt='auftrag' AND parameter='$id'");
+              $this->app->DatabaseService->update("UPDATE lager_reserviert SET menge = menge + :zu_reservieren WHERE artikel = :artikel AND objekt='auftrag' AND parameter = :parameter", ['zu_reservieren' => (string) $zu_reservieren, 'artikel' => (int) $artikel, 'parameter' => (int) $id]);
             } else {
-              $this->app->DB->Insert("INSERT INTO lager_reserviert
+              $this->app->DatabaseService->insert("INSERT INTO lager_reserviert
                       (id,adresse,artikel,menge,grund,projekt,firma,bearbeiter,datum,objekt,parameter,posid)
-                      VALUES('','$adresse','$artikel','$zu_reservieren','Reservierung f&uuml;r Auftrag $belegnr','$projekt',
-                        '" . $this->app->User->GetFirma() . "','" . $this->app->User->GetName() . "','9999-99-99','auftrag','$id','" . $artikelarr[$k]['id'] . "')");
+                      VALUES('',:adresse,:artikel,:zu_reservieren,:grund,:projekt,:firma,:bearbeiter,'9999-99-99','auftrag',:parameter,:posid)", [
+                'adresse' => (string) $adresse, 'artikel' => (int) $artikel, 'zu_reservieren' => (string) $zu_reservieren,
+                'grund' => 'Reservierung f&uuml;r Auftrag ' . $belegnr, 'projekt' => (string) $projekt,
+                'firma' => (string) $this->app->User->GetFirma(), 'bearbeiter' => (string) $this->app->User->GetName(),
+                'parameter' => (int) $id, 'posid' => (int) $artikelarr[$k]['id']
+              ]);
             }
 
           }
@@ -34066,7 +33899,8 @@ $( this ).dialog( "close" );
   {
     // wenn im beleg 3 oder 4 dann zaehlt die einstellung
     if ($doctypeid > 0 && in_array($doctyp, ['rechnung', 'angebot', 'auftrag', 'gutschrift', 'bestellung'])) {
-      $anzeigesteuer = $this->app->DB->Select("SELECT anzeigesteuer FROM `$doctyp` WHERE id='$doctypeid' LIMIT 1");
+      $validDoctyp = $this->app->DatabaseService->validateIdentifier($doctyp);
+      $anzeigesteuer = $this->app->DatabaseService->selectValue(sprintf("SELECT anzeigesteuer FROM `%s` WHERE id = :id LIMIT 1", $validDoctyp), ['id' => (int) $doctypeid]);
       if ($anzeigesteuer == 3) {
         return false;
       }
@@ -34075,7 +33909,7 @@ $( this ).dialog( "close" );
       }
     }
     if ($adresse) {
-      $bruttonetto = $this->app->DB->Select("SELECT anzeigesteuerbelege FROM adresse WHERE id = '$adresse' LIMIT 1");
+      $bruttonetto = $this->app->DatabaseService->selectValue("SELECT anzeigesteuerbelege FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $adresse]);
       if ($bruttonetto == 1) {
         return false;
       }
@@ -34084,7 +33918,7 @@ $( this ).dialog( "close" );
       }
     }
     if ($projekt) {
-      $bruttonetto = $this->app->DB->Select("SELECT anzeigesteuerbelege FROM projekt WHERE id = '$projekt' LIMIT 1");
+      $bruttonetto = $this->app->DatabaseService->selectValue("SELECT anzeigesteuerbelege FROM projekt WHERE id = :id LIMIT 1", ['id' => (int) $projekt]);
       if ($bruttonetto == 1) {
         return false;
       }
@@ -34102,7 +33936,8 @@ $( this ).dialog( "close" );
   {
     // wenn im beleg 3 oder 4 dann zaehlt die einstellung
     if ($doctypeid > 0 && ($doctyp === 'rechnung' || $doctyp === 'angebot' || $doctyp === 'auftrag' || $doctyp === 'gutschrift' || $doctyp === 'bestellung')) {
-      $anzeigesteuer = $this->app->DB->Select("SELECT anzeigesteuer FROM $doctyp WHERE id='$doctypeid' LIMIT 1");
+      $validDoctyp = $this->app->DatabaseService->validateIdentifier($doctyp);
+      $anzeigesteuer = $this->app->DatabaseService->selectValue(sprintf("SELECT anzeigesteuer FROM `%s` WHERE id = :id LIMIT 1", $validDoctyp), ['id' => (int) $doctypeid]);
       if ($anzeigesteuer == 3) {
         return true;
       }
@@ -34112,7 +33947,7 @@ $( this ).dialog( "close" );
     }
 
     if ($adresse) {
-      $bruttonetto = $this->app->DB->Select("SELECT anzeigesteuerbelege FROM adresse WHERE id = '$adresse' LIMIT 1");
+      $bruttonetto = $this->app->DatabaseService->selectValue("SELECT anzeigesteuerbelege FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $adresse]);
       if ($bruttonetto == 1) {
         return 1;
       }
@@ -34207,18 +34042,25 @@ $( this ).dialog( "close" );
 
   function AuftragZahlungaufteilen($auftrag_org, $auftrag_new)
   {
-    $gesamtsumme_new = $this->app->DB->Select("SELECT gesamtsumme FROM auftrag WHERE id='$auftrag_new' LIMIT 1");
-    $adresse_new = $this->app->DB->Select("SELECT adresse FROM auftrag WHERE id='$auftrag_new' LIMIT 1");
+    $auftragNewRow = $this->app->DatabaseService->selectRow("SELECT gesamtsumme, adresse FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int) $auftrag_new]);
+    $gesamtsumme_new = $auftragNewRow['gesamtsumme'];
+    $adresse_new = $auftragNewRow['adresse'];
 
     //pruefe ob es auf auftrag einen Zahlungseingang gibt
-    $zahlungen = $this->app->DB->SelectArr("SELECT * FROM kontoauszuege_zahlungseingang WHERE objekt='auftrag' AND parameter='$auftrag_org'");
+    $zahlungen = $this->app->DatabaseService->select("SELECT * FROM kontoauszuege_zahlungseingang WHERE objekt='auftrag' AND parameter = :parameter", ['parameter' => (string) $auftrag_org]);
     for ($i = 0; $i < (!empty($zahlungen) ? count($zahlungen) : 0); $i++) {
       if ($zahlungen[$i]['betrag'] > $gesamtsumme_new) {
         $betrag_new = $zahlungen[$i]['betrag'] - $gesamtsumme_new;
-        $this->app->DB->Update("UPDATE kontoauszuege_zahlungseingang SET betrag='$betrag_new' WHERE id='" . $zahlungen[$i]['id'] . "' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE kontoauszuege_zahlungseingang SET betrag = :betrag WHERE id = :id LIMIT 1", ['betrag' => (string) $betrag_new, 'id' => (int) $zahlungen[$i]['id']]);
 
-        $this->app->DB->Insert("INSERT INTO kontoauszuege_zahlungseingang (id,adresse,bearbeiter,betrag,datum,objekt,parameter,kontoauszuege,firma,abgeschlossen,parameter2)
-              VALUES ('','" . $adresse_new . "','" . $zahlungen[$i]['bearbeiter'] . "','" . $gesamtsumme_new . "','" . $zahlungen[$i]['datum'] . "','auftrag','" . $auftrag_new . "','" . $zahlungen[$i]['kontoauszuege'] . "','" . $zahlungen[$i]['firma'] . "','" . $zahlungen[$i]['abgeschlossen'] . "','" . $zahlungen[$i]['parameter2'] . "')");
+        $this->app->DatabaseService->insert("INSERT INTO kontoauszuege_zahlungseingang (id,adresse,bearbeiter,betrag,datum,objekt,parameter,kontoauszuege,firma,abgeschlossen,parameter2)
+              VALUES ('',:adresse,:bearbeiter,:betrag,:datum,'auftrag',:parameter,:kontoauszuege,:firma,:abgeschlossen,:parameter2)", [
+          'adresse' => (string) $adresse_new, 'bearbeiter' => (string) $zahlungen[$i]['bearbeiter'],
+          'betrag' => (string) $gesamtsumme_new, 'datum' => (string) $zahlungen[$i]['datum'],
+          'parameter' => (string) $auftrag_new, 'kontoauszuege' => (string) $zahlungen[$i]['kontoauszuege'],
+          'firma' => (string) $zahlungen[$i]['firma'], 'abgeschlossen' => (string) $zahlungen[$i]['abgeschlossen'],
+          'parameter2' => (string) $zahlungen[$i]['parameter2']
+        ]);
         break;
       }
     }
@@ -34652,7 +34494,8 @@ $( this ).dialog( "close" );
 
     //$this->LoadSteuersaetze($id,$art); //03.01.2019 Bruno entfernt, da Shopaufträge umsgestellt werden
     $this->LoadKurs($id, $art); //03.01.2019 Bruno entfernt
-    $belegarr = $this->app->DB->SelectRow("SELECT * FROM $art WHERE id='$id' LIMIT 1");
+    $validArtBeleg = $this->app->DatabaseService->validateIdentifier($art);
+    $belegarr = $this->app->DatabaseService->selectRow(sprintf("SELECT * FROM `%s` WHERE id = :id LIMIT 1", $validArtBeleg), ['id' => (int) $id]);
     if (empty($belegarr)) {
       return;
     }
@@ -34666,21 +34509,21 @@ $( this ).dialog( "close" );
     if ($art === 'auftrag' && $belegarr['lieferantkdrnummer'] == '') {
       if ($belegarr['lieferantenauftrag'] == 1) {
         if ($belegarr['lieferantenauftrag'] != 1 || empty($belegarr['lieferantkdrnummer'])) {
-          $this->app->DB->Update("
-              UPDATE auftrag a 
-              INNER JOIN adresse adr ON a.lieferant = adr.id 
+          $this->app->DatabaseService->update("
+              UPDATE auftrag a
+              INNER JOIN adresse adr ON a.lieferant = adr.id
               SET a.lieferantkdrnummer = if(a.lieferantennummer <> '',a.lieferantennummer,adr.lieferantennummer)
-              WHERE a.lieferantkdrnummer = '' AND a.lieferantenauftrag = 1 AND a.id = '$id'
-            ");
+              WHERE a.lieferantkdrnummer = '' AND a.lieferantenauftrag = 1 AND a.id = :id
+            ", ['id' => (int) $id]);
         }
       } else {
         if ($belegarr['lieferantenauftrag'] != 0 || empty($belegarr['lieferantkdrnummer'])) {
-          $this->app->DB->Update("
-              UPDATE auftrag a 
-              INNER JOIN adresse adr ON a.adresse = adr.id 
+          $this->app->DatabaseService->update("
+              UPDATE auftrag a
+              INNER JOIN adresse adr ON a.adresse = adr.id
               SET a.lieferantkdrnummer = if(a.kundennummer <> '',a.kundennummer, adr.kundennummer)
-              WHERE a.lieferantkdrnummer = '' AND a.lieferantenauftrag = 0 AND a.id = '$id'
-            ");
+              WHERE a.lieferantkdrnummer = '' AND a.lieferantenauftrag = 0 AND a.id = :id
+            ", ['id' => (int) $id]);
         }
       }
     }
@@ -34692,7 +34535,8 @@ $( this ).dialog( "close" );
     //waehrungen
 
     if ($waehrung != '') {
-      $this->app->DB->Update("UPDATE " . $art . "_position SET waehrung='$waehrung' WHERE $art='" . $id . "' AND waehrung=''");
+      $validArt = $this->app->DatabaseService->validateIdentifier($art);
+      $this->app->DatabaseService->update(sprintf("UPDATE `%s_position` SET waehrung = :waehrung WHERE `%s` = :id AND waehrung=''", $validArt, $validArt), ['waehrung' => (string) $waehrung, 'id' => (int) $id]);
     }
 
     if ($art === 'auftrag') {
@@ -34701,7 +34545,7 @@ $( this ).dialog( "close" );
       $rabatteportofestschreiben = $belegarr['rabatteportofestschreiben'];
       $liefername = $belegarr['liefername'];
       if ($liefername == '' && $abweichendelieferadresse == '1') {
-        $this->app->DB->Update("UPDATE auftrag SET abweichendelieferadresse=0 WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE auftrag SET abweichendelieferadresse=0 WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       }
     }
 
@@ -34709,19 +34553,17 @@ $( this ).dialog( "close" );
 
     $this->CheckFreifelder($art, $id);
 
-    $artikelarr = $this->app->DB->SelectArr(
-      sprintf(
-        'SELECT pos.*, 
+    $validArtNeu = $this->app->DatabaseService->validateIdentifier($art);
+    $validArtPosNeu = $this->app->DatabaseService->validateIdentifier($art . '_position');
+    $artikelarr = $this->app->DatabaseService->select(
+      sprintf('SELECT pos.*,
                 art.keinrabatterlaubt as art_keinrabatterlaubt, art.porto AS art_porto, art.rabatt AS art_rabatt,
-                art.rabatt_prozent AS art_rabatt_prozent 
-              FROM `%s` AS pos 
-              LEFT JOIN artikel AS art ON pos.artikel = art.id 
-              WHERE pos.`%s`= %d 
-              ORDER BY pos.sort',
-        $art . '_position',
-        $art,
-        (int) $id
-      )
+                art.rabatt_prozent AS art_rabatt_prozent
+              FROM `%s` AS pos
+              LEFT JOIN artikel AS art ON pos.artikel = art.id
+              WHERE pos.`%s` = :id
+              ORDER BY pos.sort', $validArtPosNeu, $validArtNeu),
+      ['id' => (int) $id]
     );
     $adresse = $belegarr['adresse'];
     $cartikelarr = $artikelarr ? count($artikelarr) : 0;
@@ -34735,7 +34577,7 @@ $( this ).dialog( "close" );
       $rabatt4 = 0;
       $rabatt5 = 0;
       if ($art === 'angebot' || $art === 'auftrag' || $art === 'rechnung' || $art === 'gutschrift' || $art === 'proformarechnung') {
-        $rabattarr = $this->app->DB->SelectRow("SELECT rabatt, rabatt1, rabatt2, rabatt3, rabatt4, rabatt5, realrabatt FROM $art WHERE id='$id' LIMIT 1");
+        $rabattarr = $this->app->DatabaseService->selectRow(sprintf("SELECT rabatt, rabatt1, rabatt2, rabatt3, rabatt4, rabatt5, realrabatt FROM `%s` WHERE id = :id LIMIT 1", $validArtNeu), ['id' => (int) $id]);
         if (!empty($rabattarr)) {
           $grundrabatt = $rabattarr['rabatt'];
           $rabatt1 = $rabattarr['rabatt1'];
@@ -34746,7 +34588,7 @@ $( this ).dialog( "close" );
         }
 
         $gruppe = $belegarr['gruppe'];
-        $preisgruppen = $this->app->DB->SelectRow("SELECT * FROM gruppen WHERE id = '$gruppe' AND art = 'preisgruppe' LIMIT 1");
+        $preisgruppen = $this->app->DatabaseService->selectRow("SELECT * FROM gruppen WHERE id = :id AND art = 'preisgruppe' LIMIT 1", ['id' => (int) $gruppe]);
         if (!empty($preisgruppen)) {
           $grundrabatt = $preisgruppen['grundrabatt'];
           $rabatt1 = $preisgruppen['rabatt1'];
@@ -34894,10 +34736,11 @@ $( this ).dialog( "close" );
         }
         // wenn kein rabatt fuer die Position erlaubt ist
 
+        $validArtPos = $this->app->DatabaseService->validateIdentifier($art . '_position');
         if ($this->Firmendaten("modul_verband") == "1" && $this->ModulVorhanden('verband')) //CLAUDI
-          $this->app->DB->Update("UPDATE " . $art . "_position SET rabatt='$rabatt' WHERE id='" . $artikelarr[$i]['id'] . "' LIMIT 1");
+          $this->app->DatabaseService->update(sprintf("UPDATE `%s` SET rabatt = :rabatt WHERE id = :id LIMIT 1", $validArtPos), ['rabatt' => (string) $rabatt, 'id' => (int) $artikelarr[$i]['id']]);
         elseif ($rabatt != 0) {
-          $this->app->DB->Update("UPDATE " . $art . "_position SET rabatt='$rabatt' WHERE id='" . $artikelarr[$i]['id'] . "' AND rabatt=0 LIMIT 1");
+          $this->app->DatabaseService->update(sprintf("UPDATE `%s` SET rabatt = :rabatt WHERE id = :id AND rabatt=0 LIMIT 1", $validArtPos), ['rabatt' => (string) $rabatt, 'id' => (int) $artikelarr[$i]['id']]);
         }
       }
     }
@@ -34911,23 +34754,19 @@ $( this ).dialog( "close" );
         $check_rabatt_artikel_prozente = $artikelarr[$i]['art_rabatt_prozent'];
 
         if ($check_rabatt_artikel_prozente <> 0) {
-          $this->app->DB->Update("UPDATE " . $art . "_position SET menge='1', preis='" . ((($betrag / 100) * $check_rabatt_artikel_prozente) * -1) . "' WHERE id='" . $artikelarr[$i]['id'] . "' LIMIT 1");
+          $rabattPreis = (string) ((($betrag / 100) * $check_rabatt_artikel_prozente) * -1);
+          $validArtPos2 = $this->app->DatabaseService->validateIdentifier($art . '_position');
+          $this->app->DatabaseService->update(sprintf("UPDATE `%s` SET menge='1', preis = :preis WHERE id = :id LIMIT 1", $validArtPos2), ['preis' => $rabattPreis, 'id' => (int) $artikelarr[$i]['id']]);
         }
       }
     }
 
     // porto berechnen
-    $portoRow = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT tp.*
-            FROM `%s` AS tp 
-            INNER JOIN artikel AS a ON a.id=tp.artikel
-            WHERE a.porto=1 AND a.geloescht!=1 AND tp.`%s`= %d 
-            LIMIT 1',
-        $art . '_position',
-        $art,
-        (int) $id
-      )
+    $validArtPorto = $this->app->DatabaseService->validateIdentifier($art . '_position');
+    $validArtKey = $this->app->DatabaseService->validateIdentifier($art);
+    $portoRow = $this->app->DatabaseService->selectRow(
+      sprintf('SELECT tp.* FROM `%s` AS tp INNER JOIN artikel AS a ON a.id=tp.artikel WHERE a.porto=1 AND a.geloescht!=1 AND tp.`%s` = :id LIMIT 1', $validArtPorto, $validArtKey),
+      ['id' => (int) $id]
     );
     $portoid = !empty($portoRow['id']) ? $portoRow['id'] : 0;
     $portoartikel = !empty($portoRow['artikel']) ? $portoRow['artikel'] : 0;
@@ -34962,13 +34801,13 @@ $( this ).dialog( "close" );
       $land = $orderRow['land'];
       if (($tatsaechlicheslieferdatum === '0000-00-00' || $tatsaechlicheslieferdatum == '') && $lieferdatum !== '0000-00-00') {
         while (
-          $this->app->DB->Select("SELECT id FROM auftrag WHERE weekday(DATE_SUB(lieferdatum, INTERVAL $differenztage DAY)) >= 5 AND id='$id' LIMIT 1") ||
-          $this->app->DB->Select("SELECT id FROM arbeitsfreietage WHERE datum = DATE_SUB((SELECT lieferdatum FROM auftrag WHERE id = '$id' LIMIT 1), INTERVAL $differenztage DAY) AND (projekt='$projekt' OR projekt=0) AND (land='$land' OR land='') ORDER by land='$land' LIMIT 1")
+          $this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE weekday(DATE_SUB(lieferdatum, INTERVAL " . (int) $differenztage . " DAY)) >= 5 AND id = :id LIMIT 1", ['id' => (int) $id]) ||
+          $this->app->DatabaseService->selectValue("SELECT id FROM arbeitsfreietage WHERE datum = DATE_SUB((SELECT lieferdatum FROM auftrag WHERE id = :id LIMIT 1), INTERVAL " . (int) $differenztage . " DAY) AND (projekt = :projekt OR projekt=0) AND (land = :land OR land='') ORDER by land = :land2 LIMIT 1", ['id' => (int) $id, 'projekt' => (string) $projekt, 'land' => (string) $land, 'land2' => (string) $land])
         ) {
           $differenztage++;
         }
 
-        $this->app->DB->Update("UPDATE auftrag SET tatsaechlicheslieferdatum=DATE_SUB(lieferdatum, INTERVAL $differenztage DAY) WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE auftrag SET tatsaechlicheslieferdatum=DATE_SUB(lieferdatum, INTERVAL " . (int) $differenztage . " DAY) WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       }
 
       $this->EventAPIAdd("EventAuftragEdit", $id, "auftrag", "edit");
@@ -35507,9 +35346,9 @@ $( this ).dialog( "close" );
         if ($gi < (!empty($gruppenarray) ? count($gruppenarray) : 0) - 1)
           $sql_erweiterung .= " OR ";
       }
-      $checkgruppeportofrei = $this->app->DB->Select("SELECT id FROM gruppen WHERE ($sql_erweiterung) AND portofrei_aktiv='1' ORDER BY portofreiab LIMIT 1");
+      $checkgruppeportofrei = $this->app->DatabaseService->selectValue("SELECT id FROM gruppen WHERE ($sql_erweiterung) AND portofrei_aktiv='1' ORDER BY portofreiab LIMIT 1");
       if ($checkgruppeportofrei > 0) {
-        $checkgruppeportofreiab = $this->app->DB->Select("SELECT portofreiab FROM gruppen WHERE id='" . $checkgruppeportofrei . "' LIMIT 1");
+        $checkgruppeportofreiab = $this->app->DatabaseService->selectValue("SELECT portofreiab FROM gruppen WHERE id = :id LIMIT 1", ['id' => (int) $checkgruppeportofrei]);
         if ($gesamtsumme >= $checkgruppeportofreiab) {
           $realpreis = true;
           return 0;
@@ -36715,7 +36554,7 @@ $( this ).dialog( "close" );
 
   function GutschriftZwischensummeSteuersaetzeBrutto2($id, $art = "ermaessigt")
   {
-    $projekt = $this->app->DB->Select("SELECT projekt FROM gutschrift WHERE id = '$id' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM gutschrift WHERE id = :id LIMIT 1", ['id' => (int) $id]);
     $positionenkaufmaenischrunden = $this->app->erp->Projektdaten($projekt, "preisberechnung");
     $viernachkommastellen_belege = $this->app->erp->Firmendaten('viernachkommastellen_belege');
 
@@ -36723,9 +36562,9 @@ $( this ).dialog( "close" );
     $sqlnach = '';
 
     if ($art != "ermaessigt")
-      $summe = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM gutschrift_position WHERE (umsatzsteuer='normal' OR umsatzsteuer='') AND gutschrift='$id'");
+      $summe = $this->app->DatabaseService->selectValue("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM gutschrift_position WHERE (umsatzsteuer='normal' OR umsatzsteuer='') AND gutschrift = :id", ['id' => (int) $id]);
     else
-      $summe = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM gutschrift_position WHERE umsatzsteuer='$art' AND gutschrift='$id'");
+      $summe = $this->app->DatabaseService->selectValue("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM gutschrift_position WHERE umsatzsteuer = :art AND gutschrift = :id", ['art' => (string) $art, 'id' => (int) $id]);
     if ($art == 'befreit')
       return $summe;
     if ($art == "ermaessigt")
@@ -37009,40 +36848,23 @@ $( this ).dialog( "close" );
     // Anführungszeichen in Unterstriche wandeln
     $name = str_replace(['\\\'', '\\"', '\'', '"'], '_', $name);
 
+    $dateiParams = [
+      'titel' => (string) $titel, 'beschreibung' => (string) $beschreibung,
+      'nummer' => (string) $nummer, 'geschuetzt' => (string) $geschuetzt
+    ];
+    $dateiSql = "INSERT INTO datei (id, titel, beschreibung, nummer, firma, geschuetzt) VALUES ('', :titel, :beschreibung, :nummer, :firma, :geschuetzt)";
     if (!$without_log) {
-      $this->app->DB->Insert("INSERT INTO datei (
-                id,
-                titel,
-                beschreibung,
-                nummer,
-                firma,
-                geschuetzt
-            ) VALUES (
-                '',
-                '" . $this->app->DB->real_escape_string($titel) . "',
-                '" . $this->app->DB->real_escape_string($beschreibung) . "',
-                '" . $this->app->DB->real_escape_string($nummer) . "',
-                '" . $this->app->User->GetFirma() . "',
-                '" . $geschuetzt . "'
-            )"
-      );
+      $dateiParams['firma'] = (string) $this->app->User->GetFirma();
+      $this->app->DatabaseService->insert($dateiSql, $dateiParams);
     } else {
-      $this->app->DB->InsertWithoutLog("INSERT INTO datei (
-                id,
-                titel,
-                beschreibung,
-                nummer,
-                firma,
-                geschuetzt
-            ) VALUES (
-                '',
+      // InsertWithoutLog doesn't support prepared statements, keep real_escape_string
+      $this->app->DB->InsertWithoutLog("INSERT INTO datei (id, titel, beschreibung, nummer, firma, geschuetzt) VALUES ('',
                 '" . $this->app->DB->real_escape_string($titel) . "',
                 '" . $this->app->DB->real_escape_string($beschreibung) . "',
                 '" . $this->app->DB->real_escape_string($nummer) . "',
                 1,
-                '" . $geschuetzt . "'
-            )
-          ");
+                '" . $this->app->DB->real_escape_string((string) $geschuetzt) . "'
+            )");
     }
 
     $fileid = $this->app->DB->GetInsertID();
@@ -39147,7 +38969,7 @@ $( this ).dialog( "close" );
 
   function ImportCreateArtikel($data, $utf8 = true)
   {
-    $this->app->DB->Insert("INSERT INTO artikel (id) VALUES ('')");
+    $this->app->DatabaseService->insert("INSERT INTO artikel (id) VALUES ('')");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39166,7 +38988,7 @@ $( this ).dialog( "close" );
   // nicht mehr verwenden
   function ImportCreateEinkaufspreis($data)
   {
-    $this->app->DB->Insert("INSERT INTO einkaufspreise (id) VALUES ('')");
+    $this->app->DatabaseService->insert("INSERT INTO einkaufspreise (id) VALUES ('')");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39185,7 +39007,7 @@ $( this ).dialog( "close" );
   // nicht mehr verwenden
   function ImportCreateVerkaufspreis($data)
   {
-    $this->app->DB->Insert("INSERT INTO verkaufspreise (id) VALUES ('')");
+    $this->app->DatabaseService->insert("INSERT INTO verkaufspreise (id) VALUES ('')");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39202,7 +39024,7 @@ $( this ).dialog( "close" );
 
   function ImportCreateUser($data)
   {
-    $this->app->DB->Insert("INSERT INTO user (id) VALUES ('')");
+    $this->app->DatabaseService->insert("INSERT INTO user (id) VALUES ('')");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39220,7 +39042,7 @@ $( this ).dialog( "close" );
 
   function ImportCreateBestellung($data)
   {
-    $this->app->DB->Insert("INSERT INTO bestellung (id,angelegtam) VALUES ('',NOW())");
+    $this->app->DatabaseService->insert("INSERT INTO bestellung (id,angelegtam) VALUES ('',NOW())");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39237,7 +39059,7 @@ $( this ).dialog( "close" );
 
   function ImportCreateRechnung($data)
   {
-    $this->app->DB->Insert("INSERT INTO rechnung (id,angelegtam) VALUES ('',NOW())");
+    $this->app->DatabaseService->insert("INSERT INTO rechnung (id,angelegtam) VALUES ('',NOW())");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39254,7 +39076,7 @@ $( this ).dialog( "close" );
 
   function ImportCreateAngebot($data)
   {
-    $this->app->DB->Insert("INSERT INTO angebot (id,angelegtam) VALUES ('',NOW())");
+    $this->app->DatabaseService->insert("INSERT INTO angebot (id,angelegtam) VALUES ('',NOW())");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39271,7 +39093,7 @@ $( this ).dialog( "close" );
 
   function ImportCreateAuftrag($data)
   {
-    $this->app->DB->Insert("INSERT INTO auftrag (id,angelegtam) VALUES ('',NOW())");
+    $this->app->DatabaseService->insert("INSERT INTO auftrag (id,angelegtam) VALUES ('',NOW())");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39288,7 +39110,7 @@ $( this ).dialog( "close" );
 
   function ImportCreateLieferschein($data)
   {
-    $this->app->DB->Insert("INSERT INTO lieferschein (id,angelegtam) VALUES ('',NOW())");
+    $this->app->DatabaseService->insert("INSERT INTO lieferschein (id,angelegtam) VALUES ('',NOW())");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39305,7 +39127,7 @@ $( this ).dialog( "close" );
 
   function ImportCreateGutschrift($data)
   {
-    $this->app->DB->Insert("INSERT INTO gutschrift (id,angelegtam) VALUES ('',NOW())");
+    $this->app->DatabaseService->insert("INSERT INTO gutschrift (id,angelegtam) VALUES ('',NOW())");
     $id = $this->app->DB->GetInsertID();
 
     if ($data['firma'] == "")
@@ -39338,7 +39160,7 @@ $( this ).dialog( "close" );
   function FirmenDatenStandard()
   {
 
-    if ($this->app->DB->Select("SELECT COUNT(id) FROM firmendaten") > 0)
+    if ($this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM firmendaten") > 0)
       return;
     $this->app->DB->Insert("INSERT INTO `firmendaten` (`id`,`firma`, `logo`, `briefpapier`, `signatur`, `datum`, `steuersatz_normal`, `steuersatz_zwischen`, `steuersatz_ermaessigt`, `steuersatz_starkermaessigt`, `steuersatz_dienstleistung`, `deviceserials`, `lizenz`, `schluessel`, `mlm_mindestbetrag`, `mlm_letzter_tag`, `mlm_erster_tag`, `mlm_letzte_berechnung`, `mlm_01`, `mlm_02`, `mlm_03`, `mlm_04`, `mlm_05`, `mlm_06`, `mlm_07`, `mlm_08`, `mlm_09`, `mlm_10`, `mlm_11`, `mlm_12`, `mlm_13`, `mlm_14`, `mlm_15`, `zahlung_rechnung_sofort_de`, `zahlung_rechnung_de`, `zahlung_vorkasse_de`, `zahlung_lastschrift_de`, `zahlung_nachnahme_de`, `zahlung_bar_de`, `zahlung_paypal_de`, `zahlung_amazon_de`, `zahlung_kreditkarte_de`, `zahlung_ratenzahlung_de`, `briefpapier2`, `freifeld1`, `freifeld2`, `freifeld3`, `freifeld4`, `freifeld5`, `freifeld6`, `firmenfarbehell`, `firmenfarbedunkel`, `firmenfarbeganzdunkel`, `navigationfarbe`, `navigationfarbeschrift`, `unternavigationfarbe`, `unternavigationfarbeschrift`, `firmenlogo`, `rechnung_header`, `lieferschein_header`, `angebot_header`, `auftrag_header`, `gutschrift_header`, `bestellung_header`, `arbeitsnachweis_header`, `provisionsgutschrift_header`, `rechnung_footer`, `lieferschein_footer`, `angebot_footer`, `auftrag_footer`, `gutschrift_footer`, `bestellung_footer`, `arbeitsnachweis_footer`, `provisionsgutschrift_footer`, `eu_lieferung_vermerk`, `export_lieferung_vermerk`, `zahlung_amazon_bestellung_de`, `zahlung_billsafe_de`, `zahlung_sofortueberweisung_de`, `zahlung_secupay_de`, `adressefreifeld1`, `adressefreifeld2`, `adressefreifeld3`, `adressefreifeld4`, `adressefreifeld5`, `adressefreifeld6`, `adressefreifeld7`, `adressefreifeld8`, `adressefreifeld9`, `adressefreifeld10`, `zahlung_eckarte_de`, `benutzername`, `passwort`, `host`, `port`,`mailssl`,`devicekey`,`mailanstellesmtp`,`layout_iconbar`,`name`,`firmenfarbe`,`betreffszeile`,`dokumententext`,`bcc1`,`bcc2`) VALUES
           (1, 1, '', '', 'LS0NCk11c3RlcmZpcm1hIEdtYkgNCk11c3RlcndlZyA1DQpELTEyMzQ1IE11c3RlcnN0YWR0DQoNClRlbCArNDkgMTIzIDEyIDM0IDU2IDcNCkZheCArNDkgMTIzIDEyIDM0IDU2IDc4DQoNCk5hbWUgZGVyIEdlc2VsbHNjaGFmdDogTXVzdGVyZmlybWEgR21iSA0KU2l0eiBkZXIgR2VzZWxsc2NoYWZ0OiBNdXN0ZXJzdGFkdA0KDQpIYW5kZWxzcmVnaXN0ZXI6IE11c3RlcnN0YWR0LCBIUkIgMTIzNDUNCkdlc2Now6RmdHNmw7xocnVuZzogTWF4IE11c3Rlcm1hbg0KVVN0LUlkTnIuOiBERTEyMzQ1Njc4OQ0KDQpBR0I6IGh0dHA6Ly93d3cubXVzdGVyZmlybWEuZGUvDQo=', '0000-00-00 00:00:00', 19.00, 7.00, 7.00, 7.00, 7.00, '', '', '', 50.00, NULL, NULL, NULL, 15.00, 20.00, 28.00, 32.00, 36.00, 40.00, 44.00, 44.00, 44.00, 44.00, 50.00, 54.00, 45.00, 48.00, 60.00, 'Rechnung zahlbar sofort.', 'Rechnung zahlbar innerhalb {ZAHLUNGSZIELTAGE} Tage bis zum {ZAHLUNGBISDATUM}.', '', '', '', '', '', '', '', '', NULL, '', '', '', '', '', '', '', '', '', '#e0e0e0', '#686868', '', '', NULL, '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '','mustermann3','passwort','smtp.ihr_mail_server.de','25','1','','0','0','Musterfirma GmbH','#ececec','9','9','',''");
@@ -39357,7 +39179,8 @@ $( this ).dialog( "close" );
         while (false !== ($entry = readdir($handle))) {
           if (strpos($entry, 'object.gen.') !== false) {
             $table = str_replace('.php', '', str_replace('object.gen.', '', $entry));
-            $Felder = $this->app->DB->SelectArr("Describe " . addslashes($table));
+            $validTable = $this->app->DatabaseService->validateIdentifier($table);
+            $Felder = $this->app->DatabaseService->select(sprintf("DESCRIBE `%s`", $validTable));
             if (true) {
               if (isset($class_methods))
                 unset($class_methods);
