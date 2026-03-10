@@ -548,20 +548,22 @@ class erpAPI
         );
         break;
       default:
-        $arr = $this->app->DB->SelectArr(
+        $_safeDoctypeBE = $this->app->DatabaseService->validateIdentifier($doctype);
+        $_safeDoctypePosBE = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+        $arr = $this->app->DatabaseService->select(
           sprintf(
             "SELECT %s
-          FROM `%s` AS `t` 
-          INNER JOIN `%s` AS `p` ON t.id = p.%s 
+          FROM `%s` AS `t`
+          INNER JOIN `%s` AS `p` ON t.id = p.`%s`
           INNER JOIN `artikel` AS `art` ON p.artikel = art.id
-          LEFT JOIN `projekt` AS `pr` ON t.projekt = pr.id 
-          WHERE t.id = %d",
+          LEFT JOIN `projekt` AS `pr` ON t.projekt = pr.id
+          WHERE t.id = :doctypeid",
             $cols,
-            $doctype,
-            $doctype . '_position',
-            $doctype,
-            $doctypeid
-          )
+            $_safeDoctypeBE,
+            $_safeDoctypePosBE,
+            $_safeDoctypeBE
+          ),
+          ['doctypeid' => (int) $doctypeid]
         );
         break;
     }
@@ -2838,21 +2840,23 @@ class erpAPI
     if (!$anzeige_lagerplaetze_in_lieferschein) {
       $anzeige_lagerplaetze_in_lieferschein = true;
     }
-    $artikelarr = $this->app->DB->SelectArr(
+    $_safeBelegtyp = $this->app->DatabaseService->validateIdentifier($belegtyp);
+    $_safeBelegtypPos = $this->app->DatabaseService->validateIdentifier($belegtyp . '_position');
+    $artikelarr = $this->app->DatabaseService->select(
       sprintf(
-        "SELECT * FROM `%s` WHERE `%s` = %d ORDER BY sort",
-        $belegtyp . '_position',
-        $belegtyp,
-        (int) $lieferschein
-      )
+        "SELECT * FROM `%s` WHERE `%s` = :id ORDER BY sort",
+        $_safeBelegtypPos,
+        $_safeBelegtyp
+      ),
+      ['id' => (int) $lieferschein]
     );
 
-    $belegarr = $this->app->DB->SelectRow(
+    $belegarr = $this->app->DatabaseService->selectRow(
       sprintf(
-        'SELECT * FROM `%s` WHERE id=%d LIMIT 1',
-        $belegtyp,
-        (int) $lieferschein
-      )
+        'SELECT * FROM `%s` WHERE id = :id LIMIT 1',
+        $_safeBelegtyp
+      ),
+      ['id' => (int) $lieferschein]
     );
     $standardlager = $belegarr['standardlager'];
     $kommissionskonsignationslager = 0;
@@ -2867,11 +2871,9 @@ class erpAPI
     $belegnr = '';
     if (!empty($belegarr)) {
       $projekt = (int) $belegarr['projekt'];
-      $projektarr = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT * FROM projekt WHERE id = %d LIMIT 1',
-          $projekt
-        )
+      $projektarr = $this->app->DatabaseService->selectRow(
+        'SELECT * FROM projekt WHERE id = :id LIMIT 1',
+        ['id' => (int) $projekt]
       );
       if (!empty($projektarr)) {
         $chargenerfassen = $projektarr['chargenerfassen'];
@@ -3035,231 +3037,301 @@ class erpAPI
 
           $this->app->erp->RunHook('lieferscheinauslagern', 6, $belegtyp, $subid, $artikel, $mindesthaltbarkeitsdatum, $chargenverwaltung, $extraorder);
 
+          $_iArtLM = (int) $artikel;
+          $_iStdLagerLM = (int) $standardlager;
+          $_iKommLM = (int) $kommissionskonsignationslager;
+          $_iProjektLM = (int) $projekt;
+          $_iLpiidLM = (int) $lpiid;
+          $_iLagerPlatzVpeLM = (int) $lager_platz_vpe;
           if ($mindesthaltbarkeitsdatum) {
             if ($standardlager > 0) {
-              $lager_max = $this->app->DB->SelectArr(
+              $lager_max = $this->app->DatabaseService->select(
                 sprintf(
-                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge, lpi.id 
+                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge, lpi.id
                   FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d 
-                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager 
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
+                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
                   INNER JOIN (
-                    SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum 
-                    FROM lager_mindesthaltbarkeitsdatum 
-                    WHERE artikel = %d 
-                    GROUP BY lager_platz 
-                  ) AS lm ON lp.id = lm.lager_platz 
+                    SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum
+                    FROM lager_mindesthaltbarkeitsdatum
+                    WHERE artikel = %d
+                    GROUP BY lager_platz
+                  ) AS lm ON lp.id = lm.lager_platz
                   WHERE lpi.artikel=%d AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1  AND ' . $sperrlagerWhere) . " AND `lag`.id='$standardlager' 
-                  ORDER by " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " `lag`.id='$standardlager' DESC, $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge 
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1  AND ' . $sperrlagerWhere) . " AND `lag`.id=%d
+                  ORDER by " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " `lag`.id=%d DESC, $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
                   LIMIT 1",
-                  (int) $kommissionskonsignationslager,
-                  (int) $artikel,
-                  (int) $artikel
+                  $_iKommLM,
+                  $_iArtLM,
+                  $_iArtLM,
+                  $_iStdLagerLM,
+                  $_iStdLagerLM
                 )
               );
               if (!$lager_max) {
-                $lager_max = $this->app->DB->SelectArr(
+                $lager_max = $this->app->DatabaseService->select(
                   sprintf(
-                    "SELECT lpi.lager_platz, lpi.menge, lpi.id 
+                    "SELECT lpi.lager_platz, lpi.menge, lpi.id
                     FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id 
-                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager 
-                    LEFT JOIN lager_mindesthaltbarkeitsdatum lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz 
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                    LEFT JOIN lager_mindesthaltbarkeitsdatum lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz
                     WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id='$standardlager' 
-                    ORDER by " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " lag.id='$standardlager' DESC, $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge 
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id=%d
+                    ORDER by " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " lag.id=%d DESC, $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
                     LIMIT 1",
-                    (int) $artikel
+                    $_iArtLM,
+                    $_iStdLagerLM,
+                    $_iStdLagerLM
                   )
                 );
               }
             } elseif ($projektlager > 0) {
               // Hole nach und nach bis alles da ist
-              $lager_max = $this->app->DB->SelectArr(
-                "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id 
-                FROM lager_platz_inhalt AS lpi
-                INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> '$kommissionskonsignationslager' 
-                INNER JOIN lager AS `lag` ON `lag`.id=lp.lager 
-                INNER JOIN (
-                  SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum 
-                  FROM lager_mindesthaltbarkeitsdatum 
-                  WHERE artikel = '$artikel' AND menge > 0
-                  GROUP BY lager_platz 
-                ) AS lm  ON lp.id = lm.lager_platz 
-                WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt='$projekt' 
-                ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge 
-                LIMIT 1"
+              $lager_max = $this->app->DatabaseService->select(
+                sprintf(
+                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
+                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                  INNER JOIN (
+                    SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum
+                    FROM lager_mindesthaltbarkeitsdatum
+                    WHERE artikel = %d AND menge > 0
+                    GROUP BY lager_platz
+                  ) AS lm  ON lp.id = lm.lager_platz
+                  WHERE lpi.artikel=%d AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=%d
+                  ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  $_iKommLM,
+                  $_iArtLM,
+                  $_iArtLM,
+                  $_iProjektLM
+                )
               );
               if (!$lager_max) {
-                $lager_max = $this->app->DB->SelectArr(
-                  "SELECT lpi.lager_platz, lpi.menge,lpi.id
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id 
-                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager 
-                  LEFT JOIN lager_mindesthaltbarkeitsdatum AS lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz 
-                  WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt='$projekt' 
-                  ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge 
-                  LIMIT 1"
+                $lager_max = $this->app->DatabaseService->select(
+                  sprintf(
+                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                    LEFT JOIN lager_mindesthaltbarkeitsdatum AS lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz
+                    WHERE lpi.artikel=%d AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=%d
+                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    $_iArtLM,
+                    $_iProjektLM
+                  )
                 );
               }
             } else {
               // Hole nach und nach bis alles da ist
-              $lager_max = $this->app->DB->SelectArr(
+              $lager_max = $this->app->DatabaseService->select(
                 sprintf(
-                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id 
+                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
                   FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz lp ON lpi.lager_platz=lp.id AND lp.id <> '$kommissionskonsignationslager'
+                  INNER JOIN lager_platz lp ON lpi.lager_platz=lp.id AND lp.id <> %d
                   INNER JOIN (
-                    SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum 
-                    FROM lager_mindesthaltbarkeitsdatum 
+                    SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum
+                    FROM lager_mindesthaltbarkeitsdatum
                     WHERE artikel = %d AND menge > 0
-                    GROUP BY lager_platz 
-                  ) AS lm  ON lp.id = lm.lager_platz 
+                    GROUP BY lager_platz
+                  ) AS lm  ON lp.id = lm.lager_platz
                   WHERE lpi.artikel=%d AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " 
-                  ORDER by " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge 
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                  ORDER by " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
                   LIMIT 1",
-                  (int) $artikel,
-                  (int) $artikel
+                  $_iKommLM,
+                  $_iArtLM,
+                  $_iArtLM
                 )
               );
               if (!$lager_max) {
-                $lager_max = $this->app->DB->SelectArr(
-                  "SELECT lpi.lager_platz, lpi.menge,lpi.id 
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id 
-                  INNER JOIN lager_mindesthaltbarkeitsdatum AS lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz 
-                  WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  
-                  ORDER by " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge 
-                  LIMIT 1"
+                $lager_max = $this->app->DatabaseService->select(
+                  sprintf(
+                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                    INNER JOIN lager_mindesthaltbarkeitsdatum AS lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz
+                    WHERE lpi.artikel=%d AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                    ORDER by " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    $_iArtLM
+                  )
                 );
               }
             }
           } else {
             if ($chargenverwaltung) {
               if ($standardlager > 0) {
-                $lager_max = $this->app->DB->SelectArr(
-                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id 
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id 
-                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager 
-                  INNER JOIN (
-                    SELECT lager_platz, sum(menge) as menge 
-                    FROM lager_charge 
-                    WHERE artikel = '$artikel' AND menge > 0
-                    GROUP BY lager_platz 
-                  ) AS lm ON lp.id = lm.lager_platz 
-                  WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.id='$standardlager' 
-                  ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " `lag`.id='$standardlager' DESC, $extraorder lpi.menge $sortreihenfolge 
-                  LIMIT 1"
+                $lager_max = $this->app->DatabaseService->select(
+                  sprintf(
+                    "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                    INNER JOIN (
+                      SELECT lager_platz, sum(menge) as menge
+                      FROM lager_charge
+                      WHERE artikel = %d AND menge > 0
+                      GROUP BY lager_platz
+                    ) AS lm ON lp.id = lm.lager_platz
+                    WHERE lpi.artikel=%d AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.id=%d
+                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " `lag`.id=%d DESC, $extraorder lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    $_iArtLM,
+                    $_iArtLM,
+                    $_iStdLagerLM,
+                    $_iStdLagerLM
+                  )
                 );
                 if (!$lager_max) {
-                  $lager_max = $this->app->DB->SelectArr(
-                    "SELECT lpi.lager_platz, lpi.menge,lpi.id 
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id 
-                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager 
-                    WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id='$standardlager' 
-                    ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " `lag`.id='$standardlager' DESC, $extraorder lpi.menge $sortreihenfolge 
-                    LIMIT 1"
+                  $lager_max = $this->app->DatabaseService->select(
+                    sprintf(
+                      "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                      FROM lager_platz_inhalt AS lpi
+                      INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                      INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                      WHERE lpi.artikel=%d AND lpi.menge > 0
+                      " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id=%d
+                      ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " `lag`.id=%d DESC, $extraorder lpi.menge $sortreihenfolge
+                      LIMIT 1",
+                      $_iArtLM,
+                      $_iStdLagerLM,
+                      $_iStdLagerLM
+                    )
                   );
                 }
               } elseif ($projektlager > 0) {
 
-                $lager_max = $this->app->DB->SelectArr(
-                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id 
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> '$kommissionskonsignationslager' 
-                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager 
-                  INNER JOIN (
-                    SELECT lager_platz, sum(menge) as menge 
-                    FROM lager_charge 
-                    WHERE artikel = '$artikel' AND menge > 0
-                    GROUP BY lager_platz 
-                  ) AS lm ON lp.id = lm.lager_platz 
-                  WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt='$projekt' 
-                  ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " $extraorder lpi.menge $sortreihenfolge 
-                  LIMIT 1"
+                $lager_max = $this->app->DatabaseService->select(
+                  sprintf(
+                    "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
+                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                    INNER JOIN (
+                      SELECT lager_platz, sum(menge) as menge
+                      FROM lager_charge
+                      WHERE artikel = %d AND menge > 0
+                      GROUP BY lager_platz
+                    ) AS lm ON lp.id = lm.lager_platz
+                    WHERE lpi.artikel=%d AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=%d
+                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    $_iKommLM,
+                    $_iArtLM,
+                    $_iArtLM,
+                    $_iProjektLM
+                  )
                 );
                 if (!$lager_max) {
-                  $lager_max = $this->app->DB->SelectArr(
-                    "SELECT lpi.lager_platz, lpi.menge,lpi.id 
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> '$kommissionskonsignationslager' 
-                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                    WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt='$projekt' 
-                    ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " $extraorder lpi.menge $sortreihenfolge 
-                    LIMIT 1"
+                  $lager_max = $this->app->DatabaseService->select(
+                    sprintf(
+                      "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                      FROM lager_platz_inhalt AS lpi
+                      INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
+                      INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                      WHERE lpi.artikel=%d AND lpi.menge > 0
+                      " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=%d
+                      ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
+                      LIMIT 1",
+                      $_iKommLM,
+                      $_iArtLM,
+                      $_iProjektLM
+                    )
                   );
                 }
               } else {
-                $lager_max = $this->app->DB->SelectArr(
-                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id  
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> '$kommissionskonsignationslager'
-                  INNER JOIN (
-                    SELECT lager_platz, sum(menge) as menge 
-                    FROM lager_charge 
-                    WHERE artikel = '$artikel' AND menge > 0
-                    GROUP BY lager_platz 
-                  ) AS lm  ON lp.id = lm.lager_platz 
-                  WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  
-                  ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " $extraorder lpi.menge $sortreihenfolge 
-                  LIMIT 1"
+                $lager_max = $this->app->DatabaseService->select(
+                  sprintf(
+                    "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
+                    INNER JOIN (
+                      SELECT lager_platz, sum(menge) as menge
+                      FROM lager_charge
+                      WHERE artikel = %d AND menge > 0
+                      GROUP BY lager_platz
+                    ) AS lm  ON lp.id = lm.lager_platz
+                    WHERE lpi.artikel=%d AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    $_iKommLM,
+                    $_iArtLM,
+                    $_iArtLM
+                  )
                 );
                 if (!$lager_max) {
-                  $lager_max = $this->app->DB->SelectArr(
-                    "SELECT lpi.lager_platz, lpi.menge,lpi.id 
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> '$kommissionskonsignationslager' 
-                    WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " 
-                    ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " $extraorder lpi.menge $sortreihenfolge 
-                    LIMIT 1"
+                  $lager_max = $this->app->DatabaseService->select(
+                    sprintf(
+                      "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                      FROM lager_platz_inhalt AS lpi
+                      INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
+                      WHERE lpi.artikel=%d AND lpi.menge > 0
+                      " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                      ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
+                      LIMIT 1",
+                      $_iKommLM,
+                      $_iArtLM
+                    )
                   );
                 }
               }
             } else {
               if ($standardlager > 0) {
-                $lager_max = $this->app->DB->SelectArr(
-                  "SELECT lpi.lager_platz, lpi.menge,lpi.id 
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> '$kommissionskonsignationslager' 
-                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager 
-                  WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id='$standardlager' 
-                  ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " `lag`.id='$standardlager' DESC, $extraorder lpi.menge $sortreihenfolge 
-                  LIMIT 1"
+                $lager_max = $this->app->DatabaseService->select(
+                  sprintf(
+                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
+                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                    WHERE lpi.artikel=%d AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id=%d
+                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " `lag`.id=%d DESC, $extraorder lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    $_iKommLM,
+                    $_iArtLM,
+                    $_iStdLagerLM,
+                    $_iStdLagerLM
+                  )
                 );
               } elseif ($projektlager > 0) {
-                $lager_max = $this->app->DB->SelectArr(
-                  "SELECT lpi.lager_platz, lpi.menge,lpi.id 
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> '$kommissionskonsignationslager' 
-                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager 
-                  WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.projekt='$projekt' 
-                  ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . "  $extraorder lpi.menge $sortreihenfolge 
-                  LIMIT 1"
+                $lager_max = $this->app->DatabaseService->select(
+                  sprintf(
+                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
+                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                    WHERE lpi.artikel=%d AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.projekt=%d
+                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . "  $extraorder lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    $_iKommLM,
+                    $_iArtLM,
+                    $_iProjektLM
+                  )
                 );
               } else {
-                $lager_max = $this->app->DB->SelectArr(
-                  "SELECT lpi.lager_platz, lpi.menge,lpi.id 
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> '$kommissionskonsignationslager' 
-                  WHERE lpi.artikel='$artikel' AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " 
-                  ORDER BY " . ($lpiid ? " lpi.id = '$lpiid' DESC, " : '') . " " . ($lager_platz_vpe ? " lpi.lager_platz_vpe = '$lager_platz_vpe' DESC, " : '') . " $extraorder lpi.menge $sortreihenfolge 
-                  LIMIT 1"
+                $lager_max = $this->app->DatabaseService->select(
+                  sprintf(
+                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
+                    WHERE lpi.artikel=%d AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    $_iKommLM,
+                    $_iArtLM
+                  )
                 );
               }
             }
@@ -3445,17 +3517,17 @@ class erpAPI
     function artikelnummerscan($artikel)
     {
       $hauptprojekt = (int)$this->app->erp->Firmendaten('projekt');
-      $haupteanherstellerscanerlauben = $this->app->DB->Select("SELECT eanherstellerscanerlauben FROM projekt WHERE id = '$hauptprojekt' LIMIT 1");
+      $haupteanherstellerscanerlauben = $this->app->DatabaseService->selectValue('SELECT eanherstellerscanerlauben FROM projekt WHERE id = :id LIMIT 1', ['id' => (int) $hauptprojekt]);
       $subwhere = "";
       if($haupteanherstellerscanerlauben)$subwhere = 'or isnull(p.id)';
       $artikelnummer = $this->app->erp->FirstTillSpace($artikel);
-      $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$artikelnummer' AND geloescht!=1 LIMIT 1");
-      if(!$artikelid)$artikelid = $this->app->DB->Select("SELECT art.id FROM artikel art 
+      $artikelid = $this->app->DatabaseService->selectValue('SELECT id FROM artikel WHERE nummer = :nummer AND geloescht!=1 LIMIT 1', ['nummer' => (string) $artikelnummer]);
+      if(!$artikelid)$artikelid = $this->app->DatabaseService->selectValue("SELECT art.id FROM artikel art
       LEFT JOIN projekt p ON art.projekt = p.id
-      WHERE (p.eanherstellerscanerlauben = 1 $subwhere) AND art.ean='$artikelnummer' AND art.ean != '' AND art.geloescht!=1 LIMIT 1");
-      if(!$artikelid)$artikelid = $this->app->DB->Select("SELECT art.id FROM artikel art 
+      WHERE (p.eanherstellerscanerlauben = 1 $subwhere) AND art.ean = :nummer AND art.ean != '' AND art.geloescht!=1 LIMIT 1", ['nummer' => (string) $artikelnummer]);
+      if(!$artikelid)$artikelid = $this->app->DatabaseService->selectValue("SELECT art.id FROM artikel art
       LEFT JOIN projekt p ON art.projekt = p.id
-      WHERE (p.eanherstellerscanerlauben = 1 $subwhere) AND art.herstellernummer='$artikelnummer' AND art.herstellernummer != '' AND art.geloescht!=1 LIMIT 1");
+      WHERE (p.eanherstellerscanerlauben = 1 $subwhere) AND art.herstellernummer = :nummer AND art.herstellernummer != '' AND art.geloescht!=1 LIMIT 1", ['nummer' => (string) $artikelnummer]);
       $this->RunHook('artikelnummerscan',2, $artikel, $artikelid);
       return $artikelid;
     }
@@ -3695,19 +3767,16 @@ title: 'Abschicken',
 
       if (date('w') == 1) // brauche heute - 2 Tage
       {
-        $checkzeit2 = $this->app->DB->Select("SELECT DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 3 DAY),'%Y-%m-%d')");
+        $checkzeit2 = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 3 DAY),'%Y-%m-%d')");
       } else {
-        $checkzeit2 = $this->app->DB->Select("SELECT DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 DAY),'%Y-%m-%d')");
+        $checkzeit2 = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(DATE_SUB(NOW(), INTERVAL 1 DAY),'%Y-%m-%d')");
       }
-      $checkzeit = $this->app->DB->Select(
-        sprintf(
-          "SELECT DATE_FORMAT(MAX(`bis`),'%%Y-%%m-%%d') 
-          FROM `zeiterfassung` 
-          WHERE `adresse` = %d 
-          AND DATE_FORMAT(`bis`,'%%Y-%%m-%%d')='%s'",
-          $this->app->User->GetAdresse(),
-          $checkzeit2
-        )
+      $checkzeit = $this->app->DatabaseService->selectValue(
+        "SELECT DATE_FORMAT(MAX(`bis`),'%Y-%m-%d')
+          FROM `zeiterfassung`
+          WHERE `adresse` = :adresse
+          AND DATE_FORMAT(`bis`,'%Y-%m-%d') = :checkzeit2",
+        ['adresse' => (int) $this->app->User->GetAdresse(), 'checkzeit2' => (string) $checkzeit2]
       );
 
       if ($checkzeit != $checkzeit2) {
@@ -4851,7 +4920,7 @@ title: 'Abschicken',
 
     if ((!empty($belege_check) ? count($belege_check) : 0) > 0) {
       foreach ($belege_check as $table => $tableid) {
-        $belege_arr = $this->app->DB->SelectRow(sprintf("SELECT * FROM `%s` WHERE id=%d", $table, (int) $tableid));
+        $belege_arr = $this->app->DatabaseService->selectRow(sprintf("SELECT * FROM `%s` WHERE id = :id", $this->app->DatabaseService->validateIdentifier($table)), ['id' => (int) $tableid]);
         if ($belege_arr) {
           foreach ($belege_arr as $key_i => $value_i) {
             if (strpos($key_i, 'datum') !== false) {
@@ -4912,16 +4981,13 @@ title: 'Abschicken',
       return $text;
     }
 
-    $zwischenPositionen = $this->app->DB->SelectArr(
-      sprintf(
-        "SELECT * 
-        FROM `beleg_zwischenpositionen` 
-        WHERE doctype = '%s' AND doctypeid = %d 
+    $zwischenPositionen = $this->app->DatabaseService->select(
+      "SELECT *
+        FROM `beleg_zwischenpositionen`
+        WHERE doctype = :doctype AND doctypeid = :doctypeid
           AND (postype = 'gruppensumme' OR postype = 'gruppensummemitoptionalenpreisen' OR postype = 'gruppe')
         ORDER BY pos, sort",
-        $doctype,
-        $id
-      )
+      ['doctype' => (string) $doctype, 'doctypeid' => (int) $id]
     );
     if (empty($zwischenPositionen)) {
       return $text;
@@ -4931,13 +4997,15 @@ title: 'Abschicken',
     $normal = !$withTax ? 1 : $this->GetSteuersatzNormal(true, $id, $doctype);
     $reduced = !$withTax ? 1 : $this->GetSteuersatzErmaessigt(true, $id, $doctype);
 
-    $positions = $this->app->DB->SelectArr(
+    $_safeDoctypePZ = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+    $_safeDoctypeColPZ = $this->app->DatabaseService->validateIdentifier($doctype);
+    $positions = $this->app->DatabaseService->select(
       sprintf(
-        'SELECT * FROM `%s` WHERE `%s` = %d ORDER BY sort, id',
-        $doctype . '_position',
-        $doctype,
-        $id
-      )
+        'SELECT * FROM `%s` WHERE `%s` = :id ORDER BY sort, id',
+        $_safeDoctypePZ,
+        $_safeDoctypeColPZ
+      ),
+      ['id' => (int) $id]
     );
     if (empty($positions)) {
       return $text;
@@ -5402,19 +5470,17 @@ title: 'Abschicken',
       return;
     }
     if ($module === 'auftrag') {
-      $docArr = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT shop,adresse, vertriebid, vertrieb FROM auftrag WHERE id = %d',
-          $id
-        )
+      $docArr = $this->app->DatabaseService->selectRow(
+        'SELECT shop,adresse, vertriebid, vertrieb FROM auftrag WHERE id = :id',
+        ['id' => (int) $id]
       );
     } else {
-      $docArr = $this->app->DB->SelectRow(
+      $docArr = $this->app->DatabaseService->selectRow(
         sprintf(
-          'SELECT adresse, vertriebid, vertrieb FROM `%s` WHERE id = %d',
-          $module,
-          $id
-        )
+          'SELECT adresse, vertriebid, vertrieb FROM `%s` WHERE id = :id',
+          $this->app->DatabaseService->validateIdentifier($module)
+        ),
+        ['id' => (int) $id]
       );
     }
     $vertrieb = !empty($docArr) ? $docArr['vertriebid'] : $this->app->DatabaseService->selectValue(
@@ -7316,9 +7382,11 @@ title: 'Abschicken',
   // @refactor in Lager Modul
   function ArtikelAnzahlBestellung($artikel)
   {
-    return $this->app->DB->Select("SELECT SUM(bp.menge-bp.geliefert) FROM bestellung_position bp INNER JOIN bestellung b ON b.id=bp.bestellung 
-   WHERE bp.artikel='$artikel' AND (b.status='freigegeben' OR b.status='versendet')");
-    //              return $this->app->DatabaseService->selectValue("SELECT SUM(menge) FROM lager_reserviert WHERE artikel = :id", ['id' => (int) $artikel]);
+    return $this->app->DatabaseService->selectValue(
+      "SELECT SUM(bp.menge-bp.geliefert) FROM bestellung_position bp INNER JOIN bestellung b ON b.id=bp.bestellung
+   WHERE bp.artikel = :artikel AND (b.status='freigegeben' OR b.status='versendet')",
+      ['artikel' => (int) $artikel]
+    );
   }
 
 
@@ -19385,7 +19453,7 @@ $( this ).dialog( "close" );
           $mhdcharge = "";
         }
 
-        $checkarr = $this->app->DB->SelectArr(sprintf("SELECT c.* FROM lager_mindesthaltbarkeitsdatum c %s WHERE c.artikel = %d %s ORDER BY mhddatum = '%s' DESC, %s mhddatum,charge, id", $join, (int) $artikel, $subwhere, $this->app->DB->real_escape_string($mhd), ($mhdcharge != '' ? "charge= '" . $this->app->DB->real_escape_string($mhdcharge) . "' DESC," : "")));
+        $checkarr = $this->app->DatabaseService->select(sprintf("SELECT c.* FROM lager_mindesthaltbarkeitsdatum c %s WHERE c.artikel = :artikel %s ORDER BY mhddatum = :mhd DESC, %s mhddatum,charge, id", $join, $subwhere, ($mhdcharge != '' ? "charge= :mhdcharge DESC," : "")), array_filter(['artikel' => (int) $artikel, 'mhd' => (string) $mhd, 'mhdcharge' => ($mhdcharge != '' ? (string) $mhdcharge : null)], fn($v) => $v !== null));
         if ($checkarr) {
           $nochmenge = $menge;
           foreach ($checkarr as $c) {
@@ -19680,18 +19748,17 @@ $( this ).dialog( "close" );
         $dokumentposid,
         $extraorder
       );
-      $lager_chargen = $this->app->DB->SelectArr(
+      $lager_chargen = $this->app->DatabaseService->select(
         sprintf(
-          "SELECT id, menge, charge 
-          FROM lager_charge 
-          WHERE artikel=%d AND lager_platz=%d AND menge > 0 AND charge = '%s'
-          ORDER BY $extraorder id 
+          "SELECT id, menge, charge
+          FROM lager_charge
+          WHERE artikel = :articleId AND lager_platz = :storageId AND menge > 0 AND charge = :batch
+          ORDER BY %s id
           LIMIT %d",
-          (int) $articleId,
-          (int) $storageLocationId,
-          $batch,
-          ceil($toRemove)
-        )
+          $extraorder,
+          (int) ceil($toRemove)
+        ),
+        ['articleId' => (int) $articleId, 'storageId' => (int) $storageLocationId, 'batch' => (string) $batch]
       );
       if (empty($lager_chargen)) {
         break;
@@ -19730,16 +19797,20 @@ $( this ).dialog( "close" );
       }
       if ($chargen_log_arr) {
         $chargensqla = null;
-        $bestandsql = sprintf("SELECT sum(menge) as bestand, charge FROM lager_charge WHERE artikel = %d AND lager_platz = %d AND menge > 0", (int) $articleId, (int) $storageLocationId);
         foreach ($chargen_log_arr as $chargenkey => $arr) {
-          $chargensqla[] = "'" . $this->app->DB->real_escape_string(substr($chargenkey, 1)) . "'";
+          $chargensqla[] = substr($chargenkey, 1);
         }
-        $bestandsql .= " AND ifnull(charge,'') in (" . implode(', ', $chargensqla) . ") GROUP BY charge";
-        $query = $this->app->DB->Query($bestandsql);
-        if ($query) {
-          while ($row = $this->app->DB->Fetch_Assoc($query)) {
-            if (isset($chargen_log_arr['C' . $row['charge']])) {
-              $chargen_log_arr['C' . $row['charge']]['bestand'] = $row['bestand'];
+        if (!empty($chargensqla)) {
+          $placeholders = implode(',', array_fill(0, count($chargensqla), '?'));
+          $bestandRows = $this->app->DatabaseService->select(
+            sprintf("SELECT sum(menge) as bestand, charge FROM lager_charge WHERE artikel = %d AND lager_platz = %d AND menge > 0 AND ifnull(charge,'') in (%s) GROUP BY charge", (int) $articleId, (int) $storageLocationId, $placeholders),
+            $chargensqla
+          );
+          if ($bestandRows) {
+            foreach ($bestandRows as $row) {
+              if (isset($chargen_log_arr['C' . $row['charge']])) {
+                $chargen_log_arr['C' . $row['charge']]['bestand'] = $row['bestand'];
+              }
             }
           }
         }
@@ -19809,17 +19880,17 @@ $( this ).dialog( "close" );
       while ($mhd_menge > 0 && $timeout < 1000) {
         $timeout++;
         $this->app->erp->RunHook('LagerAuslagernRegalMHDCHARGESRN_MHD', 7, $artikel, $regal, $menge, $dokumenttyp, $dokumentid, $dokumentposid, $extraorder);
-        $lager_mindesthaltbarkeitsdatum = $this->app->DB->SelectArr(
+        $lager_mindesthaltbarkeitsdatum = $this->app->DatabaseService->select(
           sprintf(
-            "SELECT id,menge,mhddatum, charge 
-            FROM lager_mindesthaltbarkeitsdatum 
-            WHERE artikel=%d AND lager_platz=%d AND menge > 0 
-            ORDER BY $extraorder mhddatum, datum 
+            "SELECT id,menge,mhddatum, charge
+            FROM lager_mindesthaltbarkeitsdatum
+            WHERE artikel = :artikel AND lager_platz = :regal AND menge > 0
+            ORDER BY %s mhddatum, datum
             LIMIT %d",
-            (int) $artikel,
-            (int) $regal,
-            ceil($mhd_menge)
-          )
+            $extraorder,
+            (int) ceil($mhd_menge)
+          ),
+          ['artikel' => (int) $artikel, 'regal' => (int) $regal]
         );
         if ($lager_mindesthaltbarkeitsdatum) {
           $mhd_log_arr = null;
@@ -19866,19 +19937,31 @@ $( this ).dialog( "close" );
           if ($mhd_log_arr) {
             $mhdsqla = null;
             $chargensqla = null;
-            $bestandsql = sprintf("SELECT sum(menge) as bestand, mhddatum, charge FROM lager_mindesthaltbarkeitsdatum WHERE artikel = %d AND lager_platz = %d AND menge > 0", (int) $artikel, (int) $regal);
             foreach ($mhd_log_arr as $mhdkey => $arr) {
-              $mhdsqla[] = "'" . $mhdkey . "'";
+              $mhdsqla[] = $mhdkey;
               foreach ($arr as $chargenkey => $arr2) {
-                $chargensqla[] = "'" . substr($chargenkey, 1) . "'";
+                $chargensqla[] = substr($chargenkey, 1);
               }
             }
-            $bestandsql .= " AND mhddatum in (" . implode(', ', $mhdsqla) . ") AND ifnull(charge,'') in (" . implode(', ', $chargensqla) . ")  GROUP BY mhddatum, charge";
-            $query = $this->app->DB->Query($bestandsql);
-            if ($query) {
-              while ($row = $this->app->DB->Fetch_Assoc($query)) {
-                if (isset($mhd_log_arr[$row['mhddatum']]) && isset($mhd_log_arr[$v['mhddatum']]['C' . $row['charge']])) {
-                  $mhd_log_arr[$v['mhddatum']]['C' . $row['charge']]['bestand'] = $row['bestand'];
+            if (!empty($mhdsqla) && !empty($chargensqla)) {
+              $mhdPlaceholders = implode(',', array_fill(0, count($mhdsqla), '?'));
+              $chargenPlaceholders = implode(',', array_fill(0, count($chargensqla), '?'));
+              $bestandParams = array_merge([(int) $artikel, (int) $regal], $mhdsqla, $chargensqla);
+              $bestandRows = $this->app->DatabaseService->select(
+                sprintf(
+                  "SELECT sum(menge) as bestand, mhddatum, charge FROM lager_mindesthaltbarkeitsdatum WHERE artikel = %d AND lager_platz = %d AND menge > 0 AND mhddatum in (%s) AND ifnull(charge,'') in (%s) GROUP BY mhddatum, charge",
+                  (int) $artikel,
+                  (int) $regal,
+                  $mhdPlaceholders,
+                  $chargenPlaceholders
+                ),
+                array_merge($mhdsqla, $chargensqla)
+              );
+              if ($bestandRows) {
+                foreach ($bestandRows as $row) {
+                  if (isset($mhd_log_arr[$row['mhddatum']]) && isset($mhd_log_arr[$v['mhddatum']]['C' . $row['charge']])) {
+                    $mhd_log_arr[$v['mhddatum']]['C' . $row['charge']]['bestand'] = $row['bestand'];
+                  }
                 }
               }
             }
@@ -19911,17 +19994,17 @@ $( this ).dialog( "close" );
     if ($chargenverwaltung && $chargenauslagern) {
       while ($charge_menge > 0) {
         $this->app->erp->RunHook('LagerAuslagernRegalMHDCHARGESRN_Charge', 7, $artikel, $regal, $menge, $dokumenttyp, $dokumentid, $dokumentposid, $extraorder);
-        $lager_chargen = $this->app->DB->SelectArr(
+        $lager_chargen = $this->app->DatabaseService->select(
           sprintf(
-            "SELECT id, menge, charge 
-            FROM lager_charge 
-            WHERE artikel=%d AND lager_platz=%d AND menge > 0 
-            ORDER BY $extraorder id 
+            "SELECT id, menge, charge
+            FROM lager_charge
+            WHERE artikel = :artikel AND lager_platz = :regal AND menge > 0
+            ORDER BY %s id
             LIMIT %d",
-            (int) $artikel,
-            (int) $regal,
-            ceil($menge)
-          )
+            $extraorder,
+            (int) ceil($menge)
+          ),
+          ['artikel' => (int) $artikel, 'regal' => (int) $regal]
         );
         if ($lager_chargen) {
           $chargen_log_arr = null;
@@ -19956,16 +20039,20 @@ $( this ).dialog( "close" );
           }
           if ($chargen_log_arr) {
             $chargensqla = null;
-            $bestandsql = sprintf("SELECT sum(menge) as bestand, charge FROM lager_charge WHERE artikel = %d AND lager_platz = %d AND menge > 0", (int) $artikel, (int) $regal);
             foreach ($chargen_log_arr as $chargenkey => $arr) {
-              $chargensqla[] = "'" . $this->app->DB->real_escape_string(substr($chargenkey, 1)) . "'";
+              $chargensqla[] = substr($chargenkey, 1);
             }
-            $bestandsql .= " AND ifnull(charge,'') in (" . implode(', ', $chargensqla) . ") GROUP BY charge";
-            $query = $this->app->DB->Query($bestandsql);
-            if ($query) {
-              while ($row = $this->app->DB->Fetch_Assoc($query)) {
-                if (isset($chargen_log_arr['C' . $row['charge']])) {
-                  $chargen_log_arr['C' . $row['charge']]['bestand'] = $row['bestand'];
+            if (!empty($chargensqla)) {
+              $chargenPlaceholders2 = implode(',', array_fill(0, count($chargensqla), '?'));
+              $bestandRows2 = $this->app->DatabaseService->select(
+                sprintf("SELECT sum(menge) as bestand, charge FROM lager_charge WHERE artikel = %d AND lager_platz = %d AND menge > 0 AND ifnull(charge,'') in (%s) GROUP BY charge", (int) $artikel, (int) $regal, $chargenPlaceholders2),
+                $chargensqla
+              );
+              if ($bestandRows2) {
+                foreach ($bestandRows2 as $row) {
+                  if (isset($chargen_log_arr['C' . $row['charge']])) {
+                    $chargen_log_arr['C' . $row['charge']]['bestand'] = $row['bestand'];
+                  }
                 }
               }
             }
@@ -20313,12 +20400,13 @@ $( this ).dialog( "close" );
 
   public function getPreproducedPartlistFromArticle($id)
   {
-    return $this->app->DB->Select(
-      "SELECT art.preproduced_partlist 
-      FROM artikel AS art 
-      INNER JOIN artikel art2 ON  art.preproduced_partlist = art2.id 
+    return $this->app->DatabaseService->selectValue(
+      "SELECT art.preproduced_partlist
+      FROM artikel AS art
+      INNER JOIN artikel art2 ON  art.preproduced_partlist = art2.id
                     AND art2.lagerartikel = 1 AND (art2.geloescht = 0 OR art2.geloescht IS NULL) AND art.id != art2.id
-      WHERE art.id = $id AND art.has_preproduced_partlist"
+      WHERE art.id = :id AND art.has_preproduced_partlist",
+      ['id' => (int) $id]
     );
   }
 
@@ -20629,16 +20717,18 @@ $( this ).dialog( "close" );
 
       if ($needUpdateShopStorageCache) {
         // to prevent loops
-        $this->app->DB->Update(
-          "UPDATE `artikel_onlineshops` 
-          SET `last_storage_transfer` = NOW(), `storage_cache` = {$verkaufbare_menge_korrektur} 
-          WHERE `artikel` = {$lagerartikel[$ij]['id']} AND `shop` = {$shop}"
+        $this->app->DatabaseService->execute(
+          "UPDATE `artikel_onlineshops`
+          SET `last_storage_transfer` = NOW(), `storage_cache` = :storage
+          WHERE `artikel` = :artikel AND `shop` = :shop",
+          ['storage' => (float) $verkaufbare_menge_korrektur, 'artikel' => (int) $lagerartikel[$ij]['id'], 'shop' => (int) $shop]
         );
         if (is_numeric($pseudolager)) {
-          $this->app->DB->Update(
-            "UPDATE `artikel_onlineshops` 
-            SET `pseudostorage_cache` = {$pseudolager} 
-            WHERE `artikel` = {$lagerartikel[$ij]['id']} AND `shop` = {$shop}"
+          $this->app->DatabaseService->execute(
+            "UPDATE `artikel_onlineshops`
+            SET `pseudostorage_cache` = :pseudo
+            WHERE `artikel` = :artikel AND `shop` = :shop",
+            ['pseudo' => (float) $pseudolager, 'artikel' => (int) $lagerartikel[$ij]['id'], 'shop' => (int) $shop]
           );
         }
       }
@@ -22391,7 +22481,7 @@ $( this ).dialog( "close" );
   function GetSelectDokumentKunde($typ, $adresse, $select)
   {
     $typ_bezeichnung = ucfirst($typ);
-    $result = $this->app->DatabaseService->select(sprintf("SELECT CONCAT('%s ',if(status='angelegt','ENTWURF',belegnr),' (Status: ',status,') vom ',DATE_FORMAT(datum,'%%d.%%m.%%Y')) as result, id FROM `%s` WHERE adresse = :adresse ORDER by datum DESC", $this->app->DB->real_escape_string($typ_bezeichnung), $this->app->DatabaseService->validateIdentifier($typ)), ['adresse' => (int) $adresse]);
+    $result = $this->app->DatabaseService->select(sprintf("SELECT CONCAT(:typbez,' ',if(status='angelegt','ENTWURF',belegnr),' (Status: ',status,') vom ',DATE_FORMAT(datum,'%%d.%%m.%%Y')) as result, id FROM `%s` WHERE adresse = :adresse ORDER by datum DESC", $this->app->DatabaseService->validateIdentifier($typ)), ['typbez' => (string) $typ_bezeichnung, 'adresse' => (int) $adresse]);
     if (empty($result)) {
       return '';
     }
@@ -25704,7 +25794,6 @@ $( this ).dialog( "close" );
     );
 
     if ($signatur == "") {
-      $firmendatenid = $this->app->DB->Select("SELECT MAX(id) FROM firmendaten LIMIT 1");
       $signatur = base64_decode($this->Beschriftung("signatur", $language));
     }
 
@@ -27392,52 +27481,52 @@ $( this ).dialog( "close" );
 
     $passwordunenescaped = $felder['passwordunenescaped'];
 
-    $this->app->DB->Insert(
-      sprintf(
-        "INSERT INTO `user` 
-                (`username`, `passwordmd5`, `password`, 
-                `description`, `settings`, `parentuser`, `activ`, `type`, `adresse`, 
-                `fehllogins`, `standarddrucker`, `startseite`, 
-                `hwtoken`, `hwkey`, `hwcounter`, `hwdatablock`, 
-                `motppin`, `motpsecret`, `externlogin`, 
+    $this->app->DatabaseService->execute(
+      "INSERT INTO `user`
+                (`username`, `passwordmd5`, `password`,
+                `description`, `settings`, `parentuser`, `activ`, `type`, `adresse`,
+                `fehllogins`, `standarddrucker`, `startseite`,
+                `hwtoken`, `hwkey`, `hwcounter`, `hwdatablock`,
+                `motppin`, `motpsecret`, `externlogin`,
                 `gpsstechuhr`, `firma`, `kalender_passwort`, `kalender_aktiv`, `vorlage`,
                 `projekt_bevorzugen`, `projekt`, `docscan_aktiv`, `docscan_passwort`, `repassword`)
             VALUES (
-                '%s', MD5('%s'), '', 
-                '%s', '%s', '0', '%d', '%s', %d, 
-                %d, %d, '%s',
-                %d, '%s', %d, '%s', 
-                '%s', '%s', '%d', 
-                '%d', '%d', '%s', '%d', '%s',
-                '%d', '%d', '%d', '%s', 0
+                :username, MD5(:password_md5), '',
+                :description, :settings, '0', :activ, :type, :adresse,
+                :fehllogins, :standarddrucker, :startseite,
+                :hwtoken, :hwkey, :hwcounter, :hwdatablock,
+                :motppin, :motpsecret, :externlogin,
+                :gpsstechuhr, :firma, :kalender_passwort, :kalender_aktiv, :vorlage,
+                :projekt_bevorzugen, :projekt, :docscan_aktiv, :docscan_passwort, 0
             )",
-        $felder['username'],
-        $felder['password'],
-        $felder['description'],
-        $settings,
-        $felder['activ'],
-        $felder['type'],
-        $felder['adresse'],
-        $felder['fehllogins'],
-        $felder['standarddrucker'],
-        $felder['startseite'],
-        $felder['hwtoken'],
-        $felder['hwkey'],
-        $felder['hwcounter'],
-        $felder['hwdatablock'],
-        $felder['motppin'],
-        $felder['motpsecret'],
-        $felder['externlogin'],
-        $felder['gpsstechuhr'],
-        $firma,
-        $felder['kalender_passwort'],
-        $felder['kalender_aktiv'],
-        $felder['vorlage'],
-        $felder['projekt_bevorzugen'],
-        $felder['projekt'],
-        $felder['docscan_aktiv'],
-        $felder['docscan_passwort']
-      )
+      [
+        'username' => (string) $felder['username'],
+        'password_md5' => (string) $felder['password'],
+        'description' => (string) $felder['description'],
+        'settings' => (string) $settings,
+        'activ' => (int) $felder['activ'],
+        'type' => (string) $felder['type'],
+        'adresse' => (int) $felder['adresse'],
+        'fehllogins' => (int) $felder['fehllogins'],
+        'standarddrucker' => (int) $felder['standarddrucker'],
+        'startseite' => (string) $felder['startseite'],
+        'hwtoken' => (int) $felder['hwtoken'],
+        'hwkey' => (string) $felder['hwkey'],
+        'hwcounter' => (int) $felder['hwcounter'],
+        'hwdatablock' => (string) $felder['hwdatablock'],
+        'motppin' => (string) $felder['motppin'],
+        'motpsecret' => (string) $felder['motpsecret'],
+        'externlogin' => (int) $felder['externlogin'],
+        'gpsstechuhr' => (int) $felder['gpsstechuhr'],
+        'firma' => (int) $firma,
+        'kalender_passwort' => (string) $felder['kalender_passwort'],
+        'kalender_aktiv' => (int) $felder['kalender_aktiv'],
+        'vorlage' => (string) $felder['vorlage'],
+        'projekt_bevorzugen' => (int) $felder['projekt_bevorzugen'],
+        'projekt' => (int) $felder['projekt'],
+        'docscan_aktiv' => (int) $felder['docscan_aktiv'],
+        'docscan_passwort' => (string) $felder['docscan_passwort'],
+      ]
     );
 
     $id = $this->app->DB->GetInsertID();
@@ -27467,12 +27556,9 @@ $( this ).dialog( "close" );
       return;
     }
     foreach (['login', 'logout', 'start', 'startseite', 'settings'] as $action) {
-      $this->app->DB->Update(
-        sprintf(
-          "INSERT INTO `userrights` (`user`, `module`, `action`, `permission`) VALUES (%d, 'welcome', '%s', 1)",
-          $userId,
-          $action
-        )
+      $this->app->DatabaseService->execute(
+        "INSERT INTO `userrights` (`user`, `module`, `action`, `permission`) VALUES (:userId, 'welcome', :action, 1)",
+        ['userId' => (int) $userId, 'action' => $action]
       );
     }
   }
@@ -27550,8 +27636,10 @@ $( this ).dialog( "close" );
     $check = null;
     do {
       $nummer = $this->CalcNextNummer($nummer);
-      $sql = "SELECT id FROM artikel WHERE nummer = '" . $nummer . "'";
-      $check = $this->app->DB->Select($sql);
+      $check = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM artikel WHERE nummer = :nummer",
+        ['nummer' => (string) $nummer]
+      );
     } while (!empty($check));
     return ($nummer);
   }
@@ -29154,9 +29242,12 @@ $( this ).dialog( "close" );
     if ($lvl > 30)
       return;
     $sprachen = $this->GetSelectSprachenListe(true);
-    $elemente = $this->app->DB->SelectArr("SELECT ak.id, ak.parent, ak.bezeichnung, sk.extid FROM artikelkategorien ak 
-        LEFT JOIN `shopexport_kategorien` sk ON ak.id = sk.kategorie AND sk.shop = '$shop' AND sk.shop > 0 AND sk.aktiv = 1
-        WHERE (ak.geloescht = 0 OR isnull(ak.geloescht)) AND ak.parent = '$parent' ORDER BY ak.bezeichnung");
+    $elemente = $this->app->DatabaseService->select(
+      "SELECT ak.id, ak.parent, ak.bezeichnung, sk.extid FROM artikelkategorien ak
+        LEFT JOIN `shopexport_kategorien` sk ON ak.id = sk.kategorie AND sk.shop = :shop AND sk.shop > 0 AND sk.aktiv = 1
+        WHERE (ak.geloescht = 0 OR isnull(ak.geloescht)) AND ak.parent = :parent ORDER BY ak.bezeichnung",
+      ['shop' => (int) $shop, 'parent' => (int) $parent]
+    );
     if ($elemente) {
       foreach ($elemente as $el) {
         $el['lvl'] = $lvl;
@@ -29453,7 +29544,7 @@ $( this ).dialog( "close" );
             $id
           );
         }
-        $this->app->DB->Update($sql);
+        $this->app->DatabaseService->execute($sql);
       }
 
       $status = $this->app->DatabaseService->selectValue("SELECT status FROM `{$typ}` WHERE id=:id LIMIT 1", ['id' => $id]);
@@ -29553,9 +29644,19 @@ $( this ).dialog( "close" );
 
     $belegmax = '';
     $ohnebriefpapier = 1;
-    $this->app->DB->Insert("INSERT INTO anfrage (id,datum,bearbeiter,firma,belegnr,adresse,ohne_briefpapier,bearbeiterid,projekt)
-            VALUES ('',NOW(),'" . $this->app->User->GetName() . "','" . $this->app->User->GetFirma() . "','$belegmax','$adresse','" . $ohnebriefpapier . "',
-              '" . $this->app->User->GetAdresse() . "','$projekt')");
+    $this->app->DatabaseService->execute(
+      "INSERT INTO anfrage (id,datum,bearbeiter,firma,belegnr,adresse,ohne_briefpapier,bearbeiterid,projekt)
+            VALUES (NULL,NOW(),:bearbeiter,:firma,:belegmax,:adresse,:ohnebriefpapier,:bearbeiterid,:projekt)",
+      [
+        'bearbeiter' => $this->app->User->GetName(),
+        'firma' => $this->app->User->GetFirma(),
+        'belegmax' => $belegmax,
+        'adresse' => $adresse,
+        'ohnebriefpapier' => $ohnebriefpapier,
+        'bearbeiterid' => $this->app->User->GetAdresse(),
+        'projekt' => $projekt,
+      ]
+    );
 
     $id = $this->app->DB->GetInsertID();
     $this->LoadSteuersaetzeWaehrung($id, "anfrage");
@@ -29764,9 +29865,19 @@ $( this ).dialog( "close" );
 
     $belegmax = "";
     $ohnebriefpapier = $this->Firmendaten("proformarechnung_ohnebriefpapier");
-    $this->app->DB->Insert("INSERT INTO proformarechnung (id,datum,bearbeiter,firma,belegnr,adresse,ohne_briefpapier,bearbeiterid,projekt,zollinformation)
-            VALUES ('',NOW(),'" . $this->app->User->GetName() . "','" . $this->app->User->GetFirma() . "','$belegmax','$adresse','" . $ohnebriefpapier . "',
-              '" . $this->app->User->GetAdresse() . "','$projekt',1)");
+    $this->app->DatabaseService->execute(
+      "INSERT INTO proformarechnung (id,datum,bearbeiter,firma,belegnr,adresse,ohne_briefpapier,bearbeiterid,projekt,zollinformation)
+            VALUES (NULL,NOW(),:bearbeiter,:firma,:belegmax,:adresse,:ohnebriefpapier,:bearbeiterid,:projekt,1)",
+      [
+        'bearbeiter' => $this->app->User->GetName(),
+        'firma' => $this->app->User->GetFirma(),
+        'belegmax' => $belegmax,
+        'adresse' => $adresse,
+        'ohnebriefpapier' => $ohnebriefpapier,
+        'bearbeiterid' => $this->app->User->GetAdresse(),
+        'projekt' => $projekt,
+      ]
+    );
 
     $id = $this->app->DB->GetInsertID();
     $this->LoadSteuersaetzeWaehrung($id, "proformarechnung");
@@ -30954,69 +31065,62 @@ $( this ).dialog( "close" );
       $preis = 0;
     }
 
-    $umsatzsteuer = $this->app->DB->real_escape_string($artikeldata['umsatzsteuer']);
+    $umsatzsteuer = $artikeldata['umsatzsteuer'];
     $mlmpunkte = $artikeldata['mlmpunkte'];
     $mlmbonuspunkte = $artikeldata['mlmbonuspunkte'];
     $mlmdirektpraemie = $artikeldata['mlmdirektpraemie'];
 
-    $bezeichnunglieferant = $this->app->DB->real_escape_string($bezeichnunglieferant);
-    $bestellnummer = $this->app->DB->real_escape_string($bestellnummer);
-    $beschreibung = $this->app->DB->real_escape_string($beschreibung);
-
-
     if ($typ == 'produktion') {
     } else {
-      $sort = 1 + (int) $this->app->DB->Select(
-        sprintf(
-          'SELECT IFNULL(MAX(sort),0) FROM `%s` WHERE `%s`= %d LIMIT 1',
-          $doctype . '_position',
-          $doctype,
-          (int) $auftrag
-        )
+      $_safeDoctypePos = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+      $_safeDoctypeCol = $this->app->DatabaseService->validateIdentifier($doctype);
+      $sort = 1 + (int) $this->app->DatabaseService->selectValue(
+        sprintf('SELECT IFNULL(MAX(sort),0) FROM `%s` WHERE `%s` = :auftrag LIMIT 1', $_safeDoctypePos, $_safeDoctypeCol),
+        ['auftrag' => (int) $auftrag]
       );
-      $this->app->DB->Insert(
+      $this->app->DatabaseService->execute(
         sprintf(
-          "INSERT INTO `%s` (%s,artikel,bezeichnung,nummer,menge,preis, sort,lieferdatum, umsatzsteuer, status,projekt,vpe,punkte,bonuspunkte,mlmdirektpraemie)
-              VALUES (%d, %d, '%s', '%s', %f, %f, %d, '%s', '%s','angelegt', %d, '%s', %f, %f, %f)",
-          $doctype . '_position',
-          $doctype,
-          (int) $auftrag,
-          $artikel,
-          $bezeichnunglieferant,
-          $bestellnummer,
-          (float) $menge,
-          (float) $preis,
-          $sort,
-          $datum,
-          $umsatzsteuer,
-          (int) $projekt,
-          $this->app->DB->real_escape_string($vpe),
-          $mlmpunkte,
-          $mlmbonuspunkte,
-          $mlmdirektpraemie
-        )
+          "INSERT INTO `%s` (`%s`,artikel,bezeichnung,nummer,menge,preis,sort,lieferdatum,umsatzsteuer,status,projekt,vpe,punkte,bonuspunkte,mlmdirektpraemie)
+              VALUES (:auftrag,:artikel,:bezeichnung,:nummer,:menge,:preis,:sort,:lieferdatum,:umsatzsteuer,'angelegt',:projekt,:vpe,:punkte,:bonuspunkte,:mlmdirektpraemie)",
+          $_safeDoctypePos,
+          $_safeDoctypeCol
+        ),
+        [
+          'auftrag' => (int) $auftrag,
+          'artikel' => (int) $artikel,
+          'bezeichnung' => (string) $bezeichnunglieferant,
+          'nummer' => (string) $bestellnummer,
+          'menge' => (float) $menge,
+          'preis' => (float) $preis,
+          'sort' => (int) $sort,
+          'lieferdatum' => (string) $datum,
+          'umsatzsteuer' => (string) $umsatzsteuer,
+          'projekt' => (int) $projekt,
+          'vpe' => (string) $vpe,
+          'punkte' => (float) $mlmpunkte,
+          'bonuspunkte' => (float) $mlmbonuspunkte,
+          'mlmdirektpraemie' => (float) $mlmdirektpraemie,
+        ]
       );
       $insid = $this->app->DB->GetInsertID();
       if (!empty($data) && !empty($data['parentap'])) {
-        $this->app->DB->Update(
+        $_safeDtPos2 = $this->app->DatabaseService->validateIdentifier($doctype . '_position');
+        $this->app->DatabaseService->execute(
           sprintf(
-            'UPDATE `%s` AS pp 
-                INNER JOIN artikel art ON pp.artikel = art.id AND (art.stueckliste = 1 OR art.juststueckliste = 1) 
-                SET pp.explodiert = 1 
-                WHERE pp.id = %d',
-            $doctype . '_position',
-            (int) $data['parentap']
-          )
+            'UPDATE `%s` AS pp
+                INNER JOIN artikel art ON pp.artikel = art.id AND (art.stueckliste = 1 OR art.juststueckliste = 1)
+                SET pp.explodiert = 1
+                WHERE pp.id = :parentap',
+            $_safeDtPos2
+          ),
+          ['parentap' => (int) $data['parentap']]
         );
-        $this->app->DB->Update(
+        $this->app->DatabaseService->execute(
           sprintf(
-            'UPDATE `%s` 
-                SET explodiert_parent = %d 
-                WHERE id = %d',
-            $doctype . '_position',
-            (int) $data['parentap'],
-            (int) $insid
-          )
+            'UPDATE `%s` SET explodiert_parent = :parentap WHERE id = :insid',
+            $_safeDtPos2
+          ),
+          ['parentap' => (int) $data['parentap'], 'insid' => (int) $insid]
         );
       }
     }
@@ -32266,7 +32370,7 @@ $( this ).dialog( "close" );
       $pos[$i]['angebot'] = $newid;
       $this->app->DB->UpdateArr('angebot_position', $newposid, 'id', $pos[$i], true);
       if (is_null($pos[$i]['steuersatz'])) {
-        $this->app->DB->Update("UPDATE angebot_position SET steuersatz = null WHERE id = '$newposid' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE angebot_position SET steuersatz = null WHERE id = :id LIMIT 1", ['id' => (int) $newposid]);
       }
     }
 
@@ -33438,7 +33542,7 @@ $( this ).dialog( "close" );
 
   function PaketannahmenAbschliessen()
   {
-    $arr = $this->app->DB->SelectArr("SELECT id FROM paketannahme WHERE status!='abgeschlossen'");
+    $arr = $this->app->DatabaseService->select("SELECT id FROM paketannahme WHERE status != 'abgeschlossen'");
     for ($i = 0; $i < (!empty($arr) ? count($arr) : 0); $i++) {
 
 
@@ -33507,8 +33611,9 @@ $( this ).dialog( "close" );
     if (is_array($projekt) && isset($projekt['eigenesteuer']) && isset($projekt['waehrung'])) {
       $projekt_arr = $projekt;
     } elseif ($projekt > 0) {
-      $projekt_arr = $this->app->DB->SelectRow(
-        "SELECT eigenesteuer,waehrung FROM projekt WHERE id='$projekt' LIMIT 1"
+      $projekt_arr = $this->app->DatabaseService->selectRow(
+        "SELECT eigenesteuer,waehrung FROM projekt WHERE id = :id LIMIT 1",
+        ['id' => (int) $projekt]
       );
     }
     if (!empty($projekt_arr['eigenesteuer'])) {
@@ -33529,8 +33634,9 @@ $( this ).dialog( "close" );
     if (is_array($projekt) && isset($projekt['eigenesteuer']) && isset($projekt['steuersatz_ermaessigt'])) {
       $projekt_arr = $projekt;
     } elseif ($projekt > 0) {
-      $projekt_arr = $this->app->DB->SelectRow(
-        "SELECT eigenesteuer,steuersatz_ermaessigt FROM projekt WHERE id='$projekt' LIMIT 1"
+      $projekt_arr = $this->app->DatabaseService->selectRow(
+        "SELECT eigenesteuer,steuersatz_ermaessigt FROM projekt WHERE id = :id LIMIT 1",
+        ['id' => (int) $projekt]
       );
     }
     if (!empty($projekt_arr['eigenesteuer'])) {
@@ -33551,8 +33657,9 @@ $( this ).dialog( "close" );
     if (is_array($projekt) && isset($projekt['eigenesteuer']) && isset($projekt['steuersatz_normal'])) {
       $projekt_arr = $projekt;
     } elseif ($projekt > 0) {
-      $projekt_arr = $this->app->DB->SelectRow(
-        "SELECT eigenesteuer,steuersatz_normal FROM projekt WHERE id='$projekt' LIMIT 1"
+      $projekt_arr = $this->app->DatabaseService->selectRow(
+        "SELECT eigenesteuer,steuersatz_normal FROM projekt WHERE id = :id LIMIT 1",
+        ['id' => (int) $projekt]
       );
     }
     if (!empty($projekt_arr['eigenesteuer'])) {
@@ -33826,8 +33933,14 @@ $( this ).dialog( "close" );
 
 
     if ($typ === 'auftrag') {
-      $artikelarr = $this->app->DB->SelectArr("SELECT * FROM auftrag_position WHERE auftrag='$id' AND geliefert!=1");
-      $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE parameter='$id' AND objekt='auftrag'");
+      $artikelarr = $this->app->DatabaseService->select(
+        "SELECT * FROM auftrag_position WHERE auftrag = :id AND geliefert != 1",
+        ['id' => (int) $id]
+      );
+      $this->app->DatabaseService->execute(
+        "DELETE FROM lager_reserviert WHERE parameter = :id AND objekt = 'auftrag'",
+        ['id' => (int) $id]
+      );
 
     }
 
@@ -33991,7 +34104,11 @@ $( this ).dialog( "close" );
   {
     // wenn im beleg 3 oder 4 dann zaehlt die einstellung
     if ($doctypeid > 0 && ($doctype === 'rechnung' || $doctype === 'angebot' || $doctype === 'auftrag' || $doctype == 'gutschrift' || $doctype == 'bestellung')) {
-      $anzeigesteuer = $this->app->DB->Select("SELECT anzeigesteuer FROM $doctype WHERE id='$doctypeid' LIMIT 1");
+      $_safeDoctype = $this->app->DatabaseService->validateIdentifier($doctype);
+      $anzeigesteuer = $this->app->DatabaseService->selectValue(
+        sprintf('SELECT anzeigesteuer FROM `%s` WHERE id = :id LIMIT 1', $_safeDoctype),
+        ['id' => (int) $doctypeid]
+      );
       if ($anzeigesteuer == 3) {
         return 1;
       }
@@ -34000,12 +34117,9 @@ $( this ).dialog( "close" );
     if ($projekt > 0) {
       $orderBy = ' ORDER BY projekt DESC';
     }
-    return (int) $this->app->DB->Select(
-      sprintf(
-        'SELECT netto FROM adresse_typ WHERE type=\'%s\' %s LIMIT 1',
-        $typ,
-        $orderBy
-      )
+    return (int) $this->app->DatabaseService->selectValue(
+      'SELECT netto FROM adresse_typ WHERE type = :typ' . $orderBy . ' LIMIT 1',
+      ['typ' => (string) $typ]
     );
   }
 
@@ -34652,10 +34766,22 @@ $( this ).dialog( "close" );
 
           if ($check_keinrabatterlaubt != "1" && $check_porto != "1" && $check_rabatt != "1") {
 
-            $this->app->DB->Update("UPDATE " . $art . "_position SET rabattsync='1',
-                      grundrabatt='$grundrabatt', rabatt1='$rabatt1', rabatt2='$rabatt2', rabatt3='$rabatt3', rabatt4='$rabatt4', rabatt5='$rabatt5',
-                      keinrabatterlaubt='0' WHERE id='" . $artikelarr[$i]['id'] . "' AND rabatt=0 AND keinrabatterlaubt!='1' LIMIT 1");
-
+            $_safeArtPos = $this->app->DatabaseService->validateIdentifier($art . '_position');
+            $this->app->DatabaseService->execute(
+              sprintf(
+                "UPDATE `%s` SET rabattsync=1, grundrabatt=:grundrabatt, rabatt1=:rabatt1, rabatt2=:rabatt2, rabatt3=:rabatt3, rabatt4=:rabatt4, rabatt5=:rabatt5, keinrabatterlaubt=0 WHERE id=:id AND rabatt=0 AND keinrabatterlaubt!='1' LIMIT 1",
+                $_safeArtPos
+              ),
+              [
+                'grundrabatt' => (float) $grundrabatt,
+                'rabatt1' => (float) $rabatt1,
+                'rabatt2' => (float) $rabatt2,
+                'rabatt3' => (float) $rabatt3,
+                'rabatt4' => (float) $rabatt4,
+                'rabatt5' => (float) $rabatt5,
+                'id' => (int) $artikelarr[$i]['id'],
+              ]
+            );
 
             if ($this->app->DB->affected_rows() > 0) {
               $artikelarr[$i]['rabattsync'] = 1;
@@ -34778,7 +34904,11 @@ $( this ).dialog( "close" );
       $portoberechnen = $this->PortoBerechnen($adresse, $betrag, $portoartikel, $realpreis);
 
       if ($portoberechnen || $realpreis) {
-        $this->app->DB->Update("UPDATE " . $art . "_position SET menge='1',preis='" . $this->PortoBerechnen($adresse, $betrag, $portoartikel) . "' WHERE id='" . $portoid . "' LIMIT 1");
+        $_safeArtPortoUpd = $this->app->DatabaseService->validateIdentifier($art . '_position');
+        $this->app->DatabaseService->execute(
+          sprintf("UPDATE `%s` SET menge=1, preis=:preis WHERE id=:id LIMIT 1", $_safeArtPortoUpd),
+          ['preis' => (string) $this->PortoBerechnen($adresse, $betrag, $portoartikel), 'id' => (int) $portoid]
+        );
       }
     }
     $this->ANABREGSNeuberechnenGesamtsumme($id, $art);
@@ -35103,7 +35233,10 @@ $( this ).dialog( "close" );
         break;
     }
     if (strpos($artikeldata['typ'], '_kat') !== false) {
-      $kategorie = $this->app->DB->SelectRow("SELECT * FROM artikelkategorien WHERE id = '" . (int) str_replace('_kat', '', $artikeldata['typ']) . "' LIMIT 1");
+      $kategorie = $this->app->DatabaseService->selectRow(
+        "SELECT * FROM artikelkategorien WHERE id = :id LIMIT 1",
+        ['id' => (int) str_replace('_kat', '', $artikeldata['typ'])]
+      );
     }
     if ($kategorie && ($tmpsteuertext === '' || $tmpsteuertext === false || is_null($tmpsteuertext))) {
       switch ($ust_befreit) {
@@ -35287,8 +35420,15 @@ $( this ).dialog( "close" );
       }
     }
 
-    $ust_befreit = $this->app->DB->Select("SELECT ust_befreit FROM $typ WHERE id = '$typid' LIMIT 1");
-    $ustid = $this->app->DB->Select("SELECT ustid FROM $typ WHERE id = '$typid' LIMIT 1");
+    $_safeTyp35291 = $this->app->DatabaseService->validateIdentifier($typ);
+    $ust_befreit = $this->app->DatabaseService->selectValue(
+      sprintf('SELECT ust_befreit FROM `%s` WHERE id = :id LIMIT 1', $_safeTyp35291),
+      ['id' => (int) $typid]
+    );
+    $ustid = $this->app->DatabaseService->selectValue(
+      sprintf('SELECT ustid FROM `%s` WHERE id = :id LIMIT 1', $_safeTyp35291),
+      ['id' => (int) $typid]
+    );
     $aufwendung = false;
     switch ($typ) {
       case 'bestellung':
@@ -36785,14 +36925,16 @@ $( this ).dialog( "close" );
 
   public function CheckFileSort($objekt, $parameter)
   {
-    $arr = $this->app->DB->SelectArr("SELECT SQL_CALC_FOUND_ROWS s.id, s.sort 
-            FROM datei d 
+    $arr = $this->app->DatabaseService->select(
+      "SELECT s.id, s.sort
+            FROM datei d
             INNER JOIN datei_stichwoerter s ON d.id=s.datei
             LEFT JOIN (SELECT datei, max(version) as version FROM datei_version GROUP BY datei ) v2  ON v2.datei=d.id
             LEFT JOIN datei_version v ON v.datei=v2.datei AND v.version = v2.version
-            WHERE s.objekt LIKE '$objekt' AND s.parameter='$parameter' AND d.geloescht=0 
-            ORDER BY s.sort
-             ");
+            WHERE s.objekt LIKE :objekt AND s.parameter = :parameter AND d.geloescht=0
+            ORDER BY s.sort",
+      ['objekt' => (string) $objekt, 'parameter' => (string) $parameter]
+    );
     if (!$arr)
       return;
     $oldsort = false;
@@ -37116,8 +37258,8 @@ $( this ).dialog( "close" );
 
   function GetBelegTickets($doctype, $doctypeid)
   {
-    $sql = "
-                SELECT DISTINCT
+    return $this->app->DatabaseService->select(
+      "SELECT DISTINCT
                     t.id,
                     tn.ticket
                 FROM
@@ -37129,15 +37271,15 @@ $( this ).dialog( "close" );
                 INNER JOIN `ticket` t ON
                     t.schluessel = tn.ticket
                 WHERE
-                    dst.objekt = 'Ticket' AND dsb.objekt = '" . $doctype . "' AND dsb.parameter = '" . $doctypeid . "'
-            ";
-    return ($this->app->DB->SelectArr($sql));
+                    dst.objekt = 'Ticket' AND dsb.objekt = :doctype AND dsb.parameter = :doctypeid",
+      ['doctype' => (string) $doctype, 'doctypeid' => (string) $doctypeid]
+    );
   }
 
   function GetTicketBelege($ticketid)
   {
-    $sql = "
-                SELECT DISTINCT
+    return $this->app->DatabaseService->select(
+      "SELECT DISTINCT
                     dsb.objekt doctype,
                     dsb.parameter id,
                     belege.belegnr,
@@ -37166,10 +37308,9 @@ $( this ).dialog( "close" );
                         'auftrag',
                         'verbindlichkeit',
                         'lieferantengutschrift'
-                    ) AND t.id = '" . $ticketid . "'
-            ";
-
-    return ($this->app->DB->SelectArr($sql));
+                    ) AND t.id = :ticketid",
+      ['ticketid' => (int) $ticketid]
+    );
   }
 
   function GetDateiName($id)
@@ -38602,32 +38743,28 @@ $( this ).dialog( "close" );
 
 
 
-    $waehrungSafeStatW = $this->app->DB->real_escape_string((string) $waehrung);
     $idIntStatW = (int) $id;
-    $sql = "SELECT FORMAT(
+    $preisSortDir = ($min ? 'ASC' : 'DESC');
+    $preis = $this->app->DatabaseService->selectValue(
+      "SELECT FORMAT(
             SUM(
-
                 (
                   SELECT e.preis *
-
                   if(e.waehrung != '',ifnull(
-                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeStatW' AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeStatW' AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
-                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeStatW' AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeStatW' AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
-
+                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = :w1 AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = :w2 AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
+                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = :w3 AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = :w4 AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
                   )
-                  FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') ORDER BY waehrung = '$waehrungSafeStatW' DESC, waehrung = '' DESC, preis " . ($min ? 'ASC' : 'DESC') . " LIMIT 1
-
+                  FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') ORDER BY waehrung = :w5 DESC, waehrung = '' DESC, preis " . $preisSortDir . " LIMIT 1
                 )
-
               *s.menge)
             ,2)
               FROM stueckliste s
               LEFT JOIN artikel a ON a.id=s.artikel
-              WHERE s.stuecklistevonartikel=$idIntStatW";
-
-    $preis = $this->app->DB->Select($sql);
+              WHERE s.stuecklistevonartikel = :artikelid",
+      ['w1' => (string) $waehrung, 'w2' => (string) $waehrung, 'w3' => (string) $waehrung, 'w4' => (string) $waehrung, 'w5' => (string) $waehrung, 'artikelid' => $idIntStatW]
+    );
     //Kein Einkaufspreis definiert => Stückliste
 
     $startikel = $this->app->DatabaseService->select("SELECT s.artikel FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id and a.stueckliste = '1'", ['id' => $idIntStatW]);
@@ -38664,14 +38801,11 @@ $( this ).dialog( "close" );
         foreach ($ids as $v)
           $subwherea[] = (int) $v['artikel'];
         $swhere = " (a.id = " . implode(' OR a.id = ', $subwherea) . ")";
-        $sql = "
-
-              SELECT format( SUM(if (ep>0,ep,vp)),2)
+        $preis_max = $this->app->DatabaseService->selectValue(
+          "SELECT format( SUM(if (ep>0,ep,vp)),2)
                 from (SELECT MAX(e.preis) as ep, MAX(v.preis) vp FROM artikel a left join einkaufspreise e on a.id = e.artikel left join verkaufspreise v on a.id = v.artikel
-              WHERE $swhere ) q
-
-            ";
-        $preis_max = $this->app->DB->Select($sql);
+              WHERE $swhere ) q"
+        );
       }
       $startikel = $this->app->DatabaseService->select("SELECT s.artikel FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id and a.stueckliste = '1'", ['id' => $idInt]);
       if ($startikel) {
@@ -38694,58 +38828,48 @@ $( this ).dialog( "close" );
   {
     if ($waehrung == '')
       $waehrung = 'EUR';
-    $waehrungSafeSLW = $this->app->DB->real_escape_string((string) $waehrung);
     $idIntSLW = (int) $id;
-    $sql = "SELECT
+    $preisSortDirSLW = ($min ? 'ASC' : 'DESC');
+    $waehrungSLW = (string) $waehrung;
+    $preis_max = round((float) $this->app->DatabaseService->selectValue(
+      "SELECT
             SUM(
-
                 (
                   SELECT e.preis *
-
                   if(e.waehrung != '',ifnull(
-                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeSLW' AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeSLW' AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
-                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeSLW' AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeSLW' AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
-
+                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = :w1 AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = :w2 AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
+                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = :w3 AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = :w4 AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
                   )
-                  FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis >= CURDATE() OR ifnull(e.gueltig_bis, '0000-00-00') = '0000-00-00') ORDER BY waehrung = '$waehrungSafeSLW' DESC, waehrung = '' DESC, preis " . ($min ? 'ASC' : 'DESC') . " LIMIT 1
-
+                  FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis >= CURDATE() OR ifnull(e.gueltig_bis, '0000-00-00') = '0000-00-00') ORDER BY waehrung = :w5 DESC, waehrung = '' DESC, preis " . $preisSortDirSLW . " LIMIT 1
                 )
-
               *s.menge)
-
               FROM stueckliste s
               LEFT JOIN artikel a ON a.id=s.artikel
-              WHERE s.stuecklistevonartikel=$idIntSLW";
+              WHERE s.stuecklistevonartikel = :artikelid",
+      ['w1' => $waehrungSLW, 'w2' => $waehrungSLW, 'w3' => $waehrungSLW, 'w4' => $waehrungSLW, 'w5' => $waehrungSLW, 'artikelid' => $idIntSLW]
+    ), 2);
 
-
-    $preis_max = round((float) $this->app->DB->Select($sql), 2);
-
-    $sql = "SELECT
+    return round($preis_max + (float) $this->app->DatabaseService->selectValue(
+      "SELECT
             SUM(
-
                 (
                   SELECT e.preis *
-
                   if(e.waehrung != '',ifnull(
-                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeSLW' AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeSLW' AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
-                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = '$waehrungSafeSLW' AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
-                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = '$waehrungSafeSLW' AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
-
+                    (SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = :w1 AND waehrung_nach = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                    ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = :w2 AND waehrung_von = e.waehrung AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1)),
+                    ifnull((SELECT kurs FROM waehrung_umrechnung WHERE waehrung_von = :w3 AND waehrung_nach = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),
+                      ifnull((SELECT 1/kurs FROM waehrung_umrechnung WHERE waehrung_nach = :w4 AND waehrung_von = 'EUR' AND (gueltig_bis >= curdate() OR isnull(gueltig_bis) OR gueltig_bis = '0000-00-00' ) LIMIT 1),1))
                   )
-                  FROM verkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis >= CURDATE() OR ifnull(e.gueltig_bis, '0000-00-00') = '0000-00-00') ORDER BY waehrung = '$waehrungSafeSLW' DESC, waehrung = '' DESC, preis " . ($min ? 'ASC' : 'DESC') . " LIMIT 1
-
+                  FROM verkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis >= CURDATE() OR ifnull(e.gueltig_bis, '0000-00-00') = '0000-00-00') ORDER BY waehrung = :w5 DESC, waehrung = '' DESC, preis " . $preisSortDirSLW . " LIMIT 1
                 )
-
               *s.menge)
-
               FROM stueckliste s
               LEFT JOIN artikel a ON a.id=s.artikel
-              WHERE s.stuecklistevonartikel=$idIntSLW AND a.stueckliste = 1";
-
-    return round($preis_max + (float) $this->app->DB->Select($sql), 2);
+              WHERE s.stuecklistevonartikel = :artikelid AND a.stueckliste = 1",
+      ['w1' => $waehrungSLW, 'w2' => $waehrungSLW, 'w3' => $waehrungSLW, 'w4' => $waehrungSLW, 'w5' => $waehrungSLW, 'artikelid' => $idIntSLW]
+    ), 2);
 
   }
 

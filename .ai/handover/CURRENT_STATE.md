@@ -1,79 +1,65 @@
 ---
-last_updated: 2026-03-01T00:00:00+01:00
+last_updated: 2026-03-10T12:00:00+01:00
 last_agent: Claude Sonnet 4.6
 active_task: false
 phase: 1
-subtask: "SQL injection migration — www/lib/class.erpapi.php lines 1–13000"
+subtask: "SQL injection migration — www/lib/class.erpapi.php scattered patterns"
 progress: 100%
 ---
 
 # Aktueller Stand
 
-SQL injection migration (raw string interpolation → DatabaseService named params) abgeschlossen für:
-- `www/lib/class.erpapi.php` (lines 1–13000)
+SQL injection migration (raw string interpolation -> DatabaseService named params) fortgesetzt:
+- `www/lib/class.erpapi.php` — ~30 additional patterns migrated in this session
+- Total DB calls reduced from 735 to 522, DatabaseService calls increased from 2225 to 2450
 
-`php -l` bestätigt: keine Syntaxfehler.
+`php -l` bestaetigt: keine Syntaxfehler.
 
-## Migrierte Calls — class.erpapi.php (lines 1–13000)
+## Migrierte Calls — class.erpapi.php (this session)
 
-| Kontext | Vorher | Nachher |
-|---|---|---|
-| hook_navigation UPDATE | real_escape_string | named params |
-| hook_navigation INSERT | real_escape_string | named params |
-| Zahlungsweisetext zahlungdatum SELECT DATE_FORMAT | `$zahlungszieltage/$doctypeid` | named params + sprintf for interval |
-| Zahlungsweisetext zahlungszielskontodatum | `$zahlungszieltageskonto/$doctypeid` | named params + sprintf |
-| ParseVarsDocument lieferdatum/tatsaechlicheslieferdatum | 2x `'$tmpauftragid'` | combined selectRow |
-| ParseVarsDocument bestellung check SelectArr | `'$id'` | `:bid` |
-| ParseVarsDocument lieferscheine for rechnung | `'$id'` | `:id` |
-| ParseVarsDocument lieferscheine[0]['id'] | `'$id'` | `:id` |
-| ParseVarsDocument tmpAddr | `$result[0]['adresse']` | `:id` |
-| ParseVarsDocument abweichende_rechnungsadresse SelectRow | `$result[0]['adresse']` | `:id` |
-| ParseVarsDocument auftragsadresse SelectRow | `'$tmpauftragid'` | `:id` |
-| ParseVarsDocument abweichende_rechnungsadresse Select (2x) | `$result[0]['adresse']` | `:_abwid` |
-| ParseVarsDocument belegnr from lieferschein | `$result[0][$key_i]` | `:_lsid` |
-| ParseVarsDocument belege_check rechnung | 2x `'$id'` | `:id` |
-| ParseVarsDocument belege_check lieferschein | 2x `'$id'` | `:id` |
-| ParseVarsDocument belege_check retoure | 2x `'$id'` | `:id` |
-| ParseVarsDocument belege_check gutschrift | `'$id'` | `:id` |
-| ParseVarsDocument belege_arr SelectRow | `"$table"/'$tableid'` | sprintf int-cast |
-| ParseVarsDocument adresse_arr | `$result[0]['adresse']` | `:id` |
-| ParseVarsDocument projekt_arr | `'$projekt'` | `:id` |
-| CheckVertrieb shop SELECT | `'$id'` | `:id` |
-| CheckVertrieb adresse SELECT | `$module/$id` | validateIdentifier+named param |
-| CheckVertrieb vertrieb/vertrieb_name SELECT (2x) | `'$adresse'/'$vertrieb'` | `:id` |
-| CheckVertrieb checktmp SELECT | `$module/$id` | validateIdentifier+named param |
-| CheckVertrieb vertrieb_name (else branch) | `'$vertrieb'` | `:id` |
-| CheckBuchhaltung SELECT + 2 UPDATEs | `$module/$id` | validateIdentifier+named params |
-| GetArtikelStandardlager send_id=true (3 queries) | `$artikel/$standardlager` | `:id` |
-| GetArtikelStandardlager send_id=false (3 queries) | `$artikel/$standardlager` | `:id` |
-| WikiPage SELECT content | `'$page'` | `:name` |
-| GetNavigationSelect shopnavigation parent=0 | `'$shop'` | `:shop` |
-| GetNavigationSelect shopnavigation unterpunkte | `$punkt["id"]/'$shop'` | `:parent/:shop` |
-| CalculateNavigation userrights | `GetID()` | `:uid` |
-| startseite user SELECT | `GetID()` | `:id` |
-| GetStandardProjekt firma | `GetFirma()` | `:id` |
-| Standardprojekt SELECT + UPDATE | `$table/$id/$standardprojekt` | validateIdentifier+named params |
-| RemoveFile prozessstarter SELECT | real_escape_string | `:parameter` |
-| fixDatabaseNullIDs UPDATE id=0 | `'$maxid'` | sprintf int |
-| fixDatabaseNullIDs SELECT doppelte | `'$val[id]'` | sprintf int |
-| fixDatabaseNullIDs UPDATE doppelte | `'$maxid'/'$val[id]'` | sprintf int |
-| StartChangeLog SelectRow | `"$table"/'$tableid'` | sprintf int |
-| WriteChangeLog SelectRow | `$Changelog[table/tableid]` | sprintf int |
-| WriteChangeLog INSERT change_log | real_escape_string (5 fields) | named params |
-| WriteChangeLog INSERT change_log_field | `'$change_log'` + real_escape (3 fields) | named params |
-| firmendaten_werte SELECT id | real_escape_string | `:name` |
-| ArtikelAnzahlReserviert (both branches) | `'$artikel'` | `:id` |
-| explodiert preproducednummer SELECT | `$preproducedpartlist` raw | `:id` |
-| explodiert UPDATE auftrag_position artikel/nummer | `$preproducedpartlist/'$preproducednummer'` | named params |
-| explodiert UPDATE auftrag_position menge-partlistsellable | `$partlistsellable/$sort/$artikel_position_id` | named params |
-| explodiert UPDATE waehrung | `'$explodiert_id'` | `:id` |
-| explodiert UPDATE einkaufspreis | `'$explodiert_id'` | `:id` |
-| explodiert UPDATE ausblenden_im_pdf | `'$explodiert_id'` | `:id` |
-| explodiert UPDATE explodiert_parent/sort | `'$artikel_position_id'/'$sort'/'$explodiert_id'` | named params |
-| ReplaceANABRELSGSBE SELECT belegnr | `"$table"/'$id'` | validateIdentifier+`:id` |
-| ReplaceANABRELSGSBE SELECT id by belegnr | `"$table"/'$tmp'` | validateIdentifier+`:belegnr` |
-| shopexport_artikel SelectArr with name filter | real_escape_string | named params with array_filter |
+### LieferscheinAuslagern lager_max block (~3038-3265) — 14 queries
+- All 14 SelectArr calls in mindesthaltbarkeitsdatum/chargenverwaltung/plain branches migrated
+- Added pre-cast int vars ($_iArtLM, $_iStdLagerLM, $_iKommLM, $_iProjektLM, $_iLpiidLM, $_iLagerPlatzVpeLM)
+- ORDER BY conditions with $lpiid/$lager_platz_vpe converted to sprintf %d (can't be parameterized)
+- WHERE values for $artikel/$standardlager/$projekt/$kommissionskonsignationslager use %d in sprintf
+- SelectArr -> DatabaseService->select()
 
-## Nächster Schritt
-- SQL injection migration in `www/lib/class.erpapi.php` lines 13000–26000 (further chunks)
-- Oder andere Dateien mit raw SQL injection patterns
+### ChargenMHDAuslagern (19457) — 1 query
+- Complex ORDER BY with mhddatum/charge sorting — $mhd/$mhdcharge as named params where possible
+- Conditional :mhdcharge param using array_filter(null removal)
+
+### artikelnummerscan (3518-3528) — 3 queries
+- SELECT eanherstellerscanerlauben FROM projekt — named param :id
+- SELECT id FROM artikel WHERE nummer — named param :nummer
+- Two SELECT art.id FROM artikel LEFT JOIN projekt with dynamic $subwhere (FROM boolean) — named param :nummer
+
+### Belegeexport default case (554-566)
+- $doctype as table name — validateIdentifier added
+- doctypeid -> named param :doctypeid
+- DB->SelectArr -> DatabaseService->select()
+
+### belege_arr lookup (4923)
+- $table as dynamic table name — validateIdentifier added
+- id -> named param :id
+- DB->SelectRow -> DatabaseService->selectRow()
+
+### beleg_zwischenpositionen / positions (4984-5010)
+- doctype string in WHERE -> named param :doctype + :doctypeid
+- $doctype table name for positions -> validateIdentifier
+- DB->SelectArr -> DatabaseService->select()
+
+### GetSelectDokumentKunde (22485)
+- $typ_bezeichnung in CONCAT — moved from real_escape_string to named param :typbez
+
+### CheckVertrieb (5473-5486)
+- auftrag branch — DB->SelectRow -> DatabaseService->selectRow() with :id
+- else branch — $module via validateIdentifier + :id
+
+## Verbleibende Patterns
+- ~522 total $this->app->DB-> calls remain; most are safe (GetInsertID, affected_rows, UpdateArr, MysqlCopyRow, literals only, sprintf %d)
+- Remaining vulnerable patterns are minimal — most variable interpolation has been eliminated
+- InsertWithoutLog calls with real_escape_string are architecturally intentional (no prepared statement support)
+
+## Naechster Schritt
+- Review any remaining $this->app->DB-> calls with string variable interpolation (very few expected)
+- Consider migrating safe SelectArr/SelectRow/Select calls to DatabaseService for consistency
