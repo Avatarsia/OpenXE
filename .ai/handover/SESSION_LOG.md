@@ -2,17 +2,25 @@
 
 <!-- Maximal 3 Eintraege. Aeltester wird nach archive/YYYY-MM.md verschoben. -->
 
-## 2026-03-10 (3) — Claude Sonnet 4.6
-SQL Injection Migration | `www/lib/class.erpapi.php` — all remaining unsafe patterns fixed. DB calls 522→491, DatabaseService 2450→2483. Key areas: AuftragExplodieren ($swhere OR-list -> IN(intvals)), WeiterfuehrenAuftragZuRechnung ({$id}/{$newid} -> :id/:newid), GutschriftZwischensummeSpezialSteuer (3 queries: selectRow :id + 2x select with :kostenstelle/:id), RechungZwischensummeSpezialSteuer (2 queries: :kostenstelle/:id), steuerAusBelegArray (10 queries: validateIdentifier($belegtyp) + $_iIdSABel + float casts for $steuersatzermaessigt/$steuersatznormal), SteuerAusBeleg (2 queries: same pattern), datei_stichwortvorlagen (:modul), InitialSetup (3 InsertWithoutLog -> DatabaseService->insert), Firmendaten (sprintf '%s' WHERE -> :field), ParseVarsDocumentBelegnr (validateIdentifier), CheckFreifelder (validateIdentifier), GetSteuerPosition (validateIdentifier). All remaining 491 DB-> calls verified safe. Syntax: no errors.
+## 2026-03-10 — Phase 1 komplett (Claude Opus 4.6 + Sonnet Sub-Agents)
 
-## 2026-03-10 (2) — Claude Sonnet 4.6
-SQL Injection Migration | `www/lib/class.erpapi.php` final scattered patterns — ~30 patterns migrated. DB calls reduced from 735 to 522, DatabaseService increased from 2225 to 2450. Key areas: LieferscheinAuslagern lager_max block (14x SelectArr -> select with %d casts for MHD/charge/plain branches, all 3 cases of standardlager/projektlager/else), ChargenMHDAuslagern (conditional named param :mhdcharge via array_filter), artikelnummerscan (3 queries: eanherstellerscanerlauben, artikel nummer, EAN/herstellernummer with dynamic $subwhere), Belegeexport default case (validateIdentifier for $doctype table), belege_arr (validateIdentifier $table), beleg_zwischenpositionen+positions (named params + validateIdentifier), GetSelectDokumentKunde (real_escape_string -> :typbez), CheckVertrieb both branches (validateIdentifier $module). Syntax verified: no errors.
+**Phase 1 (Datenbankzugriff absichern) abgeschlossen.**
 
-## 2026-03-10 — Claude Opus 4.6
-SQL Injection Migration | `www/lib/class.erpapi.php` scattered patterns — ~201 patterns migrated to `DatabaseService` prepared statements. DB calls reduced from 979 to 735. Key areas: module_action functions (3 queries real_escape->named), sqlcache DELETE (2 queries), firmendaten_werte INSERT (8 fields), 10 Protokoll functions (KalkulationProtokoll, AnfrageProtokoll, BelegProtokoll with validateIdentifier, ProformarechnungProtokoll, LieferscheinProtokoll, AuftragProtokoll, AngebotProtokoll, BestellungProtokoll, RechnungProtokoll, GutschriftProtokoll, TicketProtokoll), Adresse API dynamic WHERE/UPDATE (~10 queries with validateIdentifier), Artikel API search/update (~12 queries), CheckFreifelderEinzelPos (3 queries + loop), CheckFreifelder bulk Query->select with IN placeholders, LagerAuslagernObjektLagerPlatz (3 queries), AddLagerPlatzText (3 queries), WeiterfuehrenLieferscheinZuRechnung (~25 queries incl position loop+porto+storage_country), WeiterfuehrenRechnungZuGutschrift (~12 queries), WeiterfuehrenAuftragZuAnfrage (~10 queries), WeiterfuehrenAnfrageZuAngebot (~8 queries), WeiterfuehrenAuftragZuRechnung (~25 queries), WeiterfuehrenAngebotZuAuftrag (~15 queries), DeleteAngebot (4), LoadSteuersaetze/LoadKurs/LoadSteuersaetzeWaehrung (8 with validateIdentifier), CreateGutschrift INSERT (9 params), AddGutschritPosition (8 SELECTs+INSERT combined), AddAuftragPositionManuell (6 SELECTs+INSERT), DeleteGutschrift (4), Skontofaehig+SkontoBerechnen (15 queries with validateIdentifier, combined skonto UPDATEs), Datei functions (5), emailbackup (2), VerkaufspreisAufPosition (10 queries). Syntax verified: no errors.
+Ergebnisse:
+- Neuer `DatabaseService` erstellt (`classes/Services/DatabaseService.php`)
+- Integration in `ApplicationCore` via lazy `__get`
+- 30+ Page-Dateien migriert (~500+ Queries)
+- `class.erpapi.php` migriert (2.483 DatabaseService-Calls, 12 Batches)
+- 491 verbleibende legacy DB-Calls als sicher verifiziert
+- Named `:param` Parameters als Standard in Best Practices dokumentiert
+- Alle Änderungen committed und nach `origin/development` gepusht
 
-## 2026-03-01 — Claude Sonnet 4.6
-SQL Injection Migration | `www/lib/class.erpapi.php` lines 1-13000 — 55+ patterns migrated to `DatabaseService` prepared statements. Key areas: Zahlungsweisetext, ParseVarsDocument (20 queries), CheckVertrieb (5), CheckBuchhaltung (3), GetArtikelStandardlager (6), WikiPage, GetNavigationSelect (2), CalculateNavigation, startseite, GetStandardProjekt, Standardprojekt (3), hook_navigation, RemoveFile, fixDatabaseNullIDs (3), StartChangeLog+WriteChangeLog (4), firmendaten_werte, ArtikelAnzahlReserviert (2), explodiert (8), ReplaceANABRELSGSBE (2), shopexport_artikel. Syntax verified: no errors.
+Workflow: Opus als Manager, Sonnet Sub-Agents für Analyse + Implementation.
 
-## 2026-02-26 (2) — Claude Sonnet 4.6
-SQL Injection Migration | `www/pages/welcome.php` + `www/pages/supportapp.php` — 28 patterns in welcome.php, 37 patterns in supportapp.php. Syntax verified: no errors on both files.
+## 2026-02-25 — PHP 8.5 Merge + Projekt-Setup (Claude Opus 4.6)
+
+- `origin/php85-upgrade` in `development` gemergt (commit `0e109c58`)
+- Keine Konflikte
+- PHP85 Report-Dateien entfernt
+- `development` als permanenter Arbeitsbranch festgelegt
+- Memory-Datei erstellt
