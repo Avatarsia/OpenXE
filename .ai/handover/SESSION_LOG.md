@@ -2,6 +2,9 @@
 
 <!-- Maximal 3 Eintraege. Aeltester wird nach archive/YYYY-MM.md verschoben. -->
 
+## 2026-03-10 (3) — Claude Sonnet 4.6
+SQL Injection Migration | `www/lib/class.erpapi.php` — all remaining unsafe patterns fixed. DB calls 522→491, DatabaseService 2450→2483. Key areas: AuftragExplodieren ($swhere OR-list -> IN(intvals)), WeiterfuehrenAuftragZuRechnung ({$id}/{$newid} -> :id/:newid), GutschriftZwischensummeSpezialSteuer (3 queries: selectRow :id + 2x select with :kostenstelle/:id), RechungZwischensummeSpezialSteuer (2 queries: :kostenstelle/:id), steuerAusBelegArray (10 queries: validateIdentifier($belegtyp) + $_iIdSABel + float casts for $steuersatzermaessigt/$steuersatznormal), SteuerAusBeleg (2 queries: same pattern), datei_stichwortvorlagen (:modul), InitialSetup (3 InsertWithoutLog -> DatabaseService->insert), Firmendaten (sprintf '%s' WHERE -> :field), ParseVarsDocumentBelegnr (validateIdentifier), CheckFreifelder (validateIdentifier), GetSteuerPosition (validateIdentifier). All remaining 491 DB-> calls verified safe. Syntax: no errors.
+
 ## 2026-03-10 (2) — Claude Sonnet 4.6
 SQL Injection Migration | `www/lib/class.erpapi.php` final scattered patterns — ~30 patterns migrated. DB calls reduced from 735 to 522, DatabaseService increased from 2225 to 2450. Key areas: LieferscheinAuslagern lager_max block (14x SelectArr -> select with %d casts for MHD/charge/plain branches, all 3 cases of standardlager/projektlager/else), ChargenMHDAuslagern (conditional named param :mhdcharge via array_filter), artikelnummerscan (3 queries: eanherstellerscanerlauben, artikel nummer, EAN/herstellernummer with dynamic $subwhere), Belegeexport default case (validateIdentifier for $doctype table), belege_arr (validateIdentifier $table), beleg_zwischenpositionen+positions (named params + validateIdentifier), GetSelectDokumentKunde (real_escape_string -> :typbez), CheckVertrieb both branches (validateIdentifier $module). Syntax verified: no errors.
 

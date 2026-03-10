@@ -5668,21 +5668,26 @@ title: 'Abschicken',
     if ($this->app->DB->Select("SELECT COUNT(id) FROM adresse WHERE geloescht!=1") <= 0) {
       $mitarbeiternummer = $this->GetNextMitarbeiternummer();
 
-      $sql = 'INSERT INTO `adresse` (`id`, `typ`, `marketingsperre`, `trackingsperre`, `rechnungsadresse`, `sprache`, `name`, `abteilung`, `unterabteilung`, `ansprechpartner`, `land`, `strasse`, `ort`, `plz`, `telefon`, `telefax`, `mobil`, `email`, `ustid`, `ust_befreit`, `passwort_gesendet`, `sonstiges`, `adresszusatz`, `kundenfreigabe`, `steuer`, `logdatei`, `kundennummer`, `lieferantennummer`, `mitarbeiternummer`, `konto`, `blz`, `bank`, `inhaber`, `swift`, `iban`, `waehrung`, `paypal`, `paypalinhaber`, `paypalwaehrung`, `projekt`, `partner`, `geloescht`, `firma`) VALUES (NULL, \'\', \'\', \'\', \'\', \'\', \'Administrator\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', NOW(), \'\', \'\', \'' . $mitarbeiternummer . '\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'1\', \'\', \'\', \'1\');';
-      $this->app->DB->InsertWithoutLog($sql);
-      $adresse = $this->app->DB->GetInsertID();
+      $adresse = $this->app->DatabaseService->insert(
+        "INSERT INTO `adresse` (`id`, `typ`, `marketingsperre`, `trackingsperre`, `rechnungsadresse`, `sprache`, `name`, `abteilung`, `unterabteilung`, `ansprechpartner`, `land`, `strasse`, `ort`, `plz`, `telefon`, `telefax`, `mobil`, `email`, `ustid`, `ust_befreit`, `passwort_gesendet`, `sonstiges`, `adresszusatz`, `kundenfreigabe`, `steuer`, `logdatei`, `kundennummer`, `lieferantennummer`, `mitarbeiternummer`, `konto`, `blz`, `bank`, `inhaber`, `swift`, `iban`, `waehrung`, `paypal`, `paypalinhaber`, `paypalwaehrung`, `projekt`, `partner`, `geloescht`, `firma`) VALUES (NULL, '', '', '', '', '', 'Administrator', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', NOW(), '', '', :mitarbeiternummer, '', '', '', '', '', '', '', '', '', '', '1', '', '', '1')",
+        ['mitarbeiternummer' => (string) $mitarbeiternummer]
+      );
 
-      $sql = "INSERT INTO `adresse_rolle` (`id`, `adresse`, `projekt`, `subjekt`, `praedikat`, `objekt`, `parameter`, `von`, `bis`) VALUES
-        ('', '$adresse', 0, 'Mitarbeiter', '', '', '', NOW(), '0000-00-00');";
-      $this->app->DB->InsertWithoutLog($sql);
+      $this->app->DatabaseService->insert(
+        "INSERT INTO `adresse_rolle` (`id`, `adresse`, `projekt`, `subjekt`, `praedikat`, `objekt`, `parameter`, `von`, `bis`) VALUES ('', :adresse, 0, 'Mitarbeiter', '', '', '', NOW(), '0000-00-00')",
+        ['adresse' => (int) $adresse]
+      );
 
-      $sql = 'INSERT INTO `firma` (`id`, `name`, `standardprojekt`) VALUES (NULL, \'Musterfirma\', \'1\');';
-      $this->app->DB->InsertWithoutLog($sql);
+      $this->app->DatabaseService->insert(
+        "INSERT INTO `firma` (`id`, `name`, `standardprojekt`) VALUES (NULL, 'Musterfirma', '1')"
+      );
 
       $salt = hash('sha512', microtime(true));
       $sha512 = hash('sha512', 'admin' . $salt);
-      $sql = 'INSERT INTO `user` (`id`, `username`, `password`, `repassword`, `salt`, `passwordsha512`, `description`, `settings`, `parentuser`, `activ`, `type`, `adresse`, `standarddrucker`, `firma`, `logdatei`,`externlogin`) VALUES (NULL, \'admin\', \'\', \'\', \'' . $salt . '\', \'' . $sha512 . '\', NULL, \'\', NULL, \'1\', \'admin\', \'' . $adresse . '\', \'\', \'1\', NOW(),\'1\');';
-      $this->app->DB->InsertWithoutLog($sql);
+      $this->app->DatabaseService->insert(
+        "INSERT INTO `user` (`id`, `username`, `password`, `repassword`, `salt`, `passwordsha512`, `description`, `settings`, `parentuser`, `activ`, `type`, `adresse`, `standarddrucker`, `firma`, `logdatei`, `externlogin`) VALUES (NULL, 'admin', '', '', :salt, :sha512, NULL, '', NULL, '1', 'admin', :adresse, '', '1', NOW(), '1')",
+        ['salt' => $salt, 'sha512' => $sha512, 'adresse' => (int) $adresse]
+      );
 
       $sql = 'INSERT INTO `projekt` (`id`, `name`, `abkuerzung`, `verantwortlicher`, `beschreibung`, `sonstiges`, `aktiv`, `farbe`, `autoversand`, `checkok`, `checkname`, `zahlungserinnerung`, `zahlungsmailbedinungen`, `folgebestaetigung`, `kundenfreigabe_loeschen`, `autobestellung`, `firma`, `logdatei`) VALUES (NULL, \'Hauptprojekt\', \'HAUPTPROJEKT\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'\', \'1\', \'\');';
       $this->app->DB->InsertWithoutLog($sql);
@@ -11872,16 +11877,17 @@ title: 'Abschicken',
     if ($typ === 'produktion') {
     } else {
       if ($listeexplodieren) {
-        $swhere = null;
-        foreach ($listeexplodieren as $v) {
-          $swhere[] = " ap.id = '$v' ";
-        }
-        $swhere = '  (' . implode(' OR ', $swhere) . ') ';
-        $artikelarr = $this->app->DB->SelectArr(
-          "SELECT ap.* ,art.lagerartikel, art.keineeinzelartikelanzeigen,art.juststueckliste,art.stueckliste
+        $_iAuftragExpl = (int) $auftrag;
+        $_idListExpl = implode(',', array_map('intval', $listeexplodieren));
+        $artikelarr = $this->app->DatabaseService->select(
+          sprintf(
+            "SELECT ap.* ,art.lagerartikel, art.keineeinzelartikelanzeigen,art.juststueckliste,art.stueckliste
           FROM auftrag_position AS ap
           LEFT JOIN artikel AS art ON ap.artikel = art.id
-          WHERE ap.auftrag='$auftrag' AND (ap.geliefert_menge < ap.menge AND ap.geliefert=0) AND $swhere"
+          WHERE ap.auftrag = %d AND (ap.geliefert_menge < ap.menge AND ap.geliefert=0) AND ap.id IN (%s)",
+            $_iAuftragExpl,
+            $_idListExpl ?: '0'
+          )
         );
       } else {
         $artikelarr = $this->app->DatabaseService->select(
@@ -25611,8 +25617,9 @@ $( this ).dialog( "close" );
         return $firmendaten_value;
       }
 
-      $firmendaten_value = $this->app->DB->SelectRow(
-        sprintf('SELECT id, wert FROM firmendaten_werte WHERE `name` = \'%s\' LIMIT 1', $field)
+      $firmendaten_value = $this->app->DatabaseService->selectRow(
+        "SELECT id, wert FROM firmendaten_werte WHERE `name` = :field LIMIT 1",
+        ['field' => $field]
       );
       if (!empty($firmendaten_value)) {
         return $firmendaten_value['wert'];
@@ -27897,11 +27904,12 @@ $( this ).dialog( "close" );
       }
     }
     if (is_numeric($data)) {
+      $_safeDocPVDB = $this->app->DatabaseService->validateIdentifier($doctype);
       $adresse = $this->app->DB->SelectRow(
         sprintf(
           "SELECT a.* FROM `%s` b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id=%d LIMIT 1",
-          $doctype,
-          $data
+          $_safeDocPVDB,
+          (int) $data
         )
       );
     }
@@ -32726,11 +32734,12 @@ $( this ).dialog( "close" );
   {
     $language = $this->app->erp->GetSpracheBelegISO($table, $id);
 
+    $_safeTableCFF = $this->app->DatabaseService->validateIdentifier($table);
     $pos = $this->app->DB->SelectArr(
       sprintf(
         'SELECT * FROM `%s` WHERE `%s`=%d',
-        $table . '_position',
-        $table,
+        $_safeTableCFF . '_position',
+        $_safeTableCFF,
         (int) $id
       )
     );
@@ -33400,8 +33409,9 @@ $( this ).dialog( "close" );
 
     //if(($arr[0][zahlungsweise]=="vorkasse" || $arr[0][zahlungsweise]=="paypal" || $arr[0][zahlungsweise]=="kreditkarte") &&  $summe_zahlungseingaenge >= $rechnungssumme)
     if ($summe_zahlungseingaenge > 0) {
-      $summe_zahlungseingaenge -= (float) $this->app->DB->Select(
-        "SELECT SUM(`ist`) FROM `rechnung` WHERE `auftragid` = {$id} AND `id` != {$newid}"
+      $summe_zahlungseingaenge -= (float) $this->app->DatabaseService->selectValue(
+        "SELECT SUM(`ist`) FROM `rechnung` WHERE `auftragid` = :id AND `id` != :newid",
+        ['id' => (int) $id, 'newid' => (int) $newid]
       );
       if ($summe_zahlungseingaenge >= $rechnungssumme) {
         $this->app->DatabaseService->execute("UPDATE `rechnung` SET `ist` = `soll`, `zahlungsstatus` = 'bezahlt' WHERE `id` = :id", ['id' => (int) $newid]);
@@ -35384,7 +35394,8 @@ $( this ).dialog( "close" );
     if ($posid <= 0 || empty($typ)) {
       return;
     }
-    $postyp = $typ . '_position';
+    $_safeTypGSP = $this->app->DatabaseService->validateIdentifier($typ);
+    $postyp = $_safeTypGSP . '_position';
     $posRow = $this->app->DB->SelectRow(
       sprintf(
         "SELECT * FROM `%s` WHERE id = %d LIMIT 1",
@@ -35734,7 +35745,7 @@ $( this ).dialog( "close" );
       $projekt = $rechnungarr['projekt'];
       $ust_befreit = $rechnungarr['ust_befreit'];
       $ustid = $rechnungarr['ustid'];
-      $kostenstelle = $this->app->DB->real_escape_string($rechnungarr['kostenstelle']);
+      $kostenstelle = (string) $rechnungarr['kostenstelle'];
     }
 
     $positionenkaufmaenischrunden = $this->app->erp->Projektdaten($projekt, 'preisberechnung');
@@ -35753,37 +35764,39 @@ $( this ).dialog( "close" );
     }
 
     if ($gruppierenpositionen) {
-      $arr = $this->app->DB->SelectArr(
+      $arr = $this->app->DatabaseService->select(
         "SELECT rp.`nummer`, rp.`bezeichnung`, rp.`artikel`, rp.`steuersatz`,rp.`erloese`,
-            " . $sqlvor . "rp.menge*" . $sqlvor2 . "(preis-(rp.preis/100*rp.rabatt))" . $sqlnach2 . $sqlnach . " as netto, 
-            rp.menge*(rp.preis-(rp.preis/100*rp.rabatt)) as nettoungerundet, 
-            if(rp.umsatzsteuer = 'ermaessigt','ermaessigt',if(rp.umsatzsteuer = 'befreit','befreit','normal'))  as usteuer , 
-            sum(rp.einkaufspreis * rp.menge) as summeeinkaufspreis, 
+            " . $sqlvor . "rp.menge*" . $sqlvor2 . "(preis-(rp.preis/100*rp.rabatt))" . $sqlnach2 . $sqlnach . " as netto,
+            rp.menge*(rp.preis-(rp.preis/100*rp.rabatt)) as nettoungerundet,
+            if(rp.umsatzsteuer = 'ermaessigt','ermaessigt',if(rp.umsatzsteuer = 'befreit','befreit','normal'))  as usteuer ,
+            sum(rp.einkaufspreis * rp.menge) as summeeinkaufspreis,
             IF(
               IFNULL(rp.kostenstelle,'') <> '',
               rp.kostenstelle,
-              IF('$kostenstelle' <> '', '$kostenstelle', art.kostenstelle)
-            ) AS kostenstelle  
-            FROM `rechnung_position` AS rp
-            LEFT JOIN `artikel` AS art ON rp.artikel = art.id
-            WHERE rechnung = '$id' group by rp.`steuersatz`,rp.`erloese`, rp.`umsatzsteuer`,rp.`artikel`, rp.`id` "
-      );
-    } else {
-      $arr = $this->app->DB->SelectArr(
-        "SELECT  rp.`artikel`, rp.`steuersatz`,rp.`erloese`, 
-            SUM(" . $sqlvor . "rp.menge*" . $sqlvor2 . "(rp.preis-(rp.preis/100*rp.rabatt))" . $sqlnach2 . $sqlnach . ") as netto, 
-            SUM(rp.menge*(rp.preis-(rp.preis/100*rp.rabatt))) as nettoungerundet, 
-            if(rp.umsatzsteuer = 'ermaessigt','ermaessigt',if(rp.umsatzsteuer = 'befreit','befreit','normal'))  as usteuer, 
-            sum(rp.einkaufspreis * rp.menge) as summeeinkaufspreis, 
-            IF(
-              IFNULL(rp.kostenstelle,'') <> '',
-              rp.kostenstelle,
-              IF('$kostenstelle' <> '', '$kostenstelle', art.kostenstelle)
+              IF(:kostenstelle <> '', :kostenstelle, art.kostenstelle)
             ) AS kostenstelle
             FROM `rechnung_position` AS rp
-            LEFT JOIN artikel AS art ON rp.artikel = art.id 
-            WHERE rp.rechnung = '$id'
-            group by rp.`steuersatz`,rp.`erloese`, rp.`umsatzsteuer`,rp.`artikel` "
+            LEFT JOIN `artikel` AS art ON rp.artikel = art.id
+            WHERE rechnung = :id group by rp.`steuersatz`,rp.`erloese`, rp.`umsatzsteuer`,rp.`artikel`, rp.`id` ",
+        ['kostenstelle' => $kostenstelle, 'id' => (int) $id]
+      );
+    } else {
+      $arr = $this->app->DatabaseService->select(
+        "SELECT  rp.`artikel`, rp.`steuersatz`,rp.`erloese`,
+            SUM(" . $sqlvor . "rp.menge*" . $sqlvor2 . "(rp.preis-(rp.preis/100*rp.rabatt))" . $sqlnach2 . $sqlnach . ") as netto,
+            SUM(rp.menge*(rp.preis-(rp.preis/100*rp.rabatt))) as nettoungerundet,
+            if(rp.umsatzsteuer = 'ermaessigt','ermaessigt',if(rp.umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
+            sum(rp.einkaufspreis * rp.menge) as summeeinkaufspreis,
+            IF(
+              IFNULL(rp.kostenstelle,'') <> '',
+              rp.kostenstelle,
+              IF(:kostenstelle <> '', :kostenstelle, art.kostenstelle)
+            ) AS kostenstelle
+            FROM `rechnung_position` AS rp
+            LEFT JOIN artikel AS art ON rp.artikel = art.id
+            WHERE rp.rechnung = :id
+            group by rp.`steuersatz`,rp.`erloese`, rp.`umsatzsteuer`,rp.`artikel` ",
+        ['kostenstelle' => $kostenstelle, 'id' => (int) $id]
       );
     }
 
@@ -35897,11 +35910,13 @@ $( this ).dialog( "close" );
    */
   public function steuerAusBelegArray($belegtyp, $id, $gruppierenpositionen = false, $ohneporto = false, $mitErloes = false)
   {
+    $belegtyp = $this->app->DatabaseService->validateIdentifier($belegtyp);
+    $_iIdSABel = (int) $id;
     $projekt = $this->app->DB->Select(
       sprintf(
         'SELECT `projekt` FROM `%s` WHERE id = %d LIMIT 1',
         $belegtyp,
-        $id
+        $_iIdSABel
       )
     );
     $positionenkaufmaenischrunden = $this->app->erp->Projektdaten($projekt, 'preisberechnung');
@@ -35910,8 +35925,8 @@ $( this ).dialog( "close" );
     if (method_exists($this, $funktionsname)) {
       $steuerfrei = !$this->$funktionsname($id);
     }
-    $steuersatzermaessigt = $this->GetSteuersatzErmaessigt(false, $id, $belegtyp);
-    $steuersatznormal = $this->GetSteuersatzNormal(false, $id, $belegtyp);
+    $steuersatzermaessigt = (float) $this->GetSteuersatzErmaessigt(false, $id, $belegtyp);
+    $steuersatznormal = (float) $this->GetSteuersatzNormal(false, $id, $belegtyp);
     $join = '';
     if ($ohneporto) {
       $join = ' INNER JOIN artikel art ON ap.artikel = art AND art.porto <> 1 ';
@@ -35919,70 +35934,72 @@ $( this ).dialog( "close" );
     if ($positionenkaufmaenischrunden == 2) {
       if ($gruppierenpositionen) {
         if ($steuerfrei) {
-          return $this->app->DB->SelectArr(
-            "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-                    0 as steuersatz , 
-                  round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2) as netto, ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet, 
+          return $this->app->DatabaseService->select(
+            "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+                    0 as steuersatz ,
+                  round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2) as netto, ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet,
                   if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
                   round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2) as brutto
                   " . ($mitErloes ? ' ,ap.erloes' : '') . "
-                FROM `" . $belegtyp . "_position` ap 
-                $join 
-                WHERE ap.$belegtyp = '$id' "
+                FROM `" . $belegtyp . "_position` ap
+                " . $join . "
+                WHERE ap." . $belegtyp . " = :id "
             . ($belegtyp === 'angebot'
               ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
-              : '')
+              : ''),
+            ['id' => $_iIdSABel]
           );
         }
-        return $this->app->DB->SelectArr(
-          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-              round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2) as steuersatz , 
-              round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2) as netto, ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet, 
+        return $this->app->DatabaseService->select(
+          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+              round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2) as steuersatz ,
+              round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2) as netto, ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet,
               if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
-              round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))*(1+ round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2)/ 100),2) as brutto
+              round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))*(1+ round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2)/ 100),2) as brutto
               " . ($mitErloes ? ' ,ap.erloes' : '') . "
-              FROM `" . $belegtyp . "_position` ap 
-              $join 
-              WHERE ap.$belegtyp = '$id' "
+              FROM `" . $belegtyp . "_position` ap
+              " . $join . "
+              WHERE ap." . $belegtyp . " = :id "
           . ($belegtyp === 'angebot'
             ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
             : ''
-          )
+          ),
+          ['id' => $_iIdSABel]
         );
       }
       if ($steuerfrei) {
-        return $this->app->DB->SelectArr(
-          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-              0 as steuersatz , 
-              round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) as netto, 
-              sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet, 
+        return $this->app->DatabaseService->select(
+          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+              0 as steuersatz ,
+              round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) as netto,
+              sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet,
               if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
               round( sum(round(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)))),2) as brutto
-  
-              FROM `" . $belegtyp . "_position` ap $join 
-              WHERE ap.$belegtyp = '$id'  "
+              FROM `" . $belegtyp . "_position` ap " . $join . "
+              WHERE ap." . $belegtyp . " = :id  "
           . ($belegtyp === 'angebot'
             ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
             : '') . "
-              group by `steuersatz`, `usteuer` 
-              HAVING round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) <> 0"
+              group by `steuersatz`, `usteuer`
+              HAVING round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) <> 0",
+          ['id' => $_iIdSABel]
         );
       }
-      return $this->app->DB->SelectArr(
-        "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-            round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2) as steuersatz , 
-            round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) as netto, 
-            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet, 
+      return $this->app->DatabaseService->select(
+        "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+            round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2) as steuersatz ,
+            round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) as netto,
+            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet,
             if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
-            round( sum(round(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))*(1+ round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2)/ 100),2)),2) as brutto
-
-            FROM `" . $belegtyp . "_position` ap $join 
-            WHERE ap.$belegtyp = '$id'  "
+            round( sum(round(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))*(1+ round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2)/ 100),2)),2) as brutto
+            FROM `" . $belegtyp . "_position` ap " . $join . "
+            WHERE ap." . $belegtyp . " = :id  "
         . ($belegtyp === 'angebot'
           ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
           : ''
         ) . "
-            group by round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2), `usteuer` HAVING round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) <> 0"
+            group by round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2), `usteuer` HAVING round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) <> 0",
+        ['id' => $_iIdSABel]
       );
     }
     if ($positionenkaufmaenischrunden == 1 || $positionenkaufmaenischrunden == 3) {
@@ -35994,120 +36011,119 @@ $( this ).dialog( "close" );
       }
       if ($gruppierenpositionen) {
         if ($steuerfrei) {
-          return $this->app->DB->SelectArr(
-            "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-                  0 as steuersatz , 
-                  round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2) as netto, 
-                  ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet, 
+          return $this->app->DatabaseService->select(
+            "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+                  0 as steuersatz ,
+                  round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2) as netto,
+                  ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet,
                   if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
                   round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2) as brutto
                   " . ($mitErloes ? ' ,ap.erloes' : '') . "
-                FROM `" . $belegtyp . "_position` ap 
-                $join 
-                WHERE ap.$belegtyp = '$id'  "
+                FROM `" . $belegtyp . "_position` ap
+                " . $join . "
+                WHERE ap." . $belegtyp . " = :id  "
             . ($belegtyp === 'angebot'
               ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
-              : '')
+              : ''),
+            ['id' => $_iIdSABel]
           );
         }
-        return $this->app->DB->SelectArr(
-          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-                round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2) as steuersatz , 
-                round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2) as netto, 
-                ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet, 
+        return $this->app->DatabaseService->select(
+          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+                round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2) as steuersatz ,
+                round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2) as netto,
+                ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet,
                 if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
                 round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))*
                 (1+ round(
-                  if(ifnull(ap.`steuersatz`,-1) < 0, 
-                  if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,
-                  if(umsatzsteuer = 'befreit',0,$steuersatznormal)
+                  if(ifnull(ap.`steuersatz`,-1) < 0,
+                  if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",
+                  if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")
                   ) ,ap.`steuersatz`
                   )" . $mengenach . ",2)/ 100),2) as brutto
                 " . ($mitErloes ? ' ,ap.erloes' : '') . "
-              FROM `" . $belegtyp . "_position` ap 
-              $join 
-              WHERE ap.$belegtyp = '$id'  "
+              FROM `" . $belegtyp . "_position` ap
+              " . $join . "
+              WHERE ap." . $belegtyp . " = :id  "
           . ($belegtyp === 'angebot'
             ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
-            : '')
+            : ''),
+          ['id' => $_iIdSABel]
         );
       }
 
       if ($steuerfrei) {
-        $sql = "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-            0 as steuersatz , 
+        $sql = "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+            0 as steuersatz ,
             round(
               sum(
-                round( 
+                round(
                   ap.menge*
                   " . $mengevor . " (ap.preis-(ap.preis/100*ap.rabatt)) " . $mengenach . "
                   ,2
                 )
               )
               ,2
-            ) as netto, 
+            ) as netto,
             sum(
               ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))
-            ) as nettoungerundet, 
+            ) as nettoungerundet,
             if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
-            
             round(
               sum(
-                round( 
+                round(
                   ap.menge*" . $mengevor . " (ap.preis-(ap.preis/100*ap.rabatt)) " . $mengenach . "
                   ,2
                 )
               )
               ,2
-            ) 
+            )
              as brutto
-
-            FROM `" . $belegtyp . "_position` ap 
-            $join 
-            WHERE ap.$belegtyp = '$id'  "
+            FROM `" . $belegtyp . "_position` ap
+            " . $join . "
+            WHERE ap." . $belegtyp . " = :id  "
           . ($belegtyp === 'angebot'
             ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
             : '') . "
-            group by `steuersatz`, 
-            `usteuer` 
+            group by `steuersatz`,
+            `usteuer`
             HAVING round(sum(round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2)),2) <> 0";
-        return $this->app->DB->SelectArr($sql);
+        return $this->app->DatabaseService->select($sql, ['id' => $_iIdSABel]);
       }
       if ($positionenkaufmaenischrunden == 3) {
-        return $this->app->DB->SelectArr(
-          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
+        return $this->app->DatabaseService->select(
+          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
             round(
               if(
-                ifnull(ap.`steuersatz`,-1) < 0, 
+                ifnull(ap.`steuersatz`,-1) < 0,
                 if(
                   umsatzsteuer = 'ermaessigt',
-                  $steuersatzermaessigt,
+                  " . $steuersatzermaessigt . ",
                   if(
                     umsatzsteuer = 'befreit',
                     0,
-                    $steuersatznormal
+                    " . $steuersatznormal . "
                   )
                 ) ,
                 ap.`steuersatz`
               ),2
-            ) as steuersatz , 
-            round(sum(round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2)),2) as netto, 
-            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet, 
+            ) as steuersatz ,
+            round(sum(round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2)),2) as netto,
+            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet,
             if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
-            
             round(sum(round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2)),2)+
             round(
               sum(round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2)) *
               round(
               if(
-                ifnull(ap.`steuersatz`,-1) < 0, 
+                ifnull(ap.`steuersatz`,-1) < 0,
                 if(
                   umsatzsteuer = 'ermaessigt',
-                  $steuersatzermaessigt,
+                  " . $steuersatzermaessigt . ",
                   if(
                     umsatzsteuer = 'befreit',
                     0,
-                    $steuersatznormal
+                    " . $steuersatznormal . "
                   )
                 ) ,
                 ap.`steuersatz`
@@ -36115,163 +36131,166 @@ $( this ).dialog( "close" );
             )/100
             ,2
             ) as brutto
-            FROM `" . $belegtyp . "_position` ap 
-            $join 
-            WHERE ap.$belegtyp = '$id'  "
+            FROM `" . $belegtyp . "_position` ap
+            " . $join . "
+            WHERE ap." . $belegtyp . " = :id  "
           . ($belegtyp === 'angebot'
             ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
             : '') . "
             group by round(
               if(
-                ifnull(ap.`steuersatz`,-1) < 0, 
+                ifnull(ap.`steuersatz`,-1) < 0,
                 if(
                   umsatzsteuer = 'ermaessigt',
-                  $steuersatzermaessigt,
+                  " . $steuersatzermaessigt . ",
                   if(
                     umsatzsteuer = 'befreit',
                     0,
-                    $steuersatznormal
+                    " . $steuersatznormal . "
                   )
                 ) ,
                 ap.`steuersatz`
               ),2
-            ), 
-            `usteuer` HAVING round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) <> 0"
+            ),
+            `usteuer` HAVING round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) <> 0",
+          ['id' => $_iIdSABel]
         );
       }
-      return $this->app->DB->SelectArr(
-        "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-            round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2) as steuersatz , 
-            round(sum(round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2)),2) as netto, 
-            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet, 
+      return $this->app->DatabaseService->select(
+        "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+            round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2) as steuersatz ,
+            round(sum(round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2)),2) as netto,
+            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet,
             if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
-            
-            round(sum(round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2)),2) + round( round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) *   round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2)/100 ,2)
+            round(sum(round( ap.menge*" . $mengevor . "(ap.preis-(ap.preis/100*ap.rabatt))" . $mengenach . ",2)),2) + round( round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) *   round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2)/100 ,2)
              as brutto
-  
-            FROM `" . $belegtyp . "_position` ap 
-            $join 
-            WHERE ap.$belegtyp = '$id'  "
+            FROM `" . $belegtyp . "_position` ap
+            " . $join . "
+            WHERE ap." . $belegtyp . " = :id  "
         . ($belegtyp === 'angebot'
           ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
           : '') . "
-            group by round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2),
-            `usteuer` 
-            HAVING round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) <> 0"
+            group by round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2),
+            `usteuer`
+            HAVING round(sum(round( ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)),2)),2) <> 0",
+        ['id' => $_iIdSABel]
       );
     }
 
     if ($gruppierenpositionen) {
       if ($steuerfrei) {
-        return $this->app->DB->SelectArr(
-          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-              round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2) as steuersatz , 
-               ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as netto, ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet, 
+        return $this->app->DatabaseService->select(
+          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+              round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2) as steuersatz ,
+               ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as netto, ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet,
               0  as usteuer,
                ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as brutto
                 " . ($mitErloes ? ' ,ap.erloes' : '') . "
-              FROM `" . $belegtyp . "_position` ap 
-              $join 
-              WHERE ap.$belegtyp = '$id'  "
+              FROM `" . $belegtyp . "_position` ap
+              " . $join . "
+              WHERE ap." . $belegtyp . " = :id  "
           . ($belegtyp === 'angebot'
             ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
-            : '')
+            : ''),
+          ['id' => $_iIdSABel]
         );
       }
-      return $this->app->DB->SelectArr(
-        "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-              round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2) as steuersatz , 
-               ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as netto, ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet, 
+      return $this->app->DatabaseService->select(
+        "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+              round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2) as steuersatz ,
+               ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as netto, ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet,
               if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
-               ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))*(1+ round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt',$steuersatzermaessigt,if(umsatzsteuer = 'befreit',0,$steuersatznormal)) ,ap.`steuersatz`),2)/ 100) as brutto
+               ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))*(1+ round(if(ifnull(ap.`steuersatz`,-1) < 0, if(umsatzsteuer = 'ermaessigt'," . $steuersatzermaessigt . ",if(umsatzsteuer = 'befreit',0," . $steuersatznormal . ")) ,ap.`steuersatz`),2)/ 100) as brutto
             " . ($mitErloes ? ' ,ap.erloes' : '') . "
-              FROM `" . $belegtyp . "_position` ap 
-              $join 
-              WHERE ap.$belegtyp = '$id'  "
+              FROM `" . $belegtyp . "_position` ap
+              " . $join . "
+              WHERE ap." . $belegtyp . " = :id  "
         . ($belegtyp === 'angebot'
           ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
-          : '')
+          : ''),
+        ['id' => $_iIdSABel]
       );
     }
 
     if ($steuerfrei) {
-      return $this->app->DB->SelectArr(
-        "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-            0 as steuersatz , 
-            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as netto, 
-            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet, 
+      return $this->app->DatabaseService->select(
+        "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+            0 as steuersatz ,
+            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as netto,
+            sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet,
             if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
-             sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as brutto  
-            FROM `" . $belegtyp . "_position` ap 
-            $join 
-            WHERE ap.$belegtyp = '$id'  " .
-        ($belegtyp === 'angebot'
+             sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as brutto
+            FROM `" . $belegtyp . "_position` ap
+            " . $join . "
+            WHERE ap." . $belegtyp . " = :id  "
+        . ($belegtyp === 'angebot'
           ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
           : '') . "
-            group by `steuersatz`, 
-            `usteuer` HAVING sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) <> 0"
+            group by `steuersatz`,
+            `usteuer` HAVING sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) <> 0",
+        ['id' => $_iIdSABel]
       );
     }
-    return $this->app->DB->SelectArr(
-      "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
+    return $this->app->DatabaseService->select(
+      "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
           round(
               if(
-                  ifnull(ap.`steuersatz`,-1) < 0, 
+                  ifnull(ap.`steuersatz`,-1) < 0,
                   if(
                       ap.umsatzsteuer = 'ermaessigt',
-                      $steuersatzermaessigt,
+                      " . $steuersatzermaessigt . ",
                       if(ap.umsatzsteuer = 'befreit',
                           0,
-                          $steuersatznormal
+                          " . $steuersatznormal . "
                       )
                   ) ,
                   ap.`steuersatz`
-                ),2) as steuersatz , 
-          sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as netto, 
-          sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet, 
+                ),2) as steuersatz ,
+          sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as netto,
+          sum(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet,
           if(ap.umsatzsteuer = 'ermaessigt','ermaessigt',if(ap.umsatzsteuer = 'befreit','befreit','normal'))  as usteuer,
            sum(
                ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))*
                (1+ round(
                    if(
-                       ifnull(ap.`steuersatz`,-1) < 0, 
+                       ifnull(ap.`steuersatz`,-1) < 0,
                        if(
                          ap.umsatzsteuer = 'ermaessigt',
-                         $steuersatzermaessigt,
+                         " . $steuersatzermaessigt . ",
                          if(
                            ap.umsatzsteuer = 'befreit',
                              0,
-                             $steuersatznormal
+                             " . $steuersatznormal . "
                          )
                      ) ,
                        ap.`steuersatz`
                        ),2)/ 100
                    )
                ) as brutto
-
-          FROM `" . $belegtyp . "_position` ap 
-          $join 
-          WHERE ap.$belegtyp = '$id'  "
+          FROM `" . $belegtyp . "_position` ap
+          " . $join . "
+          WHERE ap." . $belegtyp . " = :id  "
       . ($belegtyp === 'angebot'
         ? " AND ap.optional!=1  AND (ap.explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))"
         : '') . "
           group by round(
               if(
-                  ifnull(ap.`steuersatz`,-1) < 0, 
+                  ifnull(ap.`steuersatz`,-1) < 0,
                   if(
                       ap.umsatzsteuer = 'ermaessigt',
-                      $steuersatzermaessigt,
+                      " . $steuersatzermaessigt . ",
                       if(ap.umsatzsteuer = 'befreit',
                           0,
-                          $steuersatznormal
+                          " . $steuersatznormal . "
                       )
                   ) ,
                   ap.`steuersatz`
-                ),2), 
-          `usteuer` HAVING 
+                ),2),
+          `usteuer` HAVING
           sum(ap.menge*
           (ap.preis-(ap.preis/100*ap.rabatt))
-          ) <> 0"
+          ) <> 0",
+      ['id' => $_iIdSABel]
     );
   }
 
@@ -36349,11 +36368,13 @@ $( this ).dialog( "close" );
    */
   public function SteuerAusBeleg($belegtyp, $id, $gruppierenpositionen = false, $ohneporto = false, $mitErloes = false)
   {
+    $belegtyp = $this->app->DatabaseService->validateIdentifier($belegtyp);
+    $_iIdSAB = (int) $id;
     $projekt = $this->app->DB->Select(
       sprintf(
         'SELECT `projekt` FROM `%s` WHERE `id` = %d LIMIT 1',
         $belegtyp,
-        $id
+        $_iIdSAB
       )
     );
     $positionenkaufmaenischrunden = $this->app->erp->Projektdaten($projekt, 'preisberechnung');
@@ -36369,8 +36390,8 @@ $( this ).dialog( "close" );
     if (method_exists($this, $funktionsname)) {
       $steuerfrei = !$this->$funktionsname($id);
     }
-    $steuersatzermaessigt = $this->GetSteuersatzErmaessigt(false, $id, $belegtyp);
-    $steuersatznormal = $this->GetSteuersatzNormal(false, $id, $belegtyp);
+    $steuersatzermaessigt = (float) $this->GetSteuersatzErmaessigt(false, $id, $belegtyp);
+    $steuersatznormal = (float) $this->GetSteuersatzNormal(false, $id, $belegtyp);
     $viernachkommastellen_belege = $this->app->erp->Firmendaten('viernachkommastellen_belege');
 
     $sqlvor = '';
@@ -36391,29 +36412,37 @@ $( this ).dialog( "close" );
       $join = ' INNER JOIN artikel art ON ap.artikel = art AND art.porto <> 1 ';
     }
     if ($gruppierenpositionen) {
-      $arr = $this->app->DB->SelectArr(
-        "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`, 
-              if(ap.`steuersatz` < 0, null,ap.`steuersatz`) as ssatz , 
-              " . $sqlvor . " ap.menge*" . $sqlvor2 . "(ap.preis-(ap.preis/100*ap.rabatt))" . $sqlnach2 . $sqlnach . " as netto, 
-              ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet, 
+      $arr = $this->app->DatabaseService->select(
+        sprintf(
+          "SELECT ap.`id`,`nummer`, ap.`bezeichnung`, ap.`artikel`,
+              if(ap.`steuersatz` < 0, null,ap.`steuersatz`) as ssatz ,
+              %s ap.menge*%s(ap.preis-(ap.preis/100*ap.rabatt))%s%s as netto,
+              ap.menge*(ap.preis-(ap.preis/100*ap.rabatt)) as nettoungerundet,
               if(umsatzsteuer = 'ermaessigt','ermaessigt',if(umsatzsteuer = 'befreit','befreit','normal'))  as usteuer
-              " . ($mitErloes ? ',ap.erloese ' : '') . "  
-            FROM `" . $belegtyp . "_position` ap 
-            $join 
-            WHERE ap.$belegtyp = '$id' 
-            GROUP BY `ssatz`,ap.`erloese`, `usteuer`,ap.`artikel`,ap.`id` "
+              %s
+            FROM `%s_position` ap
+            %s
+            WHERE ap.%s = %d
+            GROUP BY `ssatz`,ap.`erloese`, `usteuer`,ap.`artikel`,ap.`id` ",
+          $sqlvor, $sqlvor2, $sqlnach2, $sqlnach,
+          ($mitErloes ? ',ap.erloese ' : ''),
+          $belegtyp, $join, $belegtyp, $_iIdSAB
+        )
       );
     } else {
-      $arr = $this->app->DB->SelectArr(
-        "SELECT  if(ap.`steuersatz` < 0, null,ap.`steuersatz`) as ssatz  , 
-            SUM(" . $sqlvor . "ap.menge*" . $sqlvor2 . "(ap.preis-(ap.preis/100*ap.rabatt))" . $sqlnach2 . $sqlnach . ") as netto,  
-            SUM(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet, 
+      $arr = $this->app->DatabaseService->select(
+        sprintf(
+          "SELECT  if(ap.`steuersatz` < 0, null,ap.`steuersatz`) as ssatz  ,
+            SUM(%sap.menge*%s(ap.preis-(ap.preis/100*ap.rabatt))%s%s) as netto,
+            SUM(ap.menge*(ap.preis-(ap.preis/100*ap.rabatt))) as nettoungerundet,
             if(ap.umsatzsteuer = 'ermaessigt','ermaessigt',if(ap.umsatzsteuer = 'befreit','befreit','normal')) as usteuer
-            
-            FROM `" . $belegtyp . "_position` ap 
-            $join  
-            WHERE ap.$belegtyp = '$id' 
-            group by `ssatz`, `usteuer` "
+            FROM `%s_position` ap
+            %s
+            WHERE ap.%s = %d
+            group by `ssatz`, `usteuer` ",
+          $sqlvor, $sqlvor2, $sqlnach2, $sqlnach,
+          $belegtyp, $join, $belegtyp, $_iIdSAB
+        )
       );
     }
     $ret = null;
@@ -36504,9 +36533,9 @@ $( this ).dialog( "close" );
       );
     }
     if ($id > 0) {
-      $gutschriftarr = $this->app->DB->SelectRow(
-        "SELECT ust_befreit,ustid,projekt,kostenstelle 
-            FROM gutschrift WHERE id = '$id' LIMIT 1"
+      $gutschriftarr = $this->app->DatabaseService->selectRow(
+        "SELECT ust_befreit,ustid,projekt,kostenstelle FROM gutschrift WHERE id = :id LIMIT 1",
+        ['id' => (int) $id]
       );
     }
     $ust_befreit = null;
@@ -36517,7 +36546,7 @@ $( this ).dialog( "close" );
       $ust_befreit = $gutschriftarr['ust_befreit'];
       $ustid = $gutschriftarr['ustid'];
       $projekt = $gutschriftarr['projekt'];
-      $kostenstelle = $this->app->DB->real_escape_string($gutschriftarr['kostenstelle']);
+      $kostenstelle = (string) $gutschriftarr['kostenstelle'];
     }
     $positionenkaufmaenischrunden = $this->app->erp->Projektdaten($projekt, 'preisberechnung');
     $viernachkommastellen_belege = $this->app->erp->Firmendaten('viernachkommastellen_belege');
@@ -36535,41 +36564,43 @@ $( this ).dialog( "close" );
       $sqlnach2 = ',2)';
     }
     if ($gruppierenpositionen) {
-      $arr = $this->app->DB->SelectArr(
-        "SELECT gp.`nummer`, gp.`bezeichnung`, gp.`artikel`, gp.`steuersatz`,gp.`erloese`, 
-            " . $sqlvor . 'gp.menge*' . $sqlvor2 . '(gp.preis-(gp.preis/100*gp.rabatt))' . $sqlnach2 . $sqlnach . " as netto, 
+      $arr = $this->app->DatabaseService->select(
+        "SELECT gp.`nummer`, gp.`bezeichnung`, gp.`artikel`, gp.`steuersatz`,gp.`erloese`,
+            " . $sqlvor . 'gp.menge*' . $sqlvor2 . '(gp.preis-(gp.preis/100*gp.rabatt))' . $sqlnach2 . $sqlnach . " as netto,
             gp.menge*(gp.preis-(gp.preis/100*gp.rabatt)) as nettoungerundet ,
-             if(gp.umsatzsteuer = 'ermaessigt','ermaessigt',if(gp.umsatzsteuer = 'befreit','befreit','normal'))  as usteuer , 
+             if(gp.umsatzsteuer = 'ermaessigt','ermaessigt',if(gp.umsatzsteuer = 'befreit','befreit','normal'))  as usteuer ,
              sum(gp.einkaufspreis * gp.menge) as summeeinkaufspreis,
              IF(
                IFNULL(gp.kostenstelle,'') <> '',
-               gp.kostenstelle, 
-               IF('$kostenstelle' <> '', '$kostenstelle', art.kostenstelle)
+               gp.kostenstelle,
+               IF(:kostenstelle <> '', :kostenstelle, art.kostenstelle)
              )
-             AS kostenstelle  
+             AS kostenstelle
              FROM `gutschrift_position` AS gp
-             LEFT JOIN artikel AS art ON gp.artikel = art.id 
-             WHERE gp.gutschrift = '$id' 
-             GROUP BY gp.`steuersatz`,gp.`erloese`, gp.`umsatzsteuer`,gp.`artikel`,gp.`id` "
+             LEFT JOIN artikel AS art ON gp.artikel = art.id
+             WHERE gp.gutschrift = :id
+             GROUP BY gp.`steuersatz`,gp.`erloese`, gp.`umsatzsteuer`,gp.`artikel`,gp.`id` ",
+        ['kostenstelle' => $kostenstelle, 'id' => (int) $id]
       );
     } else {
-      $arr = $this->app->DB->SelectArr(
-        "SELECT  gp.`artikel`, gp.`steuersatz`,gp.`erloese`, 
-            SUM(" . $sqlvor . "gp.menge*" . $sqlvor2 . "(gp.preis-(gp.preis/100*gp.rabatt))" . $sqlnach2 . $sqlnach . ") as netto, 
-            SUM(gp.menge*(gp.preis-(gp.preis/100*gp.rabatt))) as nettoungerundet, 
+      $arr = $this->app->DatabaseService->select(
+        "SELECT  gp.`artikel`, gp.`steuersatz`,gp.`erloese`,
+            SUM(" . $sqlvor . "gp.menge*" . $sqlvor2 . "(gp.preis-(gp.preis/100*gp.rabatt))" . $sqlnach2 . $sqlnach . ") as netto,
+            SUM(gp.menge*(gp.preis-(gp.preis/100*gp.rabatt))) as nettoungerundet,
             if(gp.umsatzsteuer = 'ermaessigt','ermaessigt',
-            if(gp.umsatzsteuer = 'befreit','befreit','normal'))  as usteuer , 
+            if(gp.umsatzsteuer = 'befreit','befreit','normal'))  as usteuer ,
             sum(gp.einkaufspreis * gp.menge) as summeeinkaufspreis,
             IF(
               IFNULL(gp.kostenstelle,'')<>'',
               gp.kostenstelle,
-              IF('$kostenstelle' <> '', '$kostenstelle',art.kostenstelle)
+              IF(:kostenstelle <> '', :kostenstelle, art.kostenstelle)
             )
-            AS kostenstelle  
+            AS kostenstelle
             FROM `gutschrift_position` AS gp
-            LEFT JOIN artikel AS art ON gp.artikel = art.id 
-            WHERE gp.gutschrift = '$id' 
-            group by gp.`steuersatz`, gp.`erloese`, gp.`umsatzsteuer`, gp.`artikel` "
+            LEFT JOIN artikel AS art ON gp.artikel = art.id
+            WHERE gp.gutschrift = :id
+            group by gp.`steuersatz`, gp.`erloese`, gp.`umsatzsteuer`, gp.`artikel` ",
+        ['kostenstelle' => $kostenstelle, 'id' => (int) $id]
       );
     }
     if ($arr) {
@@ -37570,8 +37601,9 @@ $( this ).dialog( "close" );
     }
 
     if ($modul !== '') {
-      $zusaetzlicheStichworter = $this->app->DB->SelectArr(
-        "SELECT * FROM datei_stichwortvorlagen WHERE modul='$modul' OR modul='' ORDER by beschriftung"
+      $zusaetzlicheStichworter = $this->app->DatabaseService->select(
+        "SELECT * FROM datei_stichwortvorlagen WHERE modul = :modul OR modul = '' ORDER BY beschriftung",
+        ['modul' => (string) $modul]
       );
       $cZusaetzlicheStichworter = empty($zusaetzlicheStichworter) ? 0 : (!empty($zusaetzlicheStichworter) ? count($zusaetzlicheStichworter) : 0);
       for ($i = 0; $i < $cZusaetzlicheStichworter; $i++) {
