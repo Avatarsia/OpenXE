@@ -3757,16 +3757,9 @@ title: 'Abschicken',
       return;
     }
 
-    $check = $this->app->DB->Select(
-      sprintf(
-        "SELECT `id` 
-        FROM `gpsstechuhr`
-        WHERE `user` = %d AND `adresse`= %d
-        AND DATE_FORMAT(`zeit`,'%%Y-%%m-%%d')= DATE_FORMAT( NOW( ) , '%%Y-%%m-%%d' ) 
-        LIMIT 1",
-        $this->app->User->GetID(),
-        $this->app->User->GetAdresse()
-      )
+    $check = $this->app->DatabaseService->selectValue(
+      "SELECT `id` FROM `gpsstechuhr` WHERE `user` = :uid AND `adresse` = :adresse AND DATE_FORMAT(`zeit`,'%Y-%m-%d') = DATE_FORMAT(NOW(), '%Y-%m-%d') LIMIT 1",
+      ['uid' => (int) $this->app->User->GetID(), 'adresse' => (int) $this->app->User->GetAdresse()]
     );
     if ($check > 0) {
       return;
@@ -3787,7 +3780,7 @@ title: 'Abschicken',
   function Zahlungsweisetext($doctype, $doctypeid)
   {
     //if($doctype!="rechnung") return;//AUSKOMMENTIEREN?
-    $doctypeRow = $this->app->DB->SelectRow(sprintf("SELECT * FROM `%s` WHERE id=%d LIMIT 1", $doctype, (int) $doctypeid));
+    $doctypeRow = $this->app->DatabaseService->selectRow(sprintf("SELECT * FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)), ['id' => (int) $doctypeid]);
     if (empty($doctypeRow['zahlungsweise'])) {
       $zahlungsweise = '';
     }
@@ -4391,35 +4384,35 @@ title: 'Abschicken',
     // Netto gewicht
     if ($type == "auftrag" || $type == "angebot" || $type == "lieferschein" || $type == "retoure" || $type == "rechnung" || $type == "gutschrift" || $type == "bestellung" | $type == "proformarechnung" || $type == "preisanfrage") {
 
-      $anzahlteile = $this->app->DB->Select("SELECT TRIM(SUM(ap.menge))+0
-          FROM " . $type . "_position ap LEFT JOIN artikel a ON ap.artikel=a.id WHERE ap.$type='$id' AND a.porto!=1 AND a.rabatt!=1 ");
+      $validType = $this->app->DatabaseService->validateIdentifier($type);
+      $anzahlteile = $this->app->DatabaseService->selectValue(
+        sprintf("SELECT TRIM(SUM(ap.menge))+0 FROM `%s_position` ap LEFT JOIN artikel a ON ap.artikel=a.id WHERE ap.`%s` = :id AND a.porto!=1 AND a.rabatt!=1", $validType, $validType),
+        ['id' => (int) $id]
+      );
 
       $text = str_replace("{ANZAHLTEILEALLE}", $anzahlteile, $text);
 
       if ($type === 'bestellung' || $type === 'preisanfrage') {
         $anzahlteilesichtbar = $anzahlteile;
       } else if ($type == "auftrag" || $type == "angebot" || $type == "rechnung" || $type == "gutschrift") {
-        $anzahlteilesichtbar = $this->app->DB->Select("SELECT TRIM(SUM(ap.menge))+0
-          FROM " . $type . "_position ap LEFT JOIN artikel a ON ap.artikel=a.id WHERE ap.$type='$id' AND a.porto!=1 AND a.rabatt!=1 AND ap.ausblenden_im_pdf!=1");
+        $anzahlteilesichtbar = $this->app->DatabaseService->selectValue(
+          sprintf("SELECT TRIM(SUM(ap.menge))+0 FROM `%s_position` ap LEFT JOIN artikel a ON ap.artikel=a.id WHERE ap.`%s` = :id AND a.porto!=1 AND a.rabatt!=1 AND ap.ausblenden_im_pdf!=1", $validType, $validType),
+          ['id' => (int) $id]
+        );
       } else {
-        $anzahlteilesichtbar = $this->app->DB->Select("SELECT TRIM(SUM(ap.menge))+0
-          FROM " . $type . "_position ap LEFT JOIN artikel a ON ap.artikel=a.id WHERE ap.$type='$id' AND a.porto!=1 AND a.rabatt!=1");
+        $anzahlteilesichtbar = $this->app->DatabaseService->selectValue(
+          sprintf("SELECT TRIM(SUM(ap.menge))+0 FROM `%s_position` ap LEFT JOIN artikel a ON ap.artikel=a.id WHERE ap.`%s` = :id AND a.porto!=1 AND a.rabatt!=1", $validType, $validType),
+          ['id' => (int) $id]
+        );
       }
 
       $text = str_replace("{ANZAHLTEILE}", $anzahlteilesichtbar, $text);
 
 
 
-      $nettogewicht = $this->app->DB->Select(
-        "SELECT 
-            SUM(
-                REPLACE(
-                    IF(a.nettogewicht='' OR a.nettogewicht IS NULL OR a.nettogewicht = 0,
-                       a.gewicht,
-                       a.nettogewicht
-                    ),',','.') * ap.menge
-            )
-          FROM " . $type . "_position ap LEFT JOIN artikel a ON ap.artikel=a.id WHERE ap.$type='$id'"
+      $nettogewicht = $this->app->DatabaseService->selectValue(
+        sprintf("SELECT SUM(REPLACE(IF(a.nettogewicht='' OR a.nettogewicht IS NULL OR a.nettogewicht = 0, a.gewicht, a.nettogewicht),',','.') * ap.menge) FROM `%s_position` ap LEFT JOIN artikel a ON ap.artikel=a.id WHERE ap.`%s` = :id", $validType, $validType),
+        ['id' => (int) $id]
       );
       $text = str_replace('{NETTOGEWICHT}', number_format((float) $nettogewicht, 2, ",", ""), $text);
       $zahlungsweise = '';
@@ -5237,12 +5230,9 @@ title: 'Abschicken',
       return;
     }
 
-    $docArr = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT bearbeiter, adresse FROM `%s` WHERE id = %d',
-        $module,
-        $id
-      )
+    $docArr = $this->app->DatabaseService->selectRow(
+      sprintf('SELECT bearbeiter, adresse FROM `%s` WHERE id = :id', $this->app->DatabaseService->validateIdentifier($module)),
+      ['id' => (int) $id]
     );
     if (!empty($docArr)) {
       $bearbeiter = $docArr['bearbeiter'];
@@ -5268,30 +5258,14 @@ title: 'Abschicken',
       );
       if ($innendienst_name != '' && $innendienst_name != '0') {
 
-        $this->app->DB->Update(
-          sprintf(
-            "UPDATE `%s` 
-            SET bearbeiter='%s',bearbeiterid=%d 
-            WHERE id=%d
-            LIMIT 1",
-            $module,
-            $this->app->DB->real_escape_string($innendienst_name),
-            $innendienst,
-            $id
-          )
+        $this->app->DatabaseService->execute(
+          sprintf("UPDATE `%s` SET bearbeiter = :bearbeiter, bearbeiterid = :bearbeiterid WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($module)),
+          ['bearbeiter' => (string) $innendienst_name, 'bearbeiterid' => (int) $innendienst, 'id' => (int) $id]
         );
       } else {
-        $this->app->DB->Update(
-          sprintf(
-            "UPDATE `%s` 
-            SET bearbeiter='%s',bearbeiterid=%d 
-            WHERE id=%d 
-            LIMIT 1",
-            $module,
-            $this->app->DB->real_escape_string($this->app->User->GetName()),
-            $this->app->User->GetAdresse(),
-            $id
-          )
+        $this->app->DatabaseService->execute(
+          sprintf("UPDATE `%s` SET bearbeiter = :bearbeiter, bearbeiterid = :bearbeiterid WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($module)),
+          ['bearbeiter' => (string) $this->app->User->GetName(), 'bearbeiterid' => (int) $this->app->User->GetAdresse(), 'id' => (int) $id]
         );
       }
     } else if (is_numeric($bearbeiter)) {
@@ -5302,13 +5276,9 @@ title: 'Abschicken',
       if (empty($bearbeiter)) {
         return;
       }
-      $this->app->DB->Update(
-        sprintf(
-          "UPDATE `%s` SET bearbeiter='%s' WHERE id=%d LIMIT 1",
-          $module,
-          $this->app->DB->real_escape_string($bearbeiter),
-          $id
-        )
+      $this->app->DatabaseService->execute(
+        sprintf("UPDATE `%s` SET bearbeiter = :bearbeiter WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($module)),
+        ['bearbeiter' => (string) $bearbeiter, 'id' => (int) $id]
       );
     }
   }
@@ -5482,17 +5452,9 @@ title: 'Abschicken',
       $vertrieb_name = empty($vertrieb) ? null : $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $vertrieb]);
 
       if ($vertrieb_name != '' && $vertrieb_name != '0') {
-        $this->app->DB->Update(
-          sprintf(
-            "UPDATE `%s` 
-            SET vertriebid=%d,vertrieb='%s' 
-            WHERE id=%d 
-            LIMIT 1",
-            $module,
-            $vertrieb,
-            $this->app->DB->real_escape_string($vertrieb_name),
-            $id
-          )
+        $this->app->DatabaseService->execute(
+          sprintf("UPDATE `%s` SET vertriebid = :vertriebid, vertrieb = :vertrieb WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($module)),
+          ['vertriebid' => (int) $vertrieb, 'vertrieb' => (string) $vertrieb_name, 'id' => (int) $id]
         );
       } else {
         $checktmp = !empty($docArr) ? $docArr['vertrieb'] : $this->app->DatabaseService->selectValue(sprintf("SELECT vertrieb FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($module)), ['id' => (int) $id]);
@@ -5500,30 +5462,17 @@ title: 'Abschicken',
           if ($vertrieb <= 0) {
             $vertrieb = $this->app->User->GetAdresse(); // falls kein vertrieb in der adresse definiert ist kriegt es der der angelegt war
           }
-          $this->app->DB->Update(
-            sprintf(
-              "UPDATE `%s` 
-              SET vertriebid=%d, vertrieb='%s' 
-              WHERE id=%d
-              LIMIT 1",
-              $module,
-              $vertrieb,
-              $this->app->DB->real_escape_string($this->app->User->GetName()),
-              $id
-            )
+          $this->app->DatabaseService->execute(
+            sprintf("UPDATE `%s` SET vertriebid = :vertriebid, vertrieb = :vertrieb WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($module)),
+            ['vertriebid' => (int) $vertrieb, 'vertrieb' => (string) $this->app->User->GetName(), 'id' => (int) $id]
           );
         }
       }
     } else if (is_numeric($vertrieb)) {
       $vertrieb_name = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $vertrieb]);
-      $this->app->DB->Update(
-        sprintf(
-          "UPDATE `%s` SET vertrieb='%s',vertriebid=%d WHERE id=%d LIMIT 1",
-          $module,
-          $this->app->DB->real_escape_string($vertrieb_name),
-          $vertrieb,
-          $id
-        )
+      $this->app->DatabaseService->execute(
+        sprintf("UPDATE `%s` SET vertrieb = :vertrieb, vertriebid = :vertriebid WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($module)),
+        ['vertrieb' => (string) $vertrieb_name, 'vertriebid' => (int) $vertrieb, 'id' => (int) $id]
       );
     }
   }
@@ -6141,15 +6090,14 @@ title: 'Abschicken',
     if ($this->app->User->GetType() === 'admin') {
       return [];
     }
-    $modules = $this->app->DB->SelectFirstCols(
-      sprintf(
-        "SELECT `module` FROM `userrights` WHERE `user` = %d AND `module` <> '' AND `permission` = 1 GROUP BY `module`",
-        $this->app->User->GetID()
-      )
+    $modules = $this->app->DatabaseService->selectColumn(
+      "SELECT `module` FROM `userrights` WHERE `user` = :uid AND `module` <> '' AND `permission` = 1 GROUP BY `module`",
+      ['uid' => (int) $this->app->User->GetID()]
     );
 
-    $deactivated = $this->app->DB->SelectFirstCols(
-      "SELECT DISTINCT `module` FROM `module_status` WHERE `active` = 0 AND `module` <> ''"
+    $deactivated = $this->app->DatabaseService->selectColumn(
+      "SELECT DISTINCT `module` FROM `module_status` WHERE `active` = 0 AND `module` <> ''",
+      []
     );
     if (!empty($deactivated)) {
       return array_diff($modules, $deactivated);
@@ -6181,16 +6129,9 @@ title: 'Abschicken',
       return true;
     }
 
-    return (int) $this->app->DB->Select(
-      sprintf(
-        "SELECT ur.id 
-        FROM `userrights` AS `ur`
-        WHERE ur.module='%s' AND ur.action='%s' AND ur.permission=1 AND ur.user = %d 
-        LIMIT 1",
-        $this->app->DB->real_escape_string($module),
-        $this->app->DB->real_escape_string($action),
-        $this->app->User->GetID()
-      )
+    return (int) $this->app->DatabaseService->selectValue(
+      "SELECT ur.id FROM `userrights` AS `ur` WHERE ur.module = :module AND ur.action = :action AND ur.permission = 1 AND ur.user = :uid LIMIT 1",
+      ['module' => (string) $module, 'action' => (string) $action, 'uid' => (int) $this->app->User->GetID()]
     ) > 0;
   }
 
@@ -7587,14 +7528,19 @@ title: 'Abschicken',
     if (empty($parameterToReset)) {
       return false;
     }
-    $this->app->DB->Update(
-      sprintf(
-        "UPDATE `prozessstarter` 
-        SET `letzteausfuerhung` = NOW(), `mutex` = 0, `mutexcounter` = 0 
-        WHERE `parameter` IN ('%s')",
-        implode("', '", $parameterToReset)
-      )
-    );
+    if (!empty($parameterToReset)) {
+      $placeholders = [];
+      $params = [];
+      foreach ($parameterToReset as $i => $p) {
+        $key = 'p' . $i;
+        $placeholders[] = ':' . $key;
+        $params[$key] = (string) $p;
+      }
+      $this->app->DatabaseService->execute(
+        "UPDATE `prozessstarter` SET `letzteausfuerhung` = NOW(), `mutex` = 0, `mutexcounter` = 0 WHERE `parameter` IN (" . implode(', ', $placeholders) . ")",
+        $params
+      );
+    }
 
     return false;
   }
@@ -7784,35 +7730,39 @@ title: 'Abschicken',
   // @refactor Installer Komponente
   function fixDatabaseNullIDs($table)
   {
-    $query = $this->CheckAlterTable("SELECT * FROM `$table` WHERE id = '0'");
+    $validTable = $this->app->DatabaseService->validateIdentifier($table);
+    $query = $this->CheckAlterTable(sprintf("SELECT * FROM `%s` WHERE id = '0'", $validTable));
     if (!$query)
       return;
     while ($val = $this->app->DB->Fetch_Assoc($query)) {
-      $maxid = 1 + (int) $this->app->DB->Select("SELECT max(id) FROM `$table`");
-      $this->app->DB->Update(sprintf("UPDATE `%s` SET id = %d WHERE id = 0 LIMIT 1", $table, $maxid));
+      $maxid = 1 + (int) $this->app->DatabaseService->selectValue(sprintf("SELECT max(id) FROM `%s`", $validTable), []);
+      $this->app->DatabaseService->execute(sprintf("UPDATE `%s` SET id = :maxid WHERE id = 0 LIMIT 1", $validTable), ['maxid' => (int) $maxid]);
     }
     $this->app->DB->free($query);
 
-    $doppelteids = $this->app->DB->SelectArr("SELECT id, count(*) as co FROM `$table` GROUP BY id HAVING COUNT(*) > 1");
+    $doppelteids = $this->app->DatabaseService->select(sprintf("SELECT id, count(*) as co FROM `%s` GROUP BY id HAVING COUNT(*) > 1", $validTable), []);
     if ($doppelteids) {
       foreach ($doppelteids as $val) {
-        $maxid = 1 + (int) $this->app->DB->Select("SELECT max(id) FROM `$table`");
-        $doppelte = $this->app->DB->SelectArr(sprintf("SELECT * FROM `%s` WHERE id = %d", $table, (int) $val['id']));
+        $maxid = 1 + (int) $this->app->DatabaseService->selectValue(sprintf("SELECT max(id) FROM `%s`", $validTable), []);
+        $doppelte = $this->app->DatabaseService->select(sprintf("SELECT * FROM `%s` WHERE id = :id", $validTable), ['id' => (int) $val['id']]);
         for ($i = 1; $i < $val['co']; $i++) {
-          $this->app->DB->Update(sprintf("UPDATE `%s` SET id = %d WHERE id = %d LIMIT 1", $table, $maxid, (int) $val['id']));
+          $this->app->DatabaseService->execute(sprintf("UPDATE `%s` SET id = :maxid WHERE id = :oldid LIMIT 1", $validTable), ['maxid' => (int) $maxid, 'oldid' => (int) $val['id']]);
           $maxid++;
         }
       }
     }
-    $this->CheckAlterTable("ALTER TABLE `$table` ADD PRIMARY KEY(`id`);");
-    $maxid = 1 + (int) $this->app->DB->Select("SELECT max(id) FROM `$table`");
-    $this->CheckAlterTable("ALTER TABLE `$table` MODIFY `id` int(11) NOT NULL AUTO_INCREMENT,AUTO_INCREMENT=" . $maxid);
+    $this->CheckAlterTable(sprintf("ALTER TABLE `%s` ADD PRIMARY KEY(`id`);", $validTable));
+    $maxid = 1 + (int) $this->app->DatabaseService->selectValue(sprintf("SELECT max(id) FROM `%s`", $validTable), []);
+    $this->CheckAlterTable(sprintf("ALTER TABLE `%s` MODIFY `id` int(11) NOT NULL AUTO_INCREMENT,AUTO_INCREMENT=%d", $validTable, (int) $maxid));
   }
 
   function CheckBelegNummernDoppelt(string $table, string $field, $where = '1', string $group = "")
   {
-    $sql = "SELECT " . $field . " FROM " . $table . " WHERE " . $where . " GROUP BY " . $field . ($group != "" ? "," . $group : "") . " HAVING COUNT(id) > 1";
-    $doppelte = $this->app->DB->SelectArr($sql);
+    $validTable = $this->app->DatabaseService->validateIdentifier($table);
+    $validField = $this->app->DatabaseService->validateIdentifier($field);
+    $validGroup = ($group != "") ? $this->app->DatabaseService->validateIdentifier($group) : "";
+    $sql = sprintf("SELECT `%s` FROM `%s` WHERE %s GROUP BY `%s`%s HAVING COUNT(id) > 1", $validField, $validTable, $where, $validField, ($validGroup != "" ? sprintf(", `%s`", $validGroup) : ""));
+    $doppelte = $this->app->DatabaseService->select($sql, []);
     return ($doppelte);
   }
 
@@ -7834,7 +7784,7 @@ title: 'Abschicken',
       return;
     if ($bearbeiter == '' && isset($this->app->User) && $this->app->User && method_exists($this->app->User, 'GetName'))
       $bearbeiter = $this->app->User->GetName();
-    $arr = $this->app->DB->SelectRow(sprintf("SELECT * FROM `%s` WHERE id = %d LIMIT 1", $table, (int) $tableid));
+    $arr = $this->app->DatabaseService->selectRow(sprintf("SELECT * FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($table)), ['id' => (int) $tableid]);
     if (!$arr)
       return;
     $this->Changelog = array('data' => $arr, 'module' => $module, 'action' => $action, 'bearbeiter' => $bearbeiter, 'table' => $table, 'tableid' => $tableid);
@@ -7845,7 +7795,7 @@ title: 'Abschicken',
   {
     if (!isset($this->Changelog) || !$this->Changelog)
       return;
-    $arr = $this->app->DB->SelectRow(sprintf("SELECT * FROM `%s` WHERE id = %d LIMIT 1", $this->Changelog['table'], (int) $this->Changelog['tableid']));
+    $arr = $this->app->DatabaseService->selectRow(sprintf("SELECT * FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($this->Changelog['table'])), ['id' => (int) $this->Changelog['tableid']]);
     if (!$arr) {
       $this->Changelog = null;
       return;
@@ -7917,7 +7867,7 @@ title: 'Abschicken',
               $typ2 = (int) $decimala[1];
             }
             if ($typ) {
-              $wert = $this->app->DB->Select("SELECT $name FROM firmendaten LIMIT 1");
+              $wert = $this->app->DatabaseService->selectValue(sprintf("SELECT `%s` FROM firmendaten LIMIT 1", $this->app->DatabaseService->validateIdentifier($name)), []);
               $this->AddNeuenFirmendatenWert($name, $typ, $typ1, $typ2, $wert, $default_value, $default_null, $darf_null);
             }
           }
@@ -8927,13 +8877,17 @@ title: 'Abschicken',
     $check = $this->app->DatabaseService->selectValue("SELECT id FROM firmendaten_werte WHERE name = :name LIMIT 1", ['name' => (string) $name]);
     if ($check)
       return false;
-    $wert_alt = $this->app->DB->Select("SELECT $name FROM firmendaten LIMIT 1");
-    if (!$this->app->DB->error()) {
+    try {
+      $validName = $this->app->DatabaseService->validateIdentifier($name);
+      $wert_alt = $this->app->DatabaseService->selectValue(sprintf("SELECT `%s` FROM firmendaten LIMIT 1", $validName), []);
       $wert = $wert_alt;
+    } catch (\Exception $e) {
+      // column does not exist, keep original $wert
     }
-    $this->app->DB->Insert("INSERT INTO firmendaten_werte (name, typ, typ1, typ2, wert, default_value, default_null, darf_null)
-  values ('" . $this->app->DB->real_escape_string($name) . "','" . $this->app->DB->real_escape_string($typ) . "','" . $this->app->DB->real_escape_string($typ1) . "','" . $this->app->DB->real_escape_string($typ2) . "','" . $this->app->DB->real_escape_string($wert) . "','" . $this->app->DB->real_escape_string($default_value) . "','" . (int) ($default_null) . "','" . (int) ($darf_null) . "')
-  ");
+    $this->app->DatabaseService->insert(
+      "INSERT INTO firmendaten_werte (name, typ, typ1, typ2, wert, default_value, default_null, darf_null) VALUES (:name, :typ, :typ1, :typ2, :wert, :default_value, :default_null, :darf_null)",
+      ['name' => (string) $name, 'typ' => (string) $typ, 'typ1' => (string) $typ1, 'typ2' => (string) $typ2, 'wert' => (string) $wert, 'default_value' => (string) $default_value, 'default_null' => (int) $default_null, 'darf_null' => (int) $darf_null]
+    );
     return $this->app->DB->GetInsertID();
   }
 
@@ -9136,39 +9090,24 @@ title: 'Abschicken',
     if ($parameter === '') {
       return false;
     }
-    $check = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT `id`, `recommended_period` FROM `prozessstarter` WHERE `parameter` LIKE '%s' LIMIT 1",
-        $this->app->DB->real_escape_string($parameter)
-      )
+    $check = $this->app->DatabaseService->selectRow(
+      "SELECT `id`, `recommended_period` FROM `prozessstarter` WHERE `parameter` LIKE :parameter LIMIT 1",
+      ['parameter' => (string) $parameter]
     );
     if (!empty($check)) {
       if ((int) $check['recommended_period'] !== (int) $periode) {
-        $this->app->DB->Update(
-          sprintf(
-            'UPDATE `prozessstarter` SET `recommended_period` = %d WHERE `id` = %d',
-            $periode,
-            $check['id']
-          )
+        $this->app->DatabaseService->execute(
+          "UPDATE `prozessstarter` SET `recommended_period` = :periode WHERE `id` = :id",
+          ['periode' => (int) $periode, 'id' => (int) $check['id']]
         );
       }
       return false;
     }
 
-    $sql = sprintf(
-      "INSERT INTO `prozessstarter` (`bezeichnung`,`art`,`periode`,`recommended_period`,
-                              `startzeit`,`typ`,`parameter`,`aktiv`) 
-       VALUES ('%s','%s','%d','%d','%s','%s','%s','%d')",
-      $this->app->DB->real_escape_string($bezeichnung),
-      $this->app->DB->real_escape_string($art),
-      $periode,
-      $periode,
-      $this->app->DB->real_escape_string($startzeit),
-      $this->app->DB->real_escape_string($typ),
-      $this->app->DB->real_escape_string($parameter),
-      (int) (bool) $aktiv
+    $this->app->DatabaseService->insert(
+      "INSERT INTO `prozessstarter` (`bezeichnung`,`art`,`periode`,`recommended_period`,`startzeit`,`typ`,`parameter`,`aktiv`) VALUES (:bezeichnung, :art, :periode, :recommended_period, :startzeit, :typ, :parameter, :aktiv)",
+      ['bezeichnung' => (string) $bezeichnung, 'art' => (string) $art, 'periode' => (int) $periode, 'recommended_period' => (int) $periode, 'startzeit' => (string) $startzeit, 'typ' => (string) $typ, 'parameter' => (string) $parameter, 'aktiv' => (int) (bool) $aktiv]
     );
-    $this->app->DB->Insert($sql);
     return $this->app->DB->GetInsertID();
   }
 
@@ -10173,10 +10112,10 @@ title: 'Abschicken',
           $etikettFSprachen = " AND (sprache = '" . $etikettFSprachen . "')";
         }
 
-        $eigenschaftenUebersetzungen = $this->app->DB->SelectArr("SELECT language_to, property_from, property_value_from, property_to, property_value_to
-                                                                      FROM article_property_translation
-                                                                      WHERE article_id = " . (int)$id . " $etikettEigSprachen
-                                                                      ORDER BY shop_id DESC");
+        $eigenschaftenUebersetzungen = $this->app->DatabaseService->select(
+          "SELECT language_to, property_from, property_value_from, property_to, property_value_to FROM article_property_translation WHERE article_id = :id" . $etikettEigSprachen . " ORDER BY shop_id DESC",
+          ['id' => (int) $id]
+        );
 
         foreach ($eigenschaftenUebersetzungen as $name => $row) {
           if ($sprache == $row['language_to']) {
@@ -10186,9 +10125,10 @@ title: 'Abschicken',
         }
 
 
-        $freifelderUebersetzungen = $this->app->DB->SelectArr("SELECT sprache, nummer, wert
-                                                                   FROM artikel_freifelder
-                                                                   WHERE artikel = " . (int)$id . " $etikettFSprachen");
+        $freifelderUebersetzungen = $this->app->DatabaseService->select(
+          "SELECT sprache, nummer, wert FROM artikel_freifelder WHERE artikel = :id" . $etikettFSprachen,
+          ['id' => (int) $id]
+        );
 
 
         for ($i = 1; $i <= 40; $i++) {
@@ -10203,7 +10143,10 @@ title: 'Abschicken',
         }
 
 
-        $artikelNameUebersetzungen = $this->app->DB->SelectArr("SELECT sprache, name FROM artikel_texte WHERE artikel = " . (int)$id . " $etikettFSprachen");
+        $artikelNameUebersetzungen = $this->app->DatabaseService->select(
+          "SELECT sprache, name FROM artikel_texte WHERE artikel = :id" . $etikettFSprachen,
+          ['id' => (int) $id]
+        );
         foreach ($artikelNameUebersetzungen as $name => $row) {
           if ($sprache == $row['sprache']) {
             $tmp[0]['artikel_name'] = $row['name'];
@@ -10777,78 +10720,44 @@ title: 'Abschicken',
     if (empty($name) || empty($alias) || $name === $alias) {
       return;
     }
-    $hook = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT h.id, h.name, h.alias
-        FROM `hook` AS `h` 
-        WHERE h.name = '%s' OR (h.name = '%s' AND h.alias = '%s') ",
-        $this->app->DB->real_escape_string($alias),
-        $this->app->DB->real_escape_string($name),
-        $this->app->DB->real_escape_string($alias)
-      )
+    $hook = $this->app->DatabaseService->selectRow(
+      "SELECT h.id, h.name, h.alias FROM `hook` AS `h` WHERE h.name = :alias OR (h.name = :name AND h.alias = :alias2)",
+      ['alias' => (string) $alias, 'name' => (string) $name, 'alias2' => (string) $alias]
     );
     if (!empty($hook)) {
       if ($hook['name'] === $name && $hook['alias'] === $alias) {
         return;
       }
       if ($hook['name'] === $alias && $hook['alias'] === $name) {
-        $this->app->DB->Update(
-          sprintf(
-            "UPDATE `hook` SET `name` = '%s' AND `alias` = '%s' WHERE `id` = %d",
-            $this->app->DB->real_escape_string($alias),
-            $this->app->DB->real_escape_string($name),
-            $hook['id']
-          )
+        $this->app->DatabaseService->execute(
+          "UPDATE `hook` SET `name` = :alias, `alias` = :name WHERE `id` = :id",
+          ['alias' => (string) $alias, 'name' => (string) $name, 'id' => (int) $hook['id']]
         );
         return;
       }
       if (empty($hook['alias']) && $hook['name'] === $alias) {
         if (
-          !$this->app->DB->Select(
-            sprintf(
-              "SELECT COUNT(h.*) FROM `hook` AS `h` WHERE h.id <> %d AND (h.name = '%s' OR h.alias = %s)",
-              $this->app->DB->real_escape_string($name),
-              $this->app->DB->real_escape_string($name),
-              $hook['id']
-            )
+          !$this->app->DatabaseService->selectValue(
+            "SELECT COUNT(*) FROM `hook` AS `h` WHERE h.id <> :hookid AND (h.name = :name OR h.alias = :name2)",
+            ['hookid' => (int) $hook['id'], 'name' => (string) $name, 'name2' => (string) $name]
           )
         ) {
-          $this->app->DB->Update(
-            sprintf(
-              "UPDATE `hook` 
-              SET `alias` = '%s', `name` = '%s' 
-              WHERE `id` = %d 
-              LIMIT 1",
-              $this->app->DB->real_escape_string($alias),
-              $this->app->DB->real_escape_string($name),
-              $hook['id']
-            )
+          $this->app->DatabaseService->execute(
+            "UPDATE `hook` SET `alias` = :alias, `name` = :name WHERE `id` = :id LIMIT 1",
+            ['alias' => (string) $alias, 'name' => (string) $name, 'id' => (int) $hook['id']]
           );
         }
       }
       return;
     }
-    $hooks = $this->app->DB->SelectArr(
-      sprintf(
-        "SELECT h.* 
-        FROM `hook` AS `h` 
-        WHERE (h.name = '%s' OR h.name = '%s' OR h.name = '%s' OR h.name = '%s') 
-        ORDER BY h.name = '%s' DESC",
-        $this->app->DB->real_escape_string($name),
-        $this->app->DB->real_escape_string($alias),
-        $this->app->DB->real_escape_string($name),
-        $this->app->DB->real_escape_string($alias),
-        $this->app->DB->real_escape_string($name)
-      )
+    $hooks = $this->app->DatabaseService->select(
+      "SELECT h.* FROM `hook` AS `h` WHERE (h.name = :name OR h.name = :alias) ORDER BY h.name = :name2 DESC",
+      ['name' => (string) $name, 'alias' => (string) $alias, 'name2' => (string) $name]
     );
     if (empty($hooks)) {
-      $this->app->DB->Insert(
-        sprintf(
-          "INSERT INTO `hook` (`name`, `alias`, `aktiv`, `parametercount`) 
-            values ('%s','%s',1, 0)",
-          $this->app->DB->real_escape_string($name),
-          $this->app->DB->real_escape_string($alias)
-        )
+      $this->app->DatabaseService->insert(
+        "INSERT INTO `hook` (`name`, `alias`, `aktiv`, `parametercount`) VALUES (:name, :alias, 1, 0)",
+        ['name' => (string) $name, 'alias' => (string) $alias]
       );
       return;
     }
@@ -10856,26 +10765,16 @@ title: 'Abschicken',
       return;
     }
     if ($hooks[0]['name'] === $name) {
-      $this->app->DB->Update(
-        sprintf(
-          "UPDATE `hook` SET `alias` = '%s' WHERE `id` = %d LIMIT 1",
-          $this->app->DB->real_escape_string($alias),
-          $hooks[0]['id']
-        )
+      $this->app->DatabaseService->execute(
+        "UPDATE `hook` SET `alias` = :alias WHERE `id` = :id LIMIT 1",
+        ['alias' => (string) $alias, 'id' => (int) $hooks[0]['id']]
       );
       return;
     }
     if (((!empty($hooks) ? count($hooks) : 0) === 1 || $hooks[0]['name'] === $alias) && $hooks[0]['alias'] === $name) {
-      $this->app->DB->Update(
-        sprintf(
-          "UPDATE `hook` 
-          SET `alias` = '%s', `name` = '%s' 
-          WHERE `id` = %d 
-          LIMIT 1",
-          $this->app->DB->real_escape_string($alias),
-          $this->app->DB->real_escape_string($name),
-          $hooks[0]['id']
-        )
+      $this->app->DatabaseService->execute(
+        "UPDATE `hook` SET `alias` = :alias, `name` = :name WHERE `id` = :id LIMIT 1",
+        ['alias' => (string) $alias, 'name' => (string) $name, 'id' => (int) $hooks[0]['id']]
       );
     }
   }
@@ -10895,15 +10794,9 @@ title: 'Abschicken',
       return;
     }
     $hook = $check['id'];
-    $hooks = $this->app->DB->SelectArr(
-      sprintf(
-        "SELECT hr.module, hr.function, hr.module_parameter
-        FROM `hook_register` AS `hr` 
-        WHERE hr.hook = %d AND hr.aktiv = 1 AND hr.module <> '' AND hr.function <> '' 
-        GROUP BY hr.module, hr.function, hr.module_parameter
-        ORDER BY MIN(hr.position)",
-        $hook
-      )
+    $hooks = $this->app->DatabaseService->select(
+      "SELECT hr.module, hr.function, hr.module_parameter FROM `hook_register` AS `hr` WHERE hr.hook = :hook AND hr.aktiv = 1 AND hr.module <> '' AND hr.function <> '' GROUP BY hr.module, hr.function, hr.module_parameter ORDER BY MIN(hr.position)",
+      ['hook' => (int) $hook]
     );
     if (empty($hooks)) {
       return;
@@ -35119,14 +35012,16 @@ $( this ).dialog( "close" );
 
     if ($systemfreitext == '' && ($art === 'rechnung' || $art === 'auftrag')) {
       if ($art === 'auftrag') {
-        $tmprechnung = $this->app->DB->SelectArr("SELECT projekt, id as auftragid, zahlungsweise,transaktionsnummer,teillieferungvon FROM $art WHERE id='$id' LIMIT 1");
+        $validArt = $this->app->DatabaseService->validateIdentifier($art);
+        $tmprechnung = $this->app->DatabaseService->select(sprintf("SELECT projekt, id as auftragid, zahlungsweise, transaktionsnummer, teillieferungvon FROM `%s` WHERE id = :id LIMIT 1", $validArt), ['id' => (int) $id]);
         $teillieferung = ($tmprechnung[0]['teillieferungvon'] > 0 ? true : false);
       } else {
-        $tmprechnung = $this->app->DB->SelectArr("SELECT projekt, auftragid, zahlungsweise FROM $art WHERE id='$id' LIMIT 1");
+        $validArt = $this->app->DatabaseService->validateIdentifier($art);
+        $tmprechnung = $this->app->DatabaseService->select(sprintf("SELECT projekt, auftragid, zahlungsweise FROM `%s` WHERE id = :id LIMIT 1", $validArt), ['id' => (int) $id]);
       }
 
       if ($tmprechnung[0]['transaktionsnummer'] == '') {
-        $tmprechnung[0]['transaktionsnummer'] = $this->app->DB->Select("SELECT transaktionsnummer FROM auftrag WHERE id='" . $tmprechnung[0]['auftragid'] . "' LIMIT 1");
+        $tmprechnung[0]['transaktionsnummer'] = $this->app->DatabaseService->selectValue("SELECT transaktionsnummer FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int) $tmprechnung[0]['auftragid']]);
       }
 
     }
@@ -35222,7 +35117,7 @@ $( this ).dialog( "close" );
   public function getErloesFirmendaten($artikel, $ust_befreit, $aufwendung, &$tmpsteuersatz, &$tmpsteuertext, &$tmperloes, $umsatzsteuerpos, $ustid = null, $projekt = 0)
   {
     $tmperloes = '';
-    $artikeldata = $this->app->DB->SelectRow("SELECT * FROM artikel WHERE id = '$artikel' LIMIT 1");
+    $artikeldata = $this->app->DatabaseService->selectRow("SELECT * FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikel]);
     if (empty($artikeldata)) {
       return;
     }
@@ -35313,7 +35208,7 @@ $( this ).dialog( "close" );
   function GetArtikelSteuer($artikel, $ust_befreit, $aufwendung, &$tmpsteuersatz, &$tmpsteuertext, &$tmperloes, $umsatzsteuerpos, $ustid = null, $projekt = 0)
   {
     $tmperloes = '';
-    $artikeldata = $this->app->DB->SelectRow("SELECT * FROM artikel WHERE id = '$artikel' LIMIT 1");
+    $artikeldata = $this->app->DatabaseService->selectRow("SELECT * FROM artikel WHERE id = :id LIMIT 1", ['id' => (int) $artikel]);
     if (empty($artikeldata)) {
       return;
     }
@@ -35607,9 +35502,9 @@ $( this ).dialog( "close" );
   {
 
     // schaue ob Kunde eine Regel hat
-    $checkportofrei = $this->app->DB->Select("SELECT portofrei_aktiv FROM adresse WHERE id='" . $adresse . "' LIMIT 1");
+    $checkportofrei = $this->app->DatabaseService->selectValue("SELECT portofrei_aktiv FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $adresse]);
     if ($checkportofrei == "1") {
-      $checkportofreiab = $this->app->DB->Select("SELECT portofreiab FROM adresse WHERE id='" . $adresse . "' LIMIT 1");
+      $checkportofreiab = $this->app->DatabaseService->selectValue("SELECT portofreiab FROM adresse WHERE id = :id LIMIT 1", ['id' => (int) $adresse]);
       if ($gesamtsumme >= $checkportofreiab) {
         $realpreis = true;
         return 0;
@@ -35687,16 +35582,16 @@ $( this ).dialog( "close" );
         )
       );
     }
-    return $this->app->DB->Select("SELECT SUM(tp.menge*(tp.preis-(tp.preis/100*tp.rabatt))) FROM " . $art . "_position tp
-            LEFT JOIN artikel a ON a.id=tp.artikel WHERE a.porto!='1' AND (a.rabatt!='1' OR a.rabatt IS NULL) AND (a.keinrabatterlaubt!='1' OR a.keinrabatterlaubt IS NULL) AND tp." . $art . "='$id'");
+    $validArt = $this->app->DatabaseService->validateIdentifier($art);
+    return $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(tp.menge*(tp.preis-(tp.preis/100*tp.rabatt))) FROM `%s_position` tp LEFT JOIN artikel a ON a.id=tp.artikel WHERE a.porto!='1' AND (a.rabatt!='1' OR a.rabatt IS NULL) AND (a.keinrabatterlaubt!='1' OR a.keinrabatterlaubt IS NULL) AND tp.`%s` = :id", $validArt, $validArt), ['id' => (int) $id]);
   }
 
 
   function BEGesamtsummeOhnePorto($id, $art)
   {
     //inkl. kein rabatt erlaubt
-    $summeNetto = $this->app->DB->Select("SELECT SUM(tp.menge*tp.preis) FROM " . $art . "_position tp
-            LEFT JOIN artikel a ON a.id=tp.artikel WHERE a.porto!='1' AND tp." . $art . "='$id'");
+    $validArt = $this->app->DatabaseService->validateIdentifier($art);
+    $summeNetto = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(tp.menge*tp.preis) FROM `%s_position` tp LEFT JOIN artikel a ON a.id=tp.artikel WHERE a.porto!='1' AND tp.`%s` = :id", $validArt, $validArt), ['id' => (int) $id]);
     return $summeNetto;
   }
 
@@ -35717,8 +35612,8 @@ $( this ).dialog( "close" );
         )
       );
     }
-    $summeNetto = $this->app->DB->Select("SELECT SUM(tp.menge*(tp.preis-(tp.preis/100*tp.rabatt))) FROM " . $art . "_position tp
-            LEFT JOIN artikel a ON a.id=tp.artikel WHERE a.porto!='1' AND (a.rabatt!='1' OR a.rabatt IS NULL) AND tp." . $art . "='$id'");
+    $validArt = $this->app->DatabaseService->validateIdentifier($art);
+    $summeNetto = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(tp.menge*(tp.preis-(tp.preis/100*tp.rabatt))) FROM `%s_position` tp LEFT JOIN artikel a ON a.id=tp.artikel WHERE a.porto!='1' AND (a.rabatt!='1' OR a.rabatt IS NULL) AND tp.`%s` = :id", $validArt, $validArt), ['id' => (int) $id]);
     return $summeNetto;
   }
 
@@ -35732,7 +35627,8 @@ $( this ).dialog( "close" );
       }
       return;
     }
-    $docArr = $this->app->DB->SelectRow(sprintf('SELECT * FROM `%s` WHERE id = %d LIMIT 1', $art, $id));
+    $validArt = $this->app->DatabaseService->validateIdentifier($art);
+    $docArr = $this->app->DatabaseService->selectRow(sprintf('SELECT * FROM `%s` WHERE id = :id LIMIT 1', $validArt), ['id' => (int) $id]);
     if (empty($docArr)) {
       if ($return_netto) {
         return 0;
@@ -35756,69 +35652,47 @@ $( this ).dialog( "close" );
         $sqlvor2 = 'round(';
         $sqlnach2 = ',2)';
       }
+      $posTable = $validArt . '_position';
+      $idParam = ['id' => (int) $id];
       if ($art === 'angebot') {
-        $summeV = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position ap WHERE umsatzsteuer!='ermaessigt' AND umsatzsteuer!='befreit' AND " . $art . "='$id' AND optional!=1 AND (isnull(steuersatz) OR steuersatz < 0)  AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))");
-        if ($this->app->DB->error())
-          $summeV = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position ap WHERE umsatzsteuer!='ermaessigt' AND umsatzsteuer!='befreit' AND " . $art . "='$id' AND optional!=1  AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))");
-        $summeR = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position ap WHERE umsatzsteuer='ermaessigt' AND " . $art . "='$id' AND optional!=1 AND (isnull(steuersatz) OR steuersatz < 0)  AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))");
-        if ($this->app->DB->error())
-          $summeR = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position ap WHERE umsatzsteuer='ermaessigt' AND " . $art . "='$id' AND optional!=1  AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))");
+        $summeV = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` ap WHERE umsatzsteuer!='ermaessigt' AND umsatzsteuer!='befreit' AND `%s` = :id AND optional!=1 AND (isnull(steuersatz) OR steuersatz < 0) AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
+        if ($summeV === false || $summeV === null)
+          $summeV = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` ap WHERE umsatzsteuer!='ermaessigt' AND umsatzsteuer!='befreit' AND `%s` = :id AND optional!=1 AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
+        $summeR = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` ap WHERE umsatzsteuer='ermaessigt' AND `%s` = :id AND optional!=1 AND (isnull(steuersatz) OR steuersatz < 0) AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
+        if ($summeR === false || $summeR === null)
+          $summeR = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` ap WHERE umsatzsteuer='ermaessigt' AND `%s` = :id AND optional!=1 AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
         if ($positionenkaufmaenischrunden != 1 && $positionenkaufmaenischrunden != 3) {
-          $summeS = (float) $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . " * if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100)   FROM " . $art . "_position ap WHERE  " . $art . "='$id' AND optional!=1 AND ((steuersatz >= 0) and not isnull(steuersatz) OR umsatzsteuer='befreit')  AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))");
+          $summeS = (float) $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s * if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100) FROM `%s` ap WHERE `%s` = :id AND optional!=1 AND ((steuersatz >= 0) and not isnull(steuersatz) OR umsatzsteuer='befreit') AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
         } else {
-          $summeS = (float) $this->app->DB->Select("SELECT ifnull(SUM(" . $sqlvor . " s.pos * s.steuer" . $sqlnach . "),0)
-
-               FROM (
-              SELECT SUM(menge*(preis-(preis/100*rabatt))) as pos,  if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100 as steuer  
-              FROM " . $art . "_position 
-              WHERE $art = '$id' AND steuersatz >= 0   AND optional!=1
-              GROUP BY if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100
-
-              ) s");
+          $summeS = (float) $this->app->DatabaseService->selectValue(sprintf("SELECT ifnull(SUM(%s s.pos * s.steuer%s),0) FROM (SELECT SUM(menge*(preis-(preis/100*rabatt))) as pos, if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100 as steuer FROM `%s` WHERE `%s` = :id AND steuersatz >= 0 AND optional!=1 GROUP BY if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100) s", $sqlvor, $sqlnach, $posTable, $validArt), $idParam);
         }
-        $summeNetto = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position ap WHERE " . $art . "='$id' AND optional!=1  AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))");
+        $summeNetto = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` ap WHERE `%s` = :id AND optional!=1 AND (explodiert_parent = 0 OR 0 = ifnull((SELECT id FROM angebot_position WHERE id = ap.explodiert_parent AND berechnen_aus_teile = 1 LIMIT 1),0))", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
       } elseif ($art === 'bestellung') {
-        $summeV = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis)" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE umsatzsteuer!='ermaessigt' AND umsatzsteuer!='befreit' AND " . $art . "='$id' AND (isnull(steuersatz) OR steuersatz < 0)");
-        if ($this->app->DB->error())
-          $summeV = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis)" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE umsatzsteuer!='ermaessigt' AND " . $art . "='$id'");
-        $summeR = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis)" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE umsatzsteuer='ermaessigt' AND " . $art . "='$id' AND (isnull(steuersatz) OR steuersatz < 0)");
-        if ($this->app->DB->error())
-          $summeR = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis)" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE umsatzsteuer='ermaessigt' AND " . $art . "='$id'");
+        $summeV = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis)%s%s) FROM `%s` WHERE umsatzsteuer!='ermaessigt' AND umsatzsteuer!='befreit' AND `%s` = :id AND (isnull(steuersatz) OR steuersatz < 0)", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
+        if ($summeV === false || $summeV === null)
+          $summeV = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis)%s%s) FROM `%s` WHERE umsatzsteuer!='ermaessigt' AND `%s` = :id", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
+        $summeR = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis)%s%s) FROM `%s` WHERE umsatzsteuer='ermaessigt' AND `%s` = :id AND (isnull(steuersatz) OR steuersatz < 0)", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
+        if ($summeR === false || $summeR === null)
+          $summeR = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis)%s%s) FROM `%s` WHERE umsatzsteuer='ermaessigt' AND `%s` = :id", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
         if ($positionenkaufmaenischrunden != 1 && $positionenkaufmaenischrunden != 3) {
-          $summeS = (float) $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis)" . $sqlnach2 . $sqlnach . " * if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100)  FROM " . $art . "_position WHERE  " . $art . "='$id' AND ((steuersatz >= 0) and not isnull(steuersatz) OR umsatzsteuer='befreit')");
+          $summeS = (float) $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis)%s%s * if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100) FROM `%s` WHERE `%s` = :id AND ((steuersatz >= 0) and not isnull(steuersatz) OR umsatzsteuer='befreit')", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
         } else {
-          $summeS = (float) $this->app->DB->Select("SELECT ifnull(SUM(" . $sqlvor . " s.pos * s.steuer" . $sqlnach . "),0)
-
-               FROM (
-              SELECT SUM(menge*(preis)) as pos,  if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100 as steuer  
-              FROM " . $art . "_position 
-              WHERE $art = '$id' AND steuersatz >= 0   
-              GROUP BY if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100
-
-              ) s");
+          $summeS = (float) $this->app->DatabaseService->selectValue(sprintf("SELECT ifnull(SUM(%s s.pos * s.steuer%s),0) FROM (SELECT SUM(menge*(preis)) as pos, if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100 as steuer FROM `%s` WHERE `%s` = :id AND steuersatz >= 0 GROUP BY if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100) s", $sqlvor, $sqlnach, $posTable, $validArt), $idParam);
         }
-        $summeNetto = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis)" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE " . $art . "='$id'");
+        $summeNetto = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis)%s%s) FROM `%s` WHERE `%s` = :id", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
       } else {
-        $summeV = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE umsatzsteuer!='ermaessigt' AND umsatzsteuer!='befreit' AND " . $art . "='$id' AND (isnull(steuersatz) OR steuersatz < 0)");
-        if ($this->app->DB->error())
-          $summeV = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE umsatzsteuer!='ermaessigt' AND " . $art . "='$id'");
-        $summeR = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE umsatzsteuer='ermaessigt' AND " . $art . "='$id' AND (isnull(steuersatz) OR steuersatz < 0)");
-        if ($this->app->DB->error())
-          $summeR = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE umsatzsteuer='ermaessigt' AND " . $art . "='$id'");
+        $summeV = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` WHERE umsatzsteuer!='ermaessigt' AND umsatzsteuer!='befreit' AND `%s` = :id AND (isnull(steuersatz) OR steuersatz < 0)", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
+        if ($summeV === false || $summeV === null)
+          $summeV = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` WHERE umsatzsteuer!='ermaessigt' AND `%s` = :id", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
+        $summeR = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` WHERE umsatzsteuer='ermaessigt' AND `%s` = :id AND (isnull(steuersatz) OR steuersatz < 0)", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
+        if ($summeR === false || $summeR === null)
+          $summeR = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` WHERE umsatzsteuer='ermaessigt' AND `%s` = :id", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
         if ($positionenkaufmaenischrunden != 1 && $positionenkaufmaenischrunden != 3) {
-          $summeS = (float) $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . " * if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100)  FROM " . $art . "_position WHERE  " . $art . "='$id' AND ((steuersatz >= 0) and not isnull(steuersatz) OR umsatzsteuer='befreit')");
+          $summeS = (float) $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s * if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100) FROM `%s` WHERE `%s` = :id AND ((steuersatz >= 0) and not isnull(steuersatz) OR umsatzsteuer='befreit')", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
         } else {
-          $summeS = (float) $this->app->DB->Select("SELECT ifnull(SUM(" . $sqlvor . " s.pos * s.steuer" . $sqlnach . "),0)
-
-               FROM (
-              SELECT SUM(menge*(preis-(preis/100*rabatt))) as pos,  if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100 as steuer  
-              FROM " . $art . "_position 
-              WHERE $art = '$id' AND steuersatz >= 0   
-              GROUP BY if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100
-
-              ) s");
+          $summeS = (float) $this->app->DatabaseService->selectValue(sprintf("SELECT ifnull(SUM(%s s.pos * s.steuer%s),0) FROM (SELECT SUM(menge*(preis-(preis/100*rabatt))) as pos, if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100 as steuer FROM `%s` WHERE `%s` = :id AND steuersatz >= 0 GROUP BY if(umsatzsteuer != 'befreit',steuersatz,if(steuersatz < 0 OR isnull(steuersatz),0,steuersatz))/100) s", $sqlvor, $sqlnach, $posTable, $validArt), $idParam);
         }
-        $summeNetto = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*" . $sqlvor2 . "(preis-(preis/100*rabatt))" . $sqlnach2 . $sqlnach . ") FROM " . $art . "_position WHERE " . $art . "='$id'");
+        $summeNetto = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*%s(preis-(preis/100*rabatt))%s%s) FROM `%s` WHERE `%s` = :id", $sqlvor, $sqlvor2, $sqlnach2, $sqlnach, $posTable, $validArt), $idParam);
       }
 
 
@@ -35848,11 +35722,11 @@ $( this ).dialog( "close" );
     if ($extsoll == 0) {
       if ($art === 'rechnung' || $art === 'gutschrift' || $art === 'proformarechnung') {
         if ($betrag != $docArr['soll']) {
-          $this->app->DB->Update("UPDATE $art SET soll='$betrag' WHERE id='$id' LIMIT 1");
+          $this->app->DatabaseService->execute(sprintf("UPDATE `%s` SET soll = :betrag WHERE id = :id LIMIT 1", $validArt), ['betrag' => (string) $betrag, 'id' => (int) $id]);
         }
       } else {
         if ($betrag != $docArr['gesamtsumme']) {
-          $this->app->DB->Update("UPDATE $art SET gesamtsumme='$betrag' WHERE id='$id' LIMIT 1");
+          $this->app->DatabaseService->execute(sprintf("UPDATE `%s` SET gesamtsumme = :betrag WHERE id = :id LIMIT 1", $validArt), ['betrag' => (string) $betrag, 'id' => (int) $id]);
         }
       }
     }
@@ -35862,16 +35736,16 @@ $( this ).dialog( "close" );
 
   function RechnungZwischensummeSteuersaetzeBrutto2($id, $art = "ermaessigt")
   {
-    $projekt = $this->app->DB->Select("SELECT projekt FROM rechnung WHERE id = '$id' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM rechnung WHERE id = :id LIMIT 1", ['id' => (int) $id]);
     $positionenkaufmaenischrunden = $this->app->erp->Projektdaten($projekt, "preisberechnung");
     $viernachkommastellen_belege = $this->app->erp->Firmendaten('viernachkommastellen_belege');
     $sqlvor = '';
     $sqlnach = '';
 
     if ($art != "ermaessigt")
-      $summe = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM rechnung_position WHERE (umsatzsteuer='normal' OR umsatzsteuer='standard' OR umsatzsteuer='') AND rechnung='$id' AND (isnull(steuersatz) OR steuersatz < 0) AND (isnull(erloese) OR erloese = '') ");
+      $summe = $this->app->DatabaseService->selectValue("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM rechnung_position WHERE (umsatzsteuer='normal' OR umsatzsteuer='standard' OR umsatzsteuer='') AND rechnung = :id AND (isnull(steuersatz) OR steuersatz < 0) AND (isnull(erloese) OR erloese = '')", ['id' => (int) $id]);
     else
-      $summe = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM rechnung_position WHERE umsatzsteuer='$art' AND rechnung='$id' AND (isnull(steuersatz) OR steuersatz < 0) AND isnull(erloese)");
+      $summe = $this->app->DatabaseService->selectValue("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM rechnung_position WHERE umsatzsteuer = :art AND rechnung = :id AND (isnull(steuersatz) OR steuersatz < 0) AND isnull(erloese)", ['art' => (string) $art, 'id' => (int) $id]);
     if ($art == "ermaessigt")
       $ermaessigt_summe = $summe * $this->GetSteuersatzErmaessigt(true, $id, "rechnung");
     else
@@ -36889,16 +36763,17 @@ $( this ).dialog( "close" );
 
   function BelegZwischensummeSteuersaetzeBrutto2($id, $typ = "", $art = "ermaessigt")
   {
-    $projekt = $this->app->DB->Select("SELECT projekt FROM $typ WHERE id = '$id' LIMIT 1");
+    $validTyp = $this->app->DatabaseService->validateIdentifier($typ);
+    $projekt = $this->app->DatabaseService->selectValue(sprintf("SELECT projekt FROM `%s` WHERE id = :id LIMIT 1", $validTyp), ['id' => (int) $id]);
     $positionenkaufmaenischrunden = $this->app->erp->Projektdaten($projekt, "preisberechnung");
     $viernachkommastellen_belege = $this->app->erp->Firmendaten('viernachkommastellen_belege');
 
     $sqlvor = '';
     $sqlnach = '';
     if ($art != "ermaessigt")
-      $summe = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM " . $typ . "_position WHERE (umsatzsteuer='normal' OR umsatzsteuer='') AND " . $typ . "='$id'");
+      $summe = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*(preis-(preis/100*rabatt))%s) FROM `%s_position` WHERE (umsatzsteuer='normal' OR umsatzsteuer='') AND `%s` = :id", $sqlvor, $sqlnach, $validTyp, $validTyp), ['id' => (int) $id]);
     else
-      $summe = $this->app->DB->Select("SELECT SUM(" . $sqlvor . "menge*(preis-(preis/100*rabatt))" . $sqlnach . ") FROM " . $typ . "_position WHERE umsatzsteuer='$art' AND " . $typ . "='$id'");
+      $summe = $this->app->DatabaseService->selectValue(sprintf("SELECT SUM(%smenge*(preis-(preis/100*rabatt))%s) FROM `%s_position` WHERE umsatzsteuer = :art AND `%s` = :id", $sqlvor, $sqlnach, $validTyp, $validTyp), ['art' => (string) $art, 'id' => (int) $id]);
     if ($art == 'befreit')
       return $summe;
     if ($art == "ermaessigt")
@@ -36933,12 +36808,15 @@ $( this ).dialog( "close" );
 
   function GetUserKalender($adresse)
   {
-    return $this->app->DB->SelectArr("SELECT id, name, farbe FROM kalender WHERE id IN (SELECT kalender FROM kalender_user WHERE adresse = $adresse);");
+    return $this->app->DatabaseService->select("SELECT id, name, farbe FROM kalender WHERE id IN (SELECT kalender FROM kalender_user WHERE adresse = :adresse)", ['adresse' => (int) $adresse]);
   }
 
   function GetAllKalender($adresse = "")
   {
-    return $this->app->DB->SelectArr("SELECT id, name, farbe" . ($adresse != "" ? ", IFNULL((SELECT 1 FROM kalender_user WHERE adresse=$adresse AND kalender_user.kalender=kalender.id),0) zugriff" : "") . " FROM kalender;");
+    if ($adresse != "") {
+      return $this->app->DatabaseService->select("SELECT id, name, farbe, IFNULL((SELECT 1 FROM kalender_user WHERE adresse = :adresse AND kalender_user.kalender=kalender.id),0) zugriff FROM kalender", ['adresse' => (int) $adresse]);
+    }
+    return $this->app->DatabaseService->select("SELECT id, name, farbe FROM kalender", []);
   }
 
   function GetUserKalenderIds($adresse)
@@ -37108,18 +36986,17 @@ $( this ).dialog( "close" );
         $oldsort = $v['sort'];
       } elseif ($v['sort'] <= $oldsort) {
         $oldsort = $v['sort'] + 1;
-        $this->app->DB->Update("UPDATE datei_stichwoerter SET sort = $oldsort WHERE id = '" . $v['id'] . "' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE datei_stichwoerter SET sort = :sort WHERE id = :id LIMIT 1", ['sort' => (int) $oldsort, 'id' => (int) $v['id']]);
       }
     }
   }
 
   function CreateDateiWithStichwort($name, $titel, $beschreibung, $nummer, $datei, $ersteller, $subjekt, $objekt, $parameter, $path = "", $without_log = false, $geschuetzt = null)
   {
-    $dateien = $this->app->DB->SelectArr("SELECT dv.datei, dv.id FROM datei_stichwoerter ds 
-          INNER JOIN datei d ON ds.datei = d.id AND ifnull(d.geloescht,0) = 0
-          INNER JOIN datei_version dv ON d.id = dv.datei
-          WHERE ds.subjekt = '" . $this->app->DB->real_escape_string($subjekt) . "' AND 
-          ds.objekt = '" . $this->app->DB->real_escape_string($objekt) . "' AND ds.parameter = '" . $this->app->DB->real_escape_string($parameter) . "'");
+    $dateien = $this->app->DatabaseService->select(
+      "SELECT dv.datei, dv.id FROM datei_stichwoerter ds INNER JOIN datei d ON ds.datei = d.id AND ifnull(d.geloescht,0) = 0 INNER JOIN datei_version dv ON d.id = dv.datei WHERE ds.subjekt = :subjekt AND ds.objekt = :objekt AND ds.parameter = :parameter",
+      ['subjekt' => (string) $subjekt, 'objekt' => (string) $objekt, 'parameter' => (string) $parameter]
+    );
     if ($dateien) {
       if (is_file($datei)) {
         $md5 = md5_file($datei);
@@ -37204,7 +37081,7 @@ $( this ).dialog( "close" );
     $dateiname = str_replace(['\\\'', '\\"', '\'', '"'], '_', $dateiname);
 
     // ermittle neue Version
-    $version = (int) $this->app->DB->Select("SELECT ifnull(max(version),0) FROM datei_version WHERE datei='$id'") + 1;
+    $version = (int) $this->app->DatabaseService->selectValue("SELECT ifnull(max(version),0) FROM datei_version WHERE datei = :id", ['id' => (int) $id]) + 1;
 
     $tmpfilesize = 0;
     if (@is_file($datei)) {
@@ -37212,19 +37089,22 @@ $( this ).dialog( "close" );
     }
 
     // speichere werte ab
+    $insertSql = "INSERT INTO datei_version (datei, ersteller, datum, version, dateiname, bemerkung, size) VALUES (:datei, :ersteller, NOW(), :version, :dateiname, :bemerkung, :size)";
+    $insertParams = ['datei' => (int) $id, 'ersteller' => (string) $ersteller, 'version' => (int) $version, 'dateiname' => (string) $dateiname, 'bemerkung' => (string) $bemerkung, 'size' => (int) $tmpfilesize];
     if (!$without_log) {
-      $this->app->DB->Insert("INSERT INTO datei_version (id,datei,ersteller,datum,version,dateiname,bemerkung,size)
-              VALUES ('','$id','$ersteller',NOW(),'$version','$dateiname','$bemerkung','$tmpfilesize')");
+      $this->app->DatabaseService->insert($insertSql, $insertParams);
     } else {
-      $this->app->DB->InsertWithoutLog("INSERT INTO datei_version (id,datei,ersteller,datum,version,dateiname,bemerkung,size)
-              VALUES ('','$id','$ersteller',NOW(),'$version','$dateiname','$bemerkung','$tmpfilesize')");
+      $this->app->DB->InsertWithoutLog(
+        sprintf("INSERT INTO datei_version (datei, ersteller, datum, version, dateiname, bemerkung, size) VALUES (%d, '%s', NOW(), %d, '%s', '%s', %d)",
+          (int) $id, $this->app->DB->real_escape_string($ersteller), (int) $version, $this->app->DB->real_escape_string($dateiname), $this->app->DB->real_escape_string($bemerkung), (int) $tmpfilesize)
+      );
     }
 
     $versionid = $this->app->DB->GetInsertID();
 
-    $parameter = $this->app->DB->Select("SELECT parameter FROM datei_stichwoerter WHERE datei = '$id' and objekt like 'Artikel' LIMIT 1");
+    $parameter = $this->app->DatabaseService->selectValue("SELECT parameter FROM datei_stichwoerter WHERE datei = :id AND objekt LIKE 'Artikel' LIMIT 1", ['id' => (int) $id]);
     if ($parameter) {
-      $this->app->DB->Update("UPDATE artikel set bildvorschau = '' WHERE id = '$parameter' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE artikel SET bildvorschau = '' WHERE id = :id LIMIT 1", ['id' => (int) $parameter]);
     }
 
     //TODO Das ist keine lösung!
@@ -37282,7 +37162,7 @@ $( this ).dialog( "close" );
         if ($tmpfilesize == 0) {
           if (@is_file($path . '/' . $versionid)) {
             $tmpfilesize = @filesize($path . '/' . $versionid);
-            $this->app->DB->Update("UPDATE datei_version SET `size` = '$tmpfilesize' WHERE id = '$versionid'");
+            $this->app->DatabaseService->execute("UPDATE datei_version SET `size` = :size WHERE id = :id", ['size' => (int) $tmpfilesize, 'id' => (int) $versionid]);
           }
         }
         return $versionid;
@@ -37296,7 +37176,7 @@ $( this ).dialog( "close" );
       fclose($handle);
       if (@is_file($path . '/' . $versionid)) {
         $tmpfilesize = @filesize($path . '/' . $versionid);
-        $this->app->DB->Update("UPDATE datei_version SET `size` = '$tmpfilesize' WHERE id = '$versionid'");
+        $this->app->DatabaseService->execute("UPDATE datei_version SET `size` = :size WHERE id = :id", ['size' => (int) $tmpfilesize, 'id' => (int) $versionid]);
       }
       return $versionid;
     }
@@ -37307,21 +37187,24 @@ $( this ).dialog( "close" );
   function AddDateiStichwort($id, $subjekt, $objekt, $parameter, $without_log = false, $parameter2 = 0, $objekt2 = '')
   {
     if (strtolower($objekt) === 'artikel' && $parameter) {
-      $this->app->DB->Update("UPDATE artikel SET bildvorschau = '' WHERE id = '" . $parameter . "' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE artikel SET bildvorschau = '' WHERE id = :id LIMIT 1", ['id' => (int) $parameter]);
     }
-    $sort = 1 + (int) $this->app->DB->Select("SELECT max(sort) FROM datei_stichwoerter WHERE objekt like '$objekt' AND parameter = '$parameter'");
+    $sort = 1 + (int) $this->app->DatabaseService->selectValue("SELECT max(sort) FROM datei_stichwoerter WHERE objekt LIKE :objekt AND parameter = :parameter", ['objekt' => (string) $objekt, 'parameter' => (string) $parameter]);
+    $insertSql = "INSERT INTO datei_stichwoerter (datei, subjekt, objekt, parameter, sort, parameter2, objekt2) VALUES (:datei, :subjekt, :objekt, :parameter, :sort, :parameter2, :objekt2)";
+    $insertParams = ['datei' => (int) $id, 'subjekt' => (string) $subjekt, 'objekt' => (string) $objekt, 'parameter' => (string) $parameter, 'sort' => (int) $sort, 'parameter2' => (string) $parameter2, 'objekt2' => (string) $objekt2];
     if (!$without_log) {
-      $this->app->DB->Insert("INSERT INTO datei_stichwoerter (id,datei,subjekt,objekt,parameter, sort, parameter2, objekt2)
-              VALUES ('','$id','$subjekt','$objekt','$parameter','$sort','$parameter2','$objekt2')");
+      $this->app->DatabaseService->insert($insertSql, $insertParams);
     } else {
-      $this->app->DB->InsertWithoutLog("INSERT INTO datei_stichwoerter (id,datei,subjekt,objekt,parameter,sort, parameter2, objekt2)
-              VALUES ('','$id','$subjekt','$objekt','$parameter','$sort','$parameter2','$objekt2')");
+      $this->app->DB->InsertWithoutLog(
+        sprintf("INSERT INTO datei_stichwoerter (datei, subjekt, objekt, parameter, sort, parameter2, objekt2) VALUES (%d, '%s', '%s', '%s', %d, '%s', '%s')",
+          (int) $id, $this->app->DB->real_escape_string($subjekt), $this->app->DB->real_escape_string($objekt), $this->app->DB->real_escape_string($parameter), (int) $sort, $this->app->DB->real_escape_string($parameter2), $this->app->DB->real_escape_string($objekt2))
+      );
     }
   }
 
   function DeleteDateiAll($subjekt, $objekt, $parameter)
   {
-    $dateien = $this->app->DB->SelectArr("SELECT ds.datei FROM datei_stichwoerter ds WHERE ds.subjekt='$subjekt' AND ds.objekt='$objekt' AND ds.parameter='$parameter' group by ds.datei");
+    $dateien = $this->app->DatabaseService->select("SELECT ds.datei FROM datei_stichwoerter ds WHERE ds.subjekt = :subjekt AND ds.objekt = :objekt AND ds.parameter = :parameter GROUP BY ds.datei", ['subjekt' => (string) $subjekt, 'objekt' => (string) $objekt, 'parameter' => (string) $parameter]);
     if ($dateien) {
       foreach ($dateien as $datei) {
         if ($datei['datei']) {
@@ -37375,13 +37258,13 @@ $( this ).dialog( "close" );
       return false;
     }
 
-    $geschuetzt = $this->app->DB->Select("SELECT geschuetzt FROM datei WHERE id = '" . $id . "'");
+    $geschuetzt = $this->app->DatabaseService->selectValue("SELECT geschuetzt FROM datei WHERE id = :id", ['id' => (int) $id]);
     if ($geschuetzt) {
       return false;
     }
 
     $error = false;
-    $versionen = $this->app->DB->SelectArr("SELECT * FROM datei_version WHERE datei = '" . $id . "'");
+    $versionen = $this->app->DatabaseService->select("SELECT * FROM datei_version WHERE datei = :id", ['id' => (int) $id]);
     if ($versionen) {
       foreach ($versionen as $vers) {
         //$path = $this->app->Conf->WFuserdata."/dms/".$this->app->Conf->WFdbname."/".$vers['id'];
@@ -37391,12 +37274,12 @@ $( this ).dialog( "close" );
         }
         if ($path && file_exists($path)) {
           if (unlink($path)) {
-            $this->app->DB->Delete("DELETE FROM datei_version WHERE id = '" . $vers['id'] . "'");
+            $this->app->DatabaseService->delete("DELETE FROM datei_version WHERE id = :id", ['id' => (int) $vers['id']]);
           } else {
             $error = true;
           }
         } else {
-          $this->app->DB->Delete("DELETE FROM datei_version WHERE id = '" . $vers['id'] . "'");
+          $this->app->DatabaseService->delete("DELETE FROM datei_version WHERE id = :id", ['id' => (int) $vers['id']]);
         }
         $this->deleteEmptyDmsPath($path);
         $cachedir = $this->app->Conf->WFuserdata . "/dms/" . $this->app->Conf->WFdbname . '/cache/';
@@ -37421,13 +37304,13 @@ $( this ).dialog( "close" );
     }
     if (!$error) {
       $ds = $this->app->DatabaseService->select("SELECT id, objekt, parameter FROM datei_stichwoerter WHERE datei = :id AND objekt like 'Artikel' AND parameter <> '' AND parameter <> '0'", ['id' => (int) $id]);
-      $this->app->DB->Delete("DELETE FROM datei_stichwoerter WHERE datei = '$id'");
+      $this->app->DatabaseService->delete("DELETE FROM datei_stichwoerter WHERE datei = :id", ['id' => (int) $id]);
       if ($ds) {
         foreach ($ds as $d) {
-          $this->app->DB->Update("UPDATE artikel SET bildvorschau = '' WHERE id = '" . $d['parameter'] . "' LIMIT 1");
+          $this->app->DatabaseService->execute("UPDATE artikel SET bildvorschau = '' WHERE id = :id LIMIT 1", ['id' => (int) $d['parameter']]);
         }
       }
-      $this->app->DB->Delete("DELETE FROM datei WHERE id = '$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM datei WHERE id = :id LIMIT 1", ['id' => (int) $id]);
       return true;
     }
     return false;
@@ -37493,8 +37376,8 @@ $( this ).dialog( "close" );
 
   function GetDateiName($id)
   {
-    $version = $this->app->DB->Select("SELECT MAX(version) FROM datei_version WHERE datei='$id'");
-    $newid = $this->app->DB->Select("SELECT dateiname FROM datei_version WHERE datei='$id' AND version='$version' LIMIT 1");
+    $version = $this->app->DatabaseService->selectValue("SELECT MAX(version) FROM datei_version WHERE datei = :id", ['id' => (int) $id]);
+    $newid = $this->app->DatabaseService->selectValue("SELECT dateiname FROM datei_version WHERE datei = :id AND version = :version LIMIT 1", ['id' => (int) $id, 'version' => (int) $version]);
 
     //        return $this->UmlauteEntfernen($newid);
     return $newid;
@@ -37503,8 +37386,8 @@ $( this ).dialog( "close" );
 
   function GetDateiEndung($id)
   {
-    $version = $this->app->DB->Select("SELECT MAX(version) FROM datei_version WHERE datei='$id'");
-    $newid = $this->app->DB->Select("SELECT dateiname FROM datei_version WHERE datei='$id' AND version='$version' LIMIT 1");
+    $version = $this->app->DatabaseService->selectValue("SELECT MAX(version) FROM datei_version WHERE datei = :id", ['id' => (int) $id]);
+    $newid = $this->app->DatabaseService->selectValue("SELECT dateiname FROM datei_version WHERE datei = :id AND version = :version LIMIT 1", ['id' => (int) $id, 'version' => (int) $version]);
     $tmp = pathinfo($newid);
 
     return strtolower($tmp['extension']);
@@ -37512,8 +37395,8 @@ $( this ).dialog( "close" );
 
   function GetDateiDatum($id) // MYSQL format
   {
-    $version = $this->app->DB->Select("SELECT MAX(version) FROM datei_version WHERE datei='$id'");
-    $date = $this->app->DB->Select("SELECT datum FROM datei_version WHERE datei='$id' AND version='$version' LIMIT 1");
+    $version = $this->app->DatabaseService->selectValue("SELECT MAX(version) FROM datei_version WHERE datei = :id", ['id' => (int) $id]);
+    $date = $this->app->DatabaseService->selectValue("SELECT datum FROM datei_version WHERE datei = :id AND version = :version LIMIT 1", ['id' => (int) $id, 'version' => (int) $version]);
     return ($date);
   }
 
@@ -37523,7 +37406,7 @@ $( this ).dialog( "close" );
 
   function GetDateiSubjektObjektDateiname($subjekt, $objekt, $parameter, $prefix = "")
   {
-    $dateien = $this->app->DB->SelectArr("SELECT datei FROM datei_stichwoerter WHERE subjekt LIKE '$subjekt' AND objekt LIKE '$objekt' AND parameter='$parameter' GROUP by datei");
+    $dateien = $this->app->DatabaseService->select("SELECT datei FROM datei_stichwoerter WHERE subjekt LIKE :subjekt AND objekt LIKE :objekt AND parameter = :parameter GROUP BY datei", ['subjekt' => (string) $subjekt, 'objekt' => (string) $objekt, 'parameter' => (string) $parameter]);
     if (empty($dateien)) {
       return null;
     }
@@ -37629,13 +37512,13 @@ $( this ).dialog( "close" );
       $version = 0;
       $newid = 0;
       if ((int) $id > 0) {
-        $version = $this->app->DB->Select("SELECT MAX(version) FROM datei_version WHERE datei='$id'");
-        $newid = $this->app->DB->Select("SELECT id FROM datei_version WHERE datei='$id' AND version='$version' LIMIT 1");
+        $version = $this->app->DatabaseService->selectValue("SELECT MAX(version) FROM datei_version WHERE datei = :id", ['id' => (int) $id]);
+        $newid = $this->app->DatabaseService->selectValue("SELECT id FROM datei_version WHERE datei = :id AND version = :version LIMIT 1", ['id' => (int) $id, 'version' => (int) $version]);
       }
     }
 
 
-    $name = $newid <= 0 ? '' : $this->app->DB->Select("SELECT dateiname FROM datei_version WHERE id='$newid' LIMIT 1");
+    $name = $newid <= 0 ? '' : $this->app->DatabaseService->selectValue("SELECT dateiname FROM datei_version WHERE id = :id LIMIT 1", ['id' => (int) $newid]);
     $path = '';
     if ($id > 0) {
       $path = $this->GetDateiPfad($id);
@@ -37871,10 +37754,10 @@ $( this ).dialog( "close" );
   function getDates($anzWochentage)
   {
     // hole Datum der Wochentage von Mo bis $anzWochentage
-    $montag = $this->app->DB->Select("SELECT DATE_SUB(CURDATE(),INTERVAL WEEKDAY(CURDATE()) day)");
+    $montag = $this->app->DatabaseService->selectValue("SELECT DATE_SUB(CURDATE(),INTERVAL WEEKDAY(CURDATE()) day)", []);
     $week = array();
     for ($i = 0; $i < $anzWochentage; $i++)
-      $week[$i] = $this->app->DB->Select("SELECT DATE_ADD('$montag',INTERVAL $i day)");
+      $week[$i] = $this->app->DatabaseService->selectValue(sprintf("SELECT DATE_ADD(:montag, INTERVAL %d day)", (int) $i), ['montag' => (string) $montag]);
     return $week;
   }
 
@@ -37897,7 +37780,7 @@ $( this ).dialog( "close" );
 
   function KundeMitUmsatzsteuer($adresse)
   {
-    $addressRow = $this->app->DB->SelectRow("SELECT land, ustid FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
+    $addressRow = $this->app->DatabaseService->selectRow("SELECT land, ustid FROM adresse WHERE id = :id AND geloescht=0 LIMIT 1", ['id' => (int) $adresse]);
     $land = $addressRow['land'];
     $ustid = $addressRow['ustid'];
     if ($land == $this->Firmendaten('land')) {
@@ -38074,9 +37957,10 @@ $( this ).dialog( "close" );
 
   function AngebotMitUmsatzeuer($angebot)
   {
-    return $this->app->DB->Select("SELECT ust_befreit FROM angebot WHERE id='$angebot' LIMIT 1") == 0
-      || ($this->app->DB->Select("SELECT ust_befreit FROM angebot WHERE id='$angebot' LIMIT 1") == 1 &&
-        $this->app->DB->Select("SELECT ustid FROM angebot WHERE id='$angebot' LIMIT 1") == "");
+    $angebotRow = $this->app->DatabaseService->selectRow("SELECT ust_befreit, ustid FROM angebot WHERE id = :id LIMIT 1", ['id' => (int) $angebot]);
+    return ($angebotRow['ust_befreit'] ?? 0) == 0
+      || (($angebotRow['ust_befreit'] ?? 0) == 1 &&
+        ($angebotRow['ustid'] ?? '') == "");
 
     // wenn lieferant DE dann mit 19% oder 7% einkaufen
     // wenn lieferant in der EU kann man mit 0% bezahlen
@@ -38088,7 +37972,7 @@ $( this ).dialog( "close" );
 
   function BestellungMitUmsatzeuer($bestellung)
   {
-    return $this->app->DB->Select("SELECT ust_befreit FROM bestellung WHERE id='$bestellung' LIMIT 1") == 0;
+    return $this->app->DatabaseService->selectValue("SELECT ust_befreit FROM bestellung WHERE id = :id LIMIT 1", ['id' => (int) $bestellung]) == 0;
 
     // wenn lieferant DE dann mit 19% oder 7% einkaufen
     // wenn lieferant in der EU kann man mit 0% bezahlen
@@ -38121,7 +38005,7 @@ $( this ).dialog( "close" );
   function CheckLieferantEU($adresse)
   {
     // lieferant aus der EU
-    $land = $this->app->DB->Select("SELECT land FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
+    $land = $this->app->DatabaseService->selectValue("SELECT land FROM adresse WHERE id = :id AND geloescht=0 LIMIT 1", ['id' => (int) $adresse]);
 
   }
 
@@ -38135,20 +38019,26 @@ $( this ).dialog( "close" );
   {
     // ueberprueft ob in der Stunde eine Aufgabe zu erledigen ist
     //echo $datum." ".$stunde."<br>";
-    return $this->app->DB->SelectArr("SELECT aufgabe,adresse,prio
+    return $this->app->DatabaseService->select("SELECT aufgabe,adresse,prio
             FROM aufgabe
-            WHERE DATE(startdatum) = '$datum'
-            AND HOUR(TIME(startzeit)) <= $stunde
-            AND HOUR(TIME(startzeit)) + stunden >= $stunde
-            AND (adresse = $adr_id OR adresse = 0)
+            WHERE DATE(startdatum) = :datum
+            AND HOUR(TIME(startzeit)) <= :stunde
+            AND HOUR(TIME(startzeit)) + stunden >= :stunde2
+            AND (adresse = :adr_id OR adresse = 0)
             OR
-            ((DATE_SUB('$datum', INTERVAL MOD(DATEDIFF('$datum',DATE_FORMAT(startdatum, '%Y:%m:%d')),intervall_tage) day)='$datum'
-              AND DATE_SUB('$datum', INTERVAL MOD(DATEDIFF('$datum',DATE_FORMAT(startdatum, '%Y:%m:%d')),intervall_tage) day)
+            ((DATE_SUB(:datum2, INTERVAL MOD(DATEDIFF(:datum3,DATE_FORMAT(startdatum, '%Y:%m:%d')),intervall_tage) day)=:datum4
+              AND DATE_SUB(:datum5, INTERVAL MOD(DATEDIFF(:datum6,DATE_FORMAT(startdatum, '%Y:%m:%d')),intervall_tage) day)
               > abgeschlossen_am
-              AND intervall_tage>0 AND (adresse=$adr_id OR adresse=0))
-             AND HOUR(TIME(startzeit)) <= $stunde AND HOUR(TIME(startzeit)) + stunden >= $stunde)
-            OR ( DATE (abgabe_bis) = '$datum' AND  abgeschlossen=0 AND adresse = $adr_id AND HOUR(TIME(startzeit)) = $stunde)
-            LIMIT 1"); // letztes OR von Bene!
+              AND intervall_tage>0 AND (adresse=:adr_id2 OR adresse=0))
+             AND HOUR(TIME(startzeit)) <= :stunde3 AND HOUR(TIME(startzeit)) + stunden >= :stunde4)
+            OR ( DATE (abgabe_bis) = :datum7 AND  abgeschlossen=0 AND adresse = :adr_id3 AND HOUR(TIME(startzeit)) = :stunde5)
+            LIMIT 1",
+      ['datum' => (string) $datum, 'stunde' => (int) $stunde, 'stunde2' => (int) $stunde, 'adr_id' => (int) $adr_id,
+       'datum2' => (string) $datum, 'datum3' => (string) $datum, 'datum4' => (string) $datum,
+       'datum5' => (string) $datum, 'datum6' => (string) $datum, 'adr_id2' => (int) $adr_id,
+       'stunde3' => (int) $stunde, 'stunde4' => (int) $stunde,
+       'datum7' => (string) $datum, 'adr_id3' => (int) $adr_id, 'stunde5' => (int) $stunde]
+    ); // letztes OR von Bene!
   }
 
   function WebmailSetReadStatus($mailid, $boolean)
@@ -39212,21 +39102,22 @@ $( this ).dialog( "close" );
 
   function ImportCreateLieferadresse($adresse, $data)
   {
-    $this->app->DB->Insert("INSERT INTO lieferadressen (id,adresse) VALUES ('','$adresse')");
+    $this->app->DatabaseService->insert("INSERT INTO lieferadressen (adresse) VALUES (:adresse)", ['adresse' => (int) $adresse]);
     $id = $this->app->DB->GetInsertID();
 
     if ($data['land'] == "")
       $data['land'] = 'DE';
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE lieferadressen SET $key='" . $this->app->DB->real_escape_string($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE lieferadressen SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $value, 'id' => (int) $id]);
     }
     return $id;
   }
 
   function ImportCreateAnsprechpartner($adresse, $data)
   {
-    $this->app->DB->Insert("INSERT INTO ansprechpartner (id,adresse) VALUES ('','$adresse')");
+    $this->app->DatabaseService->insert("INSERT INTO ansprechpartner (adresse) VALUES (:adresse)", ['adresse' => (int) $adresse]);
     $id = $this->app->DB->GetInsertID();
     if (!empty($id)) {
       $this->app->erp->RunHook('contact_person_created', 1, $id);
@@ -39235,7 +39126,8 @@ $( this ).dialog( "close" );
       $data['land'] = 'DE';
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE ansprechpartner SET $key='" . $this->app->DB->real_escape_string($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE ansprechpartner SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $value, 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39255,18 +39147,20 @@ $( this ).dialog( "close" );
       $arr_columns[] = $columnname;
 
 
+    $params = ['id' => (int) $id];
+    $setClauses = [];
+    $pi = 0;
     foreach ($data as $key => $value) {
       if (in_array($key, $arr_columns)) {
-        if ($tmp_fields != "")
-          $tmp_fields .= ",";
-        if ($uf8) {
-          $tmp_fields .= " $key='" . $this->ConvertForDBUTF8($value) . "' ";
-        } else {
-          $tmp_fields .= " $key='" . $value . "' ";
-        }
+        $validKey = $this->app->DatabaseService->validateIdentifier($key);
+        $paramName = 'p' . $pi++;
+        $setClauses[] = sprintf("`%s` = :%s", $validKey, $paramName);
+        $params[$paramName] = $uf8 ? (string) $this->ConvertForDBUTF8($value) : (string) $value;
       }
     }
-    $this->app->DB->Update("UPDATE adresse SET $tmp_fields WHERE id='$id'");
+    if (!empty($setClauses)) {
+      $this->app->DatabaseService->execute("UPDATE adresse SET " . implode(', ', $setClauses) . " WHERE id = :id", $params);
+    }
     return $id;
   }
 
@@ -39282,11 +39176,9 @@ $( this ).dialog( "close" );
       $data['projekt'] = 1;
 
     foreach ($data as $key => $value) {
-      if ($utf8) {
-        $this->app->DB->Update("UPDATE artikel SET $key='" . $this->ConvertForDBUTF8($value) . "' WHERE id='$id' LIMIT 1");
-      } else {
-        $this->app->DB->Update("UPDATE artikel SET $key='" . $this->app->DB->real_escape_string($value) . "' WHERE id='$id' LIMIT 1");
-      }
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $val = $utf8 ? $this->ConvertForDBUTF8($value) : $value;
+      $this->app->DatabaseService->execute(sprintf("UPDATE artikel SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $val, 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39304,7 +39196,8 @@ $( this ).dialog( "close" );
 
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE einkaufspreise SET $key='" . $this->ConvertForDBUFT8($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE einkaufspreise SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $this->ConvertForDBUFT8($value), 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39321,7 +39214,8 @@ $( this ).dialog( "close" );
       $data['projekt'] = 1;
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE verkaufspreise SET $key='" . $this->ConvertForDBUTF8($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE verkaufspreise SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $this->ConvertForDBUTF8($value), 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39337,7 +39231,8 @@ $( this ).dialog( "close" );
       $data['projekt'] = 1;
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE user SET $key='" . $this->ConvertForDBUTF8($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE `user` SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $this->ConvertForDBUTF8($value), 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39354,7 +39249,8 @@ $( this ).dialog( "close" );
       $data['projekt'] = 1;
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE bestellung SET $key='" . $this->ConvertForDBUTF8($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE bestellung SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $this->ConvertForDBUTF8($value), 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39370,7 +39266,8 @@ $( this ).dialog( "close" );
       $data['projekt'] = 1;
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE rechnung SET $key='" . $this->ConvertForDBUTF8($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE rechnung SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $this->ConvertForDBUTF8($value), 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39386,7 +39283,8 @@ $( this ).dialog( "close" );
       $data['projekt'] = 1;
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE angebot SET $key='" . $this->ConvertForDBUTF8($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE angebot SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $this->ConvertForDBUTF8($value), 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39402,7 +39300,8 @@ $( this ).dialog( "close" );
       $data['projekt'] = 1;
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE auftrag SET $key='" . $this->ConvertForDBUTF8($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE auftrag SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $this->ConvertForDBUTF8($value), 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39418,7 +39317,8 @@ $( this ).dialog( "close" );
       $data['projekt'] = 1;
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE lieferschein SET $key='" . $this->ConvertForDBUTF8($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE lieferschein SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $this->ConvertForDBUTF8($value), 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39434,7 +39334,8 @@ $( this ).dialog( "close" );
       $data['projekt'] = 1;
 
     foreach ($data as $key => $value) {
-      $this->app->DB->Update("UPDATE gutschrift SET $key='" . $this->ConvertForDBUTF8($value) . "' WHERE id='$id' LIMIT 1");
+      $validKey = $this->app->DatabaseService->validateIdentifier($key);
+      $this->app->DatabaseService->execute(sprintf("UPDATE gutschrift SET `%s` = :val WHERE id = :id LIMIT 1", $validKey), ['val' => (string) $this->ConvertForDBUTF8($value), 'id' => (int) $id]);
     }
     return $id;
   }
@@ -39909,7 +39810,7 @@ $( this ).dialog( "close" );
     if ($land == '') {
       $land = $this->app->erp->Firmendaten('land');
     }
-    $arr = $this->app->DB->SelectArr("SELECT * FROM bundesstaaten WHERE land = '" . $this->app->DB->real_escape_string($land) . "' AND iso <> '' ORDER BY land, bundesstaat");
+    $arr = $this->app->DatabaseService->select("SELECT * FROM bundesstaaten WHERE land = :land AND iso <> '' ORDER BY land, bundesstaat", ['land' => (string) $land]);
     if (empty($arr)) {
       return null;
     }
