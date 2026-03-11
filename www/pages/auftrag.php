@@ -306,7 +306,7 @@ class Auftrag extends GenAuftrag
         }
 
         if(isset($parameter['artikel']) && !empty($parameter['artikel'])) {
-          $artikelid = $this->app->DB->Select("SELECT id FROM artikel where geloescht != 1 AND nummer != 'DEL' AND nummer != '' AND nummer = '".$this->app->DB->real_escape_string(reset(explode(' ',trim($parameter['artikel']))))."' LIMIT 1");
+          $artikelid = $this->app->DatabaseService->selectValue("SELECT id FROM artikel where geloescht != 1 AND nummer != 'DEL' AND nummer != '' AND nummer = :nummer LIMIT 1", ['nummer' => reset(explode(' ', trim($parameter['artikel'])))]);
           if($artikelid) {
             $sql .= sprintf(
               ' INNER JOIN `auftrag_position` AS `ap` ON a.id = ap.auftrag AND ap.artikel = %d ',
@@ -469,9 +469,9 @@ class Auftrag extends GenAuftrag
         }
 
         if(isset($parameter['kundengruppe']) && !empty($parameter['kundengruppe'])){
-          $gruppenId = $this->app->DB->Select("SELECT id FROM gruppen WHERE kennziffer LIKE '%".$parameter['kundengruppe']."%' LIMIT 1");
+          $gruppenId = $this->app->DatabaseService->selectValue("SELECT id FROM gruppen WHERE kennziffer LIKE :kennziffer LIMIT 1", ['kennziffer' => '%'.$parameter['kundengruppe'].'%']);
           $sql .= ' LEFT JOIN adresse_rolle ar ON a.adresse = ar.adresse ';
-          $paramsArray[] = " ( ar.subjekt LIKE 'Mitglied' AND ar.objekt LIKE 'Gruppe' AND ar.parameter = '$gruppenId')";
+          $paramsArray[] = " ( ar.subjekt LIKE 'Mitglied' AND ar.objekt LIKE 'Gruppe' AND ar.parameter = '".(int)$gruppenId."')";
         }
 
 
@@ -525,14 +525,14 @@ class Auftrag extends GenAuftrag
 
         if(isset($parameter['projekt']) && !empty($parameter['projekt'])) {
 
-          $projektData = $this->app->DB->SelectRow('
+          $projektData = $this->app->DatabaseService->selectRow('
             SELECT
               *
             FROM
               projekt
             WHERE
-              abkuerzung LIKE "' . $parameter['projekt'] . '"
-          ');
+              abkuerzung LIKE :abkuerzung
+          ', ['abkuerzung' => $parameter['projekt']]);
           $paramsArray[] = "a.projekt = '".$projektData['id']."' ";
         }
 
@@ -1038,11 +1038,10 @@ class Auftrag extends GenAuftrag
     }
 
     $auftragId = $detailQuery->getItemIdentifier();
-    $sql = sprintf(
-      "SELECT a.id, a.belegnr, a.datum FROM `auftrag` AS `a` WHERE a.id = '%s' LIMIT 1",
-      $this->app->DB->real_escape_string($auftragId)
+    $auftrag = $this->app->DatabaseService->selectRow(
+      "SELECT a.id, a.belegnr, a.datum FROM `auftrag` AS `a` WHERE a.id = :auftragId LIMIT 1",
+      ['auftragId' => (int)$auftragId]
     );
-    $auftrag = $this->app->DB->SelectRow($sql);
     if (empty($auftrag)) {
       return;
     }
@@ -1482,12 +1481,12 @@ class Auftrag extends GenAuftrag
     $zertifikatoption = '';
     $zertifikatcase = '';
     if($adresse > 0 && $this->app->erp->RechteVorhanden('zertifikatgenerator','list')) {
-      $zertifikate = $this->app->DB->Select("SELECT ds.datei 
-      FROM datei_stichwoerter ds 
+      $zertifikate = $this->app->DatabaseService->selectValue("SELECT ds.datei
+      FROM datei_stichwoerter ds
       INNER JOIN datei_stichwoerter ds2 ON ds.datei = ds2.datei AND ds2.objekt = 'Artikel'
-      INNER JOIN auftrag_position ap ON ap.artikel = ds2.parameter AND ap.auftrag = '$id'
-      WHERE ds.objekt = 'Adressen' AND ds.parameter = '$adresse'
-      GROUP BY ds.datei LIMIT 1");
+      INNER JOIN auftrag_position ap ON ap.artikel = ds2.parameter AND ap.auftrag = :id
+      WHERE ds.objekt = 'Adressen' AND ds.parameter = :adresse
+      GROUP BY ds.datei LIMIT 1", ['id' => (int)$id, 'adresse' => (int)$adresse]);
       if(!empty($zertifikate)) {
         $zertifikatoption = '<option value="zertifikate">Zertifikate anh&auml;ngen</option>';
         $zertifikatcase = "case 'zertifikate': if(!confirm('Zertifikate wirklich laden?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else window.location.href='index.php?module=auftrag&action=zertifikate&id=%value%'; break; ";
@@ -1522,7 +1521,7 @@ class Auftrag extends GenAuftrag
     }
     if($this->app->erp->RechteVorhanden('lieferkette', 'create'))
     {
-      if(!$this->app->DB->Select("SELECT id FROM lieferkette WHERE auftrag = '$id'"))
+      if(!$this->app->DatabaseService->selectValue("SELECT id FROM lieferkette WHERE auftrag = :auftrag", ['auftrag' => (int)$id]))
       {
         $caselieferkette = "case 'lieferkette':  window.location.href='index.php?module=lieferkette&action=create&id=%value%'; break;";
         $optionlieferkette = "<option value=\"lieferkette\">Lieferkette erzeugen</option>";
@@ -1707,7 +1706,7 @@ class Auftrag extends GenAuftrag
     $archiv = $this->app->DatabaseService->selectValue('SELECT table_id FROM pdfarchiv WHERE id = :id LIMIT 1', ['id' => (int)$id]);
     if($archiv)
     {
-      $projekt = $this->app->DB->Select("SELECT projekt from auftrag where id = '".(int)$archiv."'");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt from auftrag where id = :id", ['id' => (int)$archiv]);
     }
     if(class_exists('AuftragPDFCustom'))
     {
@@ -1869,11 +1868,9 @@ class Auftrag extends GenAuftrag
       $id = (int)$this->app->Secure->GetGET('id');
     }
     $internebemerkung = $this->app->Secure->GetPOST('internebemerkung');
-    $this->app->DB->Update(
-      sprintf(
-        "UPDATE `auftrag` SET `internebemerkung` = '%s' WHERE `id` = %d LIMIT 1",
-        $internebemerkung, $id
-      )
+    $this->app->DatabaseService->update(
+      "UPDATE `auftrag` SET `internebemerkung` = :internebemerkung WHERE `id` = :id LIMIT 1",
+      ['internebemerkung' => $internebemerkung, 'id' => (int)$id]
     );
     return ['status' => 1];
   }
@@ -1954,18 +1951,20 @@ class Auftrag extends GenAuftrag
     }
     $this->app->Tpl->Set('IHREBESTELLNUMMER',$auftragArr[0]['ihrebestellnummer']);
 
-    $rechnungs = $addressId <= 0?0: $this->app->DB->Select(
-      "SELECT SUM(soll-ist) 
-      FROM rechnung 
-      WHERE status != 'angelegt' AND zahlungsstatus != 'bezahlt' 
-        AND adresse = '".$addressId."'"
+    $rechnungs = $addressId <= 0?0: $this->app->DatabaseService->selectValue(
+      "SELECT SUM(soll-ist)
+      FROM rechnung
+      WHERE status != 'angelegt' AND zahlungsstatus != 'bezahlt'
+        AND adresse = :adresse",
+      ['adresse' => (int)$addressId]
     );
-    $gutschrifts = $addressId <= 0?0:$this->app->DB->Select(
-      "SELECT SUM(soll-ist) 
-      FROM gutschrift 
-      WHERE status != 'angelegt' 
-        AND (manuell_vorabbezahlt != '0000-00-00' OR manuell_vorabbezahlt IS NOT NULL) 
-        AND adresse = '".$addressId."'"
+    $gutschrifts = $addressId <= 0?0:$this->app->DatabaseService->selectValue(
+      "SELECT SUM(soll-ist)
+      FROM gutschrift
+      WHERE status != 'angelegt'
+        AND (manuell_vorabbezahlt != '0000-00-00' OR manuell_vorabbezahlt IS NOT NULL)
+        AND adresse = :adresse",
+      ['adresse' => (int)$addressId]
     );
     
     $kundensaldo = $rechnungs - $gutschrifts;
@@ -2008,11 +2007,12 @@ class Auftrag extends GenAuftrag
       $auftragArr[0]['lieferdatum']='sofort';
     }
     $this->app->Tpl->Set('WUNSCHLIEFERDATUM',$auftragArr[0]['lieferdatum']);
-    $gebuchtezeit = $this->app->DB->Select(
-      "SELECT IFNULL(SUM(TIME_TO_SEC(TIMEDIFF(bis, von)))/3600,0) 
-      FROM zeiterfassung z 
-      LEFT JOIN auftrag_position ap ON ap.id = z.auftragpositionid 
-      WHERE z.auftrag = '$id' OR ap.auftrag = '$id'"
+    $gebuchtezeit = $this->app->DatabaseService->selectValue(
+      "SELECT IFNULL(SUM(TIME_TO_SEC(TIMEDIFF(bis, von)))/3600,0)
+      FROM zeiterfassung z
+      LEFT JOIN auftrag_position ap ON ap.id = z.auftragpositionid
+      WHERE z.auftrag = :id OR ap.auftrag = :id2",
+      ['id' => (int)$id, 'id2' => (int)$id]
     );
 
     if(0){
@@ -2026,19 +2026,12 @@ class Auftrag extends GenAuftrag
     if (!$this->app->erp->RechteVorhanden('auftrag','einkaufspreise')) {
         $this->app->Tpl->Set('DBHIDDEN','hidden');
     } else {
-        $sql = "
-                SELECT
-                    umsatz_netto_gesamt,
-                    artikel,
-                    menge,
-                    einkaufspreis
-                FROM
-                    `auftrag_position`
-                WHERE
-                    `auftrag` = ".$id."
-            ";
-
-        $positionen = $this->app->DB->SelectArr($sql);
+        $positionen = $this->app->DatabaseService->select(
+          "SELECT umsatz_netto_gesamt, artikel, menge, einkaufspreis
+           FROM `auftrag_position`
+           WHERE `auftrag` = :id",
+          ['id' => (int)$id]
+        );
 
         $umsatz_gesamt = 0;
         $kosten_gesamt = 0;
@@ -2088,13 +2081,14 @@ class Auftrag extends GenAuftrag
 
     // angebot
       
-    $angebot[]['angebot'] = $this->app->DB->Select(
+    $angebot[]['angebot'] = $this->app->DatabaseService->selectValue(
       "SELECT CONCAT('<a href=\"index.php?module=angebot&action=edit&id=',an.id,'\" target=\"_blank\">',if(an.belegnr='0' OR an.belegnr='','ENTWURF',an.belegnr),'</a>&nbsp;<a href=\"index.php?module=angebot&action=pdf&id=',an.id,'\" target=\"blank\"><img src=\"./themes/new/images/pdf.svg\" title=\"Angebot PDF\" border=\"0\"></a>&nbsp;
-          <a href=\"index.php?module=angebot&action=edit&id=',an.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Angebot bearbeiten\" border=\"0\"></a>') 
-      FROM auftrag a 
-      LEFT JOIN angebot an ON an.id=a.angebotid 
-      WHERE a.id='$id' 
-      LIMIT 1"
+          <a href=\"index.php?module=angebot&action=edit&id=',an.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Angebot bearbeiten\" border=\"0\"></a>')
+      FROM auftrag a
+      LEFT JOIN angebot an ON an.id=a.angebotid
+      WHERE a.id = :id
+      LIMIT 1",
+      ['id' => (int)$id]
     );
 
     if(!empty($angebot)) {
@@ -2109,8 +2103,8 @@ class Auftrag extends GenAuftrag
     else{
       $this->app->Tpl->Set('ANGEBOT', '-');
     }
-    $lieferschein = $this->app->DB->SelectPairs(
-      "SELECT 
+    $lieferschein = $this->app->DatabaseService->selectPairs(
+      "SELECT
         l.id, CONCAT(
             '<a href=\"index.php?module=lieferschein&action=edit&id=',
             l.id,'\" target=\"_blank\"',
@@ -2123,8 +2117,9 @@ class Auftrag extends GenAuftrag
             l.id,
             '\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Lieferschein bearbeiten\" border=\"0\"></a>'
             ) as lieferschein
-        FROM lieferschein l 
-        WHERE l.auftragid='$id'"
+        FROM lieferschein l
+        WHERE l.auftragid = :id",
+      ['id' => (int)$id]
     );
     $deliveryNoteIds = [0];
     $hasDeliveryNotes = false;
@@ -2431,26 +2426,17 @@ class Auftrag extends GenAuftrag
 */
 
 
-      $sql = "SELECT SQL_CALC_FOUND_ROWS
-                v.id,                   
-                v.tracking as tracking,
-                v.tracking_link
-            FROM 
-                versandpakete v
-            LEFT JOIN
-                versandpaket_lieferschein_position vlp ON v.id = vlp.versandpaket
-            LEFT JOIN
-                lieferschein_position lp ON lp.id = vlp.lieferschein_position
-            LEFT JOIN
-                lieferschein l ON lp.lieferschein = l.id
-            LEFT JOIN
-                lieferschein lop ON lop.id = v.lieferschein_ohne_pos 
-            WHERE 
-                l.auftragid = ".$id." OR lop.auftragid = ".$id."
-            GROUP BY 
-               v.id
-            ";
-    $tracking = $this->app->DB->SelectArr($sql);
+    $tracking = $this->app->DatabaseService->select(
+      "SELECT v.id, v.tracking as tracking, v.tracking_link
+       FROM versandpakete v
+       LEFT JOIN versandpaket_lieferschein_position vlp ON v.id = vlp.versandpaket
+       LEFT JOIN lieferschein_position lp ON lp.id = vlp.lieferschein_position
+       LEFT JOIN lieferschein l ON lp.lieferschein = l.id
+       LEFT JOIN lieferschein lop ON lop.id = v.lieferschein_ohne_pos
+       WHERE l.auftragid = :id OR lop.auftragid = :id2
+       GROUP BY v.id",
+      ['id' => (int)$id, 'id2' => (int)$id]
+    );
 
     $tracking_list = array();
     foreach ($tracking as $single_tracking) {
@@ -2465,17 +2451,19 @@ class Auftrag extends GenAuftrag
 
     $icons = $this->app->YUI->IconsSQL();
     if(strpos($icons,'aac.status')) {
-      $icons = $this->app->DB->Select(
-        "SELECT $icons 
-        FROM auftrag a 
-        LEFT JOIN `auftragsampel_auftrag_cache` aac ON a.id = aac.auftrag 
-        WHERE a.id='$id' 
-        LIMIT 1"
+      $icons = $this->app->DatabaseService->selectValue(
+        "SELECT $icons
+        FROM auftrag a
+        LEFT JOIN `auftragsampel_auftrag_cache` aac ON a.id = aac.auftrag
+        WHERE a.id = :id
+        LIMIT 1",
+        ['id' => (int)$id]
       );
     }
     else{
-      $icons = $this->app->DB->Select(
-        "SELECT $icons FROM auftrag a WHERE a.id='$id' LIMIT 1"
+      $icons = $this->app->DatabaseService->selectValue(
+        "SELECT $icons FROM auftrag a WHERE a.id = :id LIMIT 1",
+        ['id' => (int)$id]
       );
     }
     $this->app->Tpl->Set('STATUSICONS',$icons);
@@ -3317,12 +3305,13 @@ class Auftrag extends GenAuftrag
         );
 
         if($gutschriftid > 0) {
-          $tmp = $this->app->DB->Select(
-            "SELECT 
+          $tmp = $this->app->DatabaseService->selectValue(
+            "SELECT
               CONCAT('<a href=\"index.php?module=gutschrift&action=edit&id=',r.id,'\" target=\"_blank\">',if(r.belegnr='0' OR r.belegnr='','ENTWURF',r.belegnr),'&nbsp;<a href=\"index.php?module=gutschrift&action=pdf&id=',r.id,'\" target=\"_blank\"><img src=\"./themes/new/images/pdf.svg\" title=\"Gutschrift PDF\" border=\"0\"></a>&nbsp;
                 <a href=\"index.php?module=gutschrift&action=edit&id=',r.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Rechnung bearbeiten\" border=\"0\"></a>') as rechnung
-            FROM gutschrift r 
-            WHERE r.id='".$gutschriftid."' LIMIT 1"
+            FROM gutschrift r
+            WHERE r.id = :id LIMIT 1",
+            ['id' => (int)$gutschriftid]
           );
           $this->app->Tpl->Add('GUTSCHRIFT',$tmp);
         }
@@ -3652,7 +3641,7 @@ class Auftrag extends GenAuftrag
   {
     $id = $this->app->Secure->GetGET('id');
 
-    $anzahl_artikel = $this->app->DB->Select("SELECT id FROM auftrag_position WHERE auftrag=$id LIMIT 1");
+    $anzahl_artikel = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag_position WHERE auftrag = :id LIMIT 1", ['id' => (int)$id]);
     if($anzahl_artikel <= 0)
     {
       $belegnr = $this->app->DatabaseService->selectValue("SELECT if(belegnr = '','ENTWURF',belegnr) FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
@@ -3766,7 +3755,7 @@ class Auftrag extends GenAuftrag
   {
     $id = $this->app->Secure->GetGET('id');
 
-    $auftragarr = $this->app->DB->SelectRow("SELECT projekt,art FROM auftrag WHERE id='$id' LIMIT 1");
+    $auftragarr = $this->app->DatabaseService->selectRow("SELECT projekt,art FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if(!empty($auftragarr))
     {
       $projekt = $auftragarr['projekt'];//$this->app->DB->Select("SELECT projekt FROM auftrag WHERE id='$id' LIMIT 1");
@@ -3784,12 +3773,12 @@ class Auftrag extends GenAuftrag
       // automatisch drucken bzw. freigeben
       $newid = $this->app->erp->WeiterfuehrenAuftragZuLieferschein($id);
 
-      $belegnr = (string)$this->app->DB->Select("SELECT belegnr FOM lieferschein WHERE id='$newid' LIMIT 1");
+      $belegnr = (string)$this->app->DatabaseService->selectValue("SELECT belegnr FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$newid]);
       if($belegnr==='' || $belegnr==='0') {
         $belegnr = $this->app->erp->GetNextNummer('lieferschein',$projekt,$newid);
       }
 
-      $this->app->DB->Update("UPDATE lieferschein SET belegnr='$belegnr', status='freigegeben' WHERE id='$newid' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE lieferschein SET belegnr = :belegnr, status = 'freigegeben' WHERE id = :id LIMIT 1", ['belegnr' => $belegnr, 'id' => (int)$newid]);
       $this->app->erp->LieferscheinProtokoll($newid,'Lieferschein freigegeben');
 
       $this->app->erp->LieferscheinAuslagern(lieferschein: $newid, anzeige_lagerplaetze_in_lieferschein: true, belegtyp: 'lieferschein', chargenmhdnachprojekt: true);
@@ -3815,11 +3804,11 @@ class Auftrag extends GenAuftrag
 
       //TODO eventuell wenn es Rechnung schon gibt keine weitere erstellen
       $newid = $this->app->erp->WeiterfuehrenAuftragZuRechnung($id);
-      $belegnr = (string)$this->app->DB->Select("SELECT belegnr FOM rechnung WHERE id='$newid' LIMIT 1");
+      $belegnr = (string)$this->app->DatabaseService->selectValue("SELECT belegnr FROM rechnung WHERE id = :id LIMIT 1", ['id' => (int)$newid]);
       if($belegnr==='' || $belegnr==='0') {
         $belegnr = $this->app->erp->GetNextNummer('rechnung',$projekt,$newid);
       }
-      $this->app->DB->Update("UPDATE rechnung SET belegnr='$belegnr', status='freigegeben' WHERE id='$newid' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE rechnung SET belegnr = :belegnr, status = 'freigegeben' WHERE id = :id LIMIT 1", ['belegnr' => $belegnr, 'id' => (int)$newid]);
       $this->app->erp->RechnungProtokoll($newid,'Rechnung freigegeben');
       $this->app->erp->ANABREGSNeuberechnen($newid,"rechnung");
 
@@ -3846,15 +3835,15 @@ class Auftrag extends GenAuftrag
   public function AuftragZertifikate()
   {
     $id = $this->app->Secure->GetGET('id');
-    $adresse = $this->app->DB->Select("SELECT adresse FROM auftrag WHERE id = '$id' LIMIT 1");
+    $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($adresse)
     {
-      $zertifikate = $this->app->DB->SelectArr("SELECT ds.datei 
-      FROM datei_stichwoerter ds 
+      $zertifikate = $this->app->DatabaseService->select("SELECT ds.datei
+      FROM datei_stichwoerter ds
       INNER JOIN datei_stichwoerter ds2 ON ds.datei = ds2.datei AND ds2.objekt = 'Artikel'
-      INNER JOIN auftrag_position ap ON ap.artikel = ds2.parameter AND ap.auftrag = '$id'
-      WHERE ds.objekt = 'Adressen' AND ds.parameter = '$adresse'
-      GROUP BY ds.datei");
+      INNER JOIN auftrag_position ap ON ap.artikel = ds2.parameter AND ap.auftrag = :id
+      WHERE ds.objekt = 'Adressen' AND ds.parameter = :adresse
+      GROUP BY ds.datei", ['id' => (int)$id, 'adresse' => (int)$adresse]);
       if(!empty($zertifikate))
       {
         foreach($zertifikate as $zertifikat)
@@ -3910,7 +3899,7 @@ class Auftrag extends GenAuftrag
     if($id > 0){
       $this->app->erp->CheckVertrieb($id, 'auftrag');
       $this->app->erp->CheckBearbeiter($id, 'auftrag');
-      $auftragarr = $this->app->DB->SelectRow("SELECT projekt,belegnr,status,email,gesamtsumme FROM auftrag WHERE id='$id' LIMIT 1");
+      $auftragarr = $this->app->DatabaseService->selectRow("SELECT projekt,belegnr,status,email,gesamtsumme FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       $doctype = 'auftrag';
       if(empty($intern)){
         $this->app->erp->RunHook('beleg_freigabe', 4, $doctype, $id, $allowedFrm, $showDefault);
@@ -3946,10 +3935,10 @@ class Auftrag extends GenAuftrag
       }
 
       if($this->app->User->GetParameter('auftrag_create_entwurfsdatumuebernehmen')=='1'){
-        $this->app->DB->Update("UPDATE auftrag SET belegnr='$belegnr', status='freigegeben'  WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE auftrag SET belegnr = :belegnr, status = 'freigegeben' WHERE id = :id LIMIT 1", ['belegnr' => $belegnr, 'id' => (int)$id]);
       }
       else{
-        $this->app->DB->Update("UPDATE auftrag SET datum=NOW(), belegnr='$belegnr', status='freigegeben'  WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE auftrag SET datum=NOW(), belegnr = :belegnr, status = 'freigegeben' WHERE id = :id LIMIT 1", ['belegnr' => $belegnr, 'id' => (int)$id]);
       }
 
       $this->app->erp->AuftragProtokoll($id,'Auftrag freigegeben');
@@ -3975,14 +3964,13 @@ class Auftrag extends GenAuftrag
       $this->app->Location->execute("index.php?module=auftrag&action=edit&id=$id&msg=$msg");
     }
     if($id && $showDefault) {
-      $name = $this->app->DB->Select("SELECT a.name FROM auftrag b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id='$id' LIMIT 1");
+      $name = $this->app->DatabaseService->selectValue("SELECT a.name FROM auftrag b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id = :id LIMIT 1", ['id' => (int)$id]);
       //$email = $this->app->DB->Select("SELECT email FROM auftrag WHERE id='$id' LIMIT 1");
       //$summe = $this->app->DB->Select("SELECT FORMAT(SUM(menge*preis),2) FROM auftrag_position
       //WHERE auftrag='$id'");
       //$summe = $this->app->DB->Select("SELECT gesamtsumme FROM auftrag WHERE id='$id' LIMIT 1");
 
-      $waehrung = $this->app->DB->Select("SELECT waehrung FROM auftrag_position
-          WHERE auftrag='$id' LIMIT 1");
+      $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM auftrag_position WHERE auftrag = :id LIMIT 1", ['id' => (int)$id]);
 
       // check ob entwurdsdataum alt ist
       $extra = $this->app->erp->CheckboxEntwurfsmodus('auftrag',$id);
@@ -4025,7 +4013,7 @@ class Auftrag extends GenAuftrag
   {
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
-      $anfrageid = $this->app->DB->Select("SELECT anfrageid FROM auftrag WHERE id='$id' LIMIT 1");
+      $anfrageid = $this->app->DatabaseService->selectValue("SELECT anfrageid FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }else{
       $anfrageid = 0;
     }
@@ -4042,7 +4030,7 @@ class Auftrag extends GenAuftrag
     $id = $this->app->Secure->GetGET('id');
     $alsfreigegeben= $this->app->Secure->GetGET('alsfreigegeben');
 
-    $auftragarr = $this->app->DB->SelectRow("SELECT name,belegnr,status FROM auftrag WHERE id='$id' LIMIT 1");
+    $auftragarr = $this->app->DatabaseService->selectRow("SELECT name,belegnr,status FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if(!empty($auftragarr))
     {
       $name = $auftragarr['name'];//$this->app->DB->Select("SELECT name FROM auftrag WHERE id='$id' LIMIT 1");
@@ -4070,8 +4058,8 @@ class Auftrag extends GenAuftrag
       else if($status==="abgeschlossen" || $status==="storniert" || $status==="versendet")
       {
         $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Der Auftrag \"$name\" ($belegnr) wurde wieder als freigegeben markiert!</div>  ");
-        $this->app->DB->Update("UPDATE auftrag SET status='freigegeben',schreibschutz=0 WHERE id='$id' LIMIT 1"); 
-        $this->app->DB->Update("UPDATE auftrag_position SET geliefert_menge=0,geliefert=0 WHERE auftrag='$id'"); 
+        $this->app->DatabaseService->update("UPDATE auftrag SET status='freigegeben',schreibschutz=0 WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+        $this->app->DatabaseService->update("UPDATE auftrag_position SET geliefert_menge=0,geliefert=0 WHERE auftrag = :id", ['id' => (int)$id]);
         $this->app->erp->AuftragProtokoll($id,'Auftrag manuell als freigegeben markiert');
       } 
       else 
@@ -4081,7 +4069,7 @@ class Auftrag extends GenAuftrag
       $this->app->Location->execute("index.php?module=auftrag&action=edit&id=$id&msg=$msg");
     }
     else {
-      $name = $this->app->DB->Select("SELECT a.name FROM auftrag b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id='$id' LIMIT 1");
+      $name = $this->app->DatabaseService->selectValue("SELECT a.name FROM auftrag b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id = :id LIMIT 1", ['id' => (int)$id]);
       $this->app->Tpl->Set('TAB1',"<div class=\"info\">Soll der Auftrag an <b>$name</b> jetzt wirklich als freigegeben markiert werden?
           <input type=\"button\" value=\"Freigeben\" onclick=\"window.location.href='index.php?module=auftrag&action=alsfreigegeben&id=$id&alsfreigegeben=$id&msg=$msg'\">
           </div>");
@@ -4162,7 +4150,7 @@ class Auftrag extends GenAuftrag
       $this->app->Location->execute("index.php?module=auftrag&action=edit&id=$id&msg=$msg");
     }
 
-    $name = $this->app->DB->Select("SELECT a.name FROM auftrag b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id='$id' LIMIT 1");
+    $name = $this->app->DatabaseService->selectValue("SELECT a.name FROM auftrag b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->Tpl->Set('TAB1',"<div class=\"info\">Soll der Auftrag an <b>$name</b> jetzt abgeschlossen werden?
           <input type=\"button\" value=\"Abschluss\" onclick=\"window.location.href='index.php?module=auftrag&action=abschluss&id=$id&abschluss=$id&msg=$msg'\">
           </div>");
@@ -4175,7 +4163,7 @@ class Auftrag extends GenAuftrag
   public function AuftragUndelete()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $auftragarr = $this->app->DB->SelectRow("SELECT name, belegnr, status FROM auftrag WHERE id='$id' LIMIT 1");
+    $auftragarr = $this->app->DatabaseService->selectRow("SELECT name, belegnr, status FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if(!empty($auftragarr)){
       $name = $auftragarr['name'];//$this->app->DB->Select("SELECT name FROM auftrag WHERE id='$id' LIMIT 1");
       $belegnr = $auftragarr['belegnr'];//$this->app->DB->Select("SELECT belegnr FROM auftrag WHERE id='$id' LIMIT 1");
@@ -4192,7 +4180,7 @@ class Auftrag extends GenAuftrag
     }
     if($ok)
     {
-      $anzahl_ls = $this->app->DB->Select("SELECT id FROM lieferschein WHERE auftragid='$id' LIMIT 1");
+      $anzahl_ls = $this->app->DatabaseService->selectValue("SELECT id FROM lieferschein WHERE auftragid = :id LIMIT 1", ['id' => (int)$id]);
       if($anzahl_ls)
       {
         $ok = false;
@@ -4200,7 +4188,7 @@ class Auftrag extends GenAuftrag
     }
     if($ok)
     {
-      $anzahl_re = $this->app->DB->Select("SELECT id FROM rechnung WHERE auftragid='$id' LIMIT 1");
+      $anzahl_re = $this->app->DatabaseService->selectValue("SELECT id FROM rechnung WHERE auftragid = :id LIMIT 1", ['id' => (int)$id]);
       if($anzahl_re){
         $ok = false;
       }
@@ -4208,7 +4196,7 @@ class Auftrag extends GenAuftrag
 
     if($ok)
     {
-      $this->app->DB->Update("UPDATE auftrag SET status='freigegeben' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE auftrag SET status='freigegeben' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       $this->app->erp->AuftragProtokoll($id,'Auftrag Storno rückgängig');
       $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Auftrag \"$name\" ($belegnr) wurde wieder freigegeben!</div>  ");
     } else {
@@ -4233,7 +4221,7 @@ class Auftrag extends GenAuftrag
       $mail = 0;
     }
 
-    $auftragarr = $this->app->DB->SelectRow("SELECT name, belegnr, status,shop,shopextid FROM auftrag WHERE id='$id' LIMIT 1");
+    $auftragarr = $this->app->DatabaseService->selectRow("SELECT name, belegnr, status,shop,shopextid FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if(!empty($auftragarr)){
       $name = $auftragarr['name'];//$this->app->DB->Select("SELECT name FROM auftrag WHERE id='$id' LIMIT 1");
       $belegnr = $auftragarr['belegnr'];//$this->app->DB->Select("SELECT belegnr FROM auftrag WHERE id='$id' LIMIT 1");
@@ -4250,7 +4238,7 @@ class Auftrag extends GenAuftrag
 
     if($abschluss==$id)
     {
-      if($shop && $this->app->DB->Select("SELECT id FROM shopexport WHERE aktiv = 1 AND id = '$shop' AND stornoabgleich AND demomodus = 0 LIMIT 1"))
+      if($shop && $this->app->DatabaseService->selectValue("SELECT id FROM shopexport WHERE aktiv = 1 AND id = :shop AND stornoabgleich AND demomodus = 0 LIMIT 1", ['shop' => (int)$shop]))
       {
         if($shopextid !== ''){
           $this->app->remote->RemoteStorniereAuftrag($shop, $id);
@@ -4282,11 +4270,11 @@ class Auftrag extends GenAuftrag
       }
 
 
-      $this->app->DB->Update("UPDATE auftrag SET status='storniert' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE auftrag SET status='storniert' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       $this->app->erp->AuftragProtokoll($id,'Auftrag storniert');
 
       // stornierungen loeschen
-      $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE objekt='auftrag' AND parameter='$id'");
+      $this->app->DatabaseService->delete("DELETE FROM lager_reserviert WHERE objekt='auftrag' AND parameter = :id", ['id' => (int)$id]);
 
       // ausfuellen automatisch stornofelder
       //stornobetrag // summe des zahlungseingangs!!!!
@@ -4300,7 +4288,7 @@ class Auftrag extends GenAuftrag
         $this->app->erp->Stornomail($id);
       }
 
-      $recheck = $this->app->DB->Select("SELECT id FROM rechnung WHERE auftrag='$belegnr' LIMIT 1");
+      $recheck = $this->app->DatabaseService->selectValue("SELECT id FROM rechnung WHERE auftrag = :belegnr LIMIT 1", ['belegnr' => $belegnr]);
 
       if($recheck <= 0)
       {
@@ -4322,8 +4310,8 @@ class Auftrag extends GenAuftrag
     if($intern){
       return;
     }
-    $name = $this->app->DB->Select("SELECT a.name FROM auftrag b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id='$id' LIMIT 1");
-    $auftragarr = $this->app->DB->SelectRow("SELECT email,projekt FROM auftrag WHERE id='$id' LIMIT 1");
+    $name = $this->app->DatabaseService->selectValue("SELECT a.name FROM auftrag b INNER JOIN adresse a ON a.id=b.adresse WHERE b.id = :id LIMIT 1", ['id' => (int)$id]);
+    $auftragarr = $this->app->DatabaseService->selectRow("SELECT email,projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if(!empty($auftragarr)){
       $email = $auftragarr['email'];//$this->app->DB->Select("SELECT email FROM auftrag WHERE id='$id' LIMIT 1");
       $projekt = $auftragarr['projekt'];//$this->app->DB->Select("SELECT projekt FROM auftrag WHERE id='$id' LIMIT 1");
@@ -4332,7 +4320,7 @@ class Auftrag extends GenAuftrag
       $projekt = 0;
     }
     if($projekt > 0){
-      $stornomail = $this->app->DB->Select("SELECT stornomail FROM projekt WHERE id='$projekt' LIMIT 1");
+      $stornomail = $this->app->DatabaseService->selectValue("SELECT stornomail FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
     }else{
       $stornomail = 0;
     }
@@ -4363,20 +4351,20 @@ class Auftrag extends GenAuftrag
 
     //$rechnung = $this->app->DB->Select("SELECT rechnung FROM versand WHERE id='$id' LIMIT 1");
     if($id > 0){
-      $lieferschein = $this->app->DB->Select("SELECT lieferschein  FROM versand WHERE id='$id' LIMIT 1");
+      $lieferschein = $this->app->DatabaseService->selectValue("SELECT lieferschein FROM versand WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }else{
       $lieferschein = 0;
     }
     if($lieferschein > 0){
-      $auftragid = $this->app->DB->Select("SELECT auftragid FROM lieferschein WHERE id='$lieferschein' LIMIT 1");
+      $auftragid = $this->app->DatabaseService->selectValue("SELECT auftragid FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$lieferschein]);
     }else{
       $auftragid = 0;
     }
     if($auftragid > 0){
-      $this->app->DB->Update("UPDATE auftrag SET rma=1,status='storniert' WHERE id='$auftragid' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE auftrag SET rma=1,status='storniert' WHERE id = :id LIMIT 1", ['id' => (int)$auftragid]);
     }
     if($lieferschein > 0){
-      $auftrag = $this->app->DB->Select("SELECT auftragid FROM lieferschein WHERE id='$lieferschein' LIMIT 1");
+      $auftrag = $this->app->DatabaseService->selectValue("SELECT auftragid FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$lieferschein]);
     }else{
       $auftrag = 0;
     }
@@ -4384,8 +4372,8 @@ class Auftrag extends GenAuftrag
     // status aendern
     if($lieferschein > 0)
     {
-      $this->app->DB->Update("UPDATE lieferschein SET versandart='rma',status='storniert' WHERE id='$lieferschein' LIMIT 1");
-      $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE objekt='lieferschein' AND parameter='$lieferschein'");
+      $this->app->DatabaseService->update("UPDATE lieferschein SET versandart='rma',status='storniert' WHERE id = :id LIMIT 1", ['id' => (int)$lieferschein]);
+      $this->app->DatabaseService->delete("DELETE FROM lager_reserviert WHERE objekt='lieferschein' AND parameter = :id", ['id' => (int)$lieferschein]);
       $this->app->erp->LieferscheinProtokoll($lieferschein,'Lieferschein durch Auftrag aus Versand storniert');
     }
 
@@ -4416,7 +4404,7 @@ class Auftrag extends GenAuftrag
     $id = $this->app->Secure->GetGET('id');
     $this->app->erp->AuftragNeuberechnen($id);
 
-    $projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id='$id' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if(class_exists('AuftragPDFCustom'))
     {
@@ -4437,7 +4425,7 @@ class Auftrag extends GenAuftrag
     if($id > 0)
     {
       $this->app->erp->AuftragNeuberechnen($id);
-      $auftragarr = $this->app->DB->SelectRow("SELECT projekt,schreibschutz FROM auftrag WHERE id='$id' LIMIT 1");
+      $auftragarr = $this->app->DatabaseService->selectRow("SELECT projekt,schreibschutz FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
 
     if(!empty($auftragarr))
@@ -4472,7 +4460,7 @@ class Auftrag extends GenAuftrag
 
     if($id > 0){
       $this->app->erp->AuftragNeuberechnen($id);
-      $auftragarr = $this->app->DB->SelectRow("SELECT projekt,schreibschutz FROM auftrag WHERE id='$id' LIMIT 1");
+      $auftragarr = $this->app->DatabaseService->selectRow("SELECT projekt,schreibschutz FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     if(!empty($auftragarr))
     {
@@ -4500,7 +4488,7 @@ class Auftrag extends GenAuftrag
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
       $this->app->erp->AuftragNeuberechnen($id);
-      $auftragarr = $this->app->DB->SelectRow("SELECT belegnr,name, status FROM auftrag WHERE id='$id' LIMIT 1");
+      $auftragarr = $this->app->DatabaseService->selectRow("SELECT belegnr,name, status FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     $backurl = $this->app->Secure->GetGET('backurl');
     $backurl = $this->app->erp->base64_url_decode($backurl);
@@ -4581,7 +4569,7 @@ class Auftrag extends GenAuftrag
       return;
     }
 
-    $unterartikel = $this->app->DB->SelectArr("SELECT * FROM auftrag_position WHERE explodiert_parent='$sid' ORDER BY sort");
+    $unterartikel = $this->app->DatabaseService->select("SELECT * FROM auftrag_position WHERE explodiert_parent = :sid ORDER BY sort", ['sid' => (int)$sid]);
 
     if($unterartikel && (!empty($unterartikel)?count($unterartikel):0)>0 && $sid >0 && $id >0)
     {
@@ -4591,18 +4579,16 @@ class Auftrag extends GenAuftrag
         $sidexplodiert = $unterartikel[$i]['id'];
         if($sidexplodiert>0)
         {
-          $sort = $this->app->DB->Select("SELECT sort FROM auftrag_position WHERE id='$sidexplodiert' LIMIT 1");
+          $sort = $this->app->DatabaseService->selectValue("SELECT sort FROM auftrag_position WHERE id = :id LIMIT 1", ['id' => (int)$sidexplodiert]);
           if($sort>0)
           {
-            $this->app->DB->Delete("DELETE FROM auftrag_position WHERE id='$sidexplodiert' LIMIT 1");
-            $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE parameter='$id' AND objekt='auftrag'
-                AND artikel='".$unterartikel[$i]['artikel']."'");
-            $this->app->DB->Update("UPDATE auftrag_position SET sort=sort-1 WHERE auftrag='$id' AND sort > $sort");
-            $this->app->DB->Update("UPDATE beleg_zwischenpositionen SET pos = pos - 1 WHERE doctype = 'auftrag' AND doctypeid = '$id' AND pos >= ".($sort-1)." ");
+            $this->app->DatabaseService->delete("DELETE FROM auftrag_position WHERE id = :id LIMIT 1", ['id' => (int)$sidexplodiert]);
+            $this->app->DatabaseService->delete("DELETE FROM lager_reserviert WHERE parameter = :id AND objekt='auftrag' AND artikel = :artikel", ['id' => (int)$id, 'artikel' => (int)$unterartikel[$i]['artikel']]);
+            $this->app->DatabaseService->update("UPDATE auftrag_position SET sort=sort-1 WHERE auftrag = :id AND sort > :sort", ['id' => (int)$id, 'sort' => (int)$sort]);
+            $this->app->DatabaseService->update("UPDATE beleg_zwischenpositionen SET pos = pos - 1 WHERE doctype = 'auftrag' AND doctypeid = :id AND pos >= :pos", ['id' => (int)$id, 'pos' => (int)($sort-1)]);
           }else{
-            $this->app->DB->Delete("DELETE FROM auftrag_position WHERE id='$sidexplodiert' LIMIT 1");
-            $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE parameter='$id' AND objekt='auftrag'
-                AND artikel='".$unterartikel[$i]['artikel']."'");              
+            $this->app->DatabaseService->delete("DELETE FROM auftrag_position WHERE id = :id LIMIT 1", ['id' => (int)$sidexplodiert]);
+            $this->app->DatabaseService->delete("DELETE FROM lager_reserviert WHERE parameter = :id AND objekt='auftrag' AND artikel = :artikel", ['id' => (int)$id, 'artikel' => (int)$unterartikel[$i]['artikel']]);
           }
         }
         $this->DelAuftragStueckliste($id, $sidexplodiert, $lvl + 1);
@@ -4614,7 +4600,7 @@ class Auftrag extends GenAuftrag
         );
       }
       // alle wirklich loeschen
-      $this->app->DB->Delete("DELETE FROM auftrag_position WHERE explodiert_parent='$sid' AND auftrag='$id'");
+      $this->app->DatabaseService->delete("DELETE FROM auftrag_position WHERE explodiert_parent = :sid AND auftrag = :id", ['sid' => (int)$sid, 'id' => (int)$id]);
       
     }
   }
@@ -4665,8 +4651,8 @@ class Auftrag extends GenAuftrag
     } else {
       // nach page      
 
-      $projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id='$id' LIMIT 1");
-      $projektcheckname = $this->app->DB->Select("SELECT checkname FROM projekt WHERE id='$projekt' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $projektcheckname = $this->app->DatabaseService->selectValue("SELECT checkname FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
 
       include_once './plugins/class.'.$projektcheckname.'.php';
       $tmp = new $projektcheckname($this->app);
@@ -4721,7 +4707,7 @@ class Auftrag extends GenAuftrag
     }
     $id = $this->app->Secure->GetGET('id');
     $fmodul = $this->app->Secure->GetGET('fmodul');
-    $artikel= $this->app->DB->Select("SELECT artikel FROM auftrag_position WHERE id='$id' LIMIT 1");
+    $artikel= $this->app->DatabaseService->selectValue("SELECT artikel FROM auftrag_position WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     // nach page inhalt des dialogs ausgeben
     $filename = 'widgets/widget.auftag_position_custom.php';
@@ -4733,7 +4719,7 @@ class Auftrag extends GenAuftrag
       $widget = new WidgetAuftrag_position($this->app,'PAGE');
     }
 
-    $sid= $this->app->DB->Select("SELECT auftrag FROM auftrag_position WHERE id='$id' LIMIT 1");
+    $sid= $this->app->DatabaseService->selectValue("SELECT auftrag FROM auftrag_position WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $widget->form->SpecialActionAfterExecute('close_refresh',
         "index.php?module=auftrag&action=positionen&id=$sid&fmodul=$fmodul");
     $widget->Edit();
@@ -4764,43 +4750,43 @@ class Auftrag extends GenAuftrag
     {
       $erg['status'] = 0;
       $daid = $this->app->Secure->GetPOST("da_id");
-      $check = $this->app->DB->SelectArr("SELECT ds.* FROM datei_stichwoerter ds INNER JOIN datei d on ds.datei = d.id WHERE ds.id = '$daid' and d.geloescht <> 1 LIMIT 1");
+      $check = $this->app->DatabaseService->select("SELECT ds.* FROM datei_stichwoerter ds INNER JOIN datei d on ds.datei = d.id WHERE ds.id = :daid and d.geloescht <> 1 LIMIT 1", ['daid' => (int)$daid]);
       if($check)
       {
         $sort = $check[0]['sort']+1;
         if($sort > 1)
         {
-          $check2 = $this->app->DB->SelectArr("SELECT ds.* FROM datei_stichwoerter ds INNER JOIN datei d on ds.datei = d.id WHERE ds.objekt like 'angebot' AND ds.sort = '$sort' AND d.geloescht <> 1 AND ds.parameter = '$id' LIMIT 1");
+          $check2 = $this->app->DatabaseService->select("SELECT ds.* FROM datei_stichwoerter ds INNER JOIN datei d on ds.datei = d.id WHERE ds.objekt like 'angebot' AND ds.sort = :sort AND d.geloescht <> 1 AND ds.parameter = :id LIMIT 1", ['sort' => (int)$sort, 'id' => (int)$id]);
           if($check2)
           {
             $erg['status'] = 1;
             $erg['from'] = $check2[0]['id'];
-            $this->app->DB->Update("UPDATE datei_stichwoerter SET sort = sort + 1 WHERE id = '$daid' LIMIT 1");
-            $this->app->DB->Update("UPDATE datei_stichwoerter SET sort = sort - 1 WHERE id = '".$check2[0]['id']."' LIMIT 1");
+            $this->app->DatabaseService->update("UPDATE datei_stichwoerter SET sort = sort + 1 WHERE id = :id LIMIT 1", ['id' => (int)$daid]);
+            $this->app->DatabaseService->update("UPDATE datei_stichwoerter SET sort = sort - 1 WHERE id = :id LIMIT 1", ['id' => (int)$check2[0]['id']]);
           }
         }
       }
       echo json_encode($erg);
       $this->app->ExitXentral();
     }
-    
+
     if($cmd === 'daup')
     {
       $erg['status'] = 0;
       $daid = $this->app->Secure->GetPOST("da_id");
-      $check = $this->app->DB->SelectArr("SELECT ds.* FROM datei_stichwoerter ds INNER JOIN datei d on ds.datei = d.id WHERE ds.id = '$daid' and d.geloescht <> 1 LIMIT 1");
+      $check = $this->app->DatabaseService->select("SELECT ds.* FROM datei_stichwoerter ds INNER JOIN datei d on ds.datei = d.id WHERE ds.id = :daid and d.geloescht <> 1 LIMIT 1", ['daid' => (int)$daid]);
       if($check)
       {
         $sort = $check[0]['sort']-1;
         if($sort > 0)
         {
-          $check2 = $this->app->DB->SelectArr("SELECT ds.* FROM datei_stichwoerter ds INNER JOIN datei d on ds.datei = d.id WHERE ds.objekt like 'auftrag' AND ds.sort = '$sort' AND d.geloescht <> 1 AND ds.parameter = '$id' LIMIT 1");
+          $check2 = $this->app->DatabaseService->select("SELECT ds.* FROM datei_stichwoerter ds INNER JOIN datei d on ds.datei = d.id WHERE ds.objekt like 'auftrag' AND ds.sort = :sort AND d.geloescht <> 1 AND ds.parameter = :id LIMIT 1", ['sort' => (int)$sort, 'id' => (int)$id]);
           if($check2)
           {
             $erg['status'] = 1;
             $erg['from'] = $check2[0]['id'];
-            $this->app->DB->Update("UPDATE datei_stichwoerter SET sort = sort - 1 WHERE id = '$daid' LIMIT 1");
-            $this->app->DB->Update("UPDATE datei_stichwoerter SET sort = sort + 1 WHERE id = '".$check2[0]['id']."' LIMIT 1");
+            $this->app->DatabaseService->update("UPDATE datei_stichwoerter SET sort = sort - 1 WHERE id = :id LIMIT 1", ['id' => (int)$daid]);
+            $this->app->DatabaseService->update("UPDATE datei_stichwoerter SET sort = sort + 1 WHERE id = :id LIMIT 1", ['id' => (int)$check2[0]['id']]);
           }
         }
       }
@@ -4822,7 +4808,7 @@ class Auftrag extends GenAuftrag
       $this->AuftragMenu();
       return;
     }
-    $adresse = $this->app->DB->Select("SELECT adresse FROM auftrag WHERE id='$id' LIMIT 1");
+    $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($adresse <=0) {
       $this->app->Tpl->Add('JAVASCRIPT','$(document).ready(function() { if(document.getElementById("adresse"))document.getElementById("adresse").focus(); });');
       $this->app->Tpl->Set('MESSAGE',"<div class=\"error\">Achtung! Dieses Dokument ist mit keiner Kunden-Nr. verlinkt. Bitte geben Sie die Kundennummer an und klicken Sie &uuml;bernehmen oder Speichern!</div>");
@@ -4879,11 +4865,13 @@ class Auftrag extends GenAuftrag
 
     if($teillieferungvon>0) {
       if($hauptid != $id) {
-        $teillieferungnummermax = $this->app->DB->Select(
-          "SELECT MAX(teillieferungnummer)+1 FROM auftrag WHERE teillieferungvon='$hauptid' LIMIT 1"
+        $teillieferungnummermax = $this->app->DatabaseService->selectValue(
+          "SELECT MAX(teillieferungnummer)+1 FROM auftrag WHERE teillieferungvon = :hauptid LIMIT 1",
+          ['hauptid' => (int)$hauptid]
         );
-        $teillieferung_von_auftrag_nummer = $this->app->DB->Select(
-          "SELECT belegnr FROM auftrag WHERE id='$hauptid' LIMIT 1"
+        $teillieferung_von_auftrag_nummer = $this->app->DatabaseService->selectValue(
+          "SELECT belegnr FROM auftrag WHERE id = :hauptid LIMIT 1",
+          ['hauptid' => (int)$hauptid]
         );
       }
       $this->app->Tpl->Add(
@@ -4927,23 +4915,25 @@ class Auftrag extends GenAuftrag
 
     
     if($this->app->erp->ModulVorhanden('lieferkette')) {
-      $auftraglieferkette = $this->app->DB->Select(
-        "SELECT l.auftrag 
-        FROM lieferkette l 
-        INNER JOIN lieferkette_bestellung lb 
-            ON l.id = lb.lieferkette AND lb.belegtyp = 'auftrag' AND belegid = '$id' AND l.auftrag > 0 
-        LIMIT 1"
+      $auftraglieferkette = $this->app->DatabaseService->selectValue(
+        "SELECT l.auftrag
+        FROM lieferkette l
+        INNER JOIN lieferkette_bestellung lb
+            ON l.id = lb.lieferkette AND lb.belegtyp = 'auftrag' AND belegid = :id AND l.auftrag > 0
+        LIMIT 1",
+        ['id' => (int)$id]
       );
       if($auftraglieferkette) {
         $this->app->Tpl->Add(
           'MESSAGE',
           '<div class="info">Dieser Auftrag geh&ouml;rt zur Lieferkette des Auftrags <a href="index.php?module=auftrag&action=edit&id='
           .$auftraglieferkette.'" target="_blank"><input type="button" value="'
-          .$this->app->DB->Select(
-            "SELECT if(belegnr = '','ENTWURF',belegnr) 
-            FROM auftrag 
-            WHERE id = '$auftraglieferkette' 
-            LIMIT 1"
+          .$this->app->DatabaseService->selectValue(
+            "SELECT if(belegnr = '','ENTWURF',belegnr)
+            FROM auftrag
+            WHERE id = :id
+            LIMIT 1",
+            ['id' => (int)$auftraglieferkette]
           )
           .'" /></a></div>'
         );
@@ -4960,7 +4950,7 @@ class Auftrag extends GenAuftrag
 
 
     $adresse= $orderRow['adresse'];//$this->app->DB->Select("SELECT adresse FROM auftrag WHERE id='$id' LIMIT 1");
-    $liefersperre= $this->app->DB->Select("SELECT liefersperre FROM adresse WHERE id='$adresse' LIMIT 1");
+    $liefersperre= $this->app->DatabaseService->selectValue("SELECT liefersperre FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$adresse]);
 
     if($id > 0 && $this->app->DB->Select(
         sprintf(
@@ -4978,7 +4968,7 @@ class Auftrag extends GenAuftrag
       if($Brief->zuArchivieren($id, 'auftrag')) {
         $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Der Auftrag ist noch nicht archiviert! Bitte versenden oder manuell archivieren. <input type=\"button\" onclick=\"if(!confirm('Soll das Dokument archiviert werden?')) return false;else window.location.href='index.php?module=auftrag&action=archivierepdf&id=$id';\" value=\"Manuell archivieren\" /> <input type=\"button\" value=\"Dokument versenden\" onclick=\"DokumentAbschicken('auftrag',$id)\"></div>");
       }
-      elseif(!$this->app->DB->Select("SELECT versendet FROM auftrag WHERE id = '$id' LIMIT 1")) {
+      elseif(!$this->app->DatabaseService->selectValue("SELECT versendet FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id])) {
         $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Der Auftrag wurde noch nicht versendet! <input type=\"button\" value=\"Dokument versenden\" onclick=\"DokumentAbschicken('auftrag',$id)\"></div>");
       }
     }
@@ -4995,10 +4985,10 @@ class Auftrag extends GenAuftrag
 
     $icons = $this->app->YUI->IconsSQL();
     if(strpos($icons,'aac.status')) {
-      $icons = $this->app->DB->Select("SELECT $icons FROM auftrag a LEFT JOIN `auftragsampel_auftrag_cache` aac ON a.id = aac.auftrag WHERE a.id='$id' LIMIT 1");
+      $icons = $this->app->DatabaseService->selectValue("SELECT $icons FROM auftrag a LEFT JOIN `auftragsampel_auftrag_cache` aac ON a.id = aac.auftrag WHERE a.id = :id LIMIT 1", ['id' => (int)$id]);
     }
     else{
-      $icons = $this->app->DB->Select("SELECT $icons FROM auftrag a WHERE a.id='$id' LIMIT 1");
+      $icons = $this->app->DatabaseService->selectValue("SELECT $icons FROM auftrag a WHERE a.id = :id LIMIT 1", ['id' => (int)$id]);
     }
     $this->app->Tpl->Set('STATUSICONS',$icons);
     
@@ -5007,13 +4997,13 @@ class Auftrag extends GenAuftrag
     $orderRow = $this->app->DB->SelectRow(sprintf('SELECT * FROM auftrag WHERE id = %d', $id));
     $status= $orderRow['status'];//$this->app->DB->Select("SELECT status FROM auftrag WHERE id='$id' LIMIT 1");
     if($status=='') {
-      $this->app->DB->Update("UPDATE auftrag SET status='angelegt' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE auftrag SET status='angelegt' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       $orderRow['status'] = $this->app->DB->Select(sprintf('SELECT status FROM auftrag WHERE id = %d', $id));
     }
 
     $tmpcheckversand = $orderRow['versandart'];//$this->app->DB->Select("SELECT versandart FROM auftrag WHERE id='$id' LIMIT 1");
     if($tmpcheckversand==='packstation' && $orderRow['abweichendelieferadresse'] != 0) {
-      $this->app->DB->Update("UPDATE auftrag SET abweichendelieferadresse='0' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE auftrag SET abweichendelieferadresse='0' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
 
     $status = $orderRow['status'];//$this->app->DB->Select("SELECT status FROM auftrag WHERE id='$id' LIMIT 1");
@@ -5021,7 +5011,7 @@ class Auftrag extends GenAuftrag
     $adresse = $orderRow['adresse'];//$this->app->DB->Select("SELECT adresse FROM auftrag WHERE id='$id' LIMIT 1");
 
     $lieferant = $orderRow['lieferant'];//$this->app->DB->Select("SELECT lieferant FROM auftrag WHERE id='$id' LIMIT 1");
-    $kundennummer = $this->app->DB->Select("SELECT kundennummer FROM adresse WHERE id='$adresse' LIMIT 1");
+    $kundennummer = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int)$adresse]);
     $lieferantenretoure = $orderRow['lieferantenauftrag'];//$this->app->DB->Select("SELECT lieferantenauftrag FROM auftrag WHERE id='$id' LIMIT 1");
     if($lieferantenretoure=='1' && $lieferant<=0) {
       $this->app->Tpl->Add('JAVASCRIPT','$(document).ready(function() { if(document.getElementById("adresse"))document.getElementById("adresse").focus(); });');
@@ -5088,14 +5078,13 @@ class Auftrag extends GenAuftrag
       $stornobezahltvon = $orderRow['stornobezahltvon'];//$this->app->DB->Select("SELECT stornobezahltvon FROM auftrag WHERE id='$id' LIMIT 1");
       $stornobezahltam = $orderRow['stornobezahltam'];//$this->app->DB->Select("SELECT stornobezahltam FROM auftrag WHERE id='$id' LIMIT 1");
       if($stornobezahltvon==''){
-        $this->app->DB->Update(
-          "UPDATE auftrag SET stornobezahltvon='"
-          . $this->app->DB->real_escape_string($this->app->User->GetName())
-          . "' WHERE id='$id' LIMIT 1"
+        $this->app->DatabaseService->update(
+          "UPDATE auftrag SET stornobezahltvon = :name WHERE id = :id LIMIT 1",
+          ['name' => $this->app->User->GetName(), 'id' => (int)$id]
         );
       }
       if($stornobezahltam=="0000-00-00"){
-        $this->app->DB->Update("UPDATE auftrag SET stornobezahltam=NOW() WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE auftrag SET stornobezahltam=NOW() WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       }
     }
 
@@ -5116,7 +5105,7 @@ class Auftrag extends GenAuftrag
         }
       }
 
-      $rechnungid = $this->app->DB->Select("SELECT rechnungid FROM auftrag WHERE id = '$id' LIMIT 1");
+      $rechnungid = $this->app->DatabaseService->selectValue("SELECT rechnungid FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       $rechnungen = $this->app->DB->SelectPairs(
         "SELECT id,belegnr FROM rechnung WHERE (auftragid='$id' AND auftragid > 0) OR id = '$rechnungid'"
       );
@@ -5129,7 +5118,7 @@ class Auftrag extends GenAuftrag
         }
       }
 
-      $projekt = $this->app->DB->Select("SELECT projekt from auftrag where id = '$id' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt from auftrag where id = :id LIMIT 1", ['id' => (int)$id]);
     if($schreibschutz=='1' && $this->app->erp->RechteVorhanden('auftrag','schreibschutz')) {
       $this->app->Tpl->Add(
         'MESSAGE',
@@ -5172,21 +5161,22 @@ class Auftrag extends GenAuftrag
     if($this->app->Secure->GetPOST('adresse')!='') {
       $tmp = $this->app->Secure->GetPOST('adresse');
       $kundennummer = $this->app->erp->FirstTillSpace($tmp);
-      $filter_projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id = '$id' LIMIT 1");
-      $adresse =  $this->app->DB->Select(
-        "SELECT id 
-        FROM adresse 
-        WHERE kundennummer='$kundennummer' AND geloescht=0 "
-        .$this->app->erp->ProjektRechte('projekt', true, 'vertrieb')." 
-        ORDER by ".($filter_projekt?" projekt = '$filter_projekt' DESC, ":"")." projekt 
-        LIMIT 1"
+      $filter_projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $adresse =  $this->app->DatabaseService->selectValue(
+        "SELECT id
+        FROM adresse
+        WHERE kundennummer = :kundennummer AND geloescht=0 "
+        .$this->app->erp->ProjektRechte('projekt', true, 'vertrieb')."
+        ORDER by ".($filter_projekt?" projekt = '".(int)$filter_projekt."' DESC, ":"")." projekt
+        LIMIT 1",
+        ['kundennummer' => $kundennummer]
       );
 
       $uebernehmen =$this->app->Secure->GetPOST('uebernehmen');
       if($uebernehmen=='1' && $schreibschutz != '1') {
         // nur neuladen bei tastendruck auf uebernehmen // FRAGEN!!!!
         $this->app->erp->LoadAuftragStandardwerte($id,$adresse);
-        $projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id = '$id' LIMIT 1");
+        $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
         if($projekt != $filter_projekt) {
           $deactivateAutoversand = (int)$this->app->erp->Projektdaten($projekt,'deactivateautoshipping');
           if($deactivateAutoversand) {
@@ -5198,9 +5188,9 @@ class Auftrag extends GenAuftrag
             );
           }
         }
-        $projektlager = $this->app->DB->Select("SELECT standardlager FROM projekt WHERE id = '$projekt' LIMIT 1");
-        $this->app->DB->Update("UPDATE auftrag SET standardlager = '$projektlager' WHERE id = '$id' LIMIT 1");
-        $this->app->DB->Update("UPDATE auftrag SET lieferantenauftrag=0 WHERE id='$id'");
+        $projektlager = $this->app->DatabaseService->selectValue("SELECT standardlager FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
+        $this->app->DatabaseService->update("UPDATE auftrag SET standardlager = :lager WHERE id = :id LIMIT 1", ['lager' => (int)$projektlager, 'id' => (int)$id]);
+        $this->app->DatabaseService->update("UPDATE auftrag SET lieferantenauftrag=0 WHERE id = :id", ['id' => (int)$id]);
         $this->app->Location->execute("index.php?module=auftrag&action=edit&id=$id");
       }
     }
@@ -5209,12 +5199,12 @@ class Auftrag extends GenAuftrag
       $tmplieferant = $this->app->Secure->GetPOST('lieferant');
       $lieferantennummer = $this->app->erp->FirstTillSpace($tmplieferant);
 
-      $adresselieferant =  $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='$lieferantennummer' AND lieferantennummer!=''  AND geloescht=0 LIMIT 1");
+      $adresselieferant =  $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE lieferantennummer = :lieferantennummer AND lieferantennummer!='' AND geloescht=0 LIMIT 1", ['lieferantennummer' => $lieferantennummer]);
 
       $uebernehmen2 =$this->app->Secure->GetPOST('uebernehmen2');
       if($uebernehmen2=='1' && $schreibschutz != '1') {
         // nur neuladen bei tastendruck auf uebernehmen // FRAGEN!!!!
-        $this->app->DB->Update("UPDATE auftrag SET lieferantenauftrag=1 WHERE id='$id'");
+        $this->app->DatabaseService->update("UPDATE auftrag SET lieferantenauftrag=1 WHERE id = :id", ['id' => (int)$id]);
         $this->app->erp->LoadAuftragStandardwerte($id,$adresselieferant,true);
         $this->app->Location->execute("index.php?module=auftrag&action=edit&id=$id");
       }
@@ -5231,14 +5221,14 @@ class Auftrag extends GenAuftrag
        WHERE ap.auftrag='$id'"
     );
     $table->DisplayNew('POSITIONEN','VPE','noAction');
-    $summe = $this->app->DB->Select(
-      "SELECT FORMAT(SUM(menge*preis),2) FROM auftrag_position
-        WHERE auftrag='$id'"
+    $summe = $this->app->DatabaseService->selectValue(
+      "SELECT FORMAT(SUM(menge*preis),2) FROM auftrag_position WHERE auftrag = :id",
+      ['id' => (int)$id]
     );
 
-    $waehrung = $this->app->DB->Select(
-      "SELECT waehrung FROM auftrag_position
-        WHERE auftrag='$id' LIMIT 1"
+    $waehrung = $this->app->DatabaseService->selectValue(
+      "SELECT waehrung FROM auftrag_position WHERE auftrag = :id LIMIT 1",
+      ['id' => (int)$id]
     );
 
     $orderRow = $this->app->DB->SelectRow(
@@ -5279,10 +5269,10 @@ class Auftrag extends GenAuftrag
 
     //alle RE und LS zu diesem Auftrag
     $auftragsnummer  = $orderRow['belegnr'];//$this->app->DB->Select("SELECT belegnr FROM auftrag WHERE id='$id' LIMIT 1");
-    $anzahl =   $this->app->DB->Select(
-      "SELECT COUNT(r.belegnr)
-        FROM rechnung r 
-        WHERE r.adresse='$adresse' AND r.auftrag='$auftragsnummer' AND r.auftrag!=''");
+    $anzahl = $this->app->DatabaseService->selectValue(
+      "SELECT COUNT(r.belegnr) FROM rechnung r WHERE r.adresse = :adresse AND r.auftrag = :auftragsnummer AND r.auftrag != ''",
+      ['adresse' => (int)$adresse, 'auftragsnummer' => $auftragsnummer]
+    );
 
     if($anzahl >0) {
       $this->app->Tpl->Set('AUFTRAGSDOKUMENTE',"<fieldset><legend>Rechnungen und Lieferscheine</legend>");
@@ -5312,11 +5302,9 @@ class Auftrag extends GenAuftrag
     $ust_ok = $orderRow['ust_ok'];//$this->app->DB->Select("SELECT ust_ok FROM auftrag WHERE id='$id' LIMIT 1");
     $ust_befreit = $orderRow['ust_befreit'];//$this->app->DB->Select("SELECT ust_befreit FROM auftrag WHERE id='$id' LIMIT 1");
 
-    $ustprfid = $this->app->DB->Select(
-      "SELECT id 
-      FROM ustprf 
-      WHERE DATE_FORMAT(datum_online,'%Y-%m-%d')=DATE_FORMAT(NOW(),'%Y-%m-%d') AND adresse='$adresse' AND status='erfolgreich' 
-      LIMIT 1"
+    $ustprfid = $this->app->DatabaseService->selectValue(
+      "SELECT id FROM ustprf WHERE DATE_FORMAT(datum_online,'%Y-%m-%d')=DATE_FORMAT(NOW(),'%Y-%m-%d') AND adresse = :adresse AND status='erfolgreich' LIMIT 1",
+      ['adresse' => (int)$adresse]
     );
 
     if($ust_befreit==0) {
@@ -5325,7 +5313,7 @@ class Auftrag extends GenAuftrag
     else if ($ust_befreit==1) {
 
       if($ust_ok == 1) {
-        $datum = $this->app->DB->Select("SELECT briefbestellt FROM ustprf WHERE id='$ustprfid' LIMIT 1");
+        $datum = $this->app->DatabaseService->selectValue("SELECT briefbestellt FROM ustprf WHERE id = :id LIMIT 1", ['id' => (int)$ustprfid]);
         $datum = $this->app->String->Convert($datum,"%1-%2-%3","%3.%2.%1");
         $this->app->Tpl->Set('USTPRUEFUNG',"EU-Lieferung mit Pruefung<br>Brief bestellt: $datum");
       }
@@ -5563,7 +5551,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
     $tmpname = '';
     $keinetrackingmail = 0;
     $usereditid = 0;
-    $auftrag = $this->app->DB->SelectArr("SELECT * FROM auftrag WHERE id='$id' LIMIT 1");
+    $auftrag = $this->app->DatabaseService->select("SELECT * FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if(!empty($auftrag)){
       $adresse = $auftrag[0]['adresse'];
       $versandart = $auftrag[0]['versandart'];
@@ -5573,11 +5561,11 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
       $keinetrackingmail = $auftrag[0]['keinetrackingmail'];
       $usereditid = $auftrag[0]['usereditid'];//$this->app->DB->Select("SELECT usereditid FROM auftrag WHERE id='$id' LIMIT 1");
     }
-    $useredittimestamp = $this->app->DB->Select("SELECT TIME_TO_SEC(TIMEDIFF(NOW(), useredittimestamp)) FROM auftrag WHERE id='$id' LIMIT 1");
+    $useredittimestamp = $this->app->DatabaseService->selectValue("SELECT TIME_TO_SEC(TIMEDIFF(NOW(), useredittimestamp)) FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     $projektarr = null;
     if($projekt > 0){
-      $projektarr = $this->app->DB->SelectRow("SELECT * FROM projekt WHERE id='$projekt' LIMIT 1");
+      $projektarr = $this->app->DatabaseService->selectRow("SELECT * FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
     }
     if(!empty($projektarr)){
       $kommissionierverfahren = $projektarr['kommissionierverfahren'];//$this->app->DB->Select("SELECT kommissionierverfahren FROM projekt WHERE id='$projekt' LIMIT 1");
@@ -5589,7 +5577,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
       $useredittimestamp = 1000;
     }
     
-    $anzahl_artikel = $this->app->DB->Select("SELECT id FROM auftrag_position WHERE auftrag=$id LIMIT 1");
+    $anzahl_artikel = $this->app->DatabaseService->selectValue("SELECT id FROM auftrag_position WHERE auftrag = :id LIMIT 1", ['id' => (int)$id]);
     if($anzahl_artikel <= 0)
     {
       $meldung = "Auftrag $belegnr kann nicht weitergefuehrt werden, da keine Artikel gebucht sind!";
@@ -5608,12 +5596,10 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
       // Start
       $ret = true;
 
-      $this->app->DB->Insert(
-        sprintf(
-          "INSERT INTO auftrag_protokoll (auftrag, zeit, bearbeiter, grund) VALUES 
-          (%d,now(),'%s','Lieferschein an Versandzentrum &uuml;bergeben')",
-          (int)$id,(isset($this->app->User)?$this->app->DB->real_escape_string($this->app->User->GetName()):'Cronjob')
-        )
+      $this->app->DatabaseService->insert(
+        "INSERT INTO auftrag_protokoll (auftrag, zeit, bearbeiter, grund) VALUES
+          (:id, now(), :bearbeiter, 'Lieferschein an Versandzentrum &uuml;bergeben')",
+        ['id' => (int)$id, 'bearbeiter' => (isset($this->app->User) ? $this->app->User->GetName() : 'Cronjob')]
       );
 
       $this->app->erp->Protokoll("WeiterfuehrenAuftrag AB $belegnr Art: ".$auftrag[0]['art']);
@@ -5649,17 +5635,15 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
           }
         }
 
-        $ls_belegnr = (string)$this->app->DB->Select("SELECT belegnr FROM lieferschein WHERE id='$lieferschein' LIMIT 1");
+        $ls_belegnr = (string)$this->app->DatabaseService->selectValue("SELECT belegnr FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$lieferschein]);
         if($ls_belegnr==='' || $ls_belegnr==='0') {
           $ls_belegnr = $this->app->erp->GetNextNummer('lieferschein',$projekt,$lieferschein);
         }
 
-        $this->app->DB->Update("UPDATE lieferschein SET 
-                                    belegnr='$ls_belegnr',  
-                                    status='freigegeben',
-                                    versand='".$this->app->User->GetDescription()."',
-                                    versand_status = 1
-                                WHERE id='$lieferschein' LIMIT 1");
+        $this->app->DatabaseService->update(
+          "UPDATE lieferschein SET belegnr = :belegnr, status='freigegeben', versand = :versand, versand_status = 1 WHERE id = :id LIMIT 1",
+          ['belegnr' => $ls_belegnr, 'versand' => $this->app->User->GetDescription(), 'id' => (int)$lieferschein]
+        );
 
         // Versand_status: 1 = process in versandpakete, 2 = finished, 3 = finished manually
 
@@ -5681,7 +5665,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
           $etiketten_drucker = $projektarr['etiketten_drucker'];//$this->app->DB->Select("SELECT etiketten_drucker FROM projekt WHERE id='$projekt' LIMIT 1");
           $etiketten_sort= $projektarr['etiketten_sort'];//$this->app->DB->Select("SELECT etiketten_drucker FROM projekt WHERE id='$projekt' LIMIT 1");
 
-          $etikett_adresse = $this->app->DB->SelectRow("SELECT lieferscheinpositionetikettdruck, lieferscheinpositionetikett FROM adresse WHERE id ='".$adresse."' LIMIT 1");
+          $etikett_adresse = $this->app->DatabaseService->selectRow("SELECT lieferscheinpositionetikettdruck, lieferscheinpositionetikett FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$adresse]);
           if ($etikett_adresse['lieferscheinpositionetikettdruck']) {
             $etiketten_positionen = 1;
             $etiketten_art = $etikett_adresse['lieferscheinpositionetikett'];
@@ -5701,15 +5685,16 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
       if(($auftrag[0]['art']==='rechnung' || $auftrag[0]['art']==='standardauftrag' || $auftrag[0]['art']=='') && !$this->app->erp->Projektdaten($projekt,'rechnungerzeugen'))
       {
         // nur erzeugen wenn positionen betrag hpoch genug ist
-        $artikelarrsumme = $this->app->DB->Select("SELECT SUM(preis*menge) FROM auftrag_position WHERE auftrag='$id' AND auftrag > 0");
+        $artikelarrsumme = $this->app->DatabaseService->selectValue("SELECT SUM(preis*menge) FROM auftrag_position WHERE auftrag = :id AND auftrag > 0", ['id' => (int)$id]);
         $this->app->erp->Protokoll("WeiterfuehrenAuftragZuRechnung AB $belegnr Preis ".$artikelarrsumme);
 
         // wenn mindestesten zwei verschiedene steuersaetze und rechnung 0 ist dann muss man auch erzeugen
-        $anzahlsteuer = $this->app->DB->Select("Select sum(t.summe) FROM (
-          (SELECT count(distinct 1) as summe FROM auftrag_position WHERE umsatzsteuer = 'ermaessigt' AND (isnull(steuersatz) OR steuersatz < 0) AND auftrag = '$id' LIMIT 1)
-          union all (SELECT count(distinct 1) as summe FROM auftrag_position WHERE umsatzsteuer = 'befreit' AND (isnull(steuersatz) OR steuersatz < 0) AND auftrag = '$id' LIMIT 1)
-          union all (SELECT count(distinct 1) as summe FROM auftrag_position WHERE umsatzsteuer <> 'ermaessigt' AND (isnull(steuersatz) OR steuersatz < 0) AND auftrag = '$id' LIMIT 1)
-          union all (SELECT count(distinct 1) as summe FROM auftrag_position WHERE steuersatz >= 0 and not isnull(steuersatz) AND auftrag = '$id' LIMIT 1) )t");
+        $anzahlsteuer = $this->app->DatabaseService->selectValue("Select sum(t.summe) FROM (
+          (SELECT count(distinct 1) as summe FROM auftrag_position WHERE umsatzsteuer = 'ermaessigt' AND (isnull(steuersatz) OR steuersatz < 0) AND auftrag = :id LIMIT 1)
+          union all (SELECT count(distinct 1) as summe FROM auftrag_position WHERE umsatzsteuer = 'befreit' AND (isnull(steuersatz) OR steuersatz < 0) AND auftrag = :id2 LIMIT 1)
+          union all (SELECT count(distinct 1) as summe FROM auftrag_position WHERE umsatzsteuer <> 'ermaessigt' AND (isnull(steuersatz) OR steuersatz < 0) AND auftrag = :id3 LIMIT 1)
+          union all (SELECT count(distinct 1) as summe FROM auftrag_position WHERE steuersatz >= 0 and not isnull(steuersatz) AND auftrag = :id4 LIMIT 1) )t",
+          ['id' => (int)$id, 'id2' => (int)$id, 'id3' => (int)$id, 'id4' => (int)$id]);
 
         if($artikelarrsumme>=0.01 || $anzahlsteuer > 1)
         {
@@ -5729,9 +5714,9 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
               $rechnung = $this->app->erp->WeiterfuehrenAuftragZuRechnung($id);
             }
           }
-          $this->app->DB->Update("UPDATE rechnung SET lieferschein='$lieferschein' WHERE id='$rechnung' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE rechnung SET lieferschein = :lieferschein WHERE id = :id LIMIT 1", ['lieferschein' => (int)$lieferschein, 'id' => (int)$rechnung]);
 
-          $re_belegnr = (string)$this->app->DB->Select("SELECT belegnr FROM rechnung WHERE id='$rechnung' LIMIT 1");
+          $re_belegnr = (string)$this->app->DatabaseService->selectValue("SELECT belegnr FROM rechnung WHERE id = :id LIMIT 1", ['id' => (int)$rechnung]);
           if($re_belegnr==='' || $re_belegnr==='0')
           {
             $re_belegnr = $this->app->erp->GetNextNummer('rechnung',$projekt,$rechnung);
@@ -5752,14 +5737,9 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
           );
           $this->app->erp->RechnungProtokoll($rechnung, 'Rechnung freigegeben');
 
-          $this->app->DB->Update(
-            sprintf(
-              "UPDATE rechnung 
-              SET buchhaltung='%s' 
-              WHERE id=%d 
-              LIMIT 1",
-              $this->app->DB->real_escape_string($this->app->User->GetDescription()), $rechnung
-            )
+          $this->app->DatabaseService->update(
+            "UPDATE rechnung SET buchhaltung = :buchhaltung WHERE id = :id LIMIT 1",
+            ['buchhaltung' => $this->app->User->GetDescription(), 'id' => (int)$rechnung]
           );
 
           $this->app->erp->ANABREGSNeuberechnen($rechnung,"rechnung");
@@ -5786,11 +5766,9 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
         $menge= $artikelarr[$i]['menge'];
         // lager teile reservieren
 
-        $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE objekt='auftrag' 
-            AND parameter='$id' AND artikel='$artikel' ");
+        $this->app->DatabaseService->delete("DELETE FROM lager_reserviert WHERE objekt='auftrag' AND parameter = :id AND artikel = :artikel", ['id' => (int)$id, 'artikel' => (int)$artikel]);
 
-        $this->app->DB->Update("UPDATE auftrag_position SET geliefert_menge='$menge', 
-              geliefert='1' WHERE id='$auftragspositionsid' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE auftrag_position SET geliefert_menge = :menge, geliefert='1' WHERE id = :id LIMIT 1", ['menge' => $menge, 'id' => (int)$auftragspositionsid]);
       }
 
       // nur wenn autoversand projekt
@@ -5817,12 +5795,10 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
             // sende 
             // $this->app->erp->Rechnungsmail($rechnung);
           }
-          $this->app->DB->Insert(
-            sprintf(
-              "INSERT INTO auftrag_protokoll (auftrag, zeit, bearbeiter, grund) VALUES 
-          (%d,now(),'%s','Autoversand ausgef&uuml;hrt')",
-              (int)$id,(isset($this->app->User)?$this->app->DB->real_escape_string($this->app->User->GetName()):'Cronjob')
-            )
+          $this->app->DatabaseService->insert(
+            "INSERT INTO auftrag_protokoll (auftrag, zeit, bearbeiter, grund) VALUES
+              (:id, now(), :bearbeiter, 'Autoversand ausgef&uuml;hrt')",
+            ['id' => (int)$id, 'bearbeiter' => (isset($this->app->User) ? $this->app->User->GetName() : 'Cronjob')]
           );
           break;
         default:
@@ -5841,8 +5817,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
             
             $this->app->erp->SeriennummernCheckLieferscheinBenachrichtigung($lieferschein);
             
-            $sql = "SELECT id FROM kommissionierung k WHERE k.auftrag = '".$id."'";
-            $vorkommissionierung = $this->app->DB->Select($sql);
+            $vorkommissionierung = $this->app->DatabaseService->selectValue("SELECT id FROM kommissionierung k WHERE k.auftrag = :id", ['id' => (int)$id]);
                        
             if (!$vorkommissionierung)
             {
@@ -5893,7 +5868,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
             $fileid_lieferschein = $this->app->erp->CreateDatei($Brief->filename,'lieferschein','','',$tmpfile,$this->app->User->GetName());
             $this->app->erp->AddDateiStichwort($fileid_lieferschein,'lieferschein','lieferschein',$lieferschein,$without_log=false);
 
-            $sprache = $this->app->DB->Select("SELECT sprache FROM lieferschein WHERE id='$lieferschein' LIMIT 1");
+            $sprache = $this->app->DatabaseService->selectValue("SELECT sprache FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$lieferschein]);
             if($sprache=='')
             {
               $sprache='deutsch';
@@ -5905,10 +5880,9 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
               $betreff='Mitgesendet bei Lieferung';
             }
 
-            $this->app->DB->Update("UPDATE lieferschein SET status='versendet',versendet='1',schreibschutz='1' WHERE id='$lieferschein' LIMIT 1");
-            $this->app->DB->Insert("INSERT INTO dokumente_send 
-                (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,dateiid) VALUES ('','lieferschein',NOW(),'".$this->app->User->GetName()."',
-                  '$adresse','$lieferschein','versand','$betreff','$text','$projekt','','$fileid_lieferschein')");
+            $this->app->DatabaseService->update("UPDATE lieferschein SET status='versendet',versendet='1',schreibschutz='1' WHERE id = :id LIMIT 1", ['id' => (int)$lieferschein]);
+            $this->app->DatabaseService->insert("INSERT INTO dokumente_send (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,dateiid) VALUES ('','lieferschein',NOW(),:bearbeiter,:adresse,:lieferschein,'versand',:betreff,:text,:projekt,'', :fileid)",
+              ['bearbeiter' => $this->app->User->GetName(), 'adresse' => (int)$adresse, 'lieferschein' => (int)$lieferschein, 'betreff' => $betreff, 'text' => $text, 'projekt' => (int)$projekt, 'fileid' => (int)$fileid_lieferschein]);
             $this->app->erp->LieferscheinProtokoll($lieferschein,'Lieferschein versendet (Auto-Versand)');
 
             unlink($tmpfile);
@@ -5921,12 +5895,10 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
               //                                                                     $this->app->printer->Drucken($druckercode,$tmpanhang[$i]);
               $tmpanhang ='';
             }
-            $this->app->DB->Insert(
-              sprintf(
-                "INSERT INTO auftrag_protokoll (auftrag, zeit, bearbeiter, grund) VALUES 
-          (%d,now(),'%s','Auftrag an Versandzentrum &uuml;bergeben')",
-                (int)$id,(isset($this->app->User)?$this->app->DB->real_escape_string($this->app->User->GetName()):'Cronjob')
-              )
+            $this->app->DatabaseService->insert(
+              "INSERT INTO auftrag_protokoll (auftrag, zeit, bearbeiter, grund) VALUES
+                (:id, now(), :bearbeiter, 'Auftrag an Versandzentrum &uuml;bergeben')",
+              ['id' => (int)$id, 'bearbeiter' => (isset($this->app->User) ? $this->app->User->GetName() : 'Cronjob')]
             );
           }
 
@@ -5950,31 +5922,27 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
             $menge= $artikelarr[$i]['menge'];
             // lager teile reservieren
 
-            $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE objekt='auftrag' 
-                AND parameter='$id' AND artikel='$artikel' ");
+            $this->app->DatabaseService->delete("DELETE FROM lager_reserviert WHERE objekt='auftrag' AND parameter = :id AND artikel = :artikel", ['id' => (int)$id, 'artikel' => (int)$artikel]);
 
             if($kommissionierverfahren==='zweistufig' && $lieferschein > 0)
             {
-              $this->app->DB->Insert("INSERT INTO lager_reserviert (id,adresse,artikel,menge,grund,projekt,
-                firma,bearbeiter,datum,objekt,parameter)
-                  VALUES('','$adresse','$artikel','$menge','Versand f&uuml;r Auftrag $belegnr','$projekt',
-                    '".$this->app->User->GetFirma()."','".$this->app->User->GetName()."','9999-01-01','lieferschein','$lieferschein')");
+              $this->app->DatabaseService->insert(
+                "INSERT INTO lager_reserviert (id,adresse,artikel,menge,grund,projekt,firma,bearbeiter,datum,objekt,parameter) VALUES('', :adresse, :artikel, :menge, :grund, :projekt, :firma, :bearbeiter, '9999-01-01', 'lieferschein', :lieferschein)",
+                ['adresse' => (int)$adresse, 'artikel' => (int)$artikel, 'menge' => $menge, 'grund' => 'Versand für Auftrag '.$belegnr, 'projekt' => (int)$projekt, 'firma' => $this->app->User->GetFirma(), 'bearbeiter' => $this->app->User->GetName(), 'lieferschein' => (int)$lieferschein]
+              );
             }
 
             if($lieferschein > 0) {
-              $this->app->DB->Update("UPDATE auftrag_position SET geliefert_menge='$menge', 
-              geliefert='1' WHERE id='$auftragspositionsid' LIMIT 1");
+              $this->app->DatabaseService->update("UPDATE auftrag_position SET geliefert_menge = :menge, geliefert='1' WHERE id = :id LIMIT 1", ['menge' => $menge, 'id' => (int)$auftragspositionsid]);
             }
 
           }
           //ende
 
-          $this->app->DB->Insert(
-            sprintf(
-              "INSERT INTO auftrag_protokoll (auftrag, zeit, bearbeiter, grund) VALUES 
-            (%d,now(),'%s','Autoversand ausgef&uuml;hrt')",
-              (int)$id,(isset($this->app->User)?$this->app->DB->real_escape_string($this->app->User->GetName()):'Cronjob')
-            )
+          $this->app->DatabaseService->insert(
+            "INSERT INTO auftrag_protokoll (auftrag, zeit, bearbeiter, grund) VALUES
+              (:id, now(), :bearbeiter, 'Autoversand ausgef&uuml;hrt')",
+            ['id' => (int)$id, 'bearbeiter' => (isset($this->app->User) ? $this->app->User->GetName() : 'Cronjob')]
           );
       }
 
@@ -5993,8 +5961,10 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
       }
 
       // Check for override in adresse      
-      $sql = "SELECT rechnung_anzahlpapier, rechnung_anzahlpapier_abweichend FROM adresse WHERE id =".$adresse; 
-      $adresse_settings = $this->app->DB->SelectArr($sql);
+      $adresse_settings = $this->app->DatabaseService->select(
+        "SELECT rechnung_anzahlpapier, rechnung_anzahlpapier_abweichend FROM adresse WHERE id = :id",
+        ['id' => (int)$adresse]
+      );
       if ($adresse_settings[0]['rechnung_anzahlpapier_abweichend']) {          
           $autodruckrechnungstufe1menge = $adresse_settings[0]['rechnung_anzahlpapier'];
       }
@@ -6008,15 +5978,15 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
           $exportdruckrechnungstufe1menge = 0;
         }
 
-        $exportland = $this->app->DB->Select("SELECT if(abweichendelieferadresse = 1 AND lieferland <> '',lieferland, land) FROM auftrag WHERE id = '$id' LIMIT 1");
+        $exportland = $this->app->DatabaseService->selectValue("SELECT if(abweichendelieferadresse = 1 AND lieferland <> '',lieferland, land) FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
         $exportdruckrechnungstufe1 = $this->app->erp->Export($exportland);
       }
 
       // PDF / XML rechnung
-      $xmlrechnung = (string)$this->app->DB->Select("SELECT xmlrechnung FROM rechnung WHERE id='$rechnung' LIMIT 1");
+      $xmlrechnung = (string)$this->app->DatabaseService->selectValue("SELECT xmlrechnung FROM rechnung WHERE id = :id LIMIT 1", ['id' => (int)$rechnung]);
       if(($autodruckrechnungstufe1=='1' || $exportdruckrechnungstufe1) && $rechnung > 0 &&!$xmlrechnung)
       {
-        $this->app->DB->Update("UPDATE rechnung SET status='versendet', versendet='1',schreibschutz='1' WHERE id='$rechnung' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE rechnung SET status='versendet', versendet='1',schreibschutz='1' WHERE id = :id LIMIT 1", ['id' => (int)$rechnung]);
         $druckercode = $this->app->erp->Projektdaten($projekt,'druckerlogistikstufe1');
         $this->app->erp->BriefpapierHintergrundDisable($druckercode);
         if(class_exists('RechnungPDFCustom'))
@@ -6059,7 +6029,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
       // Rechnungsmail was here, but now at the end to prioritise processing and printing over mail
 
       // auftrag abschliessen
-      $this->app->DB->Update("UPDATE auftrag SET status='abgeschlossen',schreibschutz='1' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE auftrag SET status='abgeschlossen',schreibschutz='1' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       $this->app->erp->PDFArchivieren('auftrag',$id);
 
       // auftrag abschliessen und event senden
@@ -6075,12 +6045,12 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
       }
 
       if($checkok==1){
-        $this->app->DB->Update("UPDATE adresse SET kundenfreigabe='0' WHERE id='$adresse' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE adresse SET kundenfreigabe='0' WHERE id = :id LIMIT 1", ['id' => (int)$adresse]);
       }
 
       if($this->app->erp->ModulVorhanden('produktion') && method_exists($this->app->erp, 'ProduktionEinzelnBerechnen'))
       {
-        $produktionen = $this->app->DB->SelectArr("SELECT id FROM produktion WHERE auftragid = '$id'");
+        $produktionen = $this->app->DatabaseService->select("SELECT id FROM produktion WHERE auftragid = :id", ['id' => (int)$id]);
         if($produktionen)
         {
           foreach($produktionen as $v)
@@ -6274,7 +6244,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
   public function AuftragAmpel($id,$parsetarget)
   {
 
-    $status = $this->app->DB->Select("SELECT status FROM auftrag WHERE id='$id' LIMIT 1");
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if($status=='abgeschlossen' || $status=='storniert')
     {
@@ -6413,7 +6383,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
     if($entfernen && $auftraegemarkiert){
       $cauftraegemarkiert = (!empty($auftraegemarkiert)?count($auftraegemarkiert):0);
       for($i=0;$i<$cauftraegemarkiert;$i++) {
-        $this->app->DB->Update("UPDATE auftrag SET cronjobkommissionierung = 0 WHERE id = '".$auftraegemarkiert[$i]."' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE auftrag SET cronjobkommissionierung = 0 WHERE id = :id LIMIT 1", ['id' => (int)$auftraegemarkiert[$i]]);
       }
     }
 
@@ -6534,7 +6504,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
           case 'drucken':
             if($drucker){
               foreach ($selectedIds as $v) {
-                $projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id='$v' LIMIT 1");
+                $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$v]);
                 $this->app->erp->BriefpapierHintergrunddisable = !$this->app->erp->BriefpapierHintergrunddisable;
                 if(class_exists('AuftragPDFCustom')){
                   $Brief = new AuftragPDFCustom($this->app, $projekt);
@@ -6579,22 +6549,23 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                                   simulieren: true
                                 );
 
-                        $settings = $this->app->DB->SelectRow("
-                            SELECT 
-                                projekt.autodruckkommissionierscheinstufe1,
-                                projekt.autodruckkommissionierscheinstufe1menge,
-                                adresse.etikett,
-                                adresse.etikettautodruck,
-                                projekt.id as projekt,
-                                auftrag.adresse
-                            FROM projekt 
-                            INNER JOIN auftrag ON projekt.id = auftrag.projekt
-                            INNER JOIN adresse ON adresse.id = auftrag.adresse
-                            WHERE auftrag.id = '".$v."'"
+                        $settings = $this->app->DatabaseService->selectRow(
+                          "SELECT
+                              projekt.autodruckkommissionierscheinstufe1,
+                              projekt.autodruckkommissionierscheinstufe1menge,
+                              adresse.etikett,
+                              adresse.etikettautodruck,
+                              projekt.id as projekt,
+                              auftrag.adresse
+                          FROM projekt
+                          INNER JOIN auftrag ON projekt.id = auftrag.projekt
+                          INNER JOIN adresse ON adresse.id = auftrag.adresse
+                          WHERE auftrag.id = :id",
+                          ['id' => (int)$v]
                         );                      
 
-                        $sql = "
-                            SELECT
+                        $check = $this->app->DatabaseService->selectRow(
+                            "SELECT
                                 k.id,
                                 a.belegnr,
                                 a.adresse
@@ -6613,10 +6584,10 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                             ON
                                 a.id = k.auftrag
                             WHERE
-                                a.id = $v OR al.id = $v
-                            LIMIT 1
-                        ";
-                        $check = $this->app->DB->SelectRow($sql);
+                                a.id = :v OR al.id = :v2
+                            LIMIT 1",
+                            ['v' => (int)$v, 'v2' => (int)$v]
+                        );
 
                         if (!empty($check)) {
                             $this->app->Tpl->addMessage('info',"Bereits Kommissioniert: ".$check['belegnr']);
@@ -6636,14 +6607,14 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                             }
 
                             if ($kommissionierlagerplatz) {
-                                $lagerplatz = $this->app->DB->SelectRow("SELECT kurzbezeichnung, lager FROM lager_platz WHERE id = ".$kommissionierlagerplatz);
+                                $lagerplatz = $this->app->DatabaseService->selectRow("SELECT kurzbezeichnung, lager FROM lager_platz WHERE id = :id", ['id' => (int)$kommissionierlagerplatz]);
                                 $kommentar = "Kommissioniert in ".$lagerplatz['kurzbezeichnung'];
                                 $this->app->erp->AuftragProtokoll($v,'Auftrag kommissioniert in '.$lagerplatz['kurzbezeichnung']);
-                                $this->app->DB->Update("UPDATE auftrag SET standardlager = ".$lagerplatz['lager']." WHERE id = ".$v);
+                                $this->app->DatabaseService->update("UPDATE auftrag SET standardlager = :lager WHERE id = :id", ['lager' => (int)$lagerplatz['lager'], 'id' => (int)$v]);
                             }
 
-                            $settings = $this->app->DB->SelectRow("
-                                SELECT
+                            $settings = $this->app->DatabaseService->selectRow(
+                                "SELECT
                                     projekt.autodruckkommissionierscheinstufe1,
                                     projekt.autodruckkommissionierscheinstufe1menge,
                                     adresse.etikett,
@@ -6653,11 +6624,12 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                                 FROM projekt
                                 INNER JOIN auftrag ON projekt.id = auftrag.projekt
                                 INNER JOIN adresse ON adresse.id = auftrag.adresse
-                                WHERE auftrag.id = '".$v."'"
+                                WHERE auftrag.id = :id",
+                                ['id' => (int)$v]
                             );
 
                             $kid = $this->app->erp->GetNextKommissionierung();
-                            $projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id='$v' LIMIT 1");
+                            $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$v]);
                             $druckercode = $this->app->erp->Projektdaten($projekt,'druckerlogistikstufe1');
                             $this->Kommissionieren(
                                 kommissionierung : $kid,
@@ -6799,7 +6771,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                $produktion = $this->app->erp->LoadModul('produktion');
                $produktion->ProduktionFreigabe($weiteralsproduktion);
                if(!is_int($weiteralsproduktion)){
-                 $auftragsnummer = $this->app->DB->Select("SELECT belegnr FROM auftrag WHERE id = '$v'");
+                 $auftragsnummer = $this->app->DatabaseService->selectValue("SELECT belegnr FROM auftrag WHERE id = :id", ['id' => (int)$v]);
                  $error_artikel .= $auftragsnummer . ', ';
                }
             }
@@ -6823,7 +6795,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
             break;
           case 'freigeben':
             foreach($selectedIds as $v) {
-              if($this->app->DB->Select("SELECT id FROM auftrag WHERE id = '$v' AND belegnr = '' AND status <> 'freigeben' AND status <> 'abgeschlossen' AND status <> 'storniert' LIMIT 1")){
+              if($this->app->DatabaseService->selectValue("SELECT id FROM auftrag WHERE id = :id AND belegnr = '' AND status <> 'freigeben' AND status <> 'abgeschlossen' AND status <> 'storniert' LIMIT 1", ['id' => (int)$v])){
                 $this->AuftragFreigabe($v);
               }
             }
@@ -6840,7 +6812,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
           break;
           case 'mail':
             foreach($selectedIds as $v) {
-              $auftragarr = $this->app->DB->SelectRow("SELECT email,adresse,projekt,name,sprache FROM auftrag WHERE id = '$v' LIMIT 1");
+              $auftragarr = $this->app->DatabaseService->selectRow("SELECT email,adresse,projekt,name,sprache FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$v]);
               $email = '';
               $adresse = 0;
               $projekt = 0;
@@ -6855,7 +6827,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
               }
 
               if($sprache=='' || $email === '') {
-                $adrArr = $this->app->DB->SelectRow("SELECT sprache, email FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
+                $adrArr = $this->app->DatabaseService->selectRow("SELECT sprache, email FROM adresse WHERE id = :id AND geloescht=0 LIMIT 1", ['id' => (int)$adresse]);
                 if($sprache == '') {
                   $sprache = $adrArr['sprache'];
                 }
@@ -6897,13 +6869,16 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                 $this->app->erp->AddDateiStichwort($fileid,'auftrag','auftrag',$v);
                 $this->app->erp->DokumentSend($adresse,'auftrag', $v, 'email',$emailtext['betreff'],$emailtext['text'],array($tmpfile),"","",$projekt,$email, $name);
                 $ansprechpartner = $name." <".$email.">";
-                $this->app->DB->Insert("INSERT INTO dokumente_send
-                    (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,versendet,dateiid) VALUES ('','auftrag',NOW(),'".$this->app->DB->real_escape_string($this->app->User->GetName())."',
-                      '$adresse','$v','email','".$this->app->DB->real_escape_string($emailtext['betreff'])."','".$this->app->DB->real_escape_string($emailtext['text'])."','$projekt','$ansprechpartner',1,'$fileid')");
+                $this->app->DatabaseService->insert(
+                  "INSERT INTO dokumente_send (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,versendet,dateiid) VALUES ('','auftrag',NOW(),:bearbeiter,:adresse,:v,'email',:betreff,:text,:projekt,:ansprechpartner,1,:fileid)",
+                  ['bearbeiter' => $this->app->User->GetName(), 'adresse' => (int)$adresse, 'v' => (int)$v, 'betreff' => $emailtext['betreff'], 'text' => $emailtext['text'], 'projekt' => (int)$projekt, 'ansprechpartner' => $ansprechpartner, 'fileid' => (int)$fileid]
+                );
                 $tmpid = $this->app->DB->GetInsertID();
                 unlink($tmpfile);
-                $this->app->DB->Update("UPDATE auftrag SET versendet=1, versendet_am=NOW(),
-                  versendet_per='email',versendet_durch='".$this->app->DB->real_escape_string($this->app->User->GetName())."',schreibschutz='1' WHERE id='$v' LIMIT 1");
+                $this->app->DatabaseService->update(
+                  "UPDATE auftrag SET versendet=1, versendet_am=NOW(), versendet_per='email', versendet_durch = :durch, schreibschutz='1' WHERE id = :id LIMIT 1",
+                  ['durch' => $this->app->User->GetName(), 'id' => (int)$v]
+                );
                 $this->app->erp->AuftragProtokoll($v,'Auftrag versendet');
               }
             }
@@ -6954,7 +6929,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
           break;
           case 'versendet':
             foreach($selectedIds as $v) {
-              $projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id='$v' LIMIT 1");
+              $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$v]);
               if(class_exists('AuftragPDFCustom'))
               {
                 $Brief = new AuftragPDFCustom($this->app,$projekt);
@@ -6965,8 +6940,8 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
               $tmpfile = $Brief->displayTMP();
               $Brief->ArchiviereDocument();
               $this->app->erp->AuftragProtokoll($v,'Auftrag versendet');
-              $this->app->DB->Update("UPDATE auftrag SET schreibschutz=1, versendet = 1 WHERE id = '$v' LIMIT 1");
-              $this->app->DB->Update("UPDATE auftrag SET status='versendet' WHERE id = '$v' AND status='freigegeben' LIMIT 1");
+              $this->app->DatabaseService->update("UPDATE auftrag SET schreibschutz=1, versendet = 1 WHERE id = :id LIMIT 1", ['id' => (int)$v]);
+              $this->app->DatabaseService->update("UPDATE auftrag SET status='versendet' WHERE id = :id AND status='freigegeben' LIMIT 1", ['id' => (int)$v]);
               unlink($tmpfile);
             }
 
@@ -6976,7 +6951,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
             if($drucker)
             {
               foreach($selectedIds as $v) {
-                $auftragsdaten = $this->app->DB->SelectRow("SELECT projekt, adresse FROM auftrag WHERE id='$v' LIMIT 1");
+                $auftragsdaten = $this->app->DatabaseService->selectRow("SELECT projekt, adresse FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$v]);
                 $projekt = $auftragsdaten['projekt'];
                 $adressId = $auftragsdaten['adresse'];
                 $this->app->erp->BriefpapierHintergrunddisable = !$this->app->erp->BriefpapierHintergrunddisable;
@@ -7012,7 +6987,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
           case 'pdf':
             $tmpfile = [];
             foreach($selectedIds as $v) {
-              $projekt = $this->app->DB->Select("SELECT projekt FROM auftrag WHERE id='$v' LIMIT 1");
+              $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$v]);
               $this->app->erp->BriefpapierHintergrunddisable = !$this->app->erp->BriefpapierHintergrunddisable;
               if(class_exists('AuftragPDFCustom'))
               {
@@ -7245,11 +7220,9 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
     {
       return;
     }
-    $pos_arr = $this->app->DB->SelectArr(
-      sprintf(
-        'SELECT id FROM auftrag_position WHERE auftrag = %d AND explodiert_parent = %d',
-        (int)$order_id, (int)$pos_id
-      )
+    $pos_arr = $this->app->DatabaseService->select(
+      'SELECT id FROM auftrag_position WHERE auftrag = :order_id AND explodiert_parent = :pos_id',
+      ['order_id' => (int)$order_id, 'pos_id' => (int)$pos_id]
     );
     if(empty($pos_arr))
     {
@@ -7282,8 +7255,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
     $submit = $this->app->Secure->GetPOST('submit');
 
 
-    $sql = "SELECT * from auftrag WHERE id = $id";
-    $auftrag_alt = $this->app->DB->SelectArr($sql)[0];
+    $auftrag_alt = $this->app->DatabaseService->selectRow("SELECT * from auftrag WHERE id = :id", ['id' => (int)$id]);
     $msg = "";
 
     if (in_array($auftrag_alt['status'],array('angelegt','freigegeben'))) {
@@ -7292,7 +7264,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
             switch ($submit) {
                 case 'speichern':
                     // Get parameters
-                   
+
                     $teilmenge_input = $this->app->Secure->GetPOSTArray();
 
                     $teilmengen = array();
@@ -7309,21 +7281,18 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                     if (!empty($teilmengen)) {
 
                         // Create new auftrag
-                        $sql = "SELECT * from auftrag WHERE id = $id";
-                	    $auftrag_alt = $this->app->DB->SelectArr($sql)[0];
-                                          
+                        $auftrag_alt = $this->app->DatabaseService->selectRow("SELECT * from auftrag WHERE id = :id", ['id' => (int)$id]);
+
                         // Part auftrag of part auftrag -> select parent
                         $hauptauftrag_id = $auftrag_alt['teillieferungvon'];
                         if ($hauptauftrag_id != 0) {
-                            $sql = "SELECT belegnr FROM auftrag WHERE id = $hauptauftrag_id";
-                            $hauptauftrag_belegnr = $this->app->DB->SelectArr($sql)[0]['belegnr'];
+                            $hauptauftrag_belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM auftrag WHERE id = :id", ['id' => (int)$hauptauftrag_id]);
                         } else {
                             $hauptauftrag_id = $auftrag_alt['id'];
                             $hauptauftrag_belegnr = $auftrag_alt['belegnr'];
                         }
 
-                        $sql = "SELECT MAX(teillieferungnummer) as tpn FROM auftrag WHERE teillieferungvon = $hauptauftrag_id";
-                        $teillieferungnummer = $this->app->DB->SelectArr($sql)[0]['tpn'];
+                        $teillieferungnummer = $this->app->DatabaseService->selectValue("SELECT MAX(teillieferungnummer) as tpn FROM auftrag WHERE teillieferungvon = :id", ['id' => (int)$hauptauftrag_id]);
                         if (empty($teillieferungnummer) || $teillieferungnummer == 0) {
                             $teillieferungnummer = '1';
                         } else {
@@ -7337,31 +7306,30 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                         $auftrag_neu['belegnr'] = $belegnr_neu;
                         $auftrag_neu['teillieferungvon'] = $hauptauftrag_id;
                         $auftrag_neu['teillieferungnummer'] = $teillieferungnummer;
-                   
-                        $id_neu = $this->app->DB->MysqlCopyRow('auftrag','id',$id);  
-                        $sql = "UPDATE auftrag SET belegnr = '$belegnr_neu', teillieferungvon = $hauptauftrag_id, teillieferungnummer = $teillieferungnummer WHERE id = $id_neu";
-                        $this->app->DB->Update($sql);
+
+                        $id_neu = $this->app->DB->MysqlCopyRow('auftrag','id',$id);
+                        $this->app->DatabaseService->update(
+                            "UPDATE auftrag SET belegnr = :belegnr, teillieferungvon = :hauptauftrag_id, teillieferungnummer = :teillieferungnummer WHERE id = :id_neu",
+                            ['belegnr' => $belegnr_neu, 'hauptauftrag_id' => (int)$hauptauftrag_id, 'teillieferungnummer' => (int)$teillieferungnummer, 'id_neu' => (int)$id_neu]
+                        );
 
                         // Adjust quantities
                         foreach ($teilmengen as $teilmenge) {
 
-                            $sql = "SELECT menge FROM auftrag_position WHERE id = ".$teilmenge['posid'];
-                    	    $menge_alt = $this->app->DB->SelectArr($sql)[0]['menge'];
+                            $menge_alt = $this->app->DatabaseService->selectValue("SELECT menge FROM auftrag_position WHERE id = :id", ['id' => (int)$teilmenge['posid']]);
 
                             $menge_neu = $teilmenge['menge'];
                             if ($menge_neu > $menge_alt) {
                                 $menge_neu = $menge_alt;
-                            } 
+                            }
 
                             $menge_reduziert = $menge_alt-$menge_neu;
-                          
-                            $posid_alt = $teilmenge['posid'];
-                            $posid_neu = $this->app->DB->MysqlCopyRow('auftrag_position','id',$posid_alt);  
 
-                            $sql = "UPDATE auftrag_position SET menge = $menge_reduziert WHERE id = $posid_alt";
-                            $this->app->DB->Update($sql);
-                            $sql = "UPDATE auftrag_position SET auftrag = $id_neu, menge = $menge_neu WHERE id = $posid_neu";
-                            $this->app->DB->Update($sql);                                                        
+                            $posid_alt = $teilmenge['posid'];
+                            $posid_neu = $this->app->DB->MysqlCopyRow('auftrag_position','id',$posid_alt);
+
+                            $this->app->DatabaseService->update("UPDATE auftrag_position SET menge = :menge WHERE id = :id", ['menge' => $menge_reduziert, 'id' => (int)$posid_alt]);
+                            $this->app->DatabaseService->update("UPDATE auftrag_position SET auftrag = :auftrag, menge = :menge WHERE id = :id", ['auftrag' => (int)$id_neu, 'menge' => $menge_neu, 'id' => (int)$posid_neu]);                                                        
                         }                    
 
                         $this->app->erp->AuftragProtokoll($id,"Teilauftrag $belegnr_neu erstellt");
@@ -7444,13 +7412,12 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
 
     function Kommissionieren_etiketten_drucken(int $auftragid) {
         // Etiketten
-        $auftrag = $this->app->DB->SelectRow("SELECT adresse, projekt FROM auftrag WHERE id = ".$auftragid." LIMIT 1");
+        $auftrag = $this->app->DatabaseService->selectRow("SELECT adresse, projekt FROM auftrag WHERE id = :id LIMIT 1", ['id' => (int)$auftragid]);
         $result = Array();
         $result['etikettautodruck'] = $this->app->erp->Projektdaten($auftrag['projekt'],'etiketten_kommissionierung');
         $result['etikettendrucker'] = $this->app->erp->Projektdaten($auftrag['projekt'],'etiketten_kommissionierung_drucker');
         $result['etikettart'] = $this->app->erp->Projektdaten($auftrag['projekt'],'etiketten_kommissionierung_art');
-        $sql = "SELECT etikett, etikettautodruck FROM adresse WHERE id =".$auftrag['adresse'];
-        $adresse_settings = $this->app->DB->SelectRow($sql);
+        $adresse_settings = $this->app->DatabaseService->selectRow("SELECT etikett, etikettautodruck FROM adresse WHERE id = :id", ['id' => (int)$auftrag['adresse']]);
         if ($adresse_settings['etikettautodruck']) {
             $result['etikettautodruck'] = true;
             $result['etikettart'] = $adresse_settings['etikett'];
@@ -7484,12 +7451,12 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                 INNER 
                     JOIN artikel art ON ap.artikel = art.id
                 WHERE
-                    a.id = ".$auftragid."
+                    a.id = :auftragid
                     AND
                     ap.menge > 0
                 ORDER BY ap.sort ASC
             ";
-            $positionen = $this->app->DB->SelectArr($sql);
+            $positionen = $this->app->DatabaseService->select($sql, ['auftragid' => (int)$auftragid]);
 
             foreach ($positionen as $position) {
                 $this->app->erp->EtikettenDrucker(

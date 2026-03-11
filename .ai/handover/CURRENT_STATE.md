@@ -1,49 +1,70 @@
 ---
-last_updated: 2026-03-11T00:00:00+01:00
+last_updated: 2026-03-11T23:00:00+01:00
 last_agent: Claude Sonnet 4.6
-active_task: false
+active_task: true
 phase: 1
-subtask: "—"
-progress: 100%
+subtask: "Page-Dateien Migration (unsafe SQL patterns)"
+progress: 83%
 ---
 
 # Aktueller Stand
 
-**Phase 1 (Datenbankzugriff absichern) ist vollständig abgeschlossen.**
+**Phase 1 (Datenbankzugriff absichern) ist IN ARBEIT.**
 
-## Zusammenfassung Phase 1
+## Was ist fertig
 
-### Neuer DatabaseService
+### DatabaseService (100%)
 - `classes/Services/DatabaseService.php` — mysqli-basierter Prepared-Statement-Wrapper
-- Integration in `phpwf/class.application_core.php` via lazy `__get` als `$app->DatabaseService`
-- Named `:param` Parameters als Standard (in Best Practices dokumentiert)
-- Methoden: select, selectRow, selectValue, selectColumn, selectPairs, insert, update, delete, execute, insertArray, updateArray, transactional, validateIdentifier
+- Integration in `phpwf/class.application_core.php` via lazy `__get` und `__isset`
+- Named `:param` Parameters als Standard
+- Docstring-Bug (dots) behoben, `__isset()` für DatabaseService ergänzt
 
-### Migrierte Dateien
+### class.erpapi.php (100%)
+- 2.483 DatabaseService-Calls, alle unsicheren Patterns migriert
+- Verbleibende ~491 legacy DB-Calls sind sicher (statisches SQL)
 
-**Page-Dateien (30+ Dateien, ~500+ Queries):**
-api, artikel, shopimport, auftrag, rechnung, zeiterfassung, ajax, projekt, onlineshops, bestellung, wareneingang, adresse, benutzer, gutschrift, lieferschein, welcome, supportapp, angebot, produktion, datenbankbereinigen, exportvorlage, lager, importvorlage, firmendaten, aufgaben, kalender, adapterbox, shopimporter_shopware, shopimporter_shopify, shopexport, uservorlage, generic
+### Repo-Hygiene
+- 30+ Migrations-Artefakte entfernt (fix_sqli*.php, migrate_*.php, etc.)
 
-**class.erpapi.php (2.483 DatabaseService-Calls):**
-- 12 Batches über mehrere Sessions
-- Alle unsicheren Patterns mit Variable-Interpolation migriert
-- 12 restliche `sprintf('%d', value)` Patterns in DatabaseService-Calls migriert
-- 15 ORDER BY `sprintf('%d', ...)` Patterns in LieferscheinAuslagern migriert (Zeilen ~3048–3330)
-- `$_lpiidOrder = sprintf(...)` in LagerAuslagernRegal migriert
-- Verbleibende legacy DB->Calls sind sicher (statisches SQL, hardcoded Arrays)
-- Keine `sprintf` mit `%d` für Werte mehr in DatabaseService-Calls
+## Was ist FERTIG — Page-Dateien
 
-### Dokumentation
-- `.ai/best-practices/security.md` — Named Parameters als Standard dokumentiert
-- DatabaseService API-Referenz in Best Practices
+| Datei | Unsafe | Status |
+|-------|--------|--------|
+| welcome.php | 14 | Fertig |
+| bestellung.php | 11 | Fertig |
+| benutzer.php | 7 | Fertig |
+| gutschrift.php | 6 | Fertig |
+| angebot.php | 17 | Fertig |
+| wareneingang.php | 60+ | Fertig |
+| onlineshops.php | 60+ | Fertig |
+| supportapp.php | 15 | Fertig |
+| rechnung.php | 35+ | Fertig |
+| lieferschein.php | 30+ | Fertig |
+| auftrag.php | 28+ | Fertig |
+
+## Was FEHLT — Page-Dateien
+
+| Datei | Unsafe | Status |
+|-------|--------|--------|
+| api.php | 316 | Offen |
+| artikel.php | 104 | Offen |
+| adresse.php | 70 | Offen |
+| projekt.php | 64 | Offen |
+| shopimport.php | 55 | Offen |
+| zeiterfassung.php | 52 | Offen |
+| ajax.php | 41 | Offen |
 
 ## Nächster Schritt
-- Phase 2: class.erpapi.php entflechten (Service-Klassen extrahieren)
-- Oder: Verbleibende Page-Dateien mit wenigen unsicheren Patterns migrieren
-- Wartet auf Benutzer-Entscheidung
-
-## Offene Entscheidungen
-- Keine
+- ajax.php (41 Patterns)
+- Dann: zeiterfassung, shopimport, projekt, adresse, artikel, api
 
 ## Geänderte Dateien (uncommitted)
-- Keine (alles committed und gepusht)
+- `classes/Services/DatabaseService.php` — Docstring-Fix
+- `phpwf/class.application_core.php` — __isset() für DatabaseService
+- 30+ Artefakt-Dateien gelöscht
+- `www/pages/wareneingang.php` — 60+ unsafe SQL patterns migriert
+- `www/pages/onlineshops.php` — 60+ unsafe SQL patterns migriert
+- `www/pages/supportapp.php` — 15 unsafe SQL patterns migriert, alle real_escape_string entfernt
+- `www/pages/rechnung.php` — 35+ unsafe SQL patterns migriert, alle real_escape_string entfernt
+- `www/pages/lieferschein.php` — 30+ unsafe SQL patterns migriert, alle real_escape_string entfernt
+- `www/pages/auftrag.php` — 28+ unsafe SQL patterns migriert, alle real_escape_string entfernt
