@@ -363,13 +363,14 @@ class Ajax {
       $module = strtolower($objekt);
       $objekt = $this->app->YUI->dateien_module_objekt_map($objekt);   
 
-      $data = $this->app->DB->SelectRow(
-        "SELECT d.*, s.subjekt 
-        FROM datei AS d 
-        LEFT JOIN datei_stichwoerter AS s ON d.id=s.datei 
-        LEFT JOIN datei_version AS v ON v.datei=d.id 
-        WHERE s.objekt LIKE '$objekt' AND s.parameter='$parameter' AND d.geloescht=0 AND d.id = '$id' 
-        LIMIT 1"
+      $data = $this->app->DatabaseService->selectRow(
+        "SELECT d.*, s.subjekt
+        FROM datei AS d
+        LEFT JOIN datei_stichwoerter AS s ON d.id=s.datei
+        LEFT JOIN datei_version AS v ON v.datei=d.id
+        WHERE s.objekt LIKE :objekt AND s.parameter=:parameter AND d.geloescht=0 AND d.id = :id
+        LIMIT 1",
+        ['objekt' => $objekt, 'parameter' => $parameter, 'id' => $id]
       );
 
       $typen = $this->app->erp->getDateiTypen($module);
@@ -396,7 +397,7 @@ class Ajax {
 
       if($module!='')
       {
-        $tmp = $this->app->DB->SelectArr("SELECT * FROM datei_stichwortvorlagen WHERE modul='$module' ORDER by beschriftung");
+        $tmp = $this->app->DatabaseService->select("SELECT * FROM datei_stichwortvorlagen WHERE modul=:modul ORDER by beschriftung", ['modul' => $module]);
         $ctmp = $tmp?count($tmp):0;
         for($i=0;$i<$ctmp;$i++) {
           $subjekthtml .= '<option value="' . $tmp[$i]['beschriftung'] . '">' . $tmp[$i]['beschriftung'] . '</option>';
@@ -438,7 +439,7 @@ class Ajax {
       $module = strtolower($objekt);
       $objekt = $this->app->YUI->dateien_module_objekt_map($module);      
 
-      $ersteller = $this->app->DB->real_escape_string($this->app->User->GetName());
+      $ersteller = $this->app->User->GetName();
 
       $geschuetzt = $this->app->DatabaseService->selectValue(
         'SELECT geschuetzt FROM datei WHERE id = :id',
@@ -494,14 +495,12 @@ class Ajax {
     $userId = (int)$userId;
     $addressId = 0;
     $shortUserName = '';
-    $user = $userId <= 0?null:$this->app->DB->SelectRow(
-      sprintf(
-        "SELECT u.adresse, u.`username`
-        FROM `user` AS `u` 
-        WHERE u.id=%d 
-        LIMIT 1",
-        $userId
-      )
+    $user = $userId <= 0?null:$this->app->DatabaseService->selectRow(
+      "SELECT u.adresse, u.`username`
+      FROM `user` AS `u`
+      WHERE u.id = :userId
+      LIMIT 1",
+      ['userId' => $userId]
     );
     if(!empty($user)) {
       $addressId = $user['adresse'];
@@ -541,17 +540,15 @@ class Ajax {
     if($addressId <= 0) {
       return null;
     }
-    $fileVersionId = (int)$this->app->DB->Select(
-      sprintf(
-        "SELECT dv.id 
-        FROM `datei_stichwoerter` AS `ds` 
-        INNER JOIN `datei` AS `d` ON ds.datei = d.id 
-        INNER JOIN `datei_version` AS `dv` ON dv.datei = d.id 
-        WHERE d.geloescht = 0 AND objekt LIKE 'Adressen' AND parameter = '%d' AND subjekt LIKE 'Profilbild' 
-        ORDER BY dv.id DESC 
-        LIMIT 1",
-        $addressId
-      )
+    $fileVersionId = (int)$this->app->DatabaseService->selectValue(
+      "SELECT dv.id
+      FROM `datei_stichwoerter` AS `ds`
+      INNER JOIN `datei` AS `d` ON ds.datei = d.id
+      INNER JOIN `datei_version` AS `dv` ON dv.datei = d.id
+      WHERE d.geloescht = 0 AND objekt LIKE 'Adressen' AND parameter = :addressId AND subjekt LIKE 'Profilbild'
+      ORDER BY dv.id DESC
+      LIMIT 1",
+      ['addressId' => $addressId]
     );
     if($fileVersionId <= 0) {
       return null;
@@ -651,7 +648,7 @@ class Ajax {
     $userId = (int)$this->app->Secure->GetGET('id');
     $addressId = $userId === $this->app->User->GetID()
       ?$this->app->User->GetAdresse():
-      (int)$this->app->DB->Select(sprintf('SELECT `adresse` FROM `user` WHERE `id` = %d', $userId));
+      (int)$this->app->DatabaseService->selectValue('SELECT `adresse` FROM `user` WHERE `id` = :userId', ['userId' => $userId]);
     $dateiversion = $this->getFileVersionFromProfileImage($addressId);
     $picture =  $this->getProfilePictureFromFileVersionId($dateiversion);
     if($picture !== null) {
@@ -677,16 +674,14 @@ class Ajax {
 
     if(!empty($cmd) && $id
       && (!in_array($cmd, $cmds) || (in_array($cmd, $cmds) && $this->app->erp->RechteVorhanden($cmd,'dateien')))) {
-      $datei = $this->app->DB->SelectRow(
-        sprintf(
-          "SELECT dv.id, ds.parameter, dv.dateiname 
-          FROM datei_version AS dv 
-          INNER JOIN datei_stichwoerter ds ON ds.datei = dv.datei 
-          WHERE dv.datei = %d AND (ds.objekt like '%s') 
-          ORDER BY  dv.datei DESC, dv.version DESC 
-          LIMIT 1",
-          $id, $cmd
-        )
+      $datei = $this->app->DatabaseService->selectRow(
+        "SELECT dv.id, ds.parameter, dv.dateiname
+        FROM datei_version AS dv
+        INNER JOIN datei_stichwoerter ds ON ds.datei = dv.datei
+        WHERE dv.datei = :id AND (ds.objekt LIKE :cmd)
+        ORDER BY dv.datei DESC, dv.version DESC
+        LIMIT 1",
+        ['id' => $id, 'cmd' => $cmd]
       );
       if(empty($datei)) {
         if ($this->app->erp->Firmendaten('iconset_dunkel')) {
@@ -713,11 +708,10 @@ class Ajax {
           }
         }
         else{
-          $projekt = $this->app->DB->Select(
-            sprintf(
-              'SELECT `projekt` FROM `%s` WHERE `id` = %d LIMIT 1',
-              $module, $datei[0]['parameter']
-            )
+          $safeModule = $this->app->DatabaseService->validateIdentifier($module);
+          $projekt = $this->app->DatabaseService->selectValue(
+            'SELECT `projekt` FROM `' . $safeModule . '` WHERE `id` = :id LIMIT 1',
+            ['id' => (int)$datei['parameter']]
           );
           if(!$this->app->erp->UserProjektRecht($projekt)) {
             if ($this->app->erp->Firmendaten('iconset_dunkel')) {
@@ -1280,7 +1274,7 @@ class Ajax {
 
         $felder = array('a.email','a.name');
         $subwhere = $this->AjaxFilterWhere($termorig,$felder);
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT concat(a.id, ' ',a.name) as name2 FROM adresse a 
+        $arr = $this->app->DB->SelectArr("SELECT DISTINCT concat(a.id, ' ',a.name) as name2 FROM adresse a
         INNER JOIN adresse_rolle ar ON a.id = ar.adresse AND $gruppenwhere AND ar.objekt LIKE 'Gruppe' AND (bis = '0000-00-00' OR bis >= curdate())
         WHERE ($subwhere) AND a.geloescht <> 1 ".$this->app->erp->ProjektRechte('a.projekt')."
         ORDER BY a.name LIMIT 20
@@ -1293,14 +1287,14 @@ class Ajax {
       break;
       
       case "adressename":
-        $arr = $this->app->DB->SelectArr("SELECT a.email, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.kundennummer ".$this->app->erp->ProjektRechte('a2.projekt')." order by ".($filter_projekt?" a2.projekt = '$filter_projekt' DESC, ":"")."  projekt LIMIT 1) as name2 FROM adresse a WHERE (a.email LIKE '%$term%' OR a.name LIKE '%$term%' OR a.name LIKE '%$term2%' OR a.name LIKE '%$term3%') ".$this->app->erp->ProjektRechte('a.projekt')." GROUP by email ORDER BY a.email, name2 LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT a.email, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.kundennummer ".$this->app->erp->ProjektRechte('a2.projekt')." order by ".($filter_projekt?" a2.projekt = :filter_projekt DESC, ":"")."  projekt LIMIT 1) as name2 FROM adresse a WHERE (a.email LIKE :termLike OR a.name LIKE :termLike OR a.name LIKE :term2Like OR a.name LIKE :term3Like) ".$this->app->erp->ProjektRechte('a.projekt')." GROUP by email ORDER BY a.email, name2 LIMIT 20", ['filter_projekt' => $filter_projekt, 'termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = "{$arr[$i]['name2']}";
         }
       break;
       case 'warteschlangename':
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(label, ' ', warteschlange) as result from warteschlangen WHERE label LIKE '%$term%' OR warteschlange LIKE '%$term%' ORDER BY label");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(label, ' ', warteschlange) as result from warteschlangen WHERE label LIKE :termLike OR warteschlange LIKE :termLike ORDER BY label", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = "{$arr[$i]['result']}";
@@ -1318,21 +1312,21 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
          
         if(is_numeric($checkprojekt) && $checkprojekt > 0){
-          $projektid = $this->app->DB->Select("SELECT id FROM projekt WHERE id='" . $checkprojekt . "' LIMIT 1");
+          $projektid = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :checkprojekt LIMIT 1", ['checkprojekt' => $checkprojekt]);
         }
 
         $limit = '';
         if($projektid <=0)
         {
           $checkprojekt = explode(' ',$checkprojekt);
-          $projektid = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='".$checkprojekt[0]."' AND abkuerzung!='' LIMIT 1");
+          $projektid = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :abkuerzung AND abkuerzung != '' LIMIT 1", ['abkuerzung' => $checkprojekt[0]]);
           if($projektid <=0){
             $limit = ' LIMIT 20 ';
           }
         }
 
         if($projektid > 0){
-          $subwhere = " AND p.id='".$projektid."'";
+          $subwhere = " AND p.id=".(int)$projektid;
         } else {
           $subwhere='';
         }
@@ -1360,8 +1354,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         //$arr2 = $this->app->DB->SelectArr("SELECT DISTINCT property_value_from FROM article_property_translation WHERE (property_value_from LIKE '%$term%' OR property_value_from LIKE '%$term2%' OR property_value_from LIKE '%$term3') AND language_from = 'DE' LIMIT 20");
 
 
-        $arr = $this->app->DB->SelectArr("(SELECT DISTINCT wert FROM artikeleigenschaftenwerte WHERE wert LIKE '%$term%' OR wert LIKE '%$term2%' OR wert LIKE '%$term3%' LIMIT 20) UNION 
-          (SELECT DISTINCT property_value_from as wert FROM article_property_translation WHERE (property_value_from LIKE '%$term%' OR property_value_from LIKE '%$term2%' OR property_value_from LIKE '%$term3') AND language_from = 'DE' LIMIT 20) ORDER BY wert");
+        $arr = $this->app->DatabaseService->select("(SELECT DISTINCT wert FROM artikeleigenschaftenwerte WHERE wert LIKE :termLike OR wert LIKE :term2Like OR wert LIKE :term3Like LIMIT 20) UNION
+          (SELECT DISTINCT property_value_from as wert FROM article_property_translation WHERE (property_value_from LIKE :termLike OR property_value_from LIKE :term2Like OR property_value_from LIKE :term3Like) AND language_from = 'DE' LIMIT 20) ORDER BY wert", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
 
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++){
@@ -1369,9 +1363,9 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
         break;
       case "matrixprodukt_uebersetzungen":
-        $arr = $this->app->DB->SelectArr("(SELECT DISTINCT name_from AS name FROM matrix_article_translation WHERE name_from LIKE '%$term%' OR name_from LIKE '%$term2%' OR name_from LIKE '%$term3%' LIMIT 20) 
-        UNION (SELECT DISTINCT name_to AS name FROM matrix_article_translation WHERE name_to LIKE '%$term%' OR name_to LIKE '%$term2%' OR name_to LIKE '%$term3%' LIMIT 20)
-        UNION (SELECT DISTINCT name FROM matrixprodukt_eigenschaftengruppen WHERE name LIKE '%$term%' OR name LIKE '%$term2%' OR name LIKE '%$term3%' LIMIT 20)");
+        $arr = $this->app->DatabaseService->select("(SELECT DISTINCT name_from AS name FROM matrix_article_translation WHERE name_from LIKE :termLike OR name_from LIKE :term2Like OR name_from LIKE :term3Like LIMIT 20)
+        UNION (SELECT DISTINCT name_to AS name FROM matrix_article_translation WHERE name_to LIKE :termLike OR name_to LIKE :term2Like OR name_to LIKE :term3Like LIMIT 20)
+        UNION (SELECT DISTINCT name FROM matrixprodukt_eigenschaftengruppen WHERE name LIKE :termLike OR name LIKE :term2Like OR name LIKE :term3Like LIMIT 20)", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
 
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++){
@@ -1379,9 +1373,9 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
         break;
       case "matrixprodukt_optionen_uebersetzungen":
-        $arr = $this->app->DB->SelectArr("(SELECT DISTINCT name_from AS name FROM matrix_article_options_translation WHERE name_from LIKE '%$term%' OR name_from LIKE '%$term2%' OR name_from LIKE '%$term3%' LIMIT 10)
-        UNION (SELECT DISTINCT name_to AS name FROM matrix_article_options_translation WHERE name_to LIKE '%$term%' OR name_to LIKE '%$term2%' OR name_to LIKE '%$term3%' LIMIT 20)
-        UNION (SELECT DISTINCT name FROM matrixprodukt_eigenschaftenoptionen WHERE name LIKE '%$term%' OR name LIKE '%$term2%' OR name LIKE '%$term3%' LIMIT 20)");
+        $arr = $this->app->DatabaseService->select("(SELECT DISTINCT name_from AS name FROM matrix_article_options_translation WHERE name_from LIKE :termLike OR name_from LIKE :term2Like OR name_from LIKE :term3Like LIMIT 10)
+        UNION (SELECT DISTINCT name_to AS name FROM matrix_article_options_translation WHERE name_to LIKE :termLike OR name_to LIKE :term2Like OR name_to LIKE :term3Like LIMIT 20)
+        UNION (SELECT DISTINCT name FROM matrixprodukt_eigenschaftenoptionen WHERE name LIKE :termLike OR name LIKE :term2Like OR name LIKE :term3Like LIMIT 20)", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
 
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++){
@@ -1422,7 +1416,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
         break;
       case "etiketten":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(id,' ',name) as name2 FROM etiketten WHERE name LIKE '%$term%' OR name LIKE '%$term2%' OR name LIKE '%$term3%' LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(id,' ',name) as name2 FROM etiketten WHERE name LIKE :termLike OR name LIKE :term2Like OR name LIKE :term3Like LIMIT 20", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = "{$arr[$i]['name2']}";
@@ -1460,7 +1454,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
       case "artikelgruppe":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT typ FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND typ LIKE '%$term%' ORDER by typ");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT typ FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND typ LIKE :termLike ORDER by typ", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['typ'];
@@ -1524,7 +1518,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $subwhere = $this->app->erp->ProjektRechte('ar.projekt');
         if($anz)
         {
-          $arr = $this->app->DB->SelectArr("SELECT a.typ,ar.bezeichnung  FROM artikel a LEFT JOIN artikelkategorien ar ON a.typ = concat(ar.id,'_kat') WHERE a.geloescht=0 AND a.intern_gesperrt!=1 AND ar.bezeichnung LIKE '%$term%' ".$subwhere." GROUP BY a.typ ORDER by ar.bezeichnung ");
+          $arr = $this->app->DatabaseService->select("SELECT a.typ,ar.bezeichnung  FROM artikel a LEFT JOIN artikelkategorien ar ON a.typ = concat(ar.id,'_kat') WHERE a.geloescht=0 AND a.intern_gesperrt!=1 AND ar.bezeichnung LIKE :termLike ".$subwhere." GROUP BY a.typ ORDER by ar.bezeichnung ", ['termLike' => '%'.$term.'%']);
           if($arr)
           {
             $typen = false;
@@ -1548,22 +1542,22 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           
           
         } else {
-          $arr = $this->app->DB->SelectArr("SELECT DISTINCT typ FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND typ LIKE '%$term%' ORDER by typ");  
+          $arr = $this->app->DatabaseService->select("SELECT DISTINCT typ FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND typ LIKE :termLike ORDER by typ", ['termLike' => '%'.$term.'%']);
         }
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++){
           $newarr[] = $arr[$i]['typ'];
         }
       break;
-      
+
       case "alleartikelkategorien":
         $anz = $this->app->DB->Select("SELECT count(*) FROM artikelkategorien");
         $subwhere = $this->app->erp->ProjektRechte('ar.projekt');
         if($anz)
         {
-          $arr = $this->app->DB->SelectArr("SELECT ar.bezeichnung as typ  FROM artikelkategorien ar  WHERE ar.bezeichnung LIKE '%$term%' ".$subwhere." AND ar.geloescht <> 1 ORDER by ar.bezeichnung ");
+          $arr = $this->app->DatabaseService->select("SELECT ar.bezeichnung as typ  FROM artikelkategorien ar  WHERE ar.bezeichnung LIKE :termLike ".$subwhere." AND ar.geloescht <> 1 ORDER by ar.bezeichnung ", ['termLike' => '%'.$term.'%']);
         } else {
-          $arr = $this->app->DB->SelectArr("SELECT DISTINCT typ FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND typ LIKE '%$term%' ORDER by typ");  
+          $arr = $this->app->DatabaseService->select("SELECT DISTINCT typ FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND typ LIKE :termLike ORDER by typ", ['termLike' => '%'.$term.'%']);
         }
 
         $carr = !empty($arr)?count($arr):0;
@@ -1591,9 +1585,10 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           $felder[] = 'art.freifeld1';
         }
         $subwhere = $this->AjaxFilterWhere($termorig,$felder);
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(if(art.ean <> '', art.ean, art.nummer),' ',art.name_de) as name FROM artikel art
-        INNER JOIN $doctype"."_position ap ON ap.artikel = art.id AND $doctype = '$doctypeid'
-        WHERE art.geloescht=0 AND  ($subwhere) AND art.geloescht=0 AND art.intern_gesperrt!=1 LIMIT 20");
+        $safeDoctype = $this->app->DatabaseService->validateIdentifier($doctype);
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(if(art.ean <> '', art.ean, art.nummer),' ',art.name_de) as name FROM artikel art
+        INNER JOIN `{$safeDoctype}_position` ap ON ap.artikel = art.id AND ap.`{$safeDoctype}` = :doctypeid
+        WHERE art.geloescht=0 AND  ($subwhere) AND art.geloescht=0 AND art.intern_gesperrt!=1 LIMIT 20", ['doctypeid' => $doctypeid]);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['name'];
@@ -1611,14 +1606,14 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         } else {
             $artikel_freitext1_suche = 'true';
         }
-        $subwhere = $this->AjaxFilterWhere($termorig,$felder);       
-        $sql = "SELECT CONCAT(art.nummer,' ',art.name_de) as name FROM artikel art
-        INNER JOIN $doctype"."_position ap ON ap.artikel = art.id AND $doctype = '$doctypeid'
-        WHERE 
-            art.geloescht=0 AND ($artikel_freitext1_suche) AND art.geloescht=0 AND art.intern_gesperrt!=1 AND 
-            (name_de LIKE '%$term%' OR art.nummer LIKE '%$term%') 
-        LIMIT 20";
-        $arr = $this->app->DB->SelectArr($sql);
+        $subwhere = $this->AjaxFilterWhere($termorig,$felder);
+        $safeDoctype = $this->app->DatabaseService->validateIdentifier($doctype);
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(art.nummer,' ',art.name_de) as name FROM artikel art
+        INNER JOIN `{$safeDoctype}_position` ap ON ap.artikel = art.id AND ap.`{$safeDoctype}` = :doctypeid
+        WHERE
+            art.geloescht=0 AND ($artikel_freitext1_suche) AND art.geloescht=0 AND art.intern_gesperrt!=1 AND
+            (name_de LIKE :termLike OR art.nummer LIKE :termLike)
+        LIMIT 20", ['doctypeid' => $doctypeid, 'termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['name'];
@@ -1644,7 +1639,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
       case "artikeleinheit":
         //$arr = $this->app->DB->SelectArr("SELECT DISTINCT einheit_de FROM artikeleinheit WHERE firma='".$this->app->User->GetFirma()."' AND einheit_de LIKE '%$term%' ORDER by einheit_de");
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT einheit_de FROM artikeleinheit WHERE einheit_de LIKE '%$term%' ORDER by einheit_de");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT einheit_de FROM artikeleinheit WHERE einheit_de LIKE :termLike ORDER by einheit_de", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['einheit_de'];
@@ -1654,7 +1649,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
       case "ihrebestellnummer":
         $adresse = $this->app->Secure->GetGET('adresse');
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT ihrebestellnummer FROM auftrag WHERE ihrebestellnummer LIKE '%$term%' AND adresse='$adresse' ORDER by ihrebestellnummer ");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT ihrebestellnummer FROM auftrag WHERE ihrebestellnummer LIKE :termLike AND adresse = :adresse ORDER by ihrebestellnummer", ['termLike' => '%'.$term.'%', 'adresse' => $adresse]);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['ihrebestellnummer'];
@@ -1663,7 +1658,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
 
       case "accountart":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT art FROM adresse_accounts WHERE art LIKE '%$term%' ORDER by art");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT art FROM adresse_accounts WHERE art LIKE :termLike ORDER by art", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['art'];
@@ -1675,21 +1670,21 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $adressId = $this->app->Secure->GetGET('adresse');
 
         if(is_numeric($adressId) && $adressId > 0){
-          $adressId = $this->app->DB->Select("SELECT id FROM adresse WHERE id = '$adressId' LIMIT 1");
+          $adressId = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE id = :adressId LIMIT 1", ['adressId' => $adressId]);
         }
 
         $limit = '';
 
         if($adressId <= 0){
           $adresse = explode(' ', $adressId);
-          $adressId = $this->app->DB->Select("SELECT id FROM adresse WHERE name = '".$adresse[0]."' AND name != '' LIMIT 1");
+          $adressId = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE name = :name AND name != '' LIMIT 1", ['name' => $adresse[0]]);
           if($adressId <= 0){
             $limit = ' LIMIT 20 ';
           }
         }
 
 //        if($adressId > 0){
-          $subwhere = " AND a.id = '$adressId'";
+          $subwhere = " AND a.id = ".(int)$adressId;
 //        }else{
 //          $subwhere = '';
 //        }
@@ -1709,20 +1704,20 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
       case "ansprechpartner":
         $adresse = $this->app->Secure->GetGET('adresse');
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT name FROM ansprechpartner WHERE adresse='$adresse' AND name LIKE '%$term%' AND geloescht <> 1 ORDER by name");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT name FROM ansprechpartner WHERE adresse = :adresse AND name LIKE :termLike AND geloescht <> 1 ORDER by name", ['adresse' => $adresse, 'termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['name'];
         }
         break;
       case "hersteller":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT hersteller FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND hersteller LIKE '%$term%' ORDER by hersteller");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT hersteller FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND hersteller LIKE :termLike ORDER by hersteller", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['hersteller'];
         break;
       case "rmakategorien":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT bezeichnung FROM rma_vorlagen_kategorien WHERE bezeichnung LIKE '%$term%' ORDER BY bezeichnung");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT bezeichnung FROM rma_vorlagen_kategorien WHERE bezeichnung LIKE :termLike ORDER BY bezeichnung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -1730,7 +1725,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
       case "spedition_einstellungen_feld":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT feld FROM spedition_einstellungen WHERE aktiv=1 AND feld LIKE '%$term%' ORDER by feld");        
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT feld FROM spedition_einstellungen WHERE aktiv=1 AND feld LIKE :termLike ORDER by feld", ['termLike' => '%'.$term.'%']);
           $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['feld'];
@@ -1738,7 +1733,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
   
       case "zeiterfassung_beschreibung":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT beschreibung FROM zeiterfassung_kosten WHERE beschreibung LIKE '%$term%' ORDER by beschreibung");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT beschreibung FROM zeiterfassung_kosten WHERE beschreibung LIKE :termLike ORDER by beschreibung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['beschreibung'];
@@ -1746,7 +1741,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
       case "eigenschaften_vorlagen":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT bezeichnung FROM eigenschaften_vorlagen WHERE bezeichnung LIKE '%$term%' AND aktiv = 1 ORDER BY bezeichnung");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT bezeichnung FROM eigenschaften_vorlagen WHERE bezeichnung LIKE :termLike AND aktiv = 1 ORDER BY bezeichnung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -1754,7 +1749,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
       case "ticketnummer":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(t.schluessel, ' Name: ', t.kunde, ' Betr: ', t.betreff) as schluessel FROM ticket t WHERE t.schluessel LIKE '%$term%' OR t.kunde LIKE '%$term%' OR t.betreff LIKE '%$term%' ORDER BY t.schluessel");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(t.schluessel, ' Name: ', t.kunde, ' Betr: ', t.betreff) as schluessel FROM ticket t WHERE t.schluessel LIKE :termLike OR t.kunde LIKE :termLike OR t.betreff LIKE :termLike ORDER BY t.schluessel", ['termLike' => '%'.$term.'%']);
 
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
@@ -1764,7 +1759,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
       case "abosammelrechnungen":
         $id = $this->app->Secure->GetGET('adresse');        
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(id, ' ', bezeichnung) as bezeichnung FROM adresse_abosammelrechnungen WHERE bezeichnung LIKE '%$term%' AND adresse = '$id' ORDER BY bezeichnung");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(id, ' ', bezeichnung) as bezeichnung FROM adresse_abosammelrechnungen WHERE bezeichnung LIKE :termLike AND adresse = :adresseId ORDER BY bezeichnung", ['termLike' => '%'.$term.'%', 'adresseId' => $id]);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -1773,49 +1768,49 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
 
       case "arbeitsplatzgruppe":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(id, ' ',bezeichnung) as bezeichnung FROM arbeitsplatzgruppen WHERE bezeichnung LIKE '%$term%' AND aktiv = 1 ORDER BY bezeichnung");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(id, ' ',bezeichnung) as bezeichnung FROM arbeitsplatzgruppen WHERE bezeichnung LIKE :termLike AND aktiv = 1 ORDER BY bezeichnung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['bezeichnung'];
         break;
 
       case "artikelarbeitsanweisung_vorlagen":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT bezeichnung FROM artikelarbeitsanweisung_vorlagen WHERE bezeichnung LIKE '%$term%' AND aktiv = 1 ORDER BY bezeichnung");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT bezeichnung FROM artikelarbeitsanweisung_vorlagen WHERE bezeichnung LIKE :termLike AND aktiv = 1 ORDER BY bezeichnung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['bezeichnung'];
         break;
 
       case "artikelfunktionsprotokoll_vorlagen":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT bezeichnung FROM artikelfunktionsprotokoll_vorlagen WHERE bezeichnung LIKE '%$term%' AND aktiv = 1 ORDER BY bezeichnung");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT bezeichnung FROM artikelfunktionsprotokoll_vorlagen WHERE bezeichnung LIKE :termLike AND aktiv = 1 ORDER BY bezeichnung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['bezeichnung'];
         break;
 
       case "fahrtenbuch_kennzeichen":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT kennzeichen FROM fahrtenbuch_fahrzeuge WHERE kennzeichen LIKE '%$term%' AND aktiv = 1 ORDER BY kennzeichen");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT kennzeichen FROM fahrtenbuch_fahrzeuge WHERE kennzeichen LIKE :termLike AND aktiv = 1 ORDER BY kennzeichen", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['kennzeichen'];
         break;   
 
       case "fahrtenbuch_strecke":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT strecke FROM fahrtenbuch_vorlagen WHERE (strecke LIKE '%$term%' OR strecke LIKE '%$term2%' OR strecke LIKE '%$term3%') AND aktiv = 1 ORDER BY strecke");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT strecke FROM fahrtenbuch_vorlagen WHERE (strecke LIKE :termLike OR strecke LIKE :term2Like OR strecke LIKE :term3Like) AND aktiv = 1 ORDER BY strecke", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['strecke'];
         break;
 
       case "verpackungsgruppe":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT verpackungsgruppe FROM verpackungen_details WHERE verpackungsgruppe LIKE '%$term%' ORDER by verpackungsgruppe");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT verpackungsgruppe FROM verpackungen_details WHERE verpackungsgruppe LIKE :termLike ORDER by verpackungsgruppe", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['verpackungsgruppe'];
         break;
 
       case "dropshipping_gruppe":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT bezeichnung FROM dropshipping_gruppe WHERE bezeichnung LIKE '%$term%' ORDER BY bezeichnung");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT bezeichnung FROM dropshipping_gruppe WHERE bezeichnung LIKE :termLike ORDER BY bezeichnung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -1824,14 +1819,14 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
 
       case "layoutvorlage":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(id, ' ', name) AS name FROM layoutvorlagen WHERE name LIKE '%$term%' ORDER BY name");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(id, ' ', name) AS name FROM layoutvorlagen WHERE name LIKE :termLike ORDER BY name", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
  
       case "uservorlage":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT bezeichnung FROM uservorlage WHERE bezeichnung LIKE '%$term%' ORDER by bezeichnung");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT bezeichnung FROM uservorlage WHERE bezeichnung LIKE :termLike ORDER by bezeichnung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -1839,8 +1834,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
 
       case "lagergrund":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT TRIM(REPLACE(REPLACE(referenz,'Umlagern f&uuml; :',''),'Differenz:','')) as ergebnis FROM lager_bewegung WHERE REPLACE(referenz,'Differenz:','') LIKE '%$term%' AND referenz NOT LIKE '%Inventur%' AND referenz NOT LIKE '%Charge%' AND referenz NOT LIKE '%Lieferschein%'
-            AND referenz NOT LIKE '%Manuell%' AND referenz NOT LIKE '%Wareneingang%' AND referenz NOT LIKE '%Lieferungen%' LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT TRIM(REPLACE(REPLACE(referenz,'Umlagern f&uuml; :',''),'Differenz:','')) as ergebnis FROM lager_bewegung WHERE REPLACE(referenz,'Differenz:','') LIKE :termLike AND referenz NOT LIKE '%Inventur%' AND referenz NOT LIKE '%Charge%' AND referenz NOT LIKE '%Lieferschein%'
+            AND referenz NOT LIKE '%Manuell%' AND referenz NOT LIKE '%Wareneingang%' AND referenz NOT LIKE '%Lieferungen%' LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['ergebnis'];
@@ -1855,9 +1850,9 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           $term = str_replace(',','',$term);
         }
 
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(r.belegnr,' ',REPLACE(a.name,',',''),' ',r.internet,' GESAMT: ',r.gesamtsumme,' (Kunde ',a.kundennummer,') vom ',DATE_FORMAT(r.datum,'%d.%m.%Y'),' Status: ',r.status) as name
-            FROM auftrag r LEFT JOIN adresse a ON a.id=r.adresse WHERE r.belegnr!='' 
-            AND (a.name LIKE '%$term%' OR r.belegnr LIKE '%$term%' OR a.kundennummer LIKE '%$term%' OR a.name LIKE '%$term2%' OR a.name LIKE '%$term3%' OR IFNULL(r.internet,'') LIKE '%$term%' ) ORDER by r.belegnr  DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(r.belegnr,' ',REPLACE(a.name,',',''),' ',r.internet,' GESAMT: ',r.gesamtsumme,' (Kunde ',a.kundennummer,') vom ',DATE_FORMAT(r.datum,'%d.%m.%Y'),' Status: ',r.status) as name
+            FROM auftrag r LEFT JOIN adresse a ON a.id=r.adresse WHERE r.belegnr!=''
+            AND (a.name LIKE :termLike OR r.belegnr LIKE :termLike OR a.kundennummer LIKE :termLike OR a.name LIKE :term2Like OR a.name LIKE :term3Like OR IFNULL(r.internet,'') LIKE :termLike) ORDER by r.belegnr  DESC LIMIT 20", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -1871,20 +1866,20 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           $term = str_replace(',','',$term);
         }
 
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(r.belegnr,' Soll:',r.soll,' Ist:',r.ist,' ',' Diff:',(r.soll-r.ist)*-1,' ',
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(r.belegnr,' Soll:',r.soll,' Ist:',r.ist,' ',' Diff:',(r.soll-r.ist)*-1,' ',
           if(r.zahlungszielskonto > 0,if(isnull(r.skontobetrag),CONCAT('SK:',r.zahlungszielskonto,'%(',FORMAT((r.soll/100)*r.zahlungszielskonto,2),') '),concat('SK:',FORMAT(100*r.skontobetrag / r.soll,2),'%(',FORMAT(r.skontobetrag,2),')')),''),REPLACE(a.name,',',''),'(Kunde ',a.kundennummer,') vom ',DATE_FORMAT(r.datum,'%d.%m.%Y'),' Status: ',r.status
           ,IF(IFNULL(ab.internet,'')!='',CONCAT(' Intenet: ',ab.internet),'')
           ) as name
-            FROM rechnung r 
+            FROM rechnung r
             LEFT JOIN auftrag ab ON r.auftragid = ab.id
-            LEFT JOIN adresse a ON a.id=r.adresse 
-            WHERE r.belegnr!='' AND 
-            (a.name LIKE '%$term%' OR r.belegnr LIKE '%$term%' OR a.kundennummer LIKE '%$term%' 
-            OR a.name LIKE '%$term2%' OR a.name LIKE '%$term3%'
-            OR IFNULL(ab.internet,'') LIKE '%$term%'
-            ) 
-            AND r.zahlungsstatus!='bezahlt' 
-            ORDER by r.belegnr DESC LIMIT 20");
+            LEFT JOIN adresse a ON a.id=r.adresse
+            WHERE r.belegnr!='' AND
+            (a.name LIKE :termLike OR r.belegnr LIKE :termLike OR a.kundennummer LIKE :termLike
+            OR a.name LIKE :term2Like OR a.name LIKE :term3Like
+            OR IFNULL(ab.internet,'') LIKE :termLike
+            )
+            AND r.zahlungsstatus!='bezahlt'
+            ORDER by r.belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -1898,8 +1893,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
 
 
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(r.belegnr,' SOLL: ',r.soll,' IST:',r.ist,' ',REPLACE(a.name,',',''),' (Kunde ',a.kundennummer,') vom ',DATE_FORMAT(r.datum,'%d.%m.%Y'),' Status: ',r.status) as name
-            FROM gutschrift r LEFT JOIN adresse a ON a.id=r.adresse WHERE r.belegnr!='' AND (a.name LIKE '%$term%' OR r.belegnr LIKE '%$term%' OR a.kundennummer LIKE '%$term%' OR a.name LIKE '%$term2%' OR a.name LIKE '%$term3%') AND (r.manuell_vorabbezahlt IS NULL OR r.manuell_vorabbezahlt='0000-00-00') ORDER by r.belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(r.belegnr,' SOLL: ',r.soll,' IST:',r.ist,' ',REPLACE(a.name,',',''),' (Kunde ',a.kundennummer,') vom ',DATE_FORMAT(r.datum,'%d.%m.%Y'),' Status: ',r.status) as name
+            FROM gutschrift r LEFT JOIN adresse a ON a.id=r.adresse WHERE r.belegnr!='' AND (a.name LIKE :termLike OR r.belegnr LIKE :termLike OR a.kundennummer LIKE :termLike OR a.name LIKE :term2Like OR a.name LIKE :term3Like) AND (r.manuell_vorabbezahlt IS NULL OR r.manuell_vorabbezahlt='0000-00-00') ORDER by r.belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -1908,16 +1903,16 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
 
       case "gutschrift":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) AS name
-            FROM gutschrift WHERE belegnr != '' AND belegnr != '0' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ".$this->app->erp->ProjektRechte()." ORDER BY belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) AS name
+            FROM gutschrift WHERE belegnr != '' AND belegnr != '0' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ".$this->app->erp->ProjektRechte()." ORDER BY belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
 
       case "angebot":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM angebot WHERE belegnr!='' AND belegnr!='0' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ".$this->app->erp->ProjektRechte("projekt")."  ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM angebot WHERE belegnr!='' AND belegnr!='0' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ".$this->app->erp->ProjektRechte("projekt")."  ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -1935,16 +1930,16 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
             $status = '';
             break;
         }
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM bestellung WHERE belegnr!='0' AND belegnr!='' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ".($status != ''?" AND status = '".$status."' ":'').$this->app->erp->ProjektRechte("projekt")."  ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM bestellung WHERE belegnr!='0' AND belegnr!='' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ".($status != ''?" AND status = :status ":'').$this->app->erp->ProjektRechte("projekt")."  ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%', 'status' => $status]);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
   
       case "preisanfrage":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM preisanfrage WHERE belegnr!='0' AND belegnr!='' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ".$this->app->erp->ProjektRechte("projekt")."  ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM preisanfrage WHERE belegnr!='0' AND belegnr!='' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ".$this->app->erp->ProjektRechte("projekt")."  ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -1952,8 +1947,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
   
 
       case "bestellunggesamtsumme":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',".$this->app->erp->FormatPreis("gesamtsumme",2).",' ',waehrung,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM bestellung WHERE belegnr!='0' AND belegnr!='' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%')  ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',".$this->app->erp->FormatPreis("gesamtsumme",2).",' ',waehrung,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM bestellung WHERE belegnr!='0' AND belegnr!='' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike)  ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -1962,31 +1957,31 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
 
       case "auftrag_position_dienstleistung":
-        $arr = $this->app->DB->SelectArr("SELECT ap.menge, ap.id as auftragspositionid,CONCAT(a.belegnr,'-',ap.sort,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y'),' ',ap.bezeichnung) as name 
-            FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag LEFT JOIN artikel art ON art.id=ap.artikel WHERE art.dienstleistung=1 AND  a.belegnr!='0' AND a.belegnr!='' AND (a.name LIKE '%$term%' OR ap.bezeichnung LIKE '%$term%' OR a.belegnr LIKE '%$term%' OR DATE_FORMAT(a.datum,'%Y-%m-%d') LIKE '%$term%') ORDER by a.belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT ap.menge, ap.id as auftragspositionid,CONCAT(a.belegnr,'-',ap.sort,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y'),' ',ap.bezeichnung) as name
+            FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag LEFT JOIN artikel art ON art.id=ap.artikel WHERE art.dienstleistung=1 AND  a.belegnr!='0' AND a.belegnr!='' AND (a.name LIKE :termLike OR ap.bezeichnung LIKE :termLike OR a.belegnr LIKE :termLike OR DATE_FORMAT(a.datum,'%Y-%m-%d') LIKE :termLike) ORDER by a.belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         foreach($arr as $value){
           $sollzeit = number_format($value['menge'],2);
-          $istzeit = $this->app->DB->Select("SELECT SUM(Time_to_sec(Timediff(z.von,z.bis))/3600) FROM zeiterfassung z WHERE z.auftragpositionid = '{$value['auftragspositionid']}'");
+          $istzeit = $this->app->DatabaseService->selectValue("SELECT SUM(Time_to_sec(Timediff(z.von,z.bis))/3600) FROM zeiterfassung z WHERE z.auftragpositionid = :posId", ['posId' => $value['auftragspositionid']]);
           $newarr[] = $value['name'] . " ( " . number_format(($istzeit*-1),2) . " von " . $sollzeit . ")";
         }
         break;
 
       case "alle_auftrag_positionen":
-        $arr = $this->app->DB->SelectArr("SELECT ap.menge, ap.id as auftragspositionid,CONCAT(a.belegnr,'-',ap.sort,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y'),' ',ap.bezeichnung) as name 
-            FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE a.belegnr!='0' AND a.belegnr!='' AND (a.name LIKE '%$term%' OR ap.bezeichnung LIKE '%$term%' OR a.belegnr LIKE '%$term%' OR DATE_FORMAT(a.datum,'%Y-%m-%d') LIKE '%$term%') ORDER by a.belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT ap.menge, ap.id as auftragspositionid,CONCAT(a.belegnr,'-',ap.sort,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y'),' ',ap.bezeichnung) as name
+            FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE a.belegnr!='0' AND a.belegnr!='' AND (a.name LIKE :termLike OR ap.bezeichnung LIKE :termLike OR a.belegnr LIKE :termLike OR DATE_FORMAT(a.datum,'%Y-%m-%d') LIKE :termLike) ORDER by a.belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         foreach($arr as $value){
           $sollzeit = number_format($value['menge'],2);
-          $istzeit = $this->app->DB->Select("SELECT SUM(Time_to_sec(Timediff(z.von,z.bis))/3600) FROM zeiterfassung z WHERE z.auftragpositionid = '{$value['auftragspositionid']}'");
+          $istzeit = $this->app->DatabaseService->selectValue("SELECT SUM(Time_to_sec(Timediff(z.von,z.bis))/3600) FROM zeiterfassung z WHERE z.auftragpositionid = :posId", ['posId' => $value['auftragspositionid']]);
           $newarr[] = $value['name'] . " ( " . number_format(($istzeit*-1),2) . " von " . $sollzeit . ")";
         }
         break;
 
       case "auftragihrebestellnummer":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y'),
-            if(ihrebestellnummer!='',CONCAT(' ',ihrebestellnummer),''),if(internebezeichnung!='',CONCAT(' ',internebezeichnung),'')) as name 
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y'),
+            if(ihrebestellnummer!='',CONCAT(' ',ihrebestellnummer),''),if(internebezeichnung!='',CONCAT(' ',internebezeichnung),'')) as name
             FROM auftrag WHERE belegnr!='0' AND belegnr!='' AND status!='angelegt' AND
-            (name LIKE '%$term%' OR name LIKE '%$term2%' OR name LIKE '%$term3%' OR ihrebestellnummer LIKE '%$term%' OR internebezeichnung LIKE '%$term%' 
-              OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ORDER by belegnr DESC LIMIT 20");
+            (name LIKE :termLike OR name LIKE :term2Like OR name LIKE :term3Like OR ihrebestellnummer LIKE :termLike OR internebezeichnung LIKE :termLike
+              OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2004,18 +1999,18 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
             $status = '';
             break;
         }
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(a.belegnr,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y')) as name
-            FROM auftrag a LEFT JOIN projekt p ON p.id=a.projekt             WHERE a.belegnr!='0' AND a.belegnr!='' AND (a.name LIKE '%$term%' OR a.belegnr LIKE '%$term%' OR DATE_FORMAT(a.datum,'%Y-%m-%d') LIKE '%$term%') ".$this->app->erp->ProjektRechte()." ".($status != ''?" AND a.status = '".$status."' ":'')." ORDER by a.belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(a.belegnr,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y')) as name
+            FROM auftrag a LEFT JOIN projekt p ON p.id=a.projekt             WHERE a.belegnr!='0' AND a.belegnr!='' AND (a.name LIKE :termLike OR a.belegnr LIKE :termLike OR DATE_FORMAT(a.datum,'%Y-%m-%d') LIKE :termLike) ".$this->app->erp->ProjektRechte()." ".($status != ''?" AND a.status = :status ":'')." ORDER by a.belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%', 'status' => $status]);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
 
       case "auftragmitrechnung":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(a.belegnr,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y')) as name 
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(a.belegnr,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y')) as name
             FROM auftrag a
             INNER JOIN rechnung r ON a.id = r.auftragid AND r.belegnr <> ''
-            WHERE a.belegnr!='0' AND a.belegnr!='' AND (a.name LIKE '%$term%' OR a.belegnr LIKE '%$term%' OR DATE_FORMAT(a.datum,'%Y-%m-%d') LIKE '%$term%') GROUP BY a.id ORDER by a.belegnr DESC LIMIT 20");
+            WHERE a.belegnr!='0' AND a.belegnr!='' AND (a.name LIKE :termLike OR a.belegnr LIKE :termLike OR DATE_FORMAT(a.datum,'%Y-%m-%d') LIKE :termLike) GROUP BY a.id ORDER by a.belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2023,8 +2018,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
         
       case "auftrag_freigegeben":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM auftrag WHERE belegnr!='0' AND belegnr!='' AND status='freigegeben' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM auftrag WHERE belegnr!='0' AND belegnr!='' AND status='freigegeben' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2032,16 +2027,16 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
 
       case "rechnung_freigegeben":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM rechnung WHERE belegnr!='0' AND belegnr!='' AND status='freigegeben' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM rechnung WHERE belegnr!='0' AND belegnr!='' AND status='freigegeben' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
 
       case "produktion":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM produktion WHERE belegnr!='0' AND belegnr!='' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM produktion WHERE belegnr!='0' AND belegnr!='' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2050,31 +2045,31 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
 
       case "arbeitsnachweis":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM arbeitsnachweis WHERE belegnr!='0' AND belegnr!='' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM arbeitsnachweis WHERE belegnr!='0' AND belegnr!='' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
 
       case "lieferschein":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM lieferschein WHERE belegnr!='0' AND belegnr!='' AND  (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM lieferschein WHERE belegnr!='0' AND belegnr!='' AND  (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
 
       case "rechnung":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM rechnung WHERE belegnr!='0' AND belegnr!='' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM rechnung WHERE belegnr!='0' AND belegnr!='' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
       case "retoure":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name 
-            FROM retoure WHERE belegnr!='0' AND belegnr!='' AND (name LIKE '%$term%' OR belegnr LIKE '%$term%' OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE '%$term%') ORDER by belegnr DESC LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',name,' ',DATE_FORMAT(datum,'%d.%m.%Y')) as name
+            FROM retoure WHERE belegnr!='0' AND belegnr!='' AND (name LIKE :termLike OR belegnr LIKE :termLike OR DATE_FORMAT(datum,'%Y-%m-%d') LIKE :termLike) ORDER by belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2082,39 +2077,39 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         
 
       case "rechnungmitauftrag":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(r.belegnr,' ',r.name,' ',DATE_FORMAT(r.datum,'%d.%m.%Y')) as name
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(r.belegnr,' ',r.name,' ',DATE_FORMAT(r.datum,'%d.%m.%Y')) as name
             FROM rechnung r
             INNER JOIN auftrag a ON r.auftragid = a.id
             LEFT JOIN projekt p ON p.id=r.projekt
-            WHERE r.belegnr!='0' AND r.belegnr!='' AND (r.name LIKE '%$term%' OR r.belegnr LIKE '%$term%' OR DATE_FORMAT(r.datum,'%Y-%m-%d') LIKE '%$term%') ".$this->app->erp->ProjektRechte()." GROUP BY r.id ORDER by r.belegnr DESC LIMIT 20");
+            WHERE r.belegnr!='0' AND r.belegnr!='' AND (r.name LIKE :termLike OR r.belegnr LIKE :termLike OR DATE_FORMAT(r.datum,'%Y-%m-%d') LIKE :termLike) ".$this->app->erp->ProjektRechte()." GROUP BY r.id ORDER by r.belegnr DESC LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
 
       case "fibu_objekte":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(".$this->app->erp->FormatUCfirst('typ').",'-',id,'-',info) as objekt FROM fibu_objekte WHERE info LIKE '%$term%' LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(".$this->app->erp->FormatUCfirst('typ').",'-',id,'-',info) as objekt FROM fibu_objekte WHERE info LIKE :termLike LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['objekt'];
         break;
 
       case "fibu_belege":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(".$this->app->erp->FormatUCfirst('typ').",'-',id,'-',info) as objekt FROM fibu_objekte WHERE info LIKE '%$term%' AND typ IN ('auftrag','rechnung','gutschrift','verbindlichkeit') LIMIT 20");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(".$this->app->erp->FormatUCfirst('typ').",'-',id,'-',info) as objekt FROM fibu_objekte WHERE info LIKE :termLike AND typ IN ('auftrag','rechnung','gutschrift','verbindlichkeit') LIMIT 20", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['objekt'];
         break;       
 
       case "vpeartikel":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT vpe FROM verkaufspreise WHERE geloescht=0 AND vpe LIKE '%$term%' ORDER by vpe");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT vpe FROM verkaufspreise WHERE geloescht=0 AND vpe LIKE :termLike ORDER by vpe", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['vpe'];
         break;
 
       case "herstellerlink":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT herstellerlink FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND herstellerlink LIKE '%$term%' ORDER by herstellerlink");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT herstellerlink FROM artikel WHERE geloescht=0 AND intern_gesperrt!=1 AND herstellerlink LIKE :termLike ORDER by herstellerlink", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['herstellerlink'];
@@ -2124,48 +2119,50 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
       case "lagerplatz":
       case "lagerplatzstandardlager":
 
-        $lager = $this->app->Secure->GetGET('lager');
+        $lager = (int)$this->app->Secure->GetGET('lager');
         $lagerwhere = "";
         if (!empty($lager)) {
-          $lagerwhere = "AND lager = '".$lager."'";
+          $lagerwhere = "AND lager = ".$lager;
         }
 
         $onlyStdLager = $filtername === 'lagerplatzstandardlager';
         $stdLager = 0;
         if($rmodule === 'produktionszentrum' || $rmodule==='produktion') {
           if($onlyStdLager > 0 && $rid > 0) {
-            $stdLager = (int)$this->app->DB->Select(
-              sprintf(
-                'SELECT standardlager FROM produktion WHERE id = %d',
-                $rid
-              )
+            $stdLager = (int)$this->app->DatabaseService->selectValue(
+              'SELECT standardlager FROM produktion WHERE id = :rid',
+              ['rid' => $rid]
             );
           }
         }
         $withzwischenlager = $this->app->Secure->GetGET('zwischenlager');
         $withstadardlager = $this->app->Secure->GetGET('withstandardlager');
-        $sql = "SELECT lp.kurzbezeichnung 
-          FROM lager_platz AS lp 
+        $arr = $this->app->DatabaseService->select(
+          "SELECT lp.kurzbezeichnung
+          FROM lager_platz AS lp
           LEFT JOIN lager AS l ON l.id=lp.lager
-          WHERE lp.geloescht=0  AND ('$stdLager' = '0' OR l.id = '$stdLager') 
-            AND lp.kurzbezeichnung LIKE '%$term%' ".$lagerwhere.
-          $this->app->erp->ProjektRechte('l.projekt').' 
-          ORDER BY lp.kurzbezeichnung';
-        $arr = $this->app->DB->SelectArr($sql);
+          WHERE lp.geloescht=0  AND (:stdLager = 0 OR l.id = :stdLager)
+            AND lp.kurzbezeichnung LIKE :termLike ".$lagerwhere.
+          $this->app->erp->ProjektRechte('l.projekt').'
+          ORDER BY lp.kurzbezeichnung',
+          ['stdLager' => $stdLager, 'termLike' => '%'.$term.'%']
+        );
         if(empty($arr)) {
           $arr = [];
         }
         if($withzwischenlager) {
-          $arr2 = $this->app->DB->SelectArr(
-            "SELECT 'Zwischenlager' AS kurzbezeichnung FROM (SELECT 1) a WHERE 'Zwischenlager' LIKE '%$term%' "
+          $arr2 = $this->app->DatabaseService->select(
+            "SELECT 'Zwischenlager' AS kurzbezeichnung FROM (SELECT 1) a WHERE 'Zwischenlager' LIKE :termLike",
+            ['termLike' => '%'.$term.'%']
           );
           if(!empty($arr2)) {
             $arr = array_merge($arr, $arr2);
           }
         }
         if($withstadardlager) {
-          $arr2 = $this->app->DB->SelectArr(
-            "SELECT 'Standardlager' AS kurzbezeichnung FROM (SELECT 1) a WHERE 'Standardlager' LIKE '%$term%'"
+          $arr2 = $this->app->DatabaseService->select(
+            "SELECT 'Standardlager' AS kurzbezeichnung FROM (SELECT 1) a WHERE 'Standardlager' LIKE :termLike",
+            ['termLike' => '%'.$term.'%']
           );
           if(!empty($arr2)) {
             $arr = array_merge($arr, $arr2);
@@ -2186,26 +2183,22 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $bezeichnung = $this->app->Secure->GetGET('bezeichnung');
         $shopid = (int)$this->app->Secure->GetGET('shopid');
         if(empty($articleId) && !empty($article)) {
-          $articleId = $this->app->DB->Select(
-            sprintf(
-              "SELECT id 
-              FROM artikel 
-              WHERE nummer = '%s' AND nummer <> '' AND geloescht <> 1 
-              ORDER BY intern_gesperrt
-              LIMIT 1",
-              $article
-            )
+          $articleId = $this->app->DatabaseService->selectValue(
+            "SELECT id
+            FROM artikel
+            WHERE nummer = :nummer AND nummer <> '' AND geloescht <> 1
+            ORDER BY intern_gesperrt
+            LIMIT 1",
+            ['nummer' => $article]
           );
         }
         if(!empty($articleId)) {
-          $newarr = $this->app->DB->SelectFirstCols(
-            sprintf(
-              "SELECT DISTINCT af.nummer 
-              FROM artikelnummer_fremdnummern AS af 
-              WHERE af.artikel = %d AND af.aktiv = 1 AND (af.bezeichnung = '%s' OR '%s' = '')
-                AND af.nummer LIKE '%%%s%%' AND af.shopid = %d",
-              $articleId, $bezeichnung, $bezeichnung, $term, $shopid
-            )
+          $newarr = $this->app->DatabaseService->selectColumn(
+            "SELECT DISTINCT af.nummer
+            FROM artikelnummer_fremdnummern AS af
+            WHERE af.artikel = :artikelId AND af.aktiv = 1 AND (af.bezeichnung = :bezeichnung OR :bezeichnung = '')
+              AND af.nummer LIKE :termLike AND af.shopid = :shopid",
+            ['artikelId' => (int)$articleId, 'bezeichnung' => $bezeichnung, 'termLike' => '%'.$term.'%', 'shopid' => $shopid]
           );
         }
 
@@ -2225,18 +2218,18 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
         break;
       case "lagerplatzprojekt":
-        $arr = $this->app->DB->SelectArr('SELECT lp.kurzbezeichnung 
+        $arr = $this->app->DatabaseService->select('SELECT lp.kurzbezeichnung
           FROM lager_platz AS lp
           INNER JOIN lager l ON lp.lager = l.id AND (l.projekt = 0 OR (1 '.$this->app->erp->ProjektRechte('l.projekt')."))
-          WHERE lp.geloescht=0 AND lp.kurzbezeichnung LIKE '%$term%' 
-          ORDER BY lp.kurzbezeichnung");
+          WHERE lp.geloescht=0 AND lp.kurzbezeichnung LIKE :termLike
+          ORDER BY lp.kurzbezeichnung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['kurzbezeichnung'];
         }
         break;
       case "sperrlagerplatz":
-        $arr = $this->app->DB->SelectArr("SELECT kurzbezeichnung FROM lager_platz WHERE geloescht=0 AND sperrlager = 1 AND kurzbezeichnung LIKE '%$term%' ORDER by kurzbezeichnung");
+        $arr = $this->app->DatabaseService->select("SELECT kurzbezeichnung FROM lager_platz WHERE geloescht=0 AND sperrlager = 1 AND kurzbezeichnung LIKE :termLike ORDER by kurzbezeichnung", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['kurzbezeichnung'];      
@@ -2247,26 +2240,20 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $doctype = strtolower($this->app->Secure->GetGET('doctype'));
         $join = '';
         if($pos > 0 && $doctype === 'lieferschein' && $artikel > 0) {
-          $seriennummern = $this->app->DB->Select(
-            sprintf(
-              'SELECT `seriennummern` FROM artikel WHERE id = %d LIMIT 1',
-              $artikel
-            )
+          $seriennummern = $this->app->DatabaseService->selectValue(
+            'SELECT `seriennummern` FROM artikel WHERE id = :artikel LIMIT 1',
+            ['artikel' => $artikel]
           );
           if($seriennummern !== 'keine' && !empty($seriennummern)) {
-            $cSn = $this->app->DB->SelectArr(
-              sprintf(
-                'SELECT IFNULL(COUNT(id), 0) 
-                FROM `beleg_chargesnmhd` 
-                WHERE doctype = \'%s\' AND pos = %d AND type = \'sn\' AND wert <> \'\'
-                  ',
-                $doctype, $pos
-              )
+            $cSn = $this->app->DatabaseService->select(
+              'SELECT IFNULL(COUNT(id), 0)
+              FROM `beleg_chargesnmhd`
+              WHERE doctype = :doctype AND pos = :pos AND type = \'sn\' AND wert <> \'\'',
+              ['doctype' => $doctype, 'pos' => $pos]
             );
-            $position = $this->app->DB->SelectRow(
-              sprintf('SELECT menge, geliefert FROM lieferschein_position WHERE id = %d',
-                $pos
-              )
+            $position = $this->app->DatabaseService->selectRow(
+              'SELECT menge, geliefert FROM lieferschein_position WHERE id = :pos',
+              ['pos' => $pos]
             );
             if($cSn == $position['menge']) {
               $join = sprintf(' INNER JOIN 
@@ -2281,16 +2268,15 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
             }
           }
         }
-        $arr = $this->app->DB->SelectArr(
-          sprintf('SELECT lp.kurzbezeichnung 
-            FROM lager_platz AS lp 
-            INNER JOIN lager_platz_inhalt AS lpi on lp.id = lpi.lager_platz 
-            %s
-            WHERE lpi.artikel=%d AND lp.geloescht=0 AND lp.kurzbezeichnung LIKE \'%%%s%%\' 
-            GROUP BY lp.kurzbezeichnung 
+        $arr = $this->app->DatabaseService->select(
+          'SELECT lp.kurzbezeichnung
+            FROM lager_platz AS lp
+            INNER JOIN lager_platz_inhalt AS lpi on lp.id = lpi.lager_platz
+            '.$join.'
+            WHERE lpi.artikel = :artikel AND lp.geloescht=0 AND lp.kurzbezeichnung LIKE :termLike
+            GROUP BY lp.kurzbezeichnung
             ORDER by lp.kurzbezeichnung',
-            $join, $artikel, $term
-          )
+          ['artikel' => $artikel, 'termLike' => '%'.$term.'%']
         );
         if(empty($arr)) {
           break;
@@ -2301,17 +2287,17 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
       case "lager":
-        $arr = $this->app->DB->SelectArr("SELECT l.bezeichnung FROM lager l WHERE l.geloescht=0 AND l.bezeichnung LIKE '%$term%' ".$this->app->erp->ProjektRechte("l.projekt")." ORDER by 1");
+        $arr = $this->app->DatabaseService->select("SELECT l.bezeichnung FROM lager l WHERE l.geloescht=0 AND l.bezeichnung LIKE :termLike ".$this->app->erp->ProjektRechte("l.projekt")." ORDER by 1", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['bezeichnung'];
         break;
 
       case "lager_produktion":
-        $arr = $this->app->DB->SelectArr("SELECT l.bezeichnung FROM lager l JOIN lager_platz lp ON l.id = lp.lager WHERE l.geloescht=0 AND l.bezeichnung LIKE '%$term%' ".$this->app->erp->ProjektRechte("l.projekt")." AND lp.allowproduction = 1 ORDER BY 1");
+        $arr = $this->app->DatabaseService->select("SELECT l.bezeichnung FROM lager l JOIN lager_platz lp ON l.id = lp.lager WHERE l.geloescht=0 AND l.bezeichnung LIKE :termLike ".$this->app->erp->ProjektRechte("l.projekt")." AND lp.allowproduction = 1 ORDER BY 1", ['termLike' => '%'.$term.'%']);
 
         if(empty($arr)){
-          $arr = $this->app->DB->SelectArr("SELECT l.bezeichnung FROM lager l WHERE l.geloescht=0 AND l.bezeichnung LIKE '%$term%' ".$this->app->erp->ProjektRechte("l.projekt")." ORDER by 1");
+          $arr = $this->app->DatabaseService->select("SELECT l.bezeichnung FROM lager l WHERE l.geloescht=0 AND l.bezeichnung LIKE :termLike ".$this->app->erp->ProjektRechte("l.projekt")." ORDER by 1", ['termLike' => '%'.$term.'%']);
         }
 
         $carr = !empty($arr)?count($arr):0;
@@ -2320,8 +2306,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
       case "aktionscode":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(code,' ',beschriftung) as name FROM aktionscode_liste
-            WHERE (beschriftung LIKE '%$term%' OR code LIKE '%$term%' OR code LIKE '%$term2%' OR code LIKE '%$term3%') AND ausblenden!=1 ORDER by code");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(code,' ',beschriftung) as name FROM aktionscode_liste
+            WHERE (beschriftung LIKE :termLike OR code LIKE :termLike OR code LIKE :term2Like OR code LIKE :term3Like) AND ausblenden!=1 ORDER by code", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2331,19 +2317,19 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         if($this->app->DB->Select("SELECT id FROM waehrung_umrechnung LIMIT 1")) {
 
 
-          $arr = $this->app->DB->SelectArr("
+          $arr = $this->app->DatabaseService->select("
             (
               SELECT DISTINCT waehrung_nach as name FROM waehrung_umrechnung
-              WHERE (waehrung_nach LIKE '%$term%') ORDER by waehrung_nach
-            ) 
-            UNION 
+              WHERE (waehrung_nach LIKE :termLike) ORDER by waehrung_nach
+            )
+            UNION
             (
               SELECT DISTINCT waehrung_von as name FROM waehrung_umrechnung
-              WHERE (waehrung_von LIKE '%$term%') 
-            
+              WHERE (waehrung_von LIKE :termLike)
+
               ORDER by waehrung_von
             )
-            ORDER by name");
+            ORDER by name", ['termLike' => '%'.$term.'%']);
         }else{
       
           $waehrungen = $this->app->erp->GetWaehrung();
@@ -2351,13 +2337,10 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           {
             foreach($waehrungen as $v)
             {
-              if($v) {
-                $sqla[] = " (SELECT '$v' as name FROM (SELECT 1) AS X WHERE 
-              '$v' LIKE '%$term%'
-              ) ";
+              if($v && mb_stripos($v, $term) !== false) {
+                $newarr[] = $v;
               }
             }
-            $arr = $this->app->DB->SelectArr("SELECT t.name FROM ( ".implode(' UNION ', $sqla)." ) t ORDER BY name ");
           }
         }
 
@@ -2371,14 +2354,14 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
       case "sachkonto":
         $cmd = $this->app->Secure->GetGET("cmd");
 
-        if($cmd!="") $projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='".$this->app->DB->real_escape_string($cmd)."' LIMIT 1");
+        if($cmd!="") $projekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :cmd LIMIT 1", ['cmd' => $cmd]);
 
-        $checkprojekt = ($projekt > 0?$this->app->DB->Select("SELECT COUNT(id) FROM kontorahmen WHERE projekt='$projekt'"):0);
+        $checkprojekt = ($projekt > 0?$this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM kontorahmen WHERE projekt = :projekt", ['projekt' => $projekt]):0);
         $checkprojektnull = $this->app->DB->Select("SELECT COUNT(id) FROM kontorahmen WHERE projekt=0 OR projekt IS NULL");
 
         if($checkprojekt > 0)
         {
-          $andprojekt = "AND (projekt='$projekt' OR projekt = 0 OR projekt IS NULL)";
+          $andprojekt = "AND (projekt=".(int)$projekt." OR projekt = 0 OR projekt IS NULL)";
         } else {
           if($checkprojektnull>0)
           {
@@ -2389,52 +2372,53 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
 
 
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(sachkonto,' ',beschriftung) as name FROM kontorahmen 
-            WHERE (beschriftung LIKE '%$term%' OR sachkonto LIKE '%$term%' OR sachkonto LIKE '%$term2%' OR sachkonto LIKE '%$term3%' OR beschriftung LIKE '%$term2%' OR beschriftung LIKE '%$term3%') AND ausblenden!=1 $andprojekt ORDER by sachkonto");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(sachkonto,' ',beschriftung) as name FROM kontorahmen
+            WHERE (beschriftung LIKE :termLike OR sachkonto LIKE :termLike OR sachkonto LIKE :term2Like OR sachkonto LIKE :term3Like OR beschriftung LIKE :term2Like OR beschriftung LIKE :term3Like) AND ausblenden!=1 $andprojekt ORDER by sachkonto", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
 
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
       case "sachkonto_aufwendungen":
-         $arr = $this->app->DB->SelectArr("SELECT CONCAT(sachkonto,' ',beschriftung) as name FROM kontorahmen 
-            WHERE art = 1 AND (beschriftung LIKE '%$term%' OR sachkonto LIKE '%$term%' OR sachkonto LIKE '%$term2%' OR sachkonto LIKE '%$term3%' OR beschriftung LIKE '%$term2%' OR beschriftung LIKE '%$term3%') AND ausblenden!=1 $andprojekt ORDER by sachkonto");
+         $arr = $this->app->DatabaseService->select("SELECT CONCAT(sachkonto,' ',beschriftung) as name FROM kontorahmen
+            WHERE art = 1 AND (beschriftung LIKE :termLike OR sachkonto LIKE :termLike OR sachkonto LIKE :term2Like OR sachkonto LIKE :term3Like OR beschriftung LIKE :term2Like OR beschriftung LIKE :term3Like) AND ausblenden!=1 $andprojekt ORDER by sachkonto", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
 
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
       case "lieferbedingungen":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(lieferbedingungen) as name FROM lieferbedingungen
-            WHERE (lieferbedingungen LIKE '%$term%' OR lieferbedingungen LIKE '%$term2%' OR lieferbedingungen LIKE '%$term3%') ORDER by lieferbedingungen");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(lieferbedingungen) as name FROM lieferbedingungen
+            WHERE (lieferbedingungen LIKE :termLike OR lieferbedingungen LIKE :term2Like OR lieferbedingungen LIKE :term3Like) ORDER by lieferbedingungen", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
  
       case "zeiterfassungvorlage":
-        $arr = $this->app->DB->SelectArr("SELECT vorlage as name FROM zeiterfassungvorlage
-            WHERE (vorlage LIKE '%$term%' OR vorlage LIKE '%$term2%' OR vorlage LIKE '%$term3%') AND ausblenden!=1 ORDER by vorlage");
+        $arr = $this->app->DatabaseService->select("SELECT vorlage as name FROM zeiterfassungvorlage
+            WHERE (vorlage LIKE :termLike OR vorlage LIKE :term2Like OR vorlage LIKE :term3Like) AND ausblenden!=1 ORDER by vorlage", ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
         break;
       case "zeiterfassungvorlagedetail":
         $vorlage = $this->app->Secure->GetPOST('vorlage');
-        $arr = $this->app->DB->SelectRow("SELECT vorlagedetail as name, art, projekt, teilprojekt, kunde, abrechnen FROM zeiterfassungvorlage WHERE vorlage = '$vorlage' LIMIT 1");
+        $arr = $this->app->DatabaseService->selectRow("SELECT vorlagedetail as name, art, projekt, teilprojekt, kunde, abrechnen FROM zeiterfassungvorlage WHERE vorlage = :vorlage LIMIT 1", ['vorlage' => $vorlage]);
 
         if($arr['projekt'] > 0){
-          $arr['projekt'] = $this->app->DB->Select("SELECT CONCAT(abkuerzung, ' ', name) FROM projekt WHERE id = '".$arr['projekt']."' LIMIT 1");
+          $arr['projekt'] = $this->app->DatabaseService->selectValue("SELECT CONCAT(abkuerzung, ' ', name) FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => $arr['projekt']]);
         }else{
           $arr['projekt'] = '';
         }
 
         if($arr['teilprojekt'] > 0){
-          $projektid = $this->app->DB->Select("SELECT projekt FROM arbeitspaket WHERE id = '".$arr['teilprojekt']."' LIMIT 1");
+          $projektid = $this->app->DatabaseService->selectValue("SELECT projekt FROM arbeitspaket WHERE id = :teilprojektId LIMIT 1", ['teilprojektId' => $arr['teilprojekt']]);
           if($projektid > 0){
-            $projektabk = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$projektid' LIMIT 1");
+            $projektabk = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => $projektid]);
             if($projektabk != ""){
-              $arr['teilprojekt'] = $this->app->DB->Select("SELECT CONCAT('".$arr['teilprojekt']."', ' ', '$projektabk', ' ', aufgabe) FROM arbeitspaket WHERE id = '".$arr['teilprojekt']."' LIMIT 1");
+              $teilprojektId = $arr['teilprojekt'];
+              $arr['teilprojekt'] = $this->app->DatabaseService->selectValue("SELECT CONCAT(:teilprojektId, ' ', :projektabk, ' ', aufgabe) FROM arbeitspaket WHERE id = :teilprojektId2 LIMIT 1", ['teilprojektId' => $teilprojektId, 'projektabk' => $projektabk, 'teilprojektId2' => $teilprojektId]);
             }else{
               $arr['teilprojekt'] = '';
             }
@@ -2446,7 +2430,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
 
         if($arr['kunde'] > 0){
-          $arr['kunde'] = $this->app->DB->Select("SELECT CONCAT(kundennummer, ' ', name) FROM adresse WHERE id = '".$arr['kunde']."' LIMIT 1");
+          $arr['kunde'] = $this->app->DatabaseService->selectValue("SELECT CONCAT(kundennummer, ' ', name) FROM adresse WHERE id = :kundeId LIMIT 1", ['kundeId' => $arr['kunde']]);
         }
 
         if($arr['art'] == ''){
@@ -2465,12 +2449,12 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $projekt = explode(' ',$this->app->Secure->GetPOST('projekt'));
         $projektkennung = $projekt[0];
 
-        $kunde = $this->app->DB->Select("SELECT CONCAT(a.kundennummer,' ',a.name,' (',a.ort,')') AS kunde FROM projekt p JOIN adresse a ON p.kunde=a.id WHERE a.geloescht=0 AND p.abkuerzung='$projektkennung' LIMIT 1");
+        $kunde = $this->app->DatabaseService->selectValue("SELECT CONCAT(a.kundennummer,' ',a.name,' (',a.ort,')') AS kunde FROM projekt p JOIN adresse a ON p.kunde=a.id WHERE a.geloescht=0 AND p.abkuerzung = :projektkennung LIMIT 1", ['projektkennung' => $projektkennung]);
         $newarr[] = $kunde;
         break;
 
       case "zolltarifnummer":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(nummer,' ',beschreibung) as name FROM zolltarifnummer WHERE beschreibung LIKE '%$term%' OR nummer LIKE '%$term%' ORDER by nummer");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(nummer,' ',beschreibung) as name FROM zolltarifnummer WHERE beschreibung LIKE :termLike OR nummer LIKE :termLike ORDER by nummer", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2489,7 +2473,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
       case "verrechnungsart":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(nummer,' ',beschreibung) as name FROM verrechnungsart WHERE beschreibung LIKE '%$term%' OR nummer LIKE '%$term%' ORDER by nummer");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(nummer,' ',beschreibung) as name FROM verrechnungsart WHERE beschreibung LIKE :termLike OR nummer LIKE :termLike ORDER by nummer", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2504,12 +2488,12 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         if(!$adresse)
         {
           $kunde = explode(' ',$this->app->Secure->GetGET('kunde'));
-          $adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer = '".$kunde[0]."' AND kundennummer <> '' LIMIT 1");
+          $adresse = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = :kundennummer AND kundennummer <> '' LIMIT 1", ['kundennummer' => $kunde[0]]);
         }
-        $beleg = str_replace('kunden','',$filtername);
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',kundennummer,' ',name) as name FROM $beleg WHERE (belegnr <> '') AND (belegnr LIKE '%$term%' OR name LIKE '%$term%' OR kundennummer LIKE '$%term%') AND (status IN ('angelegt','freigegeben','versendet')) 
-        ".($adresse?" AND adresse = '$adresse' ":'')."   ".$this->app->erp->ProjektRechte('projekt')."
-        ORDER by belegnr LIMIT 20");
+        $beleg = $this->app->DatabaseService->validateIdentifier(str_replace('kunden','',$filtername));
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',kundennummer,' ',name) as name FROM `{$beleg}` WHERE (belegnr <> '') AND (belegnr LIKE :termLike OR name LIKE :termLike OR kundennummer LIKE :termLike) AND (status IN ('angelegt','freigegeben','versendet'))
+        ".($adresse?" AND adresse = :adresse ":'')."   ".$this->app->erp->ProjektRechte('projekt')."
+        ORDER by belegnr LIMIT 20", ['termLike' => '%'.$term.'%', 'adresse' => $adresse]);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2520,12 +2504,12 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         if(!$adresse)
         {
           $lieferant = explode(' ',$this->app->Secure->GetGET('lieferant'));
-          $adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer = '".$lieferant[0]."' AND lieferantennummer <> '' LIMIT 1");
+          $adresse = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE lieferantennummer = :lieferantennummer AND lieferantennummer <> '' LIMIT 1", ['lieferantennummer' => $lieferant[0]]);
         }
-        $beleg = str_replace('lieferanten','',$filtername);
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(belegnr,' ',lieferantennummer,' ',name) as name FROM $beleg WHERE (belegnr <> '') AND (belegnr LIKE '%$term%' OR name LIKE '%$term%' OR lieferantennummer LIKE '$%term%') AND (status = 'versendet' OR status = 'freigegeben') 
-        ".($adresse?" AND adresse = '$adresse' ":'')."  ".$this->app->erp->ProjektRechte('projekt')."
-        ORDER by belegnr LIMIT 20" );
+        $beleg = $this->app->DatabaseService->validateIdentifier(str_replace('lieferanten','',$filtername));
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(belegnr,' ',lieferantennummer,' ',name) as name FROM `{$beleg}` WHERE (belegnr <> '') AND (belegnr LIKE :termLike OR name LIKE :termLike OR lieferantennummer LIKE :termLike) AND (status = 'versendet' OR status = 'freigegeben')
+        ".($adresse?" AND adresse = :adresse ":'')."  ".$this->app->erp->ProjektRechte('projekt')."
+        ORDER by belegnr LIMIT 20", ['termLike' => '%'.$term.'%', 'adresse' => $adresse]);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
@@ -2634,23 +2618,20 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
             $artikel = (int)$this->app->Secure->GetGET('artikel');
             $lieferschein = (int)$this->app->Secure->GetGET('lieferschein');
 
-            $sql = "
-                SELECT DISTINCT
-                    s.seriennummer
-                FROM    
-                    seriennummern s
-                INNER JOIN
-                    lieferschein_position lp ON lp.artikel = s.artikel
-                WHERE
-                    s.eingelagert = 1
-                    AND s.seriennummer LIKE '%$term%' 
-                    AND (s.artikel = '$artikel' OR '$artikel' = '0')                 
-                LIMIT 20
-            ";
-
-            //echo($sql);
-
-            $arr = $this->app->DB->SelectArr($sql);
+            $arr = $this->app->DatabaseService->select(
+              "SELECT DISTINCT
+                s.seriennummer
+              FROM
+                seriennummern s
+              INNER JOIN
+                lieferschein_position lp ON lp.artikel = s.artikel
+              WHERE
+                s.eingelagert = 1
+                AND s.seriennummer LIKE :termLike
+                AND (s.artikel = :artikel OR :artikel = 0)
+              LIMIT 20",
+              ['termLike' => '%'.$term.'%', 'artikel' => $artikel]
+            );
 
             $carr = !empty($arr)?count($arr):0;
             for($i = 0; $i < $carr; $i++) {
@@ -2664,9 +2645,10 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $belegid = $this->app->Secure->GetGet('id');
         $artikel = explode(' ',$this->app->Secure->GetPost('vorlage'));
         $artikelnummer = $artikel[0];
-        $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$artikelnummer' AND geloescht=0 LIMIT 1");
+        $artikelid = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer AND geloescht=0 LIMIT 1", ['nummer' => $artikelnummer]);
         if($artikelid){
-          $menge = $this->app->DB->Select('SELECT '.$this->app->erp->FormatMenge('SUM(menge)').' FROM '.$beleg."_position WHERE artikel='$artikelid' AND $beleg='$belegid'");
+          $safeBeleg = $this->app->DatabaseService->validateIdentifier($beleg);
+          $menge = $this->app->DatabaseService->selectValue('SELECT '.$this->app->erp->FormatMenge('SUM(menge)').' FROM `'.$safeBeleg.'_position` WHERE artikel = :artikelid AND `'.$safeBeleg.'` = :belegid', ['artikelid' => $artikelid, 'belegid' => $belegid]);
         }
         if(!$menge){
           $menge='0';
@@ -2743,11 +2725,11 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         {
           if(is_numeric($projekt))
           {
-            $tmp_where = " AND projekt = '$projekt' ";
+            $tmp_where = " AND projekt = ".(int)$projekt;
           }else{
-            $projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE ifnull(geloescht,0) = 0 AND abkuerzung = '$projekt' LIMIT 1");
+            $projekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE ifnull(geloescht,0) = 0 AND abkuerzung = :abkuerzung LIMIT 1", ['abkuerzung' => $projekt]);
             if($projekt){
-              $tmp_where = " AND projekt = '$projekt' ";
+              $tmp_where = " AND projekt = ".(int)$projekt;
             }
           }
         }
@@ -2776,8 +2758,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
       case "artikelstueckliste":
         $stuecklistenartikel = $this->app->Secure->GetGET('stuecklistenartikel');
-        $artikelID = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer = '$stuecklistenartikel'");
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(a.nummer,' ',a.name_de) AS name FROM artikel a LEFT JOIN stueckliste s ON a.id=s.artikel WHERE s.stuecklistevonartikel='$artikelID' AND a.geloescht=0 LIMIT 20");
+        $artikelID = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer", ['nummer' => $stuecklistenartikel]);
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(a.nummer,' ',a.name_de) AS name FROM artikel a LEFT JOIN stueckliste s ON a.id=s.artikel WHERE s.stuecklistevonartikel = :artikelID AND a.geloescht=0 LIMIT 20", ['artikelID' => $artikelID]);
         $carr = !empty($arr)?count($arr):0;
         for($i=0;$i<$carr;$i++){
           $newarr[] = $arr[$i]['name'];
@@ -2789,9 +2771,9 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         if($stuecklistenartikel != ''){
           $stuecklistenartikel = explode(' ', $stuecklistenartikel);
           $stuecklistenartikelnr = $stuecklistenartikel[0];
-          $stuecklistenartikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer = '$stuecklistenartikelnr' LIMIT 1");
+          $stuecklistenartikelid = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer LIMIT 1", ['nummer' => $stuecklistenartikelnr]);
           if($stuecklistenartikelid != "" && $stuecklistenartikelid > 0){
-            $arr = $this->app->DB->SelectArr("SELECT CONCAT(a.nummer, ' ', a.name_de) as name FROM artikel a LEFT JOIN stueckliste s ON a.id = s.artikel WHERE a.geloescht = 0 AND (a.nummer LIKE '%$term%' OR a.name_de LIKE '%$term%' OR a.herstellernummer LIKE '%$term%' OR a.ean LIKE '%$term%') AND a.intern_gesperrt != 1 AND s.stuecklistevonartikel = '$stuecklistenartikelid'");
+            $arr = $this->app->DatabaseService->select("SELECT CONCAT(a.nummer, ' ', a.name_de) as name FROM artikel a LEFT JOIN stueckliste s ON a.id = s.artikel WHERE a.geloescht = 0 AND (a.nummer LIKE :termLike OR a.name_de LIKE :termLike OR a.herstellernummer LIKE :termLike OR a.ean LIKE :termLike) AND a.intern_gesperrt != 1 AND s.stuecklistevonartikel = :stuecklistenartikelid", ['termLike' => '%'.$term.'%', 'stuecklistenartikelid' => $stuecklistenartikelid]);
             $carr = !empty($arr)?count($arr):0;
             for($i = 0; $i < $carr; $i++) {
               $newarr[] = $arr[$i]['name'];
@@ -2803,13 +2785,14 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
       case "partlistfrom":
         $article_id = $this->app->Secure->GetGET('article_id');
-        $arr = $this->app->DB->SelectArr("
-          SELECT concat(art.nummer,' ',art.name_de) as name 
-          FROM artikel art 
-          INNER JOIN (SELECT DISTINCT stuecklistevonartikel FROM stueckliste WHERE artikel = '$article_id') s
+        $arr = $this->app->DatabaseService->select(
+          "SELECT concat(art.nummer,' ',art.name_de) as name
+          FROM artikel art
+          INNER JOIN (SELECT DISTINCT stuecklistevonartikel FROM stueckliste WHERE artikel = :articleId) s
           ON  art.id = s.stuecklistevonartikel
-          WHERE (concat(art.nummer,' ',art.name_de) LIKE '%$term%' OR concat(art.nummer,' ',art.name_de) LIKE '%$term2%' OR concat(art.nummer,' ',art.name_de) LIKE '%$term3%') 
-          ");
+          WHERE (concat(art.nummer,' ',art.name_de) LIKE :termLike OR concat(art.nummer,' ',art.name_de) LIKE :term2Like OR concat(art.nummer,' ',art.name_de) LIKE :term3Like)",
+          ['articleId' => $article_id, 'termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']
+        );
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++){
           $newarr[] = $arr[$i]['name'];
@@ -2821,19 +2804,20 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
       case "artikelnummertagespreise":
         $projekt = $this->app->Secure->GetGET('projekt');
         $artikel_freitext1_suche = $this->app->erp->Firmendaten('artikel_freitext1_suche');
-        $checkprojekt = $this->app->DB->Select("SELECT id FROM projekt WHERE id='$projekt' LIMIT 1");
-        $eigenernummernkreis = $this->app->DB->Select("SELECT eigenernummernkreis FROM projekt WHERE id='$projekt' LIMIT 1");
+        $checkprojekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => $projekt]);
+        $eigenernummernkreis = $this->app->DatabaseService->selectValue("SELECT eigenernummernkreis FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => $projekt]);
 
         if($checkprojekt > 0 && $eigenernummernkreis=='1')
         {
-          $tmp_where = " AND projekt='$checkprojekt' ";
+          $tmp_where = " AND projekt=".(int)$checkprojekt;
         }
         else {
           $tmp_where = '';
         }
 
-
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(nummer,' ',name_de) as name FROM artikel WHERE geloescht=0 AND tagespreise = 1 AND  (nummer LIKE '%$term%' OR name_de LIKE '%$term%' OR nummer LIKE '%$term2%' OR name_de LIKE '%$term2%' OR nummer LIKE '%$term3%' OR name_de LIKE '%$term3%' OR herstellernummer LIKE '%$term%' OR ean LIKE '%$term%' ".($artikel_freitext1_suche?" OR freifeld1 LIKE '%$term%' ":"").") AND geloescht=0 AND intern_gesperrt!=1 $tmp_where LIMIT 20");
+        $freiParams = ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%'];
+        $freiSql = $artikel_freitext1_suche ? " OR freifeld1 LIKE :termLike " : "";
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(nummer,' ',name_de) as name FROM artikel WHERE geloescht=0 AND tagespreise = 1 AND  (nummer LIKE :termLike OR name_de LIKE :termLike OR nummer LIKE :term2Like OR name_de LIKE :term2Like OR nummer LIKE :term3Like OR name_de LIKE :term3Like OR herstellernummer LIKE :termLike OR ean LIKE :termLike $freiSql) AND geloescht=0 AND intern_gesperrt!=1 $tmp_where LIMIT 20", $freiParams);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['name'];
@@ -2926,7 +2910,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $lager_platz = (int)$this->app->Secure->GetGET('lager_platz');
         $lwhere = '';
         if($lager_platz){
-          $lwhere = " and lpi.lager_platz = '$lager_platz' ";
+          $lwhere = " and lpi.lager_platz = ".$lager_platz;
         }
         $felder = array('ar.nummer','ar.name_de','ar.herstellernummer','ar.ean','CONCAT(ar.nummer,\' \',ar.name_de)');
 
@@ -2975,14 +2959,14 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           $eanherstellerscan = $projekArr['eanherstellerscan'];
         }
         if($checkprojekt > 0 && $eigenernummernkreis=='1') {
-          $tmp_where = " AND a.projekt='$checkprojekt' ";
+          $tmp_where = " AND a.projekt=".(int)$checkprojekt;
         }
         else {
           $tmp_where = '';
         }
 
         // besser ist wenn man die immer scannt da es oberflächen gibt wo das projekt nicht angegeben werden kann
-        if(0)//$eanherstellerscan)	
+        if(0)//$eanherstellerscan)
         {
           $arr = $this->app->DB->SelectArr("SELECT DISTINCT CONCAT(a.nummer,' ',a.name_de,if(a.herstellernummer IS NULL OR a.herstellernummer='','',CONCAT(' PN: ',a.herstellernummer))) as name, a.id FROM artikel a WHERE a.geloescht=0 AND a.intern_gesperrt!=1 AND (a.nummer LIKE '%$term%' OR a.name_de LIKE '%$term%' OR CONCAT(a.nummer,' ',a.name_de) LIKE '%$term%' OR CONCAT(a.nummer,' ',a.name_de) LIKE '%$term2%' OR CONCAT(a.nummer,' ',a.name_de) LIKE '%$term3%'   OR a.herstellernummer LIKE '%$term%' OR a.ean LIKE '%$term%'".($artikel_freitext1_suche?" OR freifeld1 LIKE '%$term%' ":"").") $tmp_where ORDER by a.id DESC LIMIT 20");
         }
@@ -2992,13 +2976,13 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
         {
-          $check_lagerartikel = $this->app->DB->Select("SELECT lagerartikel FROM artikel WHERE id='".$arr[$i]['id']."' LIMIT 1");
+          $check_lagerartikel = $this->app->DatabaseService->selectValue("SELECT lagerartikel FROM artikel WHERE id = :artikelId LIMIT 1", ['artikelId' => $arr[$i]['id']]);
           if($check_lagerartikel)
           {
-            $summe_im_lager = (float)$this->app->DB->Select("SELECT ifnull(SUM(li.menge),0) FROM lager_platz_inhalt li LEFT JOIN lager_platz lp ON lp.id=li.lager_platz WHERE li.artikel='".$arr[$i]['id']."'");
+            $summe_im_lager = (float)$this->app->DatabaseService->selectValue("SELECT ifnull(SUM(li.menge),0) FROM lager_platz_inhalt li LEFT JOIN lager_platz lp ON lp.id=li.lager_platz WHERE li.artikel = :artikelId", ['artikelId' => $arr[$i]['id']]);
             if($summe_im_lager > 0)
             {
-              $artikel_reserviert = (float)$this->app->DB->Select("SELECT ifnull(SUM(menge),0) FROM lager_reserviert WHERE artikel='".$arr[$i]['id']."' AND (datum>=NOW() OR datum='0000-00-00')");
+              $artikel_reserviert = (float)$this->app->DatabaseService->selectValue("SELECT ifnull(SUM(menge),0) FROM lager_reserviert WHERE artikel = :artikelId AND (datum>=NOW() OR datum='0000-00-00')", ['artikelId' => $arr[$i]['id']]);
             }else $artikel_reserviert = 0;
           }
           if($check_lagerartikel && ($summe_im_lager - $artikel_reserviert) <= 0) {
@@ -3023,19 +3007,19 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
         $subwhere = $this->AjaxFilterWhere($termorig,$felder);
         $projekt = $this->app->Secure->GetGET('projekt');
-        $checkprojekt = $this->app->DB->Select("SELECT id FROM projekt WHERE id='$projekt' LIMIT 1");
-        $eigenernummernkreis = $this->app->DB->Select("SELECT eigenernummernkreis FROM projekt WHERE id='$projekt' LIMIT 1");
-        $eanherstellerscan = $this->app->DB->Select("SELECT eanherstellerscan FROM projekt WHERE id='$projekt'");
+        $checkprojekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => $projekt]);
+        $eigenernummernkreis = $this->app->DatabaseService->selectValue("SELECT eigenernummernkreis FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => $projekt]);
+        $eanherstellerscan = $this->app->DatabaseService->selectValue("SELECT eanherstellerscan FROM projekt WHERE id = :projektId", ['projektId' => $projekt]);
 
         if($checkprojekt > 0 && $eigenernummernkreis=='1') {
-          $tmp_where = " AND a.projekt='$checkprojekt' ";
+          $tmp_where = " AND a.projekt=".(int)$checkprojekt;
         }
         else {
           $tmp_where = '';
         }
 
         // besser ist wenn man die immer scannt da es oberflächen gibt wo das projekt nicht angegeben werden kann
-        if(0)//$eanherstellerscan)	
+        if(0)//$eanherstellerscan)
         {
           $arr = $this->app->DB->SelectArr("SELECT DISTINCT CONCAT(a.nummer,' ',a.name_de,if(a.herstellernummer IS NULL OR a.herstellernummer='','',CONCAT(' PN: ',a.herstellernummer))) as name FROM artikel a WHERE a.geloescht=0 AND a.intern_gesperrt!=1 AND (a.nummer LIKE '%$term%' OR a.name_de LIKE '%$term%' OR a.herstellernummer LIKE '%$term%' OR CONCAT(a.nummer,' ',a.name_de) LIKE '%$term%' OR CONCAT(a.nummer,' ',a.name_de) LIKE '%$term2%' OR CONCAT(a.nummer,' ',a.name_de) LIKE '%$term3%'   OR a.ean LIKE '%$term%'".($artikel_freitext1_suche?" OR freifeld1 LIKE '%$term%' ":"").") $tmp_where ORDER by a.id DESC LIMIT 20");
         }
@@ -3167,7 +3151,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           AND ($subwhere) $tmp_where LIMIT 20");
 
 	if ($module != "") {
-		if ($this->app->DB->Select("SHOW COLUMNS FROM `$module` LIKE 'realrabatt'")) {
+		$safeModule = $this->app->DatabaseService->validateIdentifier($module);
+		if ($this->app->DatabaseService->selectValue("SHOW COLUMNS FROM `{$safeModule}` LIKE 'realrabatt'")) {
 		        $rabatt = $this->app->DatabaseService->selectValue(
 		          'SELECT realrabatt FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id=? LIMIT 1',
 		          [(int)$sid]
@@ -3178,7 +3163,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $carr = !empty($arr)?count($arr):0;
         for($i=0;$i<$carr;$i++)  {
 
-          $arr[$i]['name'] = $this->app->DB->Select("SELECT CONCAT(nummer,' ',name_de,if(herstellernummer!='',CONCAT(' (PN: ',herstellernummer,')'),'') ) FROM artikel WHERE id='".$arr[$i]['id']."' LIMIT 1");
+          $arr[$i]['name'] = $this->app->DatabaseService->selectValue("SELECT CONCAT(nummer,' ',name_de,if(herstellernummer!='',CONCAT(' (PN: ',herstellernummer,')'),'') ) FROM artikel WHERE id=:id LIMIT 1", ['id' => (int)$arr[$i]['id']]);
           $keinrabatterlaubt = $arr[$i]['keinrabatterlaubt'];//$this->app->DB->Select("SELECT keinrabatterlaubt FROM artikel WHERE id='".$arr[$i]['id']."' LIMIT 1");
           $checkporto = $arr[$i]['porto'];//$this->app->DB->Select("SELECT porto FROM artikel WHERE id='".$arr[$i]['id']."' LIMIT 1");
           $gruppenarray = $this->app->erp->GetGruppen($adresse);
@@ -3223,7 +3208,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           }
           else{
             if($this->app->erp->Firmendaten('lagerbestand_in_auftragspositionen_anzeigen')){
-              $artikel_reserviert = $this->app->DB->Select('SELECT '.$this->app->erp->FormatMenge('SUM(menge)')." FROM lager_reserviert WHERE artikel='".$arr[$i]['id']."' AND (datum>=NOW() OR datum='0000-00-00')");
+              $artikel_reserviert = $this->app->DatabaseService->selectValue('SELECT '.$this->app->erp->FormatMenge('SUM(menge)').' FROM lager_reserviert WHERE artikel=:artikel AND (datum>=NOW() OR datum=\'0000-00-00\')', ['artikel' => (int)$arr[$i]['id']]);
 
               $lager=' (Verfügbar: '.$this->app->erp->LagerFreieMenge($arr[$i]['id']);
               if($artikel_reserviert)
@@ -3279,7 +3264,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
                 
                 if($anzeigebrutto)
                 {
-                  $umsatzsteuer = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id = '".$arr[$i]['id']."' LIMIT 1");
+                  $umsatzsteuer = $this->app->DatabaseService->selectValue("SELECT umsatzsteuer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$arr[$i]['id']]);
                   if($umsatzsteuer == 'ermaessigt')
                   {
                     $vkarr[$vi]['preis'] = round($vkarr[$vi]['preis']* (1+ (float)$this->app->DatabaseService->selectValue('SELECT steuersatz_ermaessigt FROM `' . $this->app->DatabaseService->validateIdentifier($smodule) . '` WHERE id = ? LIMIT 1', [(int)$sid])/100),8);
@@ -3304,9 +3289,9 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
           if($vi==0)
           {
-            $rabattartikel = $this->app->DB->Select("SELECT rabatt FROM artikel WHERE id='".$arr[$i]['id']."' LIMIT 1");
-            $rabattartikel_prozent = $this->app->DB->Select("SELECT rabatt_prozent FROM artikel WHERE id='".$arr[$i]['id']."' LIMIT 1");
-            $arr[$i]['name'] = $this->app->DB->Select("SELECT CONCAT(nummer,' ',name_de,if(herstellernummer!='',CONCAT(' (PN: ',herstellernummer,')'),'')) FROM artikel WHERE id='".$arr[$i]['id']."' LIMIT 1");
+            $rabattartikel = $this->app->DatabaseService->selectValue("SELECT rabatt FROM artikel WHERE id=:id LIMIT 1", ['id' => (int)$arr[$i]['id']]);
+            $rabattartikel_prozent = $this->app->DatabaseService->selectValue("SELECT rabatt_prozent FROM artikel WHERE id=:id LIMIT 1", ['id' => (int)$arr[$i]['id']]);
+            $arr[$i]['name'] = $this->app->DatabaseService->selectValue("SELECT CONCAT(nummer,' ',name_de,if(herstellernummer!='',CONCAT(' (PN: ',herstellernummer,')'),'')) FROM artikel WHERE id=:id LIMIT 1", ['id' => (int)$arr[$i]['id']]);
 
             if($rabattartikel=='1'){
               $newarr[] = $arr[$i]['name'] . " $lager ab Menge 1 | Preis: $rabattartikel_prozent% Rabatt auf Gesamtsumme ohne Porto";
@@ -3353,7 +3338,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
             $artikelnummer_suche_join .=  "AND (v.waehrung='EUR' OR v.waehrung = '')";
           }
           elseif($waehrung != ''){
-            $artikelnummer_suche_join .=  "AND v.waehrung='{$waehrung}'";
+            $artikelnummer_suche_join .=  "AND v.waehrung='".$this->app->DB->real_escape_string($waehrung)."'";
           }
           $artikelnummer_suche_where = '';
         }else{
@@ -3384,12 +3369,12 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
             FROM `artikel` AS `a` 
             LEFT JOIN `projekt` AS `p` ON p.id=a.projekt 
             LEFT JOIN `einkaufspreise` AS `e` ON e.artikel=a.id "
-            .($waehrung!=""?"AND IFNULL(e.waehrung,'$waehrung')='$waehrung'":"").
+            .($waehrung!=""?"AND IFNULL(e.waehrung,'".$this->app->DB->real_escape_string($waehrung)."')='".$this->app->DB->real_escape_string($waehrung)."'":"").
             $artikelnummer_suche_join."
-            WHERE a.tagespreise = 0 AND a.geloescht=0 AND a.intern_gesperrt!=1 
+            WHERE a.tagespreise = 0 AND a.geloescht=0 AND a.intern_gesperrt!=1
             AND (e.gueltig_bis > NOW() OR e.gueltig_bis='0000-00-00' OR e.gueltig_bis IS NULL)".
             $artikelnummer_suche_where."
-            AND (IFNULL(e.adresse,0)='$adresse' OR a.allelieferanten=1) 
+            AND (IFNULL(e.adresse,0)=".(int)$adresse." OR a.allelieferanten=1)
             AND $subwhere "
             .$this->app->erp->ProjektRechte("a.projekt")."
             GROUP BY a.nummer,a.name_de,e.bezeichnunglieferant,e.bestellnummer, e.preis, e.ab_menge, e.vpe LIMIT 20";
@@ -3404,10 +3389,13 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
       case "lieferantname":
         $felder = array('a.nummer','a.name_de','e.bezeichnunglieferant','e.bestellnummer');
         $subwhere = $this->AjaxFilterWhere($termorig,$felder);
-        $arr = $this->app->DB->SelectArr("SELECT name FROM adresse 
-          WHERE geloescht=0 AND a.lieferantennummer!='' AND a.lieferantennummer!='0' AND (
-          name LIKE '%$term%' OR name LIKE '%$term2%' OR name LIKE '%$term3%'
-         ) order by name LIMIT 20");
+        $arr = $this->app->DatabaseService->select(
+          "SELECT name FROM adresse
+          WHERE geloescht=0 AND lieferantennummer!='' AND lieferantennummer!='0' AND (
+          name LIKE :termLike OR name LIKE :term2Like OR name LIKE :term3Like
+         ) order by name LIMIT 20",
+          ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']
+        );
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['name'];
@@ -3430,11 +3418,11 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $subwhere = $this->AjaxFilterWhere($termorig,$felder);
 
         $arr = $this->app->DB->SelectArr("SELECT concat(a.lieferantennummer,' ',a.name, if(a.ort!='', CONCAT(' (',a.ort,')'),'')) as name2
-        FROM adresse a INNER JOIN   (SELECT a2.lieferantennummer,  ".($filter_projekt?"  min( if(a2.projekt = ".$filter_projekt.", -1,a2.projekt))":" min(a2.projekt) ")." as mprojekt FROM adresse a2 
+        FROM adresse a INNER JOIN   (SELECT a2.lieferantennummer,  ".($filter_projekt?"  min( if(a2.projekt = ".(int)$filter_projekt.", -1,a2.projekt))":" min(a2.projekt) ")." as mprojekt FROM adresse a2
         LEFT JOIN adresse_rolle ar2 ON a2.id = ar2.adresse AND ar2.projekt > 0 ".$this->app->erp->ProjektRechte("ar2.projekt")."
               WHERE (a2.geloescht = 0 or isnull(a2.geloescht))  AND a2.lieferantennummer!='' AND a2.lieferantennummer!='0' AND (1 ".$this->app->erp->ProjektRechte("a2.projekt", true, 'a2.vertrieb')." OR not isnull(ar2.id) )
-              group by a2.lieferantennummer) adr  
-              ON a.lieferantennummer = adr.lieferantennummer AND ".($filter_projekt?"(a.projekt = adr.mprojekt OR a.projekt = $filter_projekt AND adr.mprojekt = -1)":"a.projekt = adr.mprojekt")." 
+              group by a2.lieferantennummer) adr
+              ON a.lieferantennummer = adr.lieferantennummer AND ".($filter_projekt?"(a.projekt = adr.mprojekt OR a.projekt = ".(int)$filter_projekt." AND adr.mprojekt = -1)":"a.projekt = adr.mprojekt")."
           LEFT JOIN adresse_rolle ar ON a.id = ar.adresse AND ar.projekt > 0
           WHERE a.geloescht=0 AND a.lieferantennummer!='' AND a.lieferantennummer!='0' AND ($subwhere) 
           group by a.lieferantennummer order by name2 LIMIT 20
@@ -3452,11 +3440,11 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         $subwhere = $this->AjaxFilterWhere($termorig,$felder);
         $artikel = (int)$this->app->Secure->GetGET('artikel');
         $arr = $this->app->DB->SelectArr("SELECT concat(a.lieferantennummer,' ',a.name) as name2
-        FROM adresse a INNER JOIN   (SELECT a2.lieferantennummer,  ".($filter_projekt?"  min( if(a2.projekt = ".$filter_projekt.", -1,a2.projekt))":" min(a2.projekt) ")." as mprojekt FROM adresse a2 
+        FROM adresse a INNER JOIN   (SELECT a2.lieferantennummer,  ".($filter_projekt?"  min( if(a2.projekt = ".(int)$filter_projekt.", -1,a2.projekt))":" min(a2.projekt) ")." as mprojekt FROM adresse a2
               WHERE (a2.geloescht = 0 or isnull(a2.geloescht))  AND a2.lieferantennummer!='' AND a2.lieferantennummer!='0'  ".$this->app->erp->ProjektRechte("a2.projekt", true, 'a2.vertrieb')."
-              group by a2.lieferantennummer) adr  
-              ON a.lieferantennummer = adr.lieferantennummer AND ".($filter_projekt?"(a.projekt = adr.mprojekt OR a.projekt = $filter_projekt AND adr.mprojekt = -1)":"a.projekt = adr.mprojekt")." 
-          INNER JOIN einkaufspreise ep ON ep.adresse = a.id AND ep.artikel = '$artikel'
+              group by a2.lieferantennummer) adr
+              ON a.lieferantennummer = adr.lieferantennummer AND ".($filter_projekt?"(a.projekt = adr.mprojekt OR a.projekt = ".(int)$filter_projekt." AND adr.mprojekt = -1)":"a.projekt = adr.mprojekt")."
+          INNER JOIN einkaufspreise ep ON ep.adresse = a.id AND ep.artikel = ".(int)$artikel."
           WHERE a.geloescht=0 AND a.lieferantennummer!='' AND a.lieferantennummer!='0' AND ($subwhere) ".$this->app->erp->ProjektRechte("a.projekt")." group by a.lieferantennummer order by name2 LIMIT 20
         
         ");
@@ -3484,7 +3472,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         if($gruppe !== ''){
           $gruppeKennziffer = explode(' ', $gruppe);
           $gruppeKennziffer = $gruppeKennziffer[0];
-          $gruppeId = $this->app->DB->Select("SELECT id FROM gruppen WHERE kennziffer = '$gruppeKennziffer' LIMIT 1");
+          $gruppeId = $this->app->DatabaseService->selectValue("SELECT id FROM gruppen WHERE kennziffer = :kennziffer LIMIT 1", ['kennziffer' => $gruppeKennziffer]);
           if($gruppeId > 0){
             $gruppeJoin =
               ' LEFT JOIN `adresse_rolle` AS `ar` ON a.id = ar.adresse';
@@ -3556,7 +3544,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           )
           as name
         
-          FROM adresse a LEFT JOIN projekt p ON p.id=a.projekt WHERE a.geloescht=0 AND ($subwhere) AND ((1 ".$this->app->erp->ProjektRechte().") OR a.id = '".$this->app->User->GetAdresse()."') order by a.name LIMIT 20");
+          FROM adresse a LEFT JOIN projekt p ON p.id=a.projekt WHERE a.geloescht=0 AND ($subwhere) AND ((1 ".$this->app->erp->ProjektRechte().") OR a.id = ".(int)$this->app->User->GetAdresse().") order by a.name LIMIT 20");
           $carr = !empty($arr)?count($arr):0;
           for($i = 0; $i < $carr; $i++) {
             $newarr[] = $arr[$i]['name'];
@@ -3567,8 +3555,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           $felder = array("CONCAT(ifnull(a.kundennummer,''),' ',a.name,if(a.projekt > 0,CONCAT(' (',p.abkuerzung,')'),''),if(ifnull(a.freifeld1,'')!='',CONCAT(' (',a.freifeld1,')'),''))");
 
           $swhere = '';
-          if($aktprojekt && !$this->app->DB->Select("SELECT pos_kundenalleprojekte FROM projekt WHERE id = '$aktprojekt' LIMIT 1") && $this->app->DB->Select("SELECT eigenernummernkreis FROM projekt WHERE id = '$aktprojekt' LIMIT 1")){
-            $swhere = " AND p.id = '$aktprojekt' ";
+          if($aktprojekt && !$this->app->DatabaseService->selectValue("SELECT pos_kundenalleprojekte FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$aktprojekt]) && $this->app->DatabaseService->selectValue("SELECT eigenernummernkreis FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$aktprojekt])){
+            $swhere = " AND p.id = ".(int)$aktprojekt;
           }
           $subwhere = $this->AjaxFilterWhere($termorig,$felder);
           $arr = $this->app->DB->SelectArr("SELECT CONCAT(a.kundennummer,' ',a.name,if(a.projekt > 0,CONCAT(' (',p.abkuerzung,')'),''),if(a.freifeld1!='',CONCAT(' (',a.freifeld1,')'),'')) as name FROM adresse a LEFT JOIN projekt p ON p.id=a.projekt WHERE a.geloescht=0 AND a.kundennummer!='' AND a.kundennummer!='0' AND ($subwhere) $swhere order by name LIMIT 20");
@@ -3666,12 +3654,12 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
             FROM adresse AS a 
             INNER JOIN
               (
-                  SELECT a2.kundennummer,  " . ($filter_projekt ? "  min( if(a2.projekt = " . $filter_projekt . ", -1,a2.projekt))" : " min(a2.projekt) ") . " as mprojekt 
-                  FROM adresse a2 
+                  SELECT a2.kundennummer,  " . ($filter_projekt ? "  min( if(a2.projekt = " . (int)$filter_projekt . ", -1,a2.projekt))" : " min(a2.projekt) ") . " as mprojekt
+                  FROM adresse a2
                   WHERE (a2.geloescht = 0 or isnull(a2.geloescht))  AND a2.kundennummer!='' AND a2.kundennummer!='0'  " . $this->app->erp->ProjektRechte("a2.projekt", true, 'a2.vertrieb') . "
                   group by a2.kundennummer
-              ) AS adr 
-              ON a.kundennummer = adr.kundennummer AND " . ($filter_projekt ? "(a.projekt = adr.mprojekt OR a.projekt = $filter_projekt AND adr.mprojekt = -1)" : "a.projekt = adr.mprojekt") . " 
+              ) AS adr
+              ON a.kundennummer = adr.kundennummer AND " . ($filter_projekt ? "(a.projekt = adr.mprojekt OR a.projekt = " . (int)$filter_projekt . " AND adr.mprojekt = -1)" : "a.projekt = adr.mprojekt") . "
               WHERE ($subwhere) 
           " . $this->app->erp->ProjektRechte('a.projekt', true, 'a.vertrieb') . '
               GROUP BY a.kundennummer, a.name, a.ort
@@ -3751,29 +3739,40 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           if($this->app->Secure->GetGET('kundennummer')!="")
           {
             //$adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer like '".$this->app->Secure->GetGET('kundennummer')."' ".($filter_projekt?" AND (projekt = '$filter_projekt' or projekt = 0) ":"")." LIMIT 1");
-            $adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer like '".$this->app->Secure->GetGET('kundennummer')."' AND geloescht <> 1 ORDER BY ".($filter_projekt?" projekt = '$filter_projekt' DESC,  ":"")." projekt LIMIT 1");
+            $kundennummerFilter = $this->app->Secure->GetGET('kundennummer');
+            $adresse = $this->app->DatabaseService->selectValue(
+              "SELECT id FROM adresse WHERE kundennummer LIKE :kundennummer AND geloescht <> 1 ORDER BY ".($filter_projekt?" projekt = ".(int)$filter_projekt." DESC,  ":"")." projekt LIMIT 1",
+              ['kundennummer' => $kundennummerFilter]
+            );
             if($adresse)
             {
-              $subwhere1 .= " AND adresse = '$adresse' ";
-              $subwhere2 .= " AND id = '$adresse' ";
+              $subwhere1 .= " AND adresse = ".(int)$adresse." ";
+              $subwhere2 .= " AND id = ".(int)$adresse." ";
             }
           }
 
           if($this->app->Secure->GetGET('kd_lf_ma_nummer')!="")
           {
-            $adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE (kundennummer like '".$this->app->Secure->GetGET('kd_lf_ma_nummer')."' OR lieferantennummer like '".$this->app->Secure->GetGET('kd_lf_ma_nummer')."' OR mitarbeiternummer like '".$this->app->Secure->GetGET('kd_lf_ma_nummer')."') AND geloescht <> 1 ORDER BY ".($filter_projekt?" projekt = '$filter_projekt' DESC,  ":"")." projekt LIMIT 1");
+            $kdLfMaNummer = $this->app->Secure->GetGET('kd_lf_ma_nummer');
+            $adresse = $this->app->DatabaseService->selectValue(
+              "SELECT id FROM adresse WHERE (kundennummer LIKE :nummer OR lieferantennummer LIKE :nummer OR mitarbeiternummer LIKE :nummer) AND geloescht <> 1 ORDER BY ".($filter_projekt?" projekt = ".(int)$filter_projekt." DESC,  ":"")." projekt LIMIT 1",
+              ['nummer' => $kdLfMaNummer]
+            );
             if($adresse)
             {
-              $subwhere1 .= " AND adresse = '$adresse' ";
-              $subwhere2 .= " AND id = '$adresse' ";
+              $subwhere1 .= " AND adresse = ".(int)$adresse." ";
+              $subwhere2 .= " AND id = ".(int)$adresse." ";
             }
           }
 
           if($this->app->Secure->GetGET('kd_id')){
-            $adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE id = '".$this->app->Secure->GetGET('kd_id')."' AND geloescht != 1 ORDER BY ".($filter_projekt?"projekt = '$filter_projekt' DESC, ":"")." projekt LIMIT 1");
+            $adresse = $this->app->DatabaseService->selectValue(
+              "SELECT id FROM adresse WHERE id = :id AND geloescht != 1 ORDER BY ".($filter_projekt?"projekt = ".(int)$filter_projekt." DESC, ":"")." projekt LIMIT 1",
+              ['id' => (int)$this->app->Secure->GetGET('kd_id')]
+            );
             if($adresse){
-              $subwhere1 .= " AND adresse = '$adresse' ";
-              $subwhere2 .= " AND id = '$adresse' ";
+              $subwhere1 .= " AND adresse = ".(int)$adresse." ";
+              $subwhere2 .= " AND id = ".(int)$adresse." ";
             }
           }
 
@@ -3784,9 +3783,9 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
           if($limit=="LIMIT 1")
           {
-            $arr = $this->app->DB->SelectArr("SELECT email FROM ansprechpartner WHERE email <> '' $subwhere1 AND geloescht <> 1 order by name $limit");
+            $arr = $this->app->DatabaseService->select("SELECT email FROM ansprechpartner WHERE email <> '' {$subwhere1} AND geloescht <> 1 order by name {$limit}");
           } else {
-            $arr = $this->app->DB->SelectArr("SELECT email FROM ansprechpartner WHERE (name LIKE '%$term%' OR email LIKE '%$term%') and email <> '' $subwhere1 AND geloescht <> 1 order by name $limit");
+            $arr = $this->app->DatabaseService->select("SELECT email FROM ansprechpartner WHERE (name LIKE :termLike OR email LIKE :termLike) and email <> '' {$subwhere1} AND geloescht <> 1 order by name {$limit}", ['termLike' => '%'.$term.'%']);
           }
           $carr = !empty($arr)?count($arr):0;
           for($i = 0; $i < $carr; $i++) {
@@ -3794,11 +3793,11 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           }
           if($limit=="LIMIT 1")
           {
-            $arr = $this->app->DB->SelectArr("SELECT email  FROM adresse WHERE geloescht!='1' $subwhere2 order by name $limit");
+            $arr = $this->app->DatabaseService->select("SELECT email FROM adresse WHERE geloescht!='1' {$subwhere2} order by name {$limit}");
           }
           else
           {
-            $arr = $this->app->DB->SelectArr("SELECT email  FROM adresse WHERE (name LIKE '%$term%' OR email LIKE '%$term%') and email <> '' AND geloescht!='1' $subwhere2 order by name $limit");
+            $arr = $this->app->DatabaseService->select("SELECT email FROM adresse WHERE (name LIKE :termLike OR email LIKE :termLike) and email <> '' AND geloescht!='1' {$subwhere2} order by name {$limit}", ['termLike' => '%'.$term.'%']);
           }
 
           $carr = !empty($arr)?count($arr):0;
@@ -3848,7 +3847,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
         case "shopname":
-        $arr = $this->app->DB->SelectArr("SELECT s.bezeichnung FROM shopexport s LEFT JOIN projekt p ON p.id=s.projekt  WHERE s.bezeichnung LIKE '%$term%' ".$this->app->erp->ProjektRechte("s.projekt"));
+        $arr = $this->app->DatabaseService->select("SELECT s.bezeichnung FROM shopexport s LEFT JOIN projekt p ON p.id=s.projekt  WHERE s.bezeichnung LIKE :termLike ".$this->app->erp->ProjektRechte("s.projekt"), ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -3857,7 +3856,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
         case "shopnameid":
             $fields = $asObject ? 'id, bezeichnung' : "CONCAT(id,' ',bezeichnung) as bezeichnung";
-            $arr = $this->app->DB->SelectArr("SELECT $fields FROM shopexport WHERE bezeichnung LIKE '%$term%' ".$this->app->erp->ProjektRechte("projekt")."");
+            $arr = $this->app->DatabaseService->select("SELECT {$fields} FROM shopexport WHERE bezeichnung LIKE :termLike ".$this->app->erp->ProjektRechte("projekt"), ['termLike' => '%'.$term.'%']);
             if ($asObject) {
                 $newarr = $arr; break;
             }
@@ -3868,8 +3867,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
             break;
 
         case "gruppekennziffer":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(g.kennziffer,' ',g.name) as bezeichnung FROM gruppen g LEFT JOIN projekt p ON p.id=g.projekt  
-          WHERE (g.name LIKE '%$term%' OR g.kennziffer LIKE '%$term%') AND g.aktiv=1 ".$this->app->erp->ProjektRechte());
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(g.kennziffer,' ',g.name) as bezeichnung FROM gruppen g LEFT JOIN projekt p ON p.id=g.projekt
+          WHERE (g.name LIKE :termLike OR g.kennziffer LIKE :termLike) AND g.aktiv=1 ".$this->app->erp->ProjektRechte(), ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -3877,8 +3876,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
         case "preisgruppekennziffer":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(g.kennziffer,' ',g.name) as bezeichnung FROM gruppen g LEFT JOIN projekt p ON p.id=g.projekt  
-          WHERE (g.name LIKE '%$term%' OR g.kennziffer LIKE '%$term%') AND g.art = 'preisgruppe' AND g.aktiv=1 ".$this->app->erp->ProjektRechte());
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(g.kennziffer,' ',g.name) as bezeichnung FROM gruppen g LEFT JOIN projekt p ON p.id=g.projekt
+          WHERE (g.name LIKE :termLike OR g.kennziffer LIKE :termLike) AND g.art = 'preisgruppe' AND g.aktiv=1 ".$this->app->erp->ProjektRechte(), ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -3886,8 +3885,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
         
         case "gruppe":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(g.name,' ',g.kennziffer) as bezeichnung FROM gruppen g 
-          LEFT JOIN projekt p ON p.id=g.projekt WHERE (g.name LIKE '%$term%' OR g.kennziffer LIKE '%$term%') AND g.aktiv=1 ".$this->app->erp->ProjektRechte());
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(g.name,' ',g.kennziffer) as bezeichnung FROM gruppen g
+          LEFT JOIN projekt p ON p.id=g.projekt WHERE (g.name LIKE :termLike OR g.kennziffer LIKE :termLike) AND g.aktiv=1 ".$this->app->erp->ProjektRechte(), ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -3895,7 +3894,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
 
             case "verband":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(name,' ',kennziffer) as bezeichnung FROM gruppen WHERE (name LIKE '%$term%' OR kennziffer LIKE '%$term%') AND aktiv=1 AND art='verband'");
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(name,' ',kennziffer) as bezeichnung FROM gruppen WHERE (name LIKE :termLike OR kennziffer LIKE :termLike) AND aktiv=1 AND art='verband'", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -3943,7 +3942,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
 
       case "projektname":
         $fields = $asObject ? 'p.id, p.abkuerzung, p.name' : "CONCAT(p.abkuerzung,' ',p.name) as name";
-        $arr = $this->app->DB->SelectArr("SELECT $fields FROM projekt p WHERE p.geloescht=0 AND status <> 'abgeschlossen' AND (p.name LIKE '%$term%' OR p.name LIKE '%$term2%' OR p.name LIKE '%$term3%' OR p.abkuerzung LIKE '%$term%' OR p.abkuerzung LIKE '%$term2%' OR p.abkuerzung LIKE '%$term3%') ".$this->app->erp->ProjektRechte());
+        $arr = $this->app->DatabaseService->select("SELECT {$fields} FROM projekt p WHERE p.geloescht=0 AND status <> 'abgeschlossen' AND (p.name LIKE :termLike OR p.name LIKE :term2Like OR p.name LIKE :term3Like OR p.abkuerzung LIKE :termLike OR p.abkuerzung LIKE :term2Like OR p.abkuerzung LIKE :term3Like) ".$this->app->erp->ProjektRechte(), ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'term3Like' => '%'.$term3.'%']);
         if ($asObject) {
           $newarr = $arr;
         } else {
@@ -3955,7 +3954,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
         
       case "uebertragung_account":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(u.id,' ',u.bezeichnung) as name FROM uebertragungen_account u WHERE (u.bezeichnung LIKE '%$term%') ".$this->app->erp->ProjektRechte('u.projekt'));
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(u.id,' ',u.bezeichnung) as name FROM uebertragungen_account u WHERE (u.bezeichnung LIKE :termLike) ".$this->app->erp->ProjektRechte('u.projekt'), ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['name'];
@@ -3963,7 +3962,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
       break;
       case "api_account":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(u.id,' ',u.bezeichnung) as name FROM api_account u WHERE (u.bezeichnung LIKE '%$term%') ".$this->app->erp->ProjektRechte('u.projekt'));
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(u.id,' ',u.bezeichnung) as name FROM api_account u WHERE (u.bezeichnung LIKE :termLike) ".$this->app->erp->ProjektRechte('u.projekt'), ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['name'];
@@ -3971,8 +3970,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
       break;
       case "gruppen_kategorien":
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(g.id,' ',g.bezeichnung) as name FROM gruppen_kategorien g 
-          LEFT JOIN projekt p ON p.id=g.projekt WHERE (g.bezeichnung LIKE '%$term%' ) ".$this->app->erp->ProjektRechte());
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(g.id,' ',g.bezeichnung) as name FROM gruppen_kategorien g
+          LEFT JOIN projekt p ON p.id=g.projekt WHERE (g.bezeichnung LIKE :termLike) ".$this->app->erp->ProjektRechte(), ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['name'];
@@ -3980,8 +3979,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
       case "gruppenkategoriegruppen":
         $kategorie = (int)$this->app->Secure->GetGET('gkid');
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(g.kennziffer,' ',g.name) as bezeichnung FROM gruppen g 
-          LEFT JOIN projekt p ON p.id=g.projekt WHERE kategorie = '$kategorie' AND (g.name LIKE '%$term%' OR g.kennziffer LIKE '%$term%') AND g.aktiv=1 ".$this->app->erp->ProjektRechte());
+        $arr = $this->app->DatabaseService->select("SELECT CONCAT(g.kennziffer,' ',g.name) as bezeichnung FROM gruppen g
+          LEFT JOIN projekt p ON p.id=g.projekt WHERE kategorie = :kategorie AND (g.name LIKE :termLike OR g.kennziffer LIKE :termLike) AND g.aktiv=1 ".$this->app->erp->ProjektRechte(), ['kategorie' => $kategorie, 'termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -3991,9 +3990,9 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
       case "steuersatz":
         $newarr[] = $this->app->erp->Firmendaten('steuersatz_normal').' normal';
         $newarr[] = $this->app->erp->Firmendaten('steuersatz_ermaessigt').' ermaessigt';
-        $newarr = array_merge($newarr, $this->app->DB->SelectFirstCols(
+        $newarr = array_merge($newarr, $this->app->DatabaseService->selectColumn(
           "SELECT concat(
-                `satz`,' ',`bezeichnung`, ' ',`country_code`, 
+                `satz`,' ',`bezeichnung`, ' ',`country_code`,
                 IF(`type` != '', CONCAT(' ',`type`),''),
                 IF(
                     `valid_from` = '0000-00-00' OR `valid_from` IS NULL,
@@ -4005,10 +4004,10 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
                     '',
                     CONCAT(' gültig bis: ',DATE_FORMAT(valid_to,'%d.%m.%Y'))
                 )
-            ) as `name` 
-          FROM `steuersaetze` WHERE `aktiv` = 1 
+            ) as `name`
+          FROM `steuersaetze` WHERE `aktiv` = 1
           AND concat(
-                `satz`,' ',`bezeichnung`,' ',`country_code`, 
+                `satz`,' ',`bezeichnung`,' ',`country_code`,
                 IF(`type` != '', CONCAT(' ',`type`),''),
                 IF(
                     `valid_from` = '0000-00-00' OR `valid_from` IS NULL,
@@ -4020,11 +4019,12 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
                     '',
                     CONCAT(' gültig bis: ',DATE_FORMAT(valid_to,'%d.%m.%Y'))
                 )
-            ) LIKE '%$term%'"
+            ) LIKE :termLike",
+          ['termLike' => '%'.$term.'%']
         ));
         break;
       case "eigenschaftname":
-        $arr = $this->app->DB->SelectArr("SELECT name FROM artikeleigenschaften WHERE geloescht != 1 AND name like '%$term%' ORDER BY name ");
+        $arr = $this->app->DatabaseService->select("SELECT name FROM artikeleigenschaften WHERE geloescht != 1 AND name LIKE :termLike ORDER BY name", ['termLike' => '%'.$term.'%']);
         if($arr)
         {
           $carr = !empty($arr)?count($arr):0;
@@ -4035,16 +4035,22 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
       break;
       case "eigenschaftwert":
-        $eigenschaftname = $this->app->DB->real_escape_string(urldecode($this->app->Secure->GetGET('eigenschaftname')));
+        $eigenschaftname = urldecode($this->app->Secure->GetGET('eigenschaftname'));
         if($eigenschaftname !== '')
         {
-          $arr = $this->app->DB->SelectArr("SELECT DISTINCT aw.wert FROM artikeleigenschaftenwerte aw
-          INNER JOIN artikeleigenschaften ae ON aw.artikeleigenschaften = ae.id AND ae.geloescht <> 1
-          WHERE aw.wert like '%$term%' AND ae.name = '$eigenschaftname' ORDER BY aw.wert ");
+          $arr = $this->app->DatabaseService->select(
+            "SELECT DISTINCT aw.wert FROM artikeleigenschaftenwerte aw
+            INNER JOIN artikeleigenschaften ae ON aw.artikeleigenschaften = ae.id AND ae.geloescht <> 1
+            WHERE aw.wert LIKE :termLike AND ae.name = :eigenschaftname ORDER BY aw.wert",
+            ['termLike' => '%'.$term.'%', 'eigenschaftname' => $eigenschaftname]
+          );
         }else{
-          $arr = $this->app->DB->SelectArr("SELECT DISTINCT aw.wert FROM artikeleigenschaftenwerte aw
-          INNER JOIN artikeleigenschaften ae ON aw.artikeleigenschaften = ae.id AND ae.geloescht <> 1
-          WHERE aw.wert like '%$term%'  ORDER BY aw.wert");
+          $arr = $this->app->DatabaseService->select(
+            "SELECT DISTINCT aw.wert FROM artikeleigenschaftenwerte aw
+            INNER JOIN artikeleigenschaften ae ON aw.artikeleigenschaften = ae.id AND ae.geloescht <> 1
+            WHERE aw.wert LIKE :termLike ORDER BY aw.wert",
+            ['termLike' => '%'.$term.'%']
+          );
         }
         if($arr)
         {
@@ -4057,11 +4063,14 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         
       break;
       case "angebot_position":
-        $angebot = $this->app->Secure->GetGET('angebot');
-        $angebotposition = $this->app->Secure->GetGET('angebotposition');
-        $arr = $this->app->DB->SelectArr("SELECT CONCAT(ap.sort,' ',ap.nummer) as bezeichnung FROM angebot_position ap INNER JOIN angebot a ON ap.angebot = a.id AND a.id = '$angebot'
-          LEFT JOIN projekt p ON p.id=a.projekt 
-          WHERE  (ap.sort LIKE '%$term%' OR ap.nummer LIKE '%$term%') AND ap.explodiert_parent = 0 AND ap.id <> '$angebotposition' ".$this->app->erp->ProjektRechte());
+        $angebot = (int)$this->app->Secure->GetGET('angebot');
+        $angebotposition = (int)$this->app->Secure->GetGET('angebotposition');
+        $arr = $this->app->DatabaseService->select(
+          "SELECT CONCAT(ap.sort,' ',ap.nummer) as bezeichnung FROM angebot_position ap INNER JOIN angebot a ON ap.angebot = a.id AND a.id = :angebot
+          LEFT JOIN projekt p ON p.id=a.projekt
+          WHERE (ap.sort LIKE :termLike OR ap.nummer LIKE :termLike) AND ap.explodiert_parent = 0 AND ap.id <> :angebotposition ".$this->app->erp->ProjektRechte(),
+          ['angebot' => $angebot, 'termLike' => '%'.$term.'%', 'angebotposition' => $angebotposition]
+        );
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -4069,9 +4078,8 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         break;
       break;
       case "supportapp_gruppen":
-      $suchbegriff = $this->app->DB->real_escape_string($this->app->Secure->GetGET('term'));
-      $suchbegriff = trim($suchbegriff);
-        $arr = $this->app->DB->SelectArr("SELECT bezeichnung FROM supportapp_gruppen WHERE aktiv = '1' AND bezeichnung LIKE '%$suchbegriff%'");
+      $suchbegriff = trim($this->app->Secure->GetGET('term'));
+        $arr = $this->app->DatabaseService->select("SELECT bezeichnung FROM supportapp_gruppen WHERE aktiv = '1' AND bezeichnung LIKE :suchbegriffLike", ['suchbegriffLike' => '%'.$suchbegriff.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['bezeichnung'];
@@ -4081,20 +4089,24 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
       case "konto":
         $cmd = $this->app->Secure->GetGET("cmd");
 
-        $arr = $this->app->DB->SelectArr("
-            SELECT CONCAT(kurzbezeichnung,' ',bezeichnung) as name FROM konten
-            WHERE (kurzbezeichnung LIKE '%$term%' OR bezeichnung LIKE '%$term%') ORDER by kurzbezeichnung");
+        $arr = $this->app->DatabaseService->select(
+          "SELECT CONCAT(kurzbezeichnung,' ',bezeichnung) as name FROM konten
+            WHERE (kurzbezeichnung LIKE :termLike OR bezeichnung LIKE :termLike) ORDER by kurzbezeichnung",
+          ['termLike' => '%'.$term.'%']
+        );
 
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++)
           $newarr[] = $arr[$i]['name'];
       break;
       case "datevkonto":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT t.gegenkonto FROM
-        ( (SELECT  concat(datevkonto, ' ',bezeichnung) as gegenkonto FROM konten WHERE datevkonto <> 0 AND datevkonto <> '' AND aktiv = 1)
-          UNION ALL (SELECT  concat(sachkonto, ' ',beschriftung) as gegenkonto FROM kontorahmen WHERE sachkonto <> 0 AND sachkonto <> '' AND ausblenden <> 1)
-        
-        ) t WHERE t.gegenkonto <> '' AND t.gegenkonto LIKE '%$term%' ORDER BY t.gegenkonto");
+        $arr = $this->app->DatabaseService->select(
+          "SELECT DISTINCT t.gegenkonto FROM
+          ( (SELECT concat(datevkonto, ' ',bezeichnung) as gegenkonto FROM konten WHERE datevkonto <> 0 AND datevkonto <> '' AND aktiv = 1)
+            UNION ALL (SELECT concat(sachkonto, ' ',beschriftung) as gegenkonto FROM kontorahmen WHERE sachkonto <> 0 AND sachkonto <> '' AND ausblenden <> 1)
+          ) t WHERE t.gegenkonto <> '' AND t.gegenkonto LIKE :termLike ORDER BY t.gegenkonto",
+          ['termLike' => '%'.$term.'%']
+        );
         $carr = !empty($arr)?count($arr):0;
         for($i=0;$i<$carr;$i++) {
           $newarr[] = $arr[$i]['gegenkonto'];
@@ -4113,11 +4125,11 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
           $subwhere = sprintf(" AND ka.gegenkonto NOT IN ('%s') ", implode("','", $kontorahmenArr));
         }
 
-        $arr = $this->app->DB->SelectArr(
-          "SELECT DISTINCT t.gegenkonto 
+        $arr = $this->app->DatabaseService->select(
+          "SELECT DISTINCT t.gegenkonto
         FROM
         (
-            ( 
+            (
                 SELECT concat(ka.gegenkonto,' ',ka.name) as gegenkonto
                 FROM (SELECT ka2.gegenkonto,a.name
                   FROM kontoauszuege ka2
@@ -4125,61 +4137,63 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
                   WHERE ka2.gegenkonto <> ''
                   GROUP BY ka2.gegenkonto, a.name
                 ) AS ka
-                WHERE ka.gegenkonto <> '' $subwhere
+                WHERE ka.gegenkonto <> '' {$subwhere}
             )
           UNION ALL (
-              SELECT  concat(datevkonto, ' ',bezeichnung) 
-              FROM konten 
+              SELECT concat(datevkonto, ' ',bezeichnung)
+              FROM konten
               WHERE datevkonto <> 0 AND datevkonto <> '' AND aktiv = 1
-              AND concat(datevkonto, ' ',bezeichnung) LIKE '%$term%' 
+              AND concat(datevkonto, ' ',bezeichnung) LIKE :termLike
               )
           UNION ALL (
-              SELECT  concat(sachkonto, ' ',beschriftung) 
-              FROM kontorahmen 
+              SELECT concat(sachkonto, ' ',beschriftung)
+              FROM kontorahmen
               WHERE sachkonto <> 0 AND sachkonto <> '' AND ausblenden <> 1
-                AND concat(sachkonto, ' ',beschriftung) LIKE '%$term%' 
+                AND concat(sachkonto, ' ',beschriftung) LIKE :termLike
               )
-        
-        ) t 
-        WHERE t.gegenkonto <> '' AND t.gegenkonto LIKE '%$term%' 
-        ORDER BY t.gegenkonto"
+
+        ) t
+        WHERE t.gegenkonto <> '' AND t.gegenkonto LIKE :termLike
+        ORDER BY t.gegenkonto",
+          ['termLike' => '%'.$term.'%']
         );
 
 
       if($this->app->DB->error()){
-        $arr = $this->app->DB->SelectArr(
-          "SELECT DISTINCT t.gegenkonto 
+        $arr = $this->app->DatabaseService->select(
+          "SELECT DISTINCT t.gegenkonto
         FROM
         (
-            ( 
+            (
                 SELECT concat(ka.gegenkonto,' ',(
-                    SELECT a.name 
-                    FROM adresse a 
+                    SELECT a.name
+                    FROM adresse a
                     WHERE (a.kundennummer=ka.gegenkonto OR a.lieferantennummer=ka.gegenkonto) AND ka.gegenkonto!='')
-                    ) as gegenkonto 
-                FROM kontoauszuege ka 
-                LEFT JOIN kontorahmen kr 
-                    ON (ka.gegenkonto = kr.sachkonto OR ka.gegenkonto = concat(kr.sachkonto, ' ',kr.beschriftung)) 
+                    ) as gegenkonto
+                FROM kontoauszuege ka
+                LEFT JOIN kontorahmen kr
+                    ON (ka.gegenkonto = kr.sachkonto OR ka.gegenkonto = concat(kr.sachkonto, ' ',kr.beschriftung))
                            AND kr.ausblenden <> 1
                 WHERE isnull(kr.id) AND ka.gegenkonto <> ''
                 GROUP BY ka.gegenkonto
             )
           UNION ALL (
-              SELECT  concat(datevkonto, ' ',bezeichnung) 
-              FROM konten 
+              SELECT concat(datevkonto, ' ',bezeichnung)
+              FROM konten
               WHERE datevkonto <> 0 AND datevkonto <> '' AND aktiv = 1
-              AND concat(datevkonto, ' ',bezeichnung) LIKE '%$term%' 
+              AND concat(datevkonto, ' ',bezeichnung) LIKE :termLike
               )
           UNION ALL (
-              SELECT  concat(sachkonto, ' ',beschriftung) 
-              FROM kontorahmen 
+              SELECT concat(sachkonto, ' ',beschriftung)
+              FROM kontorahmen
               WHERE sachkonto <> 0 AND sachkonto <> '' AND ausblenden <> 1
-                AND concat(sachkonto, ' ',beschriftung) LIKE '%$term%' 
+                AND concat(sachkonto, ' ',beschriftung) LIKE :termLike
               )
-        
-        ) t 
-        WHERE t.gegenkonto <> '' AND t.gegenkonto LIKE '%$term%' 
-        ORDER BY t.gegenkonto"
+
+        ) t
+        WHERE t.gegenkonto <> '' AND t.gegenkonto LIKE :termLike
+        ORDER BY t.gegenkonto",
+          ['termLike' => '%'.$term.'%']
         );
       }
         $carr = !empty($arr)?count($arr):0;
@@ -4190,8 +4204,7 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         
       break;
       case "versand_klaergrund":
-        $arr = $this->app->DB->SelectArr("SELECT DISTINCT problemcase FROM
-        delivery_problemcase WHERE problemcase LIKE '%$term%' ORDER BY sort, problemcase");
+        $arr = $this->app->DatabaseService->select("SELECT DISTINCT problemcase FROM delivery_problemcase WHERE problemcase LIKE :termLike ORDER BY sort, problemcase", ['termLike' => '%'.$term.'%']);
         $carr = !empty($arr)?count($arr):0;
         for($i = 0; $i < $carr; $i++) {
           $newarr[] = $arr[$i]['problemcase'];
@@ -4237,34 +4250,28 @@ select a.kundennummer, (SELECT name FROM adresse a2 WHERE a2.kundennummer = a.ku
         }
         break;
       case "ticketcategory":
-        $newarr = $this->app->DB->SelectFirstCols(
-          sprintf(
-            "SELECT CONCAT(`id`,' ',`name`) FROM `ticket_category` WHERE (`name` LIKE '%%%s%%' OR `name` LIKE '%%%s%%') %s",
-            $term, $term2, $this->app->erp->ProjektRechte('project_id')
-          )
+        $newarr = $this->app->DatabaseService->selectColumn(
+          "SELECT CONCAT(`id`,' ',`name`) FROM `ticket_category` WHERE (`name` LIKE :termLike OR `name` LIKE :term2Like) ".$this->app->erp->ProjektRechte('project_id'),
+          ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%']
         );
         break;
       case "shopimport_auftraege":
-        $shopId = $this->app->Secure->GetGET('id');
-        $newarr = $this->app->DB->SelectFirstCols(
-          sprintf(
-            "SELECT CONCAT(sa.`extid`,' ',IFNULL(sa.`bestellnummer`,'')) 
-            FROM  `shopimport_auftraege` AS `sa` 
+        $shopId = (int)$this->app->Secure->GetGET('id');
+        $newarr = $this->app->DatabaseService->selectColumn(
+          "SELECT CONCAT(sa.`extid`,' ',IFNULL(sa.`bestellnummer`,''))
+            FROM `shopimport_auftraege` AS `sa`
             WHERE (
-                CONCAT(sa.`extid`,' ',IFNULL(sa.`bestellnummer`,'')) LIKE '%%%s%%' 
-                OR CONCAT(sa.`extid`,' ',IFNULL(sa.`bestellnummer`,'')) LIKE '%%%s%%'
-                )  AND (%d = 0 OR %d = sa.shopid) %s",
-            $term, $term2, $shopId, $shopId, $this->app->erp->ProjektRechte('sa.projekt')
-          )
+                CONCAT(sa.`extid`,' ',IFNULL(sa.`bestellnummer`,'')) LIKE :termLike
+                OR CONCAT(sa.`extid`,' ',IFNULL(sa.`bestellnummer`,'')) LIKE :term2Like
+                ) AND (:shopId = 0 OR :shopId = sa.shopid) ".$this->app->erp->ProjektRechte('sa.projekt'),
+          ['termLike' => '%'.$term.'%', 'term2Like' => '%'.$term2.'%', 'shopId' => $shopId]
         );
 
         break;
         case "smarty_template":
-            $newarr = $this->app->DB->SelectFirstCols(
-            sprintf(
-                "SELECT CONCAT(`id`,' ',`name`) FROM `smarty_templates` WHERE (`name` LIKE '%%%s%%')",
-                $term
-            )
+            $newarr = $this->app->DatabaseService->selectColumn(
+            "SELECT CONCAT(`id`,' ',`name`) FROM `smarty_templates` WHERE (`name` LIKE :termLike)",
+            ['termLike' => '%'.$term.'%']
         );
         break;
       default:

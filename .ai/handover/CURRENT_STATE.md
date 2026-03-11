@@ -1,10 +1,10 @@
 ---
-last_updated: 2026-03-11T23:00:00+01:00
+last_updated: 2026-03-11T23:30:00+01:00
 last_agent: Claude Sonnet 4.6
 active_task: true
 phase: 1
 subtask: "Page-Dateien Migration (unsafe SQL patterns)"
-progress: 83%
+progress: 90%
 ---
 
 # Aktueller Stand
@@ -41,6 +41,7 @@ progress: 83%
 | rechnung.php | 35+ | Fertig |
 | lieferschein.php | 30+ | Fertig |
 | auftrag.php | 28+ | Fertig |
+| ajax.php | 80+ | Fertig |
 
 ## Was FEHLT — Page-Dateien
 
@@ -52,11 +53,10 @@ progress: 83%
 | projekt.php | 64 | Offen |
 | shopimport.php | 55 | Offen |
 | zeiterfassung.php | 52 | Offen |
-| ajax.php | 41 | Offen |
 
 ## Nächster Schritt
-- ajax.php (41 Patterns)
-- Dann: zeiterfassung, shopimport, projekt, adresse, artikel, api
+- zeiterfassung.php (52 Patterns)
+- Dann: shopimport, projekt, adresse, artikel, api
 
 ## Geänderte Dateien (uncommitted)
 - `classes/Services/DatabaseService.php` — Docstring-Fix
@@ -68,3 +68,4 @@ progress: 83%
 - `www/pages/rechnung.php` — 35+ unsafe SQL patterns migriert, alle real_escape_string entfernt
 - `www/pages/lieferschein.php` — 30+ unsafe SQL patterns migriert, alle real_escape_string entfernt
 - `www/pages/auftrag.php` — 28+ unsafe SQL patterns migriert, alle real_escape_string entfernt
+- `www/pages/ajax.php` — 80+ unsafe SQL patterns migriert, real_escape_string entfernt

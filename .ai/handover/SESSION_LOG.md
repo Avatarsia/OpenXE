@@ -2,6 +2,42 @@
 
 <!-- Maximal 3 Eintraege. Aeltester wird nach archive/YYYY-MM.md verschoben. -->
 
+## 2026-03-11 — ajax.php Migration (Claude Sonnet 4.6)
+
+**Alle unsicheren SQL-Patterns in `www/pages/ajax.php` auf DatabaseService migriert.**
+
+Ergebnisse:
+- Weit mehr als die initial geschätzten 41 Patterns migriert (tatsächlich ~80+)
+- `SHOW COLUMNS FROM \`$module\`` → validateIdentifier + selectValue
+- `SELECT ... FROM artikel WHERE id='".$arr[$i]['id']."'` → selectValue mit `:id`
+- `FROM lager_reserviert WHERE artikel='".$arr[$i]['id']."'` → selectValue mit `:artikel`
+- `SELECT umsatzsteuer/rabatt/rabatt_prozent ... WHERE id='".$arr[$i]['id']."'` → 4x selectValue
+- `lieferantname`: LIKE '%$term%' × 3 → select mit `:termLike`/`:term2Like`/`:term3Like`
+- `emailadresse`: 5x unsafe Queries (GetGET-Werte, LIKE) → DatabaseService mit named params; subwhere1/2 mit int-cast gesichert
+- `adressegruppevertriebbearbeiter`: `SELECT id FROM gruppen WHERE kennziffer='$gruppeKennziffer'` → selectValue mit `:kennziffer`
+- `adressemitvertrieb`: `a.id = '".$this->app->User->GetAdresse()."'` → int-cast
+- `kundepos`: 2x `WHERE id = '$aktprojekt'` → selectValue mit `:id`; `$swhere` int-cast
+- `shopname`/`shopnameid` → DatabaseService select mit `:termLike`
+- `gruppekennziffer`/`preisgruppekennziffer`/`gruppe`/`verband` → select mit `:termLike`
+- `projektname` → select mit `:termLike`/`:term2Like`/`:term3Like`
+- `uebertragung_account`/`api_account`/`gruppen_kategorien` → select mit `:termLike`
+- `gruppenkategoriegruppen` → select mit `:kategorie` + `:termLike`
+- `steuersatz`: SelectFirstCols → selectColumn mit `:termLike`
+- `eigenschaftname` → select mit `:termLike`
+- `eigenschaftwert`: real_escape_string entfernt → select mit `:termLike`/`:eigenschaftname`
+- `angebot_position` → select mit `:angebot`/`:termLike`/`:angebotposition`
+- `supportapp_gruppen`: real_escape_string entfernt → select mit `:suchbegriffLike`
+- `konto`/`datevkonto` → select mit `:termLike`
+- `gegenkonto`: 2x komplexe UNION-Queries → DatabaseService select mit `:termLike`
+- `versand_klaergrund` → select mit `:termLike`
+- `ticketcategory`/`shopimport_auftraege`/`smarty_template` → selectColumn mit params
+- `waehrung`-case: `'$v' LIKE '%$term%'` SQL → PHP-seitiges mb_stripos-Filter
+- `datei_stichwortvorlagen`: `WHERE modul='$module'` → select mit `:modul`
+- `filter_projekt` in mehreren Legacy-Queries: int-cast mit `(int)$filter_projekt`
+- `$waehrung` in einkaufartikelnummerprojekt: real_escape_string gesichert
+- `real_escape_string` bei `$ersteller` entfernt (kein SQL-Kontext)
+- `php -l` bestätigt: keine Syntaxfehler
+
 ## 2026-03-11 — auftrag.php Migration (Claude Sonnet 4.6)
 
 **Alle unsicheren SQL-Patterns in `www/pages/auftrag.php` auf DatabaseService migriert.**
@@ -65,45 +101,3 @@ Ergebnisse:
 - `rechnung_zahlstatus_berechnen`: Update (ist=null) → execute
 - `php -l` bestätigt: keine Syntaxfehler
 
-## 2026-03-11 — onlineshops.php Migration (Claude Sonnet 4.6)
-
-**Alle unsicheren SQL-Patterns in `www/pages/onlineshops.php` auf DatabaseService migriert.**
-
-Ergebnisse:
-- 60+ unsafe Queries migriert (weit mehr als die initial angenommenen 14)
-- `genearteApiAccount`: SelectRow, while-SelectValue, Insert, Update migriert; alle `real_escape_string` entfernt
-- `ShopexportItemlink`/`ShopexportOrderlink`: beide Select + SelectRow mit `$shop`/`$sid` migriert
-- `ShopexportAppNew`: 3x Select/SelectArr/Update migriert; `OnlineShopsWelcomeStart` SelectArr migriert
-- `ShopexportGetApi`: 2x SelectRow (token, api_account) migriert
-- `ShopexportMinidetail`: SelectValue + change_log SelectValue/SelectArr/SelectValue migriert
-- `ShopexportMinidetail`: SelectRow für shopimport_auftraege + SelectArr für onlineshop_transfer_cart migriert
-- `ShopexportZahlweisesave`/`editsave`/`get`: Insert+Update / Update+Update / SelectRow migriert
-- `ShopexportSubshopsave`/`editsave`/`get`: alle Queries migriert; `real_escape_string` entfernt
-- `ShopexportFreifeldsave`/`editsave`/`get`: alle Queries migriert
-- `ShopexportArtikelbaumexport`: SelectRow + Update + Insert für onlineshops_tasks migriert; SelectRow shopinfo
-- `ShopexportSprachenget`/`editsave`/`delete`: alle Queries migriert
-- `ShopexportVersandartget`/`save`/`editsave`/`delete`: alle Queries migriert
-- `ShopexportKundengruppenget`/`delete`: SelectRow + Select+Delete migriert
-- `ShopexportSprachendelete`/`SubshopDelete`/`FreifeldDelete`: alle Select+Delete migriert
-- `createShippingArticleByShopId`/`createDiscountArticleForShop`: SelectRow + 2x Update migriert
-- `createInternShop`: while-SelectValue + Insert migriert
-- `saveCreateData`: SelectRow + Update migriert
-- `getVueShopexportAppNewSuccessPageYt`: SelectValue migriert
-- `ShopexportCreate` (extern + GetArticleList): while-SelectValue + 2x Insert migriert
-- `createPriceGroupByShopId`: SelectValue + while-SelectValue + Insert migriert
-- `ShopexportArtikelList`: Update mit `$id` migriert
-- `ShopexportMenu`: 3x SelectValue migriert
-- `ShopexportDelete`: Delete migriert
-- `HandleLoadDefaultTemplateAjaxAction`: SelectValue migriert
-- `ShopexportEdit` (speichern): SelectValue + SelectValue für password + SelectValue/SelectArr change_log + 2x Insert migriert; `real_escape_string` entfernt
-- `ShopexportEdit` (archivspeichern): Update+SelectValue+Insert+4x Update migriert
-- `ShopexportEdit` (changeaktiv/testcustomfile/savefile): 3x SelectRow + 2x Update migriert
-- `ShopexportEdit` (pruefen): SelectValue + Update migriert
-- `ShopexportEdit` (projektId/versandarten/kundengruppen): 3x SelectValue/Select/SelectArr migriert
-- `getJsonSettings`/`setJsonSettings`/`getSettingFields`: 3x SelectValue + Update migriert
-- `HandleLoadCartAjaxAction`: SelectRow migriert
-- `HandleRunSmartyIncommingAjaxAction` (onlineshop_transfer_cart): Insert + Update migriert
-- `HandleSaveSmartyIncommingAjaxAction`: SelectRow + Update migriert
-- `ShopexportEdit` (`addBetaWarning`): SelectRow migriert
-- `HandleLoadCartAjaxAction` (addCartInfo): SelectRow migriert
-- `php -l` bestätigt: keine Syntaxfehler
