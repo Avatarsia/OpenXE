@@ -2,102 +2,119 @@
 
 <!-- Maximal 3 Eintraege. Aeltester wird nach archive/YYYY-MM.md verschoben. -->
 
-## 2026-03-11 — ajax.php Migration (Claude Sonnet 4.6)
+## 2026-03-12 — api.php Migration — ABGESCHLOSSEN (Claude Sonnet 4.6)
 
-**Alle unsicheren SQL-Patterns in `www/pages/ajax.php` auf DatabaseService migriert.**
+**Phase 1 vollständig abgeschlossen. Alle 316+ unsicheren SQL-Patterns in `www/pages/api.php` auf DatabaseService migriert.**
+
+Ergebnisse (Teil 2 — Fortsetzung nach Session-Unterbrechung):
+- `ApiZeiterfassungEdit` dynamic column loop: bereits aus vorheriger Session
+- `BelegeimportAusfuehren` produktion-Block: 5x DB->Update/Select(sprintf) → DatabaseService mit named params
+- Artikel-Lookup (nummer/ean): `real_escape_string` + string concat → selectValue mit `:nummer`/`:ean`/`:projekt`
+- Artikel-Bezeichnung/Sprache-Lookup: 2x SelectRow + 2x Select → selectRow + 2x selectValue; `$aktbelegart` → validateIdentifier
+- `teillieferungvon`-Block: porto-Check, SelectArr, 2x Update, Delete → selectValue + select + update + delete + delete
+- Position-INSERTs für alle Belegtypen (gutschrift/bestellung/angebot/lieferschein/retoure/preisanfrage/proformarechnung/produktion): je SelectValue(max sort) + insert mit named params
+- `artikelnummerkunde` SELECT/UPDATE: real_escape_string entfernt → selectValue + validateIdentifier + update
+- `felder`-foreach-Loop: dynamic column `validateIdentifier` + update mit `:value`/`:id`
+- DELETE FROM belegeimport: delete mit `:id`
+- `erstelltebelegeids` + `erstelltebelegeNichtAngelegtids` foreach: validateIdentifier + update/selectValue
+- `BelegeimportDatei`: uebertragungen_account (3x SELECT), INSERT belegeimport, UPDATE beleg_projekt; alle 8 switch-cases (beleg_projekt/artikel/artikel_nummer/artikel_ean/beleg_kundennummer/beleg_lieferantennummer); dynamischer SET `validateIdentifier`; end-of-row UPDATEs
+- `ApiExportVorlageGet`: 2x Select(`'$projekt'`/`'$id'`) → selectValue mit named params
+- `ApiStuecklisteSet`: 3x Select + 1x Insert + 1x Update + 1x Delete → DatabaseService; alternativevorhanden-Check
+- `EventCall`/EventAuftragEdit: SelectArr(eventname) + 2x Insert + Update(retries) + Delete → DatabaseService
+- `ApiBestellungGet`/`ApiLieferscheinPositionenGet`: SelectArr mit `$doctype`/`$id` → validateIdentifier + select
+- `ApiArtikelGet`: api_mapping extid, projekt, artikelkategorien, lager SELECTs (7x), einkaufspreise/verkaufspreise SelectArr → DatabaseService
+- `adresse`-Lookup in BelegeimportAusfuehren: dynamic `$adresseprojektSql` mit params-Array
+- `BelegeimportAusfuehren` hauptbelegnr: validateIdentifier + selectValue
+- `php -l` bestätigt: keine Syntaxfehler
+- Phase 1 **vollständig abgeschlossen**
+
+## 2026-03-12 — artikel.php Migration (Claude Sonnet 4.6)
+
+**Alle unsicheren SQL-Patterns in `www/pages/artikel.php` auf DatabaseService migriert.**
 
 Ergebnisse:
-- Weit mehr als die initial geschätzten 41 Patterns migriert (tatsächlich ~80+)
-- `SHOW COLUMNS FROM \`$module\`` → validateIdentifier + selectValue
-- `SELECT ... FROM artikel WHERE id='".$arr[$i]['id']."'` → selectValue mit `:id`
-- `FROM lager_reserviert WHERE artikel='".$arr[$i]['id']."'` → selectValue mit `:artikel`
-- `SELECT umsatzsteuer/rabatt/rabatt_prozent ... WHERE id='".$arr[$i]['id']."'` → 4x selectValue
-- `lieferantname`: LIKE '%$term%' × 3 → select mit `:termLike`/`:term2Like`/`:term3Like`
-- `emailadresse`: 5x unsafe Queries (GetGET-Werte, LIKE) → DatabaseService mit named params; subwhere1/2 mit int-cast gesichert
-- `adressegruppevertriebbearbeiter`: `SELECT id FROM gruppen WHERE kennziffer='$gruppeKennziffer'` → selectValue mit `:kennziffer`
-- `adressemitvertrieb`: `a.id = '".$this->app->User->GetAdresse()."'` → int-cast
-- `kundepos`: 2x `WHERE id = '$aktprojekt'` → selectValue mit `:id`; `$swhere` int-cast
-- `shopname`/`shopnameid` → DatabaseService select mit `:termLike`
-- `gruppekennziffer`/`preisgruppekennziffer`/`gruppe`/`verband` → select mit `:termLike`
-- `projektname` → select mit `:termLike`/`:term2Like`/`:term3Like`
-- `uebertragung_account`/`api_account`/`gruppen_kategorien` → select mit `:termLike`
-- `gruppenkategoriegruppen` → select mit `:kategorie` + `:termLike`
-- `steuersatz`: SelectFirstCols → selectColumn mit `:termLike`
-- `eigenschaftname` → select mit `:termLike`
-- `eigenschaftwert`: real_escape_string entfernt → select mit `:termLike`/`:eigenschaftname`
-- `angebot_position` → select mit `:angebot`/`:termLike`/`:angebotposition`
-- `supportapp_gruppen`: real_escape_string entfernt → select mit `:suchbegriffLike`
-- `konto`/`datevkonto` → select mit `:termLike`
-- `gegenkonto`: 2x komplexe UNION-Queries → DatabaseService select mit `:termLike`
-- `versand_klaergrund` → select mit `:termLike`
-- `ticketcategory`/`shopimport_auftraege`/`smarty_template` → selectColumn mit params
-- `waehrung`-case: `'$v' LIKE '%$term%'` SQL → PHP-seitiges mb_stripos-Filter
-- `datei_stichwortvorlagen`: `WHERE modul='$module'` → select mit `:modul`
-- `filter_projekt` in mehreren Legacy-Queries: int-cast mit `(int)$filter_projekt`
-- `$waehrung` in einkaufartikelnummerprojekt: real_escape_string gesichert
-- `real_escape_string` bei `$ersteller` entfernt (kein SQL-Kontext)
+- 104+ unsafe Queries migriert; alle `real_escape_string` entfernt
+- `getalternativedetails`: SelectArr mit `'$alternativeId'` → selectRow; Select CONCAT → selectValue
+- `ArtikelLagerVPE` (getvpe/getvpevorlage/savevpe): 3x SelectRow/Select mit `'".$lpiid."'`/`'".$vpeid."'` → selectRow/selectValue
+- `ArtikelLager` bestbeforeBatchSn: DB->SelectRow(sprintf('%d')) → selectRow mit `:id`
+- `ArtikelStuecklisteExport`: SelectArr mit `'$id'` → select mit `:id`
+- `ArtikelgenEigenschaften`: SelectArr mit `'$keys[$lvl]'`/`'$k'` → select mit named params
+- `ArtikelFreifelderEdit` (get): 2x SelectRow mit `'$id'` → selectRow mit `:id`; dynamic `freifeld$nummer` column → validateIdentifier
+- `ArtikelFreifelderSave`: 2x Update mit `'$inhalt'`/`'$id'` → update mit named params; Insert → insert
+- `ArtikelFreifelderDelete`: Delete mit `'$id'` → delete mit `:id`
+- `ArtikelFreifelder` (nachladen): Insert mit `'$artikelid'` → insert mit `:artikelid`/`:artikelid2`
+- `getArtikelThumbnailDateiVersion`: SelectArr mit `' . $id . '` → select mit `:id`
+- `getPreviewFileFromFileId`: SelectRow(sprintf('%d')) → selectRow mit `:fileId`
+- `getPreviewFileFromArticleId`: SelectRow(sprintf('%d')) → selectRow mit `:articleId`
+- `ajaxGenerateThumbnail`: 3x SelectRow/Update(sprintf) → selectRow + 2x update mit named params
+- `ArtikelThumbnail` (direkt): SelectRow(sprintf) → selectRow mit `:id`
+- `ArtikelThumbnail` (vorschau): DB->Select(sprintf) + DB->SelectRow('…WHERE id=\'$id\'') → selectValue + selectRow mit named params; DB->Update(sprintf) → update mit `:id`
+- `ArtikelBaumDetail`: Select/Insert/Delete mit `'$artikel'`/`'$id'` → selectValue/insert/delete mit named params
+- `getKategorien`: SelectArr mit `'$parent'` → select mit `:parent` (int-cast)
+- `ArtikelBaumAjax`: SelectArr mit `'$id'` → select mit `:id`
+- `ArtikelDeleteFile`: DB->Update(sprintf) → update mit `:fileId1`/`:fileId2`
+- `ArtikelSupersearchDetail`: SelectRow(sprintf + real_escape_string) → selectRow mit `:id`; real_escape_string entfernt
+- `updateArticlePicturePreview`: SelectFirstCols(sprintf) → selectColumn mit `:limit`
+- `Kalkulation` sql_query: `'$id'` → `(int)$id` inline-cast; SelectArr($sql) mit `'$id'` → DatabaseService select mit `:id`
+- `ArtikelLagerInfo`: 5x Select mit `'$artikel'` → selectValue mit `:artikel`
+- `ArtikelSchnellanlegen` barcode: 2x Select mit `'$barcode'`/`'$checkbarcode'` → selectValue mit named params
+- `ArtikelScan`: komplett refaktoriert — 5 Suchpfade (nummer/ean/herstellernummer/lieferant/fremdnummer) je mit `$ignoreprefixpostfix`-Variante; real_escape_string entfernt; alle Queries → selectValue mit named params
+- Alle statischen SQL-Calls (cache-rebuild-Funktionen, streaming DB->Query+Fetch_Assoc, IN-Clauses mit pre-sanierten int-Arrays) unangetastet gelassen
+- Alle comment-block-Calls unangetastet gelassen
 - `php -l` bestätigt: keine Syntaxfehler
 
-## 2026-03-11 — auftrag.php Migration (Claude Sonnet 4.6)
+## 2026-03-11 — zeiterfassung.php Migration (Claude Sonnet 4.6)
 
-**Alle unsicheren SQL-Patterns in `www/pages/auftrag.php` auf DatabaseService migriert.**
+**Alle unsicheren SQL-Patterns in `www/pages/zeiterfassung.php` auf DatabaseService migriert.**
 
 Ergebnisse:
-- 28+ unsafe Queries migriert (mehr als initial geschätzt)
-- `real_escape_string` Aufrufe entfernt: stornobezahltvon Update, buchhaltung Update, 4x auftrag_protokoll Insert
-- Variable-Interpolation in DB-Calls beseitigt: `$id`, `$adresse`, `$hauptid`, `$v`, `$auftragid`, `$kommissionierlagerplatz`, `$kundennummer`
-- `AuftragTeillieferung`: kompletter SQL-Block migriert (4x SelectArr → select/selectValue/selectRow, 2x Update)
-- `Kommissionieren_etiketten_drucken`: SelectRow + SQL-var + SelectArr → selectRow + selectColumn
-- `createCronjobCommission`-Kontext: `$check` SelectRow mit `$v OR $v2` → selectRow mit `:v`/`:v2`
-- Versandzentrum: `$lagerplatz` SelectRow + Update → selectRow + update mit named params
-- `$settings` SelectRow mit `.$v."` → selectRow mit `:id`
-- `$lieferschein` SelectPairs mit `'$id'` → selectPairs mit `:id`
-- 4x `auftrag_protokoll` Insert mit `real_escape_string(GetName())` → insert mit `:bearbeiter`
-- `rechnung buchhaltung` Update mit `real_escape_string(GetDescription())` → update mit `:buchhaltung`
-- `vorkommissionierung` Select mit `'".$id."'` → selectValue mit `:id`
+- 52 unsafe Queries migriert
+- Kalender-Event-Queries (2x SelectArr mit $user/$start/$end/$start_datum/$end_datum) → select mit named params; $subwhere (intern generiert) sicher eingebettet
+- `getzeiterfassung`-Block: 6x Select → selectValue mit `:id` (int-cast)
+- `delzeiterfassung`: DB->Delete → delete mit `:id`
+- `ZeiterfassungCreate`: `SELECT adresse FROM user WHERE id='$id'` → selectValue mit `:id`
+- `ZeiterfassungListUser`: 5x DB->Delete mit $lid → delete mit `:id` (int-cast); +1 mit gebucht_von_user → `:user_id`
+- `ZeiterfassungList`: Delete + 2x Select ($tmpmitarbeiter, $mitarbeiterid) → DatabaseService
+- `ArbeitspaketReadDetails`: SelectArr mit $index → select mit `:id`
+- `ArbeitspaketDetails`: Select + SelectArr → selectValue + select mit `:ap_id`/`:adr_id`; Update → update mit `:id`/`:abgabedatum`
+- `ZeiterfassungManuell` ZURUECKDATUM/VORWAERTSDATUM: 2x Select mit $datumzeiterfassung → selectValue mit `:datum`
+- `ZeiterfassungManuell` $tmp-Block: 10x Select (mitarbeiter, projektabgeschlossen, projekt_komplett, serviceauftrag, adresse_abrechnung, kostenstelle, verrechnungsart, auftrag, auftragposition, produktion) → selectValue mit named params
+- `ZeiterfassungManuell` vonZeit: 2x Select mit $adr_id/$datumzeiterfassung/$User->GetAdresse() → selectValue
+- `ZeiterfassungManuell` $pakete: SelectArr mit $adr_id+ProjektRechte() → select mit `:adr_id` (ProjektRechte intern)
+- `ZeiterfassungManuell` paketauswahl: DB->Select → selectValue mit `:id`
+- Projekt-Status-Checks: 10x DB->Select("SELECT id/abkuerzung FROM projekt WHERE id='$projekt'") → selectValue mit `:id`; $_projekt_abkuerzung Hilfsvariable eingeführt um Doppel-Query zu vermeiden
+- serviceauftrag Update (3x): DB->Update → update mit `:serviceauftrag`/`:id`
+- `AufgabenOffen`: DB->Update + DB->Insert → update/insert mit `:id`/`:adresse`/`:aufgabe`
+- `ZeiterfassungDetails` ($id=user, $monat/$jahr): 2x Select → selectValue mit named params
+- Alle static-SQL-Calls (`SHOW TABLES LIKE`, `COUNT(id)`, `DATE_FORMAT(NOW())`) unangetastet gelassen (Rule 2)
+- Alle comment-block-Calls unangetastet gelassen
 - `php -l` bestätigt: keine Syntaxfehler
 
-## 2026-03-11 — rechnung.php Migration (Claude Sonnet 4.6)
+## 2026-03-12 — adresse.php Migration — ABGESCHLOSSEN (Claude Sonnet 4.6)
 
-**Alle unsicheren SQL-Patterns in `www/pages/rechnung.php` auf DatabaseService migriert.**
+**Verbleibende unsichere SQL-Patterns in `www/pages/adresse.php` vollständig migriert.**
 
-Ergebnisse:
-- 35+ unsafe Queries migriert (mehr als die initial angenommenen 28)
-- `RechnungSupersearchDetail`: sprintf+real_escape_string → selectRow mit `:rechnungId`
-- `RechnungAlternativPDF`: 3x Select/Update → selectValue + 2x execute
-- `RechnungArchiviereXML`/`RechnungArchivierePDF`: 2x Update → execute
-- `removeManualPayed`/`setManualPayed`: sprintf Select + Update → selectValue + execute; real_escape_string entfernt
-- `RechnungIconMenu`: SelectRow + Select (gutschrift) → selectRow + selectValue
-- `RechnungIconMenu` (zertifikate): adresse Select + komplex datei Select → 2x selectValue mit params
-- `RechnungLiveTabelle`: `$id` mit `(int)` gesichert
-- `RechnungPDFfromArchiv`: 2x Select (pdfarchiv/projekt) → 2x selectValue
-- `RechnungMiniDetail`: `$id` mit `(int)` gesichert; SelectArr→select, 3x Select→selectValue
-- `RechnungMiniDetail`: mahnwesen_name SelectArr[0]→selectValue; internet/belegnr selects
-- `RechnungMiniDetail`: auftraege (UNION query) → select mit `:id`/`:id2`
-- `RechnungMiniDetail`: gutschrift SelectArr → select; status Select→selectValue
-- `RechnungMiniDetail`: lieferscheinsql — `$id`/`$lieferschein` mit `(int)` gesichert
-- `Rechnungsadresse`: SelectArr → select mit `:id`
-- `RechnungFreigabe`: belegnr/name/summe/waehrung — 4x Select → selectValue
-- `RechnungDelete`: SelectRow → selectRow
-- `RechnungMahnPDF`/`RechnungInlinePDF`/`RechnungPDF`/`RechnungMenu`: 4x SelectRow → selectRow
-- `RechnungPositionenEditPopup`: 2x Select → selectValue
-- `RechnungSmarty`: SelectRow + Select + SelectArr + SelectArr + Select (template) → migriert
-- `RechnungEdit`: `$id` mit `(int)` gesichert; viele Select/SelectRow → selectValue/selectRow
-- `RechnungEdit`: skontosoll, versendet, lieferscheiniddatum, 2x lieferdatum-Update, auftrag-Update
-- `RechnungEdit`: zahlungsweise, mahnwesenfestsetzen, alle_gutschriften, alte_mahnstufe
-- `RechnungEdit`: adresse-Lookup mit real_escape_string → selectValue mit `:kundennummer`
-- `RechnungEdit`: rechnungarr SelectRow, summe/waehrung/summebrutto/ust_befreit_check/status/internet
-- `RechnungList` (mail-case): xmlrechnung/checkpapier/email-check/projekt → 4x selectValue
-- `RechnungList` (drucken-case): 2x Update mit `$v` → execute mit `:v`
-- `RechnungList` (pdf-case): xmlrechnung/projekt → 2x selectValue
-- `GetXMLSmartyTemplate`/`SetXMLRechnung`: adresse/template + Update → selectValue + execute
-- `CreateRechnung`: real_escape_string + Update → execute mit `:deliverythresholdvatid`
-- `CopyRechnung`: SelectRow + 2x Select + SelectArr + Insert + Update (steuersatz) → migriert
-- `LoadRechnungStandardwerte`: adresse SelectArr + rolle_projekt + abweichende SelectArr × 2
-- `LoadRechnungStandardwerte`: liefernantenvorlage SelectArr × 2 + projekt_bevorzugt + projekt + abkuerzung
-- `DeleteRechnung`: Select + 3x Delete → selectValue + 3x execute
-- `AddRechnungPosition`: Select + Insert → selectValue + insert mit named params
-- `AddRechnungPositionManuell`: real_escape_string ×4 entfernt; fallback Selects + Update + Insert migriert
-- `rechnung_zahlstatus_berechnen`: Update (ist=null) → execute
+Ergebnisse (Teil 2 — Fortsetzung nach Session-Unterbrechung):
+- `getgruppe` case (fehlend aus Teil 1): SelectRow + 3x Select → selectRow + 3x selectValue mit named params
+- `deletegruppe` case: 2x DB->Update + DB->Delete → 2x update + delete mit `:sid`
+- `anlegen_artikelneu` block: 3x DB->Insert + GetInsertID → 3x insert() mit named params (insert() gibt ID zurück direkt)
+- `ajaxbuchen` block: 4x DB->Select mit `'$var'` → 4x selectValue mit named params
+- `smlsave` case: 3x validation selects + UPDATE + INSERT → DatabaseService mit named params; DB->Update("DELETE...") → delete
+- `smledit` case: SelectRow + 5x Select (abwadressid/name/kundennr/lieferantennr/projektabkuerzung) → selectRow + 5x selectValue
+- `smldelete` case: DB->Update("DELETE...") → delete mit `:smlid`
+- `AdresseSEPAMandat`: SelectArr (1 row) → [$db->selectRow()] mit `:id`
+- `AdresseArtikelEditPopup`: Select → selectValue mit `:id`
+- `AdresseVerein`: UPDATE + SelectRow mit `'$id'` → update + selectRow mit named params
+- `AdresseMinidetailLieferadressen`: 2x Select → 2x selectValue mit `:id`
+- `AdresseMinidetailAnsprechpartner`: Select → selectValue mit `:id`
+- `AdresseAnschriftString` (else branch): SelectArr (1 row) → [$db->selectRow()] mit `:id`
+- `DruckerSelect`: 2x DB calls → selectValue + select mit named params
+- `AdresseLieferadresseEditPopup`: Select → selectValue mit `:id`
+- `AdresseAnlegenAngebot`: dynamischer UPDATE-foreach → updateArray('adresse', $adressdaten, 'id', $adressid)
+- `AdresseMiniDetailZeit`: `$dataId = (int)$data[0]` vor switch; 4x queries mit `$dataId`
+- `AdresseBriefBearbeiten`: kalender_event query `' . $id . '` → `(int)$id`; dokumente query → `(int)$id`
+- `AdresseBriefPreview`: `$idInt = (int)$id` vor switch; 5x switch-cases mit `$idInt`
+- `AdresseBriefDelete`: 4x DB->Delete mit `'$id'`/`"$id"` → 4x delete mit `:id`
+- `CopyAdresse`: INSERT...SELECT mit `$idNew`/`$id` → (int)-casts inline
 - `php -l` bestätigt: keine Syntaxfehler
 
