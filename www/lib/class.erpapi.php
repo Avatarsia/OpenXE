@@ -3866,8 +3866,8 @@ title: 'Abschicken',
     $zahlungszieltage = (int) $zahlungszieltage;
 
     $zahlungdatum = $this->app->DatabaseService->selectValue(
-      sprintf("SELECT DATE_FORMAT(DATE_ADD(datum, INTERVAL %d DAY),'%%d.%%m.%%Y') FROM `%s` WHERE id = :id LIMIT 1", $zahlungszieltage, $this->app->DatabaseService->validateIdentifier($doctype)),
-      ['id' => (int) $doctypeid]
+      sprintf("SELECT DATE_FORMAT(DATE_ADD(datum, INTERVAL :days DAY),'%%d.%%m.%%Y') FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)),
+      ['days' => (int) $zahlungszieltage, 'id' => (int) $doctypeid]
     );
 
     $anzeigen = false;
@@ -3914,8 +3914,8 @@ title: 'Abschicken',
     $zahlungszieltageskonto = (int) $zahlungszieltageskonto;
 
     $zahlungszielskontodatum = $this->app->DatabaseService->selectValue(
-      sprintf("SELECT DATE_FORMAT(DATE_ADD(datum, INTERVAL %d DAY),'%%d.%%m.%%Y') FROM `%s` WHERE id = :id LIMIT 1", $zahlungszieltageskonto, $this->app->DatabaseService->validateIdentifier($doctype)),
-      ['id' => (int) $doctypeid]
+      sprintf("SELECT DATE_FORMAT(DATE_ADD(datum, INTERVAL :days DAY),'%%d.%%m.%%Y') FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($doctype)),
+      ['days' => (int) $zahlungszieltageskonto, 'id' => (int) $doctypeid]
     );
 
     $adresse = !empty($doctypeRow['adresse']) ? $doctypeRow['adresse'] : 0;
@@ -4379,12 +4379,12 @@ title: 'Abschicken',
       $zahlungszieltageskonto = $result[0]['zahlungszieltageskonto'];
       $zahlungszielskonto = $result[0]['zahlungszielskonto'];
       $zahlungdatum = $this->app->DatabaseService->selectValue(
-        sprintf("SELECT DATE_FORMAT(DATE_ADD(datum, INTERVAL %d DAY), '%%d.%%m.%%Y') FROM `%s` WHERE id = :id LIMIT 1", (int) $zahlungszieltage, $this->app->DatabaseService->validateIdentifier($type)),
-        ['id' => (int) $id]
+        sprintf("SELECT DATE_FORMAT(DATE_ADD(datum, INTERVAL :days DAY), '%%d.%%m.%%Y') FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($type)),
+        ['days' => (int) $zahlungszieltage, 'id' => (int) $id]
       );
       $zahlungszielskontodatum = $this->app->DatabaseService->selectValue(
-        sprintf("SELECT DATE_FORMAT(DATE_ADD(datum, INTERVAL %d DAY), '%%d.%%m.%%Y') FROM `%s` WHERE id = :id LIMIT 1", (int) $zahlungszieltageskonto, $this->app->DatabaseService->validateIdentifier($type)),
-        ['id' => (int) $id]
+        sprintf("SELECT DATE_FORMAT(DATE_ADD(datum, INTERVAL :skontodays DAY), '%%d.%%m.%%Y') FROM `%s` WHERE id = :id LIMIT 1", $this->app->DatabaseService->validateIdentifier($type)),
+        ['skontodays' => (int) $zahlungszieltageskonto, 'id' => (int) $id]
       );
       $text = str_replace("{ZAHLUNGSZIELTAGE}", $zahlungszieltage, $text);
       $text = str_replace("{ZAHLUNGBISDATUM}", $zahlungdatum, $text);
@@ -19311,7 +19311,7 @@ $( this ).dialog( "close" );
         if ($vpe_found)
           $grund .= $this->GetVPEBezeichnung($lager_platz_vpe);
         $this->app->DatabaseService->execute("UPDATE lager_platz_inhalt SET menge = menge - :menge WHERE artikel = :artikel AND lager_platz = :regal $subwhere LIMIT 1", ['menge' => $menge, 'artikel' => (int)$artikel, 'regal' => (int)$regal]);
-        $this->app->DatabaseService->execute(sprintf('DELETE FROM `lager_platz_inhalt` WHERE `id` = %d AND `menge` <= 0 AND `lager_platz_vpe` <= 0', (int)$check));
+        $this->app->DatabaseService->execute('DELETE FROM `lager_platz_inhalt` WHERE `id` = :id AND `menge` <= 0 AND `lager_platz_vpe` <= 0', ['id' => (int)$check]);
         // Bewegung buchen
         $bestand = $this->ArtikelImLagerPlatz($artikel, $regal);
         $this->app->DatabaseService->execute(
@@ -19332,7 +19332,7 @@ $( this ).dialog( "close" );
                 $vpemengen[$v['lager_platz_vpe']] = 0;
               $vpemengen[$v['lager_platz_vpe']] += $_menge;
               $this->app->DatabaseService->execute("UPDATE lager_platz_inhalt SET menge = menge - :menge WHERE id = :id LIMIT 1", ['menge' => $_menge, 'id' => (int)$v['id']]);
-              $this->app->DatabaseService->execute(sprintf('DELETE FROM `lager_platz_inhalt` WHERE `id` = %d AND `menge` <= 0', (int)$v['id']));
+              $this->app->DatabaseService->execute('DELETE FROM `lager_platz_inhalt` WHERE `id` = :id AND `menge` <= 0', ['id' => (int)$v['id']]);
               $_menge = 0;
               break;
             } elseif ($_menge == $v['menge']) {
@@ -19375,7 +19375,7 @@ $( this ).dialog( "close" );
 
     $this->LagerArtikelZusammenfassen($artikel, $regal);
     $this->RunHook('LagerAuslagernRegal_after', 7, $artikel, $menge, $regal, $projekt, $grund, $doctype, $doctypeid);
-    $this->app->DatabaseService->execute(sprintf('UPDATE `artikel` SET `laststorage_changed` = NOW() WHERE `id` = %d', (int)$artikel));
+    $this->app->DatabaseService->execute('UPDATE `artikel` SET `laststorage_changed` = NOW() WHERE `id` = :id', ['id' => (int)$artikel]);
     return 1;
   }
 
@@ -24830,7 +24830,11 @@ $( this ).dialog( "close" );
     } else {
       $limit = 0;
     }
-    $auftraege = $this->app->DatabaseService->select("SELECT id FROM auftrag WHERE status='freigegeben' AND inbearbeitung=0 AND autoversand=1 ORDER BY fastlane = 1 DESC, datum " . ($limit > 0 ? sprintf(" LIMIT %d ", (int)$limit) : ''));
+    if ($limit > 0) {
+      $auftraege = $this->app->DatabaseService->select("SELECT id FROM auftrag WHERE status='freigegeben' AND inbearbeitung=0 AND autoversand=1 ORDER BY fastlane = 1 DESC, datum LIMIT :limit", ['limit' => (int)$limit]);
+    } else {
+      $auftraege = $this->app->DatabaseService->select("SELECT id FROM auftrag WHERE status='freigegeben' AND inbearbeitung=0 AND autoversand=1 ORDER BY fastlane = 1 DESC, datum");
+    }
     if (empty($auftraege)) {
       return;
     }
@@ -32612,20 +32616,20 @@ $( this ).dialog( "close" );
     foreach ($arr as $k => $v) {
       if ($v['sort'] > ($k + 1)) {
         $diff = (int)($v['sort'] - ($k + 1));
-        $this->app->DatabaseService->execute(sprintf("UPDATE %s_position SET sort = sort - %d WHERE id = :id LIMIT 1", $validDoctype, $diff), ['id' => $v['id']]);
+        $this->app->DatabaseService->execute(sprintf("UPDATE %s_position SET sort = sort - :diff WHERE id = :id LIMIT 1", $validDoctype), ['diff' => (int)$diff, 'id' => $v['id']]);
         for ($sort = ($k + 1); $sort < $v['sort']; $sort++) {
           $beleg_zwischenpositionensort = $this->app->DatabaseService->select("SELECT id, sort FROM beleg_zwischenpositionen WHERE doctype = :doctype AND doctypeid = :doctypeid AND pos = :pos ORDER BY sort DESC LIMIT 1", ['doctype' => $doctype, 'doctypeid' => $id, 'pos' => ($sort - 1)]);
           $offset = 0;
           if ($beleg_zwischenpositionensort) {
             $offset = 1 + $beleg_zwischenpositionensort[0]['sort'];
           }
-          $this->app->DatabaseService->execute(sprintf("UPDATE beleg_zwischenpositionen SET pos = pos - %d, sort = sort + %d WHERE doctype = :doctype AND doctypeid = :doctypeid AND pos = :pos", $diff, (int)$offset), ['doctype' => $doctype, 'doctypeid' => $id, 'pos' => $sort]);
+          $this->app->DatabaseService->execute("UPDATE beleg_zwischenpositionen SET pos = pos - :diff, sort = sort + :offset WHERE doctype = :doctype AND doctypeid = :doctypeid AND pos = :pos", ['diff' => (int)$diff, 'offset' => (int)$offset, 'doctype' => $doctype, 'doctypeid' => $id, 'pos' => $sort]);
         }
       }
     }
     //Belegpositionen nach letzter Position
     $sort = (!empty($arr) ? count($arr) : 0);
-    $restpositionen = $this->app->DatabaseService->select(sprintf("SELECT id FROM beleg_zwischenpositionen WHERE doctype = :doctype AND doctypeid = :doctypeid AND pos > %d ORDER BY pos, sort", (int)$sort), ['doctype' => $doctype, 'doctypeid' => $id]);
+    $restpositionen = $this->app->DatabaseService->select("SELECT id FROM beleg_zwischenpositionen WHERE doctype = :doctype AND doctypeid = :doctypeid AND pos > :pos ORDER BY pos, sort", ['doctype' => $doctype, 'doctypeid' => $id, 'pos' => (int)$sort]);
     if ($restpositionen) {
       $beleg_zwischenpositionensort = $this->app->DatabaseService->select("SELECT id, sort FROM beleg_zwischenpositionen WHERE doctype = :doctype AND doctypeid = :doctypeid AND pos = :pos ORDER BY sort DESC LIMIT 1", ['doctype' => $doctype, 'doctypeid' => $id, 'pos' => $sort]);
       $offset = 0;
@@ -37728,7 +37732,7 @@ $( this ).dialog( "close" );
     $montag = $this->app->DatabaseService->selectValue("SELECT DATE_SUB(CURDATE(),INTERVAL WEEKDAY(CURDATE()) day)", []);
     $week = array();
     for ($i = 0; $i < $anzWochentage; $i++)
-      $week[$i] = $this->app->DatabaseService->selectValue(sprintf("SELECT DATE_ADD(:montag, INTERVAL %d day)", (int) $i), ['montag' => (string) $montag]);
+      $week[$i] = $this->app->DatabaseService->selectValue("SELECT DATE_ADD(:montag, INTERVAL :days day)", ['montag' => (string) $montag, 'days' => (int) $i]);
     return $week;
   }
 

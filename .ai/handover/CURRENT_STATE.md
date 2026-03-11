@@ -1,6 +1,6 @@
 ---
-last_updated: 2026-03-10T20:00:00+01:00
-last_agent: Claude Opus 4.6
+last_updated: 2026-03-11T00:00:00+01:00
+last_agent: Claude Sonnet 4.6
 active_task: false
 phase: 1
 subtask: "—"
@@ -27,7 +27,9 @@ api, artikel, shopimport, auftrag, rechnung, zeiterfassung, ajax, projekt, onlin
 **class.erpapi.php (2.483 DatabaseService-Calls):**
 - 12 Batches über mehrere Sessions
 - Alle unsicheren Patterns mit Variable-Interpolation migriert
-- 491 verbleibende legacy DB->Calls sind sicher (statisches SQL, sprintf %d, hardcoded Arrays)
+- 12 restliche `sprintf('%d', value)` Patterns in DatabaseService-Calls migriert (diese Session)
+- Verbleibende legacy DB->Calls sind sicher (statisches SQL, hardcoded Arrays)
+- Keine `sprintf` mit `%d` für Werte mehr vorhanden — nur noch `%%d` als MySQL DATE_FORMAT Escapes
 
 ### Dokumentation
 - `.ai/best-practices/security.md` — Named Parameters als Standard dokumentiert

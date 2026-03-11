@@ -2,6 +2,22 @@
 
 <!-- Maximal 3 Eintraege. Aeltester wird nach archive/YYYY-MM.md verschoben. -->
 
+## 2026-03-11 — sprintf %d Cleanup in class.erpapi.php (Claude Sonnet 4.6)
+
+**Alle verbliebenen `sprintf('%d', value)` Patterns in DatabaseService-Calls bereinigt.**
+
+Ergebnisse:
+- 12 Fixes in `www/lib/class.erpapi.php`
+- INTERVAL %d DAY → INTERVAL :days DAY (Zeilen 3869, 3917, 4382, 4386)
+- DELETE/UPDATE WHERE id = %d → WHERE id = :id (Zeilen 19314, 19335, 19378)
+- LIMIT %d → LIMIT :limit mit if/else Branch (Zeile 24833)
+- UPDATE %s_position ... sort - %d → :diff (Zeile 32615)
+- pos - %d, sort + %d → :diff, :offset (Zeile 32622)
+- pos > %d → pos > :pos (Zeile 32628)
+- INTERVAL %d day → INTERVAL :days day (Zeile 37731)
+- `php -l` bestätigt: keine Syntaxfehler
+- Alle Änderungen committed
+
 ## 2026-03-10 — Phase 1 komplett (Claude Opus 4.6 + Sonnet Sub-Agents)
 
 **Phase 1 (Datenbankzugriff absichern) abgeschlossen.**
