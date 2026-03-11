@@ -2,19 +2,26 @@
 
 <!-- Maximal 3 Eintraege. Aeltester wird nach archive/YYYY-MM.md verschoben. -->
 
-## 2026-03-11 — sprintf %d Cleanup in class.erpapi.php (Claude Sonnet 4.6)
+## 2026-03-11 — ORDER BY sprintf %d in lager_max-Queries (Claude Sonnet 4.6)
+
+**Alle `sprintf('%d', ...)` in ORDER BY / bedingten SQL-Fragmenten der LieferscheinAuslagern-Funktion bereinigt.**
+
+Ergebnisse:
+- 15 DatabaseService->select() Aufrufe in `www/lib/class.erpapi.php` (Zeilen ~3048–3330)
+- `$extraorder = sprintf(' lpi.lager_platz = %d DESC, ', ...)` → Named Param `:extraorder_lp`
+- Gemeinsames `$_lmBaseParams`-Array mit bedingten `lpiid_order`, `vpe_order`, `extraorder_lp`
+- `$_orderLpiid` und `$_orderVpe` SQL-Fragmente mit `:lpiid_order` / `:vpe_order`
+- `$_lpiidOrder = sprintf(...)` in LagerAuslagernRegal → Named Param `:lpiid_ord`
+- `php -l` bestätigt: keine Syntaxfehler
+- Alle Änderungen committed
+
+## 2026-03-11 — sprintf %d Cleanup (Claude Sonnet 4.6)
 
 **Alle verbliebenen `sprintf('%d', value)` Patterns in DatabaseService-Calls bereinigt.**
 
 Ergebnisse:
 - 12 Fixes in `www/lib/class.erpapi.php`
-- INTERVAL %d DAY → INTERVAL :days DAY (Zeilen 3869, 3917, 4382, 4386)
-- DELETE/UPDATE WHERE id = %d → WHERE id = :id (Zeilen 19314, 19335, 19378)
-- LIMIT %d → LIMIT :limit mit if/else Branch (Zeile 24833)
-- UPDATE %s_position ... sort - %d → :diff (Zeile 32615)
-- pos - %d, sort + %d → :diff, :offset (Zeile 32622)
-- pos > %d → pos > :pos (Zeile 32628)
-- INTERVAL %d day → INTERVAL :days day (Zeile 37731)
+- INTERVAL %d DAY, DELETE/UPDATE WHERE id = %d, LIMIT %d, sort - %d, pos fixes
 - `php -l` bestätigt: keine Syntaxfehler
 - Alle Änderungen committed
 

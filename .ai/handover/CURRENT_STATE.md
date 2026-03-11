@@ -27,9 +27,11 @@ api, artikel, shopimport, auftrag, rechnung, zeiterfassung, ajax, projekt, onlin
 **class.erpapi.php (2.483 DatabaseService-Calls):**
 - 12 Batches über mehrere Sessions
 - Alle unsicheren Patterns mit Variable-Interpolation migriert
-- 12 restliche `sprintf('%d', value)` Patterns in DatabaseService-Calls migriert (diese Session)
+- 12 restliche `sprintf('%d', value)` Patterns in DatabaseService-Calls migriert
+- 15 ORDER BY `sprintf('%d', ...)` Patterns in LieferscheinAuslagern migriert (Zeilen ~3048–3330)
+- `$_lpiidOrder = sprintf(...)` in LagerAuslagernRegal migriert
 - Verbleibende legacy DB->Calls sind sicher (statisches SQL, hardcoded Arrays)
-- Keine `sprintf` mit `%d` für Werte mehr vorhanden — nur noch `%%d` als MySQL DATE_FORMAT Escapes
+- Keine `sprintf` mit `%d` für Werte mehr in DatabaseService-Calls
 
 ### Dokumentation
 - `.ai/best-practices/security.md` — Named Parameters als Standard dokumentiert

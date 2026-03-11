@@ -3028,7 +3028,8 @@ class erpAPI
               )
             );
             if (!empty($snDeliveryNoteStorage)) {
-              $extraorder = sprintf(' lpi.lager_platz = %d DESC, ', $snDeliveryNoteStorage[0]['storage_location_id']);
+              $extraorder = ' lpi.lager_platz = :extraorder_lp DESC, ';
+              $_iExtraorderLp = (int) $snDeliveryNoteStorage[0]['storage_location_id'];
               if ($snDeliveryNoteStorage[0]['amount'] < $restmenge && $snDeliveryNoteStorage[0]['amount'] > 0 && (!empty($snDeliveryNoteStorage) ? count($snDeliveryNoteStorage) : 0) > 1) {
                 $maxAuslagern = $snDeliveryNoteStorage[0]['amount'];
               }
@@ -3043,125 +3044,116 @@ class erpAPI
           $_iProjektLM = (int) $projekt;
           $_iLpiidLM = (int) $lpiid;
           $_iLagerPlatzVpeLM = (int) $lager_platz_vpe;
+
+          // Build conditional ORDER BY fragments and shared params for lager_max queries
+          $_orderLpiid = $lpiid ? ' lpi.id = :lpiid_order DESC, ' : '';
+          $_orderVpe   = $lager_platz_vpe ? ' lpi.lager_platz_vpe = :vpe_order DESC, ' : '';
+          $_lmBaseParams = ['artikel' => $_iArtLM];
+          if ($lpiid) {
+            $_lmBaseParams['lpiid_order'] = $_iLpiidLM;
+          }
+          if ($lager_platz_vpe) {
+            $_lmBaseParams['vpe_order'] = $_iLagerPlatzVpeLM;
+          }
+          if (!empty($_iExtraorderLp)) {
+            $_lmBaseParams['extraorder_lp'] = $_iExtraorderLp;
+          }
+
           if ($mindesthaltbarkeitsdatum) {
             if ($standardlager > 0) {
               $lager_max = $this->app->DatabaseService->select(
-                sprintf(
-                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge, lpi.id
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                  INNER JOIN (
-                    SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum
-                    FROM lager_mindesthaltbarkeitsdatum
-                    WHERE artikel = %d
-                    GROUP BY lager_platz
-                  ) AS lm ON lp.id = lm.lager_platz
-                  WHERE lpi.artikel=%d AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1  AND ' . $sperrlagerWhere) . " AND `lag`.id=%d
-                  ORDER by " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " `lag`.id=%d DESC, $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
-                  LIMIT 1",
-                  $_iKommLM,
-                  $_iArtLM,
-                  $_iArtLM,
-                  $_iStdLagerLM,
-                  $_iStdLagerLM
-                )
+                "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge, lpi.id
+                FROM lager_platz_inhalt AS lpi
+                INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                INNER JOIN (
+                  SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum
+                  FROM lager_mindesthaltbarkeitsdatum
+                  WHERE artikel = :artikel
+                  GROUP BY lager_platz
+                ) AS lm ON lp.id = lm.lager_platz
+                WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                " . ($lpiid ? '' : ' AND lp.autolagersperre!=1  AND ' . $sperrlagerWhere) . " AND `lag`.id=:stdlager
+                ORDER BY {$_orderLpiid} {$_orderVpe} `lag`.id=:stdlager DESC, {$extraorder} lm.mhddatum ASC, lpi.menge $sortreihenfolge
+                LIMIT 1",
+                array_merge($_lmBaseParams, ['komm' => $_iKommLM, 'stdlager' => $_iStdLagerLM])
               );
               if (!$lager_max) {
                 $lager_max = $this->app->DatabaseService->select(
-                  sprintf(
-                    "SELECT lpi.lager_platz, lpi.menge, lpi.id
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
-                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                    LEFT JOIN lager_mindesthaltbarkeitsdatum lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz
-                    WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id=%d
-                    ORDER by " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " lag.id=%d DESC, $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
-                    LIMIT 1",
-                    $_iArtLM,
-                    $_iStdLagerLM,
-                    $_iStdLagerLM
-                  )
+                  "SELECT lpi.lager_platz, lpi.menge, lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                  LEFT JOIN lager_mindesthaltbarkeitsdatum lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz
+                  WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id=:stdlager
+                  ORDER BY {$_orderLpiid} {$_orderVpe} lag.id=:stdlager DESC, {$extraorder} lm.mhddatum ASC, lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  array_merge($_lmBaseParams, ['stdlager' => $_iStdLagerLM])
                 );
               }
             } elseif ($projektlager > 0) {
               // Hole nach und nach bis alles da ist
               $lager_max = $this->app->DatabaseService->select(
-                sprintf(
-                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                  INNER JOIN (
-                    SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum
-                    FROM lager_mindesthaltbarkeitsdatum
-                    WHERE artikel = %d AND menge > 0
-                    GROUP BY lager_platz
-                  ) AS lm  ON lp.id = lm.lager_platz
-                  WHERE lpi.artikel=%d AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=%d
-                  ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
-                  LIMIT 1",
-                  $_iKommLM,
-                  $_iArtLM,
-                  $_iArtLM,
-                  $_iProjektLM
-                )
+                "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
+                FROM lager_platz_inhalt AS lpi
+                INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                INNER JOIN (
+                  SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum
+                  FROM lager_mindesthaltbarkeitsdatum
+                  WHERE artikel = :artikel AND menge > 0
+                  GROUP BY lager_platz
+                ) AS lm  ON lp.id = lm.lager_platz
+                WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=:projekt
+                ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lm.mhddatum ASC, lpi.menge $sortreihenfolge
+                LIMIT 1",
+                array_merge($_lmBaseParams, ['komm' => $_iKommLM, 'projekt' => $_iProjektLM])
               );
               if (!$lager_max) {
                 $lager_max = $this->app->DatabaseService->select(
-                  sprintf(
-                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
-                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                    LEFT JOIN lager_mindesthaltbarkeitsdatum AS lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz
-                    WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=%d
-                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
-                    LIMIT 1",
-                    $_iArtLM,
-                    $_iProjektLM
-                  )
+                  "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                  LEFT JOIN lager_mindesthaltbarkeitsdatum AS lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz
+                  WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=:projekt
+                  ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lm.mhddatum ASC, lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  array_merge($_lmBaseParams, ['projekt' => $_iProjektLM])
                 );
               }
             } else {
               // Hole nach und nach bis alles da ist
               $lager_max = $this->app->DatabaseService->select(
-                sprintf(
-                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
-                  FROM lager_platz_inhalt AS lpi
-                  INNER JOIN lager_platz lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                  INNER JOIN (
-                    SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum
-                    FROM lager_mindesthaltbarkeitsdatum
-                    WHERE artikel = %d AND menge > 0
-                    GROUP BY lager_platz
-                  ) AS lm  ON lp.id = lm.lager_platz
-                  WHERE lpi.artikel=%d AND lpi.menge > 0
-                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
-                  ORDER by " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
-                  LIMIT 1",
-                  $_iKommLM,
-                  $_iArtLM,
-                  $_iArtLM
-                )
+                "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
+                FROM lager_platz_inhalt AS lpi
+                INNER JOIN lager_platz lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                INNER JOIN (
+                  SELECT lager_platz, sum(menge) as menge,min(mhddatum) as mhddatum
+                  FROM lager_mindesthaltbarkeitsdatum
+                  WHERE artikel = :artikel AND menge > 0
+                  GROUP BY lager_platz
+                ) AS lm  ON lp.id = lm.lager_platz
+                WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lm.mhddatum ASC, lpi.menge $sortreihenfolge
+                LIMIT 1",
+                array_merge($_lmBaseParams, ['komm' => $_iKommLM])
               );
               if (!$lager_max) {
                 $lager_max = $this->app->DatabaseService->select(
-                  sprintf(
-                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
-                    INNER JOIN lager_mindesthaltbarkeitsdatum AS lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz
-                    WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
-                    ORDER by " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lm.mhddatum ASC, lpi.menge $sortreihenfolge
-                    LIMIT 1",
-                    $_iArtLM
-                  )
+                  "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                  INNER JOIN lager_mindesthaltbarkeitsdatum AS lm ON lm.artikel=lpi.artikel AND lp.id = lm.lager_platz
+                  WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                  ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lm.mhddatum ASC, lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  $_lmBaseParams
                 );
               }
             }
@@ -3169,169 +3161,132 @@ class erpAPI
             if ($chargenverwaltung) {
               if ($standardlager > 0) {
                 $lager_max = $this->app->DatabaseService->select(
-                  sprintf(
-                    "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
-                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                    INNER JOIN (
-                      SELECT lager_platz, sum(menge) as menge
-                      FROM lager_charge
-                      WHERE artikel = %d AND menge > 0
-                      GROUP BY lager_platz
-                    ) AS lm ON lp.id = lm.lager_platz
-                    WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.id=%d
-                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " `lag`.id=%d DESC, $extraorder lpi.menge $sortreihenfolge
-                    LIMIT 1",
-                    $_iArtLM,
-                    $_iArtLM,
-                    $_iStdLagerLM,
-                    $_iStdLagerLM
-                  )
+                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                  INNER JOIN (
+                    SELECT lager_platz, sum(menge) as menge
+                    FROM lager_charge
+                    WHERE artikel = :artikel AND menge > 0
+                    GROUP BY lager_platz
+                  ) AS lm ON lp.id = lm.lager_platz
+                  WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.id=:stdlager
+                  ORDER BY {$_orderLpiid} {$_orderVpe} `lag`.id=:stdlager DESC, {$extraorder} lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  array_merge($_lmBaseParams, ['stdlager' => $_iStdLagerLM])
                 );
                 if (!$lager_max) {
                   $lager_max = $this->app->DatabaseService->select(
-                    sprintf(
-                      "SELECT lpi.lager_platz, lpi.menge,lpi.id
-                      FROM lager_platz_inhalt AS lpi
-                      INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
-                      INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                      WHERE lpi.artikel=%d AND lpi.menge > 0
-                      " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id=%d
-                      ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " `lag`.id=%d DESC, $extraorder lpi.menge $sortreihenfolge
-                      LIMIT 1",
-                      $_iArtLM,
-                      $_iStdLagerLM,
-                      $_iStdLagerLM
-                    )
+                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id
+                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                    WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id=:stdlager
+                    ORDER BY {$_orderLpiid} {$_orderVpe} `lag`.id=:stdlager DESC, {$extraorder} lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    array_merge($_lmBaseParams, ['stdlager' => $_iStdLagerLM])
                   );
                 }
               } elseif ($projektlager > 0) {
 
                 $lager_max = $this->app->DatabaseService->select(
-                  sprintf(
-                    "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                    INNER JOIN (
-                      SELECT lager_platz, sum(menge) as menge
-                      FROM lager_charge
-                      WHERE artikel = %d AND menge > 0
-                      GROUP BY lager_platz
-                    ) AS lm ON lp.id = lm.lager_platz
-                    WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=%d
-                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
-                    LIMIT 1",
-                    $_iKommLM,
-                    $_iArtLM,
-                    $_iArtLM,
-                    $_iProjektLM
-                  )
+                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                  INNER JOIN (
+                    SELECT lager_platz, sum(menge) as menge
+                    FROM lager_charge
+                    WHERE artikel = :artikel AND menge > 0
+                    GROUP BY lager_platz
+                  ) AS lm ON lp.id = lm.lager_platz
+                  WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=:projekt
+                  ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  array_merge($_lmBaseParams, ['komm' => $_iKommLM, 'projekt' => $_iProjektLM])
                 );
                 if (!$lager_max) {
                   $lager_max = $this->app->DatabaseService->select(
-                    sprintf(
-                      "SELECT lpi.lager_platz, lpi.menge,lpi.id
-                      FROM lager_platz_inhalt AS lpi
-                      INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                      INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                      WHERE lpi.artikel=%d AND lpi.menge > 0
-                      " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=%d
-                      ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
-                      LIMIT 1",
-                      $_iKommLM,
-                      $_iArtLM,
-                      $_iProjektLM
-                    )
+                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                    WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "  AND `lag`.projekt=:projekt
+                    ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    array_merge($_lmBaseParams, ['komm' => $_iKommLM, 'projekt' => $_iProjektLM])
                   );
                 }
               } else {
                 $lager_max = $this->app->DatabaseService->select(
-                  sprintf(
-                    "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                    INNER JOIN (
-                      SELECT lager_platz, sum(menge) as menge
-                      FROM lager_charge
-                      WHERE artikel = %d AND menge > 0
-                      GROUP BY lager_platz
-                    ) AS lm  ON lp.id = lm.lager_platz
-                    WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
-                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
-                    LIMIT 1",
-                    $_iKommLM,
-                    $_iArtLM,
-                    $_iArtLM
-                  )
+                  "SELECT lpi.lager_platz, if(lpi.menge > lm.menge, lm.menge,lpi.menge) as menge,lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                  INNER JOIN (
+                    SELECT lager_platz, sum(menge) as menge
+                    FROM lager_charge
+                    WHERE artikel = :artikel AND menge > 0
+                    GROUP BY lager_platz
+                  ) AS lm  ON lp.id = lm.lager_platz
+                  WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                  ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  array_merge($_lmBaseParams, ['komm' => $_iKommLM])
                 );
                 if (!$lager_max) {
                   $lager_max = $this->app->DatabaseService->select(
-                    sprintf(
-                      "SELECT lpi.lager_platz, lpi.menge,lpi.id
-                      FROM lager_platz_inhalt AS lpi
-                      INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                      WHERE lpi.artikel=%d AND lpi.menge > 0
-                      " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
-                      ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
-                      LIMIT 1",
-                      $_iKommLM,
-                      $_iArtLM
-                    )
+                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                    FROM lager_platz_inhalt AS lpi
+                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                    WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                    ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lpi.menge $sortreihenfolge
+                    LIMIT 1",
+                    array_merge($_lmBaseParams, ['komm' => $_iKommLM])
                   );
                 }
               }
             } else {
               if ($standardlager > 0) {
                 $lager_max = $this->app->DatabaseService->select(
-                  sprintf(
-                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                    WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id=%d
-                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " `lag`.id=%d DESC, $extraorder lpi.menge $sortreihenfolge
-                    LIMIT 1",
-                    $_iKommLM,
-                    $_iArtLM,
-                    $_iStdLagerLM,
-                    $_iStdLagerLM
-                  )
+                  "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                  WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.id=:stdlager
+                  ORDER BY {$_orderLpiid} {$_orderVpe} `lag`.id=:stdlager DESC, {$extraorder} lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  array_merge($_lmBaseParams, ['komm' => $_iKommLM, 'stdlager' => $_iStdLagerLM])
                 );
               } elseif ($projektlager > 0) {
                 $lager_max = $this->app->DatabaseService->select(
-                  sprintf(
-                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                    INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
-                    WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.projekt=%d
-                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . "  $extraorder lpi.menge $sortreihenfolge
-                    LIMIT 1",
-                    $_iKommLM,
-                    $_iArtLM,
-                    $_iProjektLM
-                  )
+                  "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                  INNER JOIN lager AS `lag` ON `lag`.id=lp.lager
+                  WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . " AND `lag`.projekt=:projekt
+                  ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  array_merge($_lmBaseParams, ['komm' => $_iKommLM, 'projekt' => $_iProjektLM])
                 );
               } else {
                 $lager_max = $this->app->DatabaseService->select(
-                  sprintf(
-                    "SELECT lpi.lager_platz, lpi.menge,lpi.id
-                    FROM lager_platz_inhalt AS lpi
-                    INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> %d
-                    WHERE lpi.artikel=%d AND lpi.menge > 0
-                    " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
-                    ORDER BY " . ($lpiid ? sprintf(" lpi.id = %d DESC, ", $_iLpiidLM) : '') . " " . ($lager_platz_vpe ? sprintf(" lpi.lager_platz_vpe = %d DESC, ", $_iLagerPlatzVpeLM) : '') . " $extraorder lpi.menge $sortreihenfolge
-                    LIMIT 1",
-                    $_iKommLM,
-                    $_iArtLM
-                  )
+                  "SELECT lpi.lager_platz, lpi.menge,lpi.id
+                  FROM lager_platz_inhalt AS lpi
+                  INNER JOIN lager_platz AS lp ON lpi.lager_platz=lp.id AND lp.id <> :komm
+                  WHERE lpi.artikel=:artikel AND lpi.menge > 0
+                  " . ($lpiid ? '' : ' AND lp.autolagersperre!=1 AND ' . $sperrlagerWhere) . "
+                  ORDER BY {$_orderLpiid} {$_orderVpe} {$extraorder} lpi.menge $sortreihenfolge
+                  LIMIT 1",
+                  array_merge($_lmBaseParams, ['komm' => $_iKommLM])
                 );
               }
             }
@@ -19319,8 +19274,12 @@ $( this ).dialog( "close" );
           ['regal' => (int)$regal, 'artikel' => (int)$artikel, 'menge' => $menge, 'grund' => $grund, 'bearbeiter' => $username, 'projekt' => $projekt, 'bestand' => $bestand, 'doctype' => $doctype, 'doctypeid' => (int)$doctypeid]
         );
       } else {
-        $_lpiidOrder = ($lager_platz_vpe && $lpiid) ? sprintf(' id = %d DESC, ', (int)$lpiid) : '';
-        $lpis = $this->app->DatabaseService->select("SELECT id, menge, lager_platz_vpe FROM lager_platz_inhalt WHERE artikel = :artikel AND lager_platz = :regal ORDER BY {$_lpiidOrder} lager_platz_vpe = :vpe DESC, id", ['artikel' => (int)$artikel, 'regal' => (int)$regal, 'vpe' => (int)$lager_platz_vpe]);
+        $_lpiidOrderSql = ($lager_platz_vpe && $lpiid) ? ' id = :lpiid_ord DESC, ' : '';
+        $_lpiidOrderParams = ['artikel' => (int)$artikel, 'regal' => (int)$regal, 'vpe' => (int)$lager_platz_vpe];
+        if ($lager_platz_vpe && $lpiid) {
+          $_lpiidOrderParams['lpiid_ord'] = (int)$lpiid;
+        }
+        $lpis = $this->app->DatabaseService->select("SELECT id, menge, lager_platz_vpe FROM lager_platz_inhalt WHERE artikel = :artikel AND lager_platz = :regal ORDER BY {$_lpiidOrderSql} lager_platz_vpe = :vpe DESC, id", $_lpiidOrderParams);
         if ($lpis) {
           $vpemengen = null;
           $_menge = $menge;
