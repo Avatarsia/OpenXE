@@ -256,7 +256,7 @@ final class DatabaseService
      *
      * @throws RuntimeException if the identifier contains disallowed characters.
      */
-    public function validateIdentifier(string $identifier): void
+    public function validateIdentifier(string $identifier): string
     {
         if (!preg_match('/^[a-zA-Z0-9_]+$/', $identifier)) {
             throw new RuntimeException(
@@ -264,6 +264,7 @@ final class DatabaseService
                 "Only alphanumeric characters and underscores are allowed."
             );
         }
+        return $identifier;
     }
 
     // -------------------------------------------------------------------------

@@ -2670,7 +2670,7 @@ class erpAPI
           $id,
           $lpiid
         );
-        $beleg_chargesnmhd = $this->app->DatabaseService->select("SELECT * FROM `beleg_chargesnmhd` WEHRE doctype = 'lieferschein' AND doctypeid = :id AND pos = :pos", ['id' => (int) $id, 'pos' => (int) $olp['parameter']]);
+        $beleg_chargesnmhd = $this->app->DatabaseService->select("SELECT * FROM `beleg_chargesnmhd` WHERE doctype = 'lieferschein' AND doctypeid = :id AND pos = :pos", ['id' => (int) $id, 'pos' => (int) $olp['parameter']]);
         $seriennummern = $this->app->DatabaseService->select("SELECT * FROM seriennummern WHERE lieferschein = :id AND lieferscheinpos = :pos", ['id' => (int) $id, 'pos' => (int) $olp['parameter']]);
         if ($seriennummern) {
           foreach ($seriennummern as $sn) {
