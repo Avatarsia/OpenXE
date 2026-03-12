@@ -1,13 +1,13 @@
 <?php
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -73,8 +73,8 @@ class Gutschrift extends GenGutschrift
     $id = (int)$this->app->Secure->GetGET('id');
     $returnOrderRow = $id <= 0 ? null : $this->app->DB->SelectRow(
       "SELECT ro.stornorechnung, ro.belegnr, adr.name
-      FROM `gutschrift` AS `ro` 
-      LEFT JOIN `adresse` AS `adr` ON ro.adresse = adr.id 
+      FROM `gutschrift` AS `ro`
+      LEFT JOIN `adresse` AS `adr` ON ro.adresse = adr.id
       WHERE ro.id = {$id}"
     );
     $stornorechnung = !empty($returnOrderRow['stornorechnung']);
@@ -139,7 +139,7 @@ class Gutschrift extends GenGutschrift
 
   public function GutschriftFormeln()
   {
-    
+
   }
 
   public function GutschriftCreatePayment()
@@ -148,17 +148,17 @@ class Gutschrift extends GenGutschrift
     $ids = [$id];
     $this->app->DB->Insert(
       sprintf(
-        "INSERT INTO `payment_transaction` 
+        "INSERT INTO `payment_transaction`
             (`returnorder_id`, `payment_status`, `address_id`, `amount`, `currency`, `payment_json`, `payment_info`)
         SELECT ro.id,'angelegt', ro.adresse, ro.soll, IF(ro.waehrung <> '', ro.waehrung, 'EUR'),
           JSON_OBJECT('bic', ad.swift, 'iban', ad.iban, 'empfaenger', ad.inhaber, 'betrag', ro.soll, 'waehrung',
           IF(ro.waehrung <> '', ro.waehrung, 'EUR'), 'datum', ro.datum, 'vz1', '', 'vz2', ''),
-          CONCAT(IF(ad.swift != '', IF(ad.iban != '', CONCAT('BIC: ', ad.swift, '<br />'), 
-          CONCAT('BIC: ', ad.swift)), ''), IF(ad.iban != '', CONCAT('IBAN: ', ad.iban), ''))  
+          CONCAT(IF(ad.swift != '', IF(ad.iban != '', CONCAT('BIC: ', ad.swift, '<br />'),
+          CONCAT('BIC: ', ad.swift)), ''), IF(ad.iban != '', CONCAT('IBAN: ', ad.iban), ''))
         FROM `gutschrift` AS `ro`
         LEFT JOIN `payment_transaction` AS `pt` ON ro.id = pt.returnorder_id
         LEFT JOIN `adresse` AS `ad` ON ro.adresse = ad.id
-        WHERE pt.id IS NULL AND ro.id IN (%s) 
+        WHERE pt.id IS NULL AND ro.id IN (%s)
           AND ro.status <> '' AND ro.status <> 'angelegt' AND ro.status <> 'storniert'",
         implode(',', $ids)
       )
@@ -168,20 +168,20 @@ class Gutschrift extends GenGutschrift
     }
     $this->app->Location->execute('index.php?module=gutschrift&action=edit&id='.$id);
   }
-  
+
   public function GutschriftSteuer()
   {
-    
+
   }
-  
+
   public function GutschriftSumme()
   {
 
   }
-  
+
   public function GutschriftEinkaufspreise()
   {
-  
+
   }
 
   public function GutschriftArchivierePDF()
@@ -267,9 +267,9 @@ class Gutschrift extends GenGutschrift
     $id=$this->app->Secure->GetGET('id');
     $this->app->DB->Update(
       sprintf(
-        'UPDATE `gutschrift` 
-        SET `rabatt` = 0, `rabatt1` = 0,`rabatt2` = 0,`rabatt3` = 0,`rabatt4` = 0,`rabatt5` = 0,`realrabatt`= 0 
-        WHERE `id` = %d 
+        'UPDATE `gutschrift`
+        SET `rabatt` = 0, `rabatt1` = 0,`rabatt2` = 0,`rabatt3` = 0,`rabatt4` = 0,`rabatt5` = 0,`realrabatt`= 0
+        WHERE `id` = %d
         LIMIT 1',
         $id
       )
@@ -311,7 +311,7 @@ class Gutschrift extends GenGutschrift
 
 
   public function GutschriftEditable()
-  { 
+  {
     $this->app->YUI->AARLGEditable();
   }
 
@@ -401,9 +401,9 @@ class Gutschrift extends GenGutschrift
     if($status==='freigegeben')
     {
       $table->Query(
-        "SELECT SUBSTRING(ap.bezeichnung,1,20) as artikel, ap.nummer as Nummer, 
+        "SELECT SUBSTRING(ap.bezeichnung,1,20) as artikel, ap.nummer as Nummer,
           TRIM(ap.menge)+0 as Menge,FORMAT(ap.preis,2,'de_DE') as Preis
-        FROM gutschrift_position ap, artikel a 
+        FROM gutschrift_position ap, artikel a
         WHERE ap.gutschrift='$id' AND a.id=ap.artikel"
       );
       $artikel = $table->DisplayNew('return','Preis','noAction');
@@ -412,7 +412,7 @@ class Gutschrift extends GenGutschrift
       $table->Query(
         "SELECT SUBSTRING(ap.bezeichnung,1,20) as artikel, ap.nummer as Nummer, TRIM(ap.menge)+0 as Menge,
         FORMAT(ap.preis,2,'de_DE') as Preis
-        FROM gutschrift_position ap, artikel a 
+        FROM gutschrift_position ap, artikel a
         WHERE ap.gutschrift='$id' AND a.id=ap.artikel"
       );
       $artikel = $table->DisplayNew('return','Preis','noAction');
@@ -426,17 +426,17 @@ class Gutschrift extends GenGutschrift
    * @param bool   $menu
    */
   public function GutschriftMiniDetail($parsetarget='',$menu=true)
-  { 
+  {
     $id = (int)$this->app->Secure->GetGET('id');
     if(!$this->app->DatabaseService->selectValue("SELECT deckungsbeitragcalc FROM gutschrift WHERE id = :id LIMIT 1", ['id' => $id])) {
       $this->app->erp->BerechneDeckungsbeitrag($id,'gutschrift');
     }
-    $auftragArr = $this->app->DB->SelectArr("SELECT * FROM gutschrift WHERE id='$id' LIMIT 1");
+    $auftragArr = $this->app->DatabaseService->select("SELECT * FROM gutschrift WHERE id = :id LIMIT 1", ['id' => $id]);
     $kundennummer = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id = :adresseId LIMIT 1", ['adresseId' => (int)$auftragArr[0]['adresse']]);
     $projekt = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => (int)$auftragArr[0]['projekt']]);
     $kundenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = :adresseId LIMIT 1", ['adresseId' => (int)$auftragArr[0]['adresse']]);
     $this->app->Tpl->Set('DECKUNGSBEITRAG',0);
-    $this->app->Tpl->Set('DBPROZENT',0);    
+    $this->app->Tpl->Set('DBPROZENT',0);
     $this->app->Tpl->Set('KUNDE',"<a href=\"index.php?module=adresse&action=edit&id=".$auftragArr[0]['adresse']."\">".$kundennummer."</a> ".$kundenname);
 
    if($this->app->erp->RechteVorhanden("projekt","dashboard"))
@@ -461,8 +461,8 @@ class Gutschrift extends GenGutschrift
           <a href=\"index.php?module=rechnung&action=edit&id=',`r`.id,
             '\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Rechnung bearbeiten\" border=\"0\"></a>'
             ) as `rechnung`
-        FROM `gutschrift` AS `g` 
-        LEFT JOIN `rechnung` AS `r` ON `r`.id=`g`.rechnungid 
+        FROM `gutschrift` AS `g`
+        LEFT JOIN `rechnung` AS `r` ON `r`.id=`g`.rechnungid
         WHERE `g`.id='$id'"
    );
 
@@ -478,7 +478,7 @@ class Gutschrift extends GenGutschrift
           if($lieferscheinid > 0) {
             $lieferschein = $this->app->DatabaseService->selectValue("SELECT CONCAT(belegnr,'&nbsp;<a href=\"index.php?module=lieferschein&action=pdf&id=',id,'\">&lt;img src=\"./themes/new/images/pdf.svg\" title=\"Lieferschein PDF\" border=\"0\">&lt;/a>&nbsp;<a href=\"index.php?module=lieferschein&action=edit&id=',id,'\">&lt;img src=\"./themes/new/images/edit.svg\" title=\"Lieferschein bearbeiten\" border=\"0\">&lt;/a>') FROM lieferschein WHERE id = :lieferscheinId LIMIT 1", ['lieferscheinId' => $lieferscheinid]);
           }
-    
+
           $this->app->Tpl->Set('LIEFERSCHEIN',$lieferschein);
         }
       }
@@ -538,7 +538,7 @@ class Gutschrift extends GenGutschrift
     }
     // ARTIKEL
 
-    $status = $this->app->DB->Select("SELECT status FROM gutschrift WHERE id='$id' LIMIT 1");
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM gutschrift WHERE id = :id LIMIT 1", ['id' => $id]);
 
     $table = new EasyTable($this->app);
 
@@ -591,7 +591,7 @@ class Gutschrift extends GenGutschrift
     }else{
       $Brief = new GutschriftPDF($this->app,$projekt);
     }
-    
+
     $Dokumentenliste = $Brief->getArchivedFiles($id, 'gutschrift');
     if($Dokumentenliste)
     {
@@ -626,7 +626,7 @@ class Gutschrift extends GenGutschrift
 
   function Gutschriftadresse($id)
   {
-    $data = $this->app->DB->SelectArr("SELECT * FROM gutschrift WHERE id='$id' LIMIT 1");
+    $data = $this->app->DatabaseService->select("SELECT * FROM gutschrift WHERE id = :id LIMIT 1", ['id' => $id]);
 
     foreach($data[0] as $key=>$value)
     {
@@ -654,7 +654,7 @@ class Gutschrift extends GenGutschrift
   {
     $id = $this->app->Secure->GetGET('id');
 
-    $zahlungen = $this->app->erp->GetZahlungen($id,'gutschrift'); 
+    $zahlungen = $this->app->erp->GetZahlungen($id,'gutschrift');
     if (!empty($zahlungen)) {
         $et = new EasyTable($this->app);
 
@@ -663,8 +663,8 @@ class Gutschrift extends GenGutschrift
         foreach ($zahlungen as $zahlung) {
             $row = array(
                 $zahlung['datum'],
-                "<a href=\"index.php?module=".$zahlung['doc_typ']."&action=edit&id=".$zahlung['doc_id']."\">                            
-                    ".ucfirst($zahlung['doc_typ'])." 
+                "<a href=\"index.php?module=".$zahlung['doc_typ']."&action=edit&id=".$zahlung['doc_id']."\">
+                    ".ucfirst($zahlung['doc_typ'])."
                     ".$zahlung['doc_info']."
                 </a>",
                 $zahlung['betrag'],
@@ -674,7 +674,7 @@ class Gutschrift extends GenGutschrift
         }
 
         $salden = $this->app->erp->GetSaldenDokument($id,'gutschrift');
-        foreach ($salden as $saldo) {   
+        foreach ($salden as $saldo) {
             $row = array(
                 '',
                 '<b>Saldo</b>',
@@ -683,8 +683,8 @@ class Gutschrift extends GenGutschrift
             );
             $et->AddRow($row);
         }
-        return($et->DisplayNew('return',""));           
-    }  
+        return($et->DisplayNew('return',""));
+    }
   }
 
 
@@ -721,7 +721,7 @@ class Gutschrift extends GenGutschrift
     if(empty($intern)){
       $this->app->erp->RunHook('beleg_freigabe', 4, $doctype, $id, $allowedFrm, $showDefault);
     }
-    if($allowedFrm && $freigabe==$id) {        
+    if($allowedFrm && $freigabe==$id) {
 
       if($belegnr=='') {
         $this->app->erp->BelegFreigabe('gutschrift',$id);
@@ -744,14 +744,14 @@ class Gutschrift extends GenGutschrift
       $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Die Gutschrift war bereits freigegeben!</div>");
       $this->app->Location->execute("index.php?module=gutschrift&action=edit&id=$id&msg=$msg");
     }
-    if($showDefault){    
+    if($showDefault){
      if ($rechnungid > 0) {
            $input_html = "<input type=\"button\" value=\"Freigabe ohne Rechnung\" onclick=\"window.location.href='index.php?module=gutschrift&action=freigabe&id=$id&freigabe=$id&gegen_rechnung=0'\">"
-                            ."<input type=\"button\" value=\"Freigabe gegen Rechnung\" onclick=\"window.location.href='index.php?module=gutschrift&action=freigabe&id=$id&freigabe=$id&gegen_rechnung=1'\">";          
+                            ."<input type=\"button\" value=\"Freigabe gegen Rechnung\" onclick=\"window.location.href='index.php?module=gutschrift&action=freigabe&id=$id&freigabe=$id&gegen_rechnung=1'\">";
      } else {
         $input_html = "<input type=\"button\" value=\"Freigabe Rechnung\" onclick=\"window.location.href='index.php?module=gutschrift&action=freigabe&id=$id&freigabe=$id'\">";
      }
-      $this->app->Tpl->Set('TAB1', "<div class=\"info\">Soll die Gutschrift an <b>$name</b> im Wert von <b>$summe $waehrung</b> 
+      $this->app->Tpl->Set('TAB1', "<div class=\"info\">Soll die Gutschrift an <b>$name</b> im Wert von <b>$summe $waehrung</b>
         jetzt freigegeben werden? ".
             $input_html.
         "</div>");
@@ -788,7 +788,7 @@ class Gutschrift extends GenGutschrift
     {
       if(0)//$status=="versendet")
       {
-        // KUNDE muss RMA starten                                                                                                                             
+        // KUNDE muss RMA starten
         $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Gutschrift \"$name\" ($belegnr) kann nicht storniert werden sie bereits versendet ist.</div>");
       }
       else
@@ -796,9 +796,9 @@ class Gutschrift extends GenGutschrift
         $maxbelegnr = $this->app->DB->Select("SELECT MAX(belegnr) FROM gutschrift");
         if(0)//$maxbelegnr == $belegnr)
         {
-          $this->app->DB->Delete("DELETE FROM gutschrift_position WHERE gutschrift='$id'");
-          $this->app->DB->Delete("DELETE FROM gutschrift_protokoll WHERE gutschrift='$id'");
-          $this->app->DB->Delete("DELETE FROM gutschrift WHERE id='$id'");
+          $this->app->DatabaseService->delete("DELETE FROM gutschrift_position WHERE gutschrift = :id", ['id' => $id]);
+          $this->app->DatabaseService->delete("DELETE FROM gutschrift_protokoll WHERE gutschrift = :id", ['id' => $id]);
+          $this->app->DatabaseService->delete("DELETE FROM gutschrift WHERE id = :id", ['id' => $id]);
           $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Gutschrift \"$name\" ($belegnr) wurde ge&ouml;scht !</div>");
         } else
         {
@@ -824,7 +824,7 @@ class Gutschrift extends GenGutschrift
     {
       $this->app->erp->DeleteGutschrift($id);
       $this->app->Tpl->Set('MESSAGE',"<div class=\"info\">Gutschrift wurde gel&ouml;scht!</div>");
-    } else 
+    } else
     {
       $this->app->Tpl->Set('MESSAGE',"<div class=\"error\">Die Gutschrift kann nicht mehr gel&ouml;scht werden, da diese bereits versendet wurde!</div>");
     }
@@ -893,7 +893,7 @@ class Gutschrift extends GenGutschrift
         $Brief = new GutschriftPDF($this->app,$projekt);
       }
       $Brief->GetGutschrift($id);
-      $Brief->displayDocument(); 
+      $Brief->displayDocument();
     }// else
     // $this->app->Tpl->Set(MESSAGE,"<div class=\"error\">Noch nicht freigegebene Gutschriften k&ouml;nnen nicht als PDF betrachtet werden.!</div>");
 
@@ -954,7 +954,7 @@ class Gutschrift extends GenGutschrift
     $this->app->YUI->SortListEvent('copy','gutschrift_position','gutschrift');
     $this->GutschriftPositionen();
   }
-  
+
   public function DelGutschriftPosition()
   {
     $this->app->YUI->SortListEvent('del','gutschrift_position','gutschrift');
@@ -1012,7 +1012,7 @@ class Gutschrift extends GenGutschrift
     }
     $id = $this->app->Secure->GetGET('id');
 
-    $artikel= $this->app->DB->Select("SELECT artikel FROM gutschrift_position WHERE id='$id' LIMIT 1");
+    $artikel= $this->app->DatabaseService->selectValue("SELECT artikel FROM gutschrift_position WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     // nach page inhalt des dialogs ausgeben
     $filename = 'widgets/widget.gutschrift_position_custom.php';
@@ -1023,7 +1023,7 @@ class Gutschrift extends GenGutschrift
     else {
       $widget = new WidgetGutschrift_position($this->app,'PAGE');
     }
-    $sid= $this->app->DB->Select("SELECT gutschrift FROM gutschrift_position WHERE id='$id' LIMIT 1");
+    $sid= $this->app->DatabaseService->selectValue("SELECT gutschrift FROM gutschrift_position WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $widget->form->SpecialActionAfterExecute('close_refresh',
         "index.php?module=gutschrift&action=positionen&id=$sid");
     $widget->Edit();
@@ -1047,7 +1047,7 @@ class Gutschrift extends GenGutschrift
     // zum aendern vom Vertrieb
     $sid = $this->app->Secure->GetGET("sid");
     $cmd = $this->app->Secure->GetGET("cmd");
-    
+
     if($cmd === 'dadown')
     {
       $erg['status'] = 0;
@@ -1095,7 +1095,7 @@ class Gutschrift extends GenGutschrift
       echo json_encode($erg);
       $this->app->ExitXentral();
     }
-    
+
     if($this->app->erp->VertriebAendern('gutschrift',$id,$cmd,$sid)) {
       return;
     }
@@ -1152,7 +1152,7 @@ class Gutschrift extends GenGutschrift
         $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Die Gutschrift wurde noch nicht versendet! <input type=\"button\" onclick=\"if(!confirm('Soll das Dokument archiviert werden?')) return false;else window.location.href='index.php?module=gutschrift&action=archivierepdf&id=$id';\" value=\"Manuell archivieren\" /> <input type=\"button\" value=\"Dokument versenden\" onclick=\"DokumentAbschicken('gutschrift',$id)\"></div>");
       }
     }
-    
+
     if($schreibschutz!='1' && $this->app->erp->RechteVorhanden('gutschrift','schreibschutz')){
       $this->app->erp->AnsprechpartnerButton($adresse);
     }
@@ -1186,7 +1186,11 @@ class Gutschrift extends GenGutschrift
     if($zahlungsweise=="einzugsermaechtigung" || $zahlungsweise=="lastschrift") $this->app->Tpl->Set('EINZUGSERMAECHTIGUNG',"");
     if($zahlungsweise=="vorkasse" || $zahlungsweise=="kreditkarte" || $zahlungsweise=="paypal" || $zahlungsweise=="bar") $this->app->Tpl->Set('VORKASSE',"");
 
-    $zahlungsinfo = $this->app->DB->SelectArr("SELECT zahlungsstatus, ".$this->app->erp->FormatMenge('soll*(-1)',2)." as betrag FROM gutschrift WHERE id='$id' LIMIT 1"); // id already int-cast above
+    $formatMenge = $this->app->erp->FormatMenge('soll*(-1)',2); // trusted internal SQL expression
+    $zahlungsinfo = $this->app->DatabaseService->select(
+        "SELECT zahlungsstatus, $formatMenge as betrag FROM gutschrift WHERE id = :id LIMIT 1",
+        ['id' => (int)$id]
+    );
     $this->app->Tpl->Set('ZAHLUNGSSTATUS_DB',$zahlungsinfo[0]['zahlungsstatus']);
     $this->app->Tpl->Set('SOLL',$zahlungsinfo[0]['betrag']);
 
@@ -1206,7 +1210,7 @@ class Gutschrift extends GenGutschrift
     if($schreibschutz=='1' && $this->app->erp->RechteVorhanden('gutschrift','edit'))
     {
       $this->app->erp->RemoveReadonly('zahlungsstatus');
-        
+
         if ($aktion = $this->app->Secure->GetPOST('speichern') == 'Speichern') {
             $zahlungsstatus = $this->app->Secure->GetPOST('zahlungsstatus');
             $this->app->DatabaseService->update("UPDATE gutschrift SET zahlungsstatus = :zahlungsstatus WHERE id = :id LIMIT 1", ['zahlungsstatus' => $zahlungsstatus, 'id' => $id]);
@@ -1214,10 +1218,10 @@ class Gutschrift extends GenGutschrift
 
     }
 
-    $rechnungid = $this->app->DB->Select("SELECT rechnungid FROM gutschrift WHERE id='$id' LIMIT 1");
-    $rechnungid = $this->app->DB->Select("SELECT id FROM rechnung WHERE id='$rechnungid' AND belegnr!='' LIMIT 1");
+    $rechnungid = $this->app->DatabaseService->selectValue("SELECT rechnungid FROM gutschrift WHERE id = :id LIMIT 1", ['id' => $id]);
+    $rechnungid = $this->app->DatabaseService->selectValue("SELECT id FROM rechnung WHERE id = :rechnungid AND belegnr != '' LIMIT 1", ['rechnungid' => (int)$rechnungid]);
 
-    $alle_gutschriften = $this->app->DB->SelectArr("SELECT id,belegnr FROM gutschrift WHERE rechnungid='$rechnungid' AND rechnungid>0");
+    $alle_gutschriften = $this->app->DatabaseService->select("SELECT id,belegnr FROM gutschrift WHERE rechnungid = :rechnungid AND rechnungid > 0", ['rechnungid' => (int)$rechnungid]);
 
 	if (!is_null($alle_gutschriften)) {
 	    if((!empty($alle_gutschriften)?count($alle_gutschriften):0) > 1)
@@ -1233,7 +1237,7 @@ class Gutschrift extends GenGutschrift
     //      $this->app->Tpl->Set(MESSAGE,"<div class=\"error\">Diese Gutschrift wurde bereits versendet und darf daher nicht mehr bearbeitet werden!</div>");
 
     if($status=="")
-      $this->app->DB->Update("UPDATE gutschrift SET status='angelegt' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE gutschrift SET status = 'angelegt' WHERE id = :id LIMIT 1", ['id' => $id]);
     if($schreibschutz != '1'){
       if($this->app->erp->Firmendaten("schnellanlegen") == "1"){
         $this->app->Tpl->Set('BUTTON_UEBERNEHMEN', '      <input type="button" value="&uuml;bernehmen" onclick="document.getElementById(\'uebernehmen\').value=1; document.getElementById(\'eprooform\').submit();"/><input type="hidden" id="uebernehmen" name="uebernehmen" value="0">
@@ -1279,7 +1283,7 @@ class Gutschrift extends GenGutschrift
     }
 
 
-    // easy table mit arbeitspaketen YUI als template 
+    // easy table mit arbeitspaketen YUI als template
     $table = new EasyTable($this->app);
     $table->Query("SELECT bezeichnung as artikel, nummer as Nummer, menge, vpe as VPE, FORMAT(preis,4) as preis        FROM gutschrift_position        WHERE gutschrift='$id'",0,'');
     $table->DisplayNew('POSITIONEN','Preis','noAction');
@@ -1311,8 +1315,8 @@ class Gutschrift extends GenGutschrift
 
     $sollExtSoll = $this->app->DB->SelectRow(
       sprintf(
-        "SELECT extsoll, soll 
-        FROM gutschrift 
+        "SELECT extsoll, soll
+        FROM gutschrift
         WHERE id = %d AND schreibschutz = 0 AND status = 'versendet' AND extsoll <> 0",
         $id
       )
@@ -1381,9 +1385,9 @@ class Gutschrift extends GenGutschrift
         Offene Auftr&auml;ge, die durch andere Mitarbeiter in Bearbeitung sind.
         <br>
         </td>
-        </tr>  
+        </tr>
         </table>
-        <br> 
+        <br>
         [AUFTRAGE]");
 
 
@@ -1407,7 +1411,7 @@ class Gutschrift extends GenGutschrift
   {
     $this->app->Tpl->Set('UEBERSCHRIFT', 'Gutschriften');
 
-    $this->app->DB->Update("UPDATE gutschrift SET zahlungsstatus='offen' WHERE zahlungsstatus=''"); 
+    $this->app->DB->Update("UPDATE gutschrift SET zahlungsstatus='offen' WHERE zahlungsstatus=''");
 
     if($this->app->Secure->GetPOST('ausfuehren') && $this->app->erp->RechteVorhanden('gutschrift', 'edit')) {
       $drucker = $this->app->Secure->GetPOST('seldrucker');
@@ -1437,9 +1441,9 @@ class Gutschrift extends GenGutschrift
             if(!empty($ids)){
               $this->app->DB->Update(
                 sprintf(
-                  "UPDATE `gutschrift` 
-                  SET `manuell_vorabbezahlt`=CURDATE(), 
-                  `manuell_vorabbezahlt_hinweis`=CONCAT(`manuell_vorabbezahlt_hinweis`,'\r\n','Erledigt am manuell auf %s gesetzt') 
+                  "UPDATE `gutschrift`
+                  SET `manuell_vorabbezahlt`=CURDATE(),
+                  `manuell_vorabbezahlt_hinweis`=CONCAT(`manuell_vorabbezahlt_hinweis`,'\r\n','Erledigt am manuell auf %s gesetzt')
                   WHERE `id` IN (%s)",
                   date('d.m.Y'), implode(',', $ids)
                 )
@@ -1450,9 +1454,9 @@ class Gutschrift extends GenGutschrift
             if(!empty($ids)) {
               $this->app->DB->Update(
                 sprintf(
-                  "UPDATE `gutschrift` 
-                  SET `manuell_vorabbezahlt` = NULL, 
-                    `manuell_vorabbezahlt_hinweis`=CONCAT(`manuell_vorabbezahlt_hinweis`,'\r\n','Erledigt am manuell zurückgesetzt am %s') 
+                  "UPDATE `gutschrift`
+                  SET `manuell_vorabbezahlt` = NULL,
+                    `manuell_vorabbezahlt_hinweis`=CONCAT(`manuell_vorabbezahlt_hinweis`,'\r\n','Erledigt am manuell zurückgesetzt am %s')
                   WHERE `id` IN (%s)",
                   date('d.m.Y'), implode(',', $ids)
                 )
@@ -1531,14 +1535,15 @@ class Gutschrift extends GenGutschrift
                   [$tmpfile],'','',$projekt,$email, $name
                 );
                 $ansprechpartner = $name.' <'.$email.'>';
-                $this->app->DB->Insert("INSERT INTO dokumente_send
-                    (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,versendet,dateiid) 
-                    VALUES ('','gutschrift',NOW(),'".$this->app->DB->real_escape_string($this->app->User->GetName())."',
-                      '$adresse','$v','email','$betreff','$text','$projekt','$ansprechpartner',1,'$fileid')");
-                $tmpid = $this->app->DB->GetInsertID();
+                $tmpid = $this->app->DatabaseService->insert(
+                  "INSERT INTO dokumente_send (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,versendet,dateiid) VALUES ('','gutschrift',NOW(),:bearbeiter,:adresse,:v,'email',:betreff,:text,:projekt,:ansprechpartner,1,:fileid)",
+                  ['bearbeiter' => $this->app->User->GetName(), 'adresse' => (int)$adresse, 'v' => (int)$v, 'betreff' => $emailtext['betreff'], 'text' => $emailtext['text'], 'projekt' => (int)$projekt, 'ansprechpartner' => $ansprechpartner, 'fileid' => (int)$fileid]
+                );
                 unlink($tmpfile);
-                $this->app->DB->Update("UPDATE gutschrift SET versendet=1, versendet_am=NOW(),
-                  versendet_per='email',versendet_durch='".$this->app->DB->real_escape_string($this->app->User->GetName())."',schreibschutz='1' WHERE id='$v' LIMIT 1");
+                $this->app->DatabaseService->update(
+                  "UPDATE gutschrift SET versendet=1, versendet_am=NOW(), versendet_per='email', versendet_durch=:durch, schreibschutz='1' WHERE id=:id LIMIT 1",
+                  ['durch' => $this->app->User->GetName(), 'id' => (int)$v]
+                );
                 $this->app->erp->GutschriftProtokoll($v,'Gutschrift versendet');
               }
             }
@@ -1563,9 +1568,9 @@ class Gutschrift extends GenGutschrift
               $this->app->erp->GutschriftProtokoll($returnOrderId, 'Gutschrift versendet');
               $this->app->DB->Update(
                 sprintf(
-                  "UPDATE `gutschrift` 
-                  SET `schreibschutz`=1, `versendet` = 1, `status`='versendet' 
-                  WHERE `id` = %d 
+                  "UPDATE `gutschrift`
+                  SET `schreibschutz`=1, `versendet` = 1, `status`='versendet'
+                  WHERE `id` = %d
                   LIMIT 1",
                   $returnOrderId
                 )
@@ -1593,14 +1598,14 @@ class Gutschrift extends GenGutschrift
                 $Brief->ArchiviereDocument();
                 $this->app->printer->Drucken($drucker,$tmpfile);
                 $doctype = 'gutschrift';
-                $adressId = $this->app->DB->Select("SELECT adresse FROM gutschrift WHERE id = '$returnOrderId' LIMIT 1");
+                $adressId = $this->app->DatabaseService->selectValue("SELECT adresse FROM gutschrift WHERE id = :returnOrderId LIMIT 1", ['returnOrderId' => (int)$returnOrderId]);
                 $this->app->erp->RunHook('dokumentsend_ende', 5, $doctype, $returnOrderId, $projekt, $adressId, $aktion);
                 $this->app->erp->GutschriftProtokoll($returnOrderId,'Gutschrift versendet');
                 $this->app->DB->Update(
                   sprintf(
-                    "UPDATE `gutschrift` 
-                    SET `schreibschutz` = 1, `versendet` = 1, `status`='versendet' 
-                    WHERE `id` = %d 
+                    "UPDATE `gutschrift`
+                    SET `schreibschutz` = 1, `versendet` = 1, `status`='versendet'
+                    WHERE `id` = %d
                     LIMIT 1",
                     $returnOrderId
                   )
@@ -1649,7 +1654,7 @@ class Gutschrift extends GenGutschrift
             }
           break;
         }
-      }      
+      }
     }
 
    // refresh all open items
@@ -1658,19 +1663,16 @@ class Gutschrift extends GenGutschrift
     foreach ($openids as $openid) {
         $saldo = $this->app->erp->GetSaldoDokument($openid['id'],'gutschrift');
 
-        if (!empty($saldo)) {            
+        if (!empty($saldo)) {
             if ($saldo['waehrung'] == $openid['waehrung']) {
-                $sql = "UPDATE 
-                            gutschrift
-                        SET
-                            ist = ".$saldo['betrag']."+soll,
-                            zahlungsstatus = IF(".$saldo['betrag']." = 0,'bezahlt','offen')
-                        WHERE id=".$openid['id'];
-                $this->app->DB->Update($sql);
-            } 
+                $this->app->DatabaseService->update(
+                    "UPDATE gutschrift SET ist = :betrag + soll, zahlungsstatus = IF(:betrag2 = 0, 'bezahlt', 'offen') WHERE id = :id",
+                    ['betrag' => $saldo['betrag'], 'betrag2' => $saldo['betrag'], 'id' => $openid['id']]
+                );
+            }
         }
         else {
-            $this->app->DB->Update("UPDATE gutschrift SET ist = null WHERE id=".$openid['id']);
+            $this->app->DatabaseService->update("UPDATE gutschrift SET ist = null WHERE id = :id", ['id' => $openid['id']]);
         }
     }
 
@@ -1688,7 +1690,7 @@ class Gutschrift extends GenGutschrift
     }
 
     $zahlungsweisen = $this->app->DB->SelectArr('
-      SELECT `zahlungsweise` 
+      SELECT `zahlungsweise`
       FROM `gutschrift`
       GROUP BY `zahlungsweise`
     ');
@@ -1783,22 +1785,22 @@ class Gutschrift extends GenGutschrift
   {
     $this->app->DB->Insert('INSERT INTO gutschrift (id) VALUES (NULL)');
     $newid = $this->app->DB->GetInsertID();
-    $arr = $this->app->DB->SelectRow("SELECT NOW() as datum,projekt,bodyzusatz,freitext,adresse,name,abteilung,unterabteilung,strasse,adresszusatz,plz,ort,land,ustid,email,telefon,telefax,betreff,kundennummer, bearbeiter,zahlungszieltage,zahlungszieltageskonto,zahlungsweise,ohne_artikeltext,ohne_briefpapier,'angelegt' as status,typ,
+    $arr = $this->app->DatabaseService->selectRow("SELECT NOW() as datum,projekt,bodyzusatz,freitext,adresse,name,abteilung,unterabteilung,strasse,adresszusatz,plz,ort,land,ustid,email,telefon,telefax,betreff,kundennummer, bearbeiter,zahlungszieltage,zahlungszieltageskonto,zahlungsweise,ohne_artikeltext,ohne_briefpapier,'angelegt' as status,typ,
             zahlungszielskonto,ust_befreit,rabatt,rabatt1,rabatt2,rabatt3,rabatt4,rabatt5,gruppe,vertriebid,bearbeiterid,provision,provision_summe,sprache,anzeigesteuer,waehrung,kurs,kostenstelle,
-            firma FROM gutschrift WHERE id='$id' LIMIT 1");
+            firma FROM gutschrift WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->DB->LogIfError();
-    $arr['kundennummer'] = $this->app->DB->Select("SELECT kundennummer FROM adresse WHERE id = '".$arr['adresse']."' LIMIT 1");
-    $arr['bundesstaat'] = $this->app->DB->Select("SELECT bundesstaat FROM gutschrift WHERE id='$id' LIMIT 1");
+    $arr['kundennummer'] = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id = :adresseId LIMIT 1", ['adresseId' => (int)$arr['adresse']]);
+    $arr['bundesstaat'] = $this->app->DatabaseService->selectValue("SELECT bundesstaat FROM gutschrift WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->DB->UpdateArr('gutschrift',$newid,'id',$arr, true);
-    $pos = $this->app->DB->SelectArr("SELECT * FROM gutschrift_position WHERE gutschrift='$id'");
+    $pos = $this->app->DatabaseService->select("SELECT * FROM gutschrift_position WHERE gutschrift = :id", ['id' => (int)$id]);
     $cpos = !empty($pos)?count($pos):0;
     for($i=0;$i<$cpos;$i++){
-      $this->app->DB->Insert("INSERT INTO gutschrift_position (gutschrift) VALUES ($newid)");
+      $this->app->DatabaseService->insert("INSERT INTO gutschrift_position (gutschrift) VALUES (:newid)", ['newid' => (int)$newid]);
       $newposid = $this->app->DB->GetInsertID();
       $pos[$i]['gutschrift']=$newid;
       $this->app->DB->UpdateArr('gutschrift_position',$newposid,'id',$pos[$i], true);
       if(is_null($pos[$i]['steuersatz'])){
-        $this->app->DB->Update("UPDATE gutschrift_position SET steuersatz = null WHERE id = '$newposid' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE gutschrift_position SET steuersatz = null WHERE id = :newposid LIMIT 1", ['newposid' => (int)$newposid]);
       }
     }
     $this->app->erp->CheckFreifelder('gutschrift',$newid);
@@ -1821,9 +1823,9 @@ class Gutschrift extends GenGutschrift
     // standard adresse von lieferant
     $arr = $this->app->DB->SelectRow(
       sprintf(
-        "SELECT adr.*,adr.vertrieb as vertriebid, '' as bearbeiter, adr.innendienst as bearbeiterid 
-        FROM `adresse` AS `adr` 
-        WHERE adr.id= %d AND adr.geloescht=0 
+        "SELECT adr.*,adr.vertrieb as vertriebid, '' as bearbeiter, adr.innendienst as bearbeiterid
+        FROM `adresse` AS `adr`
+        WHERE adr.id= %d AND adr.geloescht=0
         LIMIT 1",
         $adresse
       )
@@ -1837,11 +1839,11 @@ class Gutschrift extends GenGutschrift
 
     $rolle_projekt = $this->app->DB->Select(
       sprintf(
-        "SELECT ar.parameter 
-        FROM `adresse_rolle` AS `ar`  
+        "SELECT ar.parameter
+        FROM `adresse_rolle` AS `ar`
         WHERE ar.adresse= %d
-          AND ar.subjekt='Kunde' AND ar.objekt='Projekt' 
-          AND (IFNULL(ar.bis,'0000-00-00') ='0000-00-00' OR ar.bis <= CURDATE()) 
+          AND ar.subjekt='Kunde' AND ar.objekt='Projekt'
+          AND (IFNULL(ar.bis,'0000-00-00') ='0000-00-00' OR ar.bis <= CURDATE())
         LIMIT 1",
         $adresse
       )
@@ -1874,15 +1876,15 @@ class Gutschrift extends GenGutschrift
     $uparr=null;
 
     //liefernantenvorlage
-    $arr = $this->app->DB->SelectRow("SELECT * FROM adresse WHERE id='$adresse' LIMIT 1");
+    $arr = $this->app->DatabaseService->selectRow("SELECT * FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int)$adresse]);
     $field = array('zahlungsweise','zahlungszieltage','zahlungszieltageskonto','zahlungszielskonto','versandart');
 
     // falls von Benutzer projekt ueberladen werden soll
-    $projekt_bevorzugt=$this->app->DB->Select("SELECT projekt_bevorzugen FROM user WHERE id='".$this->app->User->GetID()."' LIMIT 1");
+    $projekt_bevorzugt=$this->app->DatabaseService->selectValue("SELECT projekt_bevorzugen FROM user WHERE id = :userId LIMIT 1", ['userId' => (int)$this->app->User->GetID()]);
     if($projekt_bevorzugt=='1') {
-      $uparr['projekt'] = $this->app->DB->Select("SELECT projekt FROM user WHERE id='".$this->app->User->GetID()."' LIMIT 1");
+      $uparr['projekt'] = $this->app->DatabaseService->selectValue("SELECT projekt FROM user WHERE id = :userId LIMIT 1", ['userId' => (int)$this->app->User->GetID()]);
       $arr['projekt'] = $uparr['projekt'];
-      $this->app->Secure->POST['projekt']=$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='".$arr['projekt']."' AND id > 0 LIMIT 1");
+      $this->app->Secure->POST['projekt']=$this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :projektId AND id > 0 LIMIT 1", ['projektId' => (int)$arr['projekt']]);
     }
 
     $this->app->erp->LoadZahlungsweise($adresse,$arr);
@@ -1931,11 +1933,11 @@ class Gutschrift extends GenGutschrift
 
     $eingangArr = $this->app->DB->SelectArr(
       sprintf(
-        "SELECT ko.bezeichnung as konto, DATE_FORMAT(ke.datum,'%%d.%%m.%%Y') as datum, k.id as kontoauszuege, ke.betrag as betrag 
+        "SELECT ko.bezeichnung as konto, DATE_FORMAT(ke.datum,'%%d.%%m.%%Y') as datum, k.id as kontoauszuege, ke.betrag as betrag
         FROM `kontoauszuege_zahlungseingang` AS `ke`
-        LEFT JOIN `kontoauszuege` AS `k` ON ke.kontoauszuege=k.id 
-        LEFT JOIN `konten` AS `ko` ON k.konto=ko.id 
-        WHERE (ke.objekt='gutschrift' AND ke.parameter=%d) 
+        LEFT JOIN `kontoauszuege` AS `k` ON ke.kontoauszuege=k.id
+        LEFT JOIN `konten` AS `ko` ON k.konto=ko.id
+        WHERE (ke.objekt='gutschrift' AND ke.parameter=%d)
           OR (ke.objekt='auftrag' AND ke.parameter=%d AND ke.parameter>0)
           OR (ke.objekt='rechnung' AND ke.parameter=%d  AND ke.parameter>0)",
         $id, $auftragid, $rechnungid
@@ -1951,8 +1953,8 @@ class Gutschrift extends GenGutschrift
     //$gutschriften = $this->app->DB->SelectArr("SELECT belegnr, DATE_FORMAT(datum,'%d.%m.%Y') as datum,soll FROM gutschrift WHERE rechnungid='$id' "); // alt
     $gutschriften = $this->app->DB->SelectArr(
       sprintf(
-        "SELECT ro.belegnr, DATE_FORMAT(ro.datum,'%%d.%%m.%%Y') as datum, ro.soll 
-        FROM `gutschrift` AS `ro` 
+        "SELECT ro.belegnr, DATE_FORMAT(ro.datum,'%%d.%%m.%%Y') as datum, ro.soll
+        FROM `gutschrift` AS `ro`
         WHERE ro.`id` = %d ",
         $id
       )
@@ -1966,12 +1968,12 @@ class Gutschrift extends GenGutschrift
 
     $ausgangArr = $this->app->DB->SelectArr(
       sprintf(
-        "SELECT ko.bezeichnung as konto, DATE_FORMAT(ke.datum,'%%d.%%m') as datum, ke.betrag as betrag 
+        "SELECT ko.bezeichnung as konto, DATE_FORMAT(ke.datum,'%%d.%%m') as datum, ke.betrag as betrag
         FROM kontoauszuege_zahlungsausgang ke
-        LEFT JOIN kontoauszuege k ON ke.kontoauszuege=k.id 
-        LEFT JOIN konten ko ON k.konto=ko.id 
-        WHERE (ke.objekt='gutschrift' AND ke.parameter=%d) 
-           OR (ke.objekt='rechnung' AND ke.parameter=%d  AND ke.parameter>0)                    
+        LEFT JOIN kontoauszuege k ON ke.kontoauszuege=k.id
+        LEFT JOIN konten ko ON k.konto=ko.id
+        WHERE (ke.objekt='gutschrift' AND ke.parameter=%d)
+           OR (ke.objekt='rechnung' AND ke.parameter=%d  AND ke.parameter>0)
            OR (ke.objekt='auftrag' AND ke.parameter=%d AND ke.parameter>0)",
         $id, $rechnungid, $auftragid
       )

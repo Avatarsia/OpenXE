@@ -1,13 +1,13 @@
 <?php
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -80,7 +80,7 @@ class Rechnung extends GenRechnung
 
     $this->app->ActionHandler("summe","RechnungSumme"); // nur fuer rechte
     $this->app->ActionHandler("belegnredit","belegnredit"); // nur fuer rechte
-    
+
     $this->app->ActionHandler("einkaufspreise","RechnungEinkaufspreise");
     $this->app->ActionHandler("steuer","RechnungSteuer");
     $this->app->ActionHandler("formeln","RechnungFormeln");
@@ -133,11 +133,10 @@ class Rechnung extends GenRechnung
       }
 
       $rechnungId = $detailQuery->getItemIdentifier();
-      $sql = sprintf(
-          "SELECT r.id, r.belegnr, r.datum, r.soll FROM `rechnung` AS `r` WHERE r.id = '%s' LIMIT 1",
-          $this->app->DB->real_escape_string($rechnungId)
+      $rechnung = $this->app->DatabaseService->selectRow(
+          "SELECT r.id, r.belegnr, r.datum, r.soll FROM `rechnung` AS `r` WHERE r.id = :rechnungId LIMIT 1",
+          ['rechnungId' => $rechnungId]
       );
-      $rechnung = $this->app->DB->SelectRow($sql);
       if (empty($rechnung)) {
           return;
       }
@@ -151,7 +150,7 @@ class Rechnung extends GenRechnung
 
   function RechnungFormeln()
   {
-    
+
   }
 
   /**
@@ -163,17 +162,17 @@ class Rechnung extends GenRechnung
   {
     return '';
   }
-  
+
   function RechnungSteuer()
   {
-    
+
   }
-  
+
   function RechnungEinkaufspreise()
   {
-    
+
   }
-  
+
   function RechnungSumme()
   {
   }
@@ -183,9 +182,9 @@ class Rechnung extends GenRechnung
   function RechnungAlternativPDF()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $abweichendebezeichnung = $this->app->DB->Select("SELECT abweichendebezeichnung FROM rechnung WHERE id='$id' LIMIT 1");
-    $projekt = $this->app->DB->Select("SELECT projekt FROM rechnung WHERE id='$id' LIMIT 1");
-    $this->app->DB->Update("UPDATE rechnung SET abweichendebezeichnung=1 WHERE id='$id' LIMIT 1");
+    $abweichendebezeichnung = $this->app->DatabaseService->selectValue("SELECT abweichendebezeichnung FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
+    $this->app->DatabaseService->execute("UPDATE rechnung SET abweichendebezeichnung=1 WHERE id=:id LIMIT 1", ['id' => $id]);
     // Rechnungen
     if(class_exists('RechnungPDFCustom'))
     {
@@ -196,7 +195,7 @@ class Rechnung extends GenRechnung
     $Brief->GetRechnung($id);
 
     if($abweichendebezeichnung!="1")
-      $this->app->DB->Update("UPDATE rechnung SET abweichendebezeichnung=0 WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE rechnung SET abweichendebezeichnung=0 WHERE id=:id LIMIT 1", ['id' => $id]);
 
     $Brief->displayDocument();
     $this->app->ExitXentral();
@@ -247,18 +246,18 @@ class Rechnung extends GenRechnung
         } else {
             throw new exception("XML Rechnung fehlgeschlagen!");
         }
-        
-        $this->app->DB->Update("UPDATE rechnung SET schreibschutz='1', zuarchivieren = '0' WHERE id='$id'");
+
+        $this->app->DatabaseService->execute("UPDATE rechnung SET schreibschutz='1', zuarchivieren = '0' WHERE id=:id", ['id' => $id]);
         if ($redirect) {
             $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id);
         }
     }
-      
+
   function RechnungArchivierePDF()
   {
     $id = (int)$this->app->Secure->GetGET('id');
     $this->app->erp->PDFArchivieren('rechnung', $id, true);
-    $this->app->DB->Update("UPDATE rechnung SET schreibschutz='1' WHERE id='$id'");
+    $this->app->DatabaseService->execute("UPDATE rechnung SET schreibschutz='1' WHERE id=:id", ['id' => $id]);
     $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id);
   }
 
@@ -304,15 +303,16 @@ class Rechnung extends GenRechnung
    */
   public function removeManualPayed($invoiceId)
   {
-    if(empty($invoiceId) || !$this->app->DB->Select(sprintf('SELECT id FROM rechnung WHERE id = %d', $invoiceId))) {
+    if(empty($invoiceId) || !$this->app->DatabaseService->selectValue('SELECT id FROM rechnung WHERE id = :id', ['id' => (int)$invoiceId])) {
       return false;
     }
     $this->app->erp->RechnungProtokoll($invoiceId,'Rechnung manuell als bezahlt entfernt');
-    $this->app->DB->Update(
-      "UPDATE rechnung 
-      SET zahlungsstatus='offen',bezahlt_am = NULL, 
+    $this->app->DatabaseService->execute(
+      "UPDATE rechnung
+      SET zahlungsstatus='offen',bezahlt_am = NULL,
       mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Manuell als bezahlt entfernt am ".date('d.m.Y')."')
-      WHERE id='$invoiceId'"
+      WHERE id=:invoiceId",
+      ['invoiceId' => (int)$invoiceId]
     );
 
     return true;
@@ -347,16 +347,17 @@ class Rechnung extends GenRechnung
    */
   public function setManualPayed($invoiceId)
   {
-    if(empty($invoiceId) || !$this->app->DB->Select(sprintf('SELECT id FROM rechnung WHERE id = %d', $invoiceId))) {
+    if(empty($invoiceId) || !$this->app->DatabaseService->selectValue('SELECT id FROM rechnung WHERE id = :id', ['id' => (int)$invoiceId])) {
       return false;
     }
     $this->app->erp->RechnungProtokoll($invoiceId,'Rechnung manuell als bezahlt markiert');
 
-    $this->app->DB->Update(
-      "UPDATE rechnung 
+    $this->app->DatabaseService->execute(
+      "UPDATE rechnung
       SET zahlungsstatus='bezahlt',bezahlt_am = now(), mahnwesenfestsetzen='1',
-      mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Manuell als bezahlt markiert am ".date('d.m.Y')."') 
-      WHERE id='$invoiceId'"
+      mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Manuell als bezahlt markiert am ".date('d.m.Y')."')
+      WHERE id=:invoiceId",
+      ['invoiceId' => (int)$invoiceId]
     );
 
     return true;
@@ -422,8 +423,8 @@ class Rechnung extends GenRechnung
     }
     $zertificates = $this->app->DB->SelectArr(
         sprintf(
-          "SELECT ds.datei 
-          FROM datei_stichwoerter ds 
+          "SELECT ds.datei
+          FROM datei_stichwoerter ds
           INNER JOIN datei_stichwoerter ds2 ON ds.datei = ds2.datei AND ds2.objekt = 'Artikel'
           INNER JOIN rechnung_position ap ON ap.artikel = ds2.parameter AND ap.rechnung = %d
           WHERE ds.objekt = 'Adressen' AND ds.parameter = %d
@@ -449,15 +450,16 @@ class Rechnung extends GenRechnung
   public function RechnungIconMenu($id, $prefix = '')
   {
     if($id > 0){
-      $rechnungarr = $this->app->DB->SelectRow(
-        "SELECT status,zahlungsstatus,xmlrechnung,belegnr FROM rechnung WHERE id='$id' LIMIT 1"
+      $rechnungarr = $this->app->DatabaseService->selectRow(
+        "SELECT status,zahlungsstatus,xmlrechnung,belegnr FROM rechnung WHERE id=:id LIMIT 1",
+        ['id' => $id]
       );
     }
     $status = '';
     $zahlungsstatus = '';
     if(!empty($rechnungarr)){
-      $status = $rechnungarr['status'];//$this->app->DB->Select("SELECT status FROM rechnung WHERE id='$id' LIMIT 1");
-      $zahlungsstatus = $rechnungarr['zahlungsstatus'];//$this->app->DB->Select("SELECT zahlungsstatus FROM rechnung WHERE id='$id' LIMIT 1");
+      $status = $rechnungarr['status'];
+      $zahlungsstatus = $rechnungarr['zahlungsstatus'];
     }
     $freigabe ="";
     $storno="";
@@ -465,7 +467,7 @@ class Rechnung extends GenRechnung
     $weiterfuehren="";
     $optionteilstorno = "";
 
-    $checkifgsexists = $this->app->DB->Select("SELECT id FROM gutschrift WHERE rechnungid='$id' LIMIT 1");
+    $checkifgsexists = $this->app->DatabaseService->selectValue("SELECT id FROM gutschrift WHERE rechnungid=:id LIMIT 1", ['id' => $id]);
 
     if($status==="angelegt" || $status=="")
     {
@@ -477,7 +479,7 @@ class Rechnung extends GenRechnung
     $casehook = '';
     $optionhook = '';
     $this->app->erp->RunHook('rechnungiconmenu_option', 5, $id, $casehook, $optionhook, $status, $prefix);
-    
+
     if($this->app->erp->RechteVorhanden("rechnung","undostorno") && !$checkifgsexists)
       $undostorno = "<option value=\"undostorno\">Rechnung Storno rückgängig</option>";
 
@@ -490,7 +492,7 @@ class Rechnung extends GenRechnung
 
     $zertifikatoption = '';
     $zertifikatcase = '';
-    
+
     $optioncustom = $this->Custom('option');
     $casecustom = $this->Custom('case');
 
@@ -507,32 +509,35 @@ class Rechnung extends GenRechnung
 
     if($this->app->erp->RechteVorhanden('zertifikatgenerator','list'))
     {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM rechnung WHERE id = '$id' LIMIT 1");
+      $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
       if($adresse)
       {
-        $zertifikate = $this->app->DB->Select("SELECT ds.datei 
-      FROM datei_stichwoerter ds 
-      INNER JOIN datei_stichwoerter ds2 ON ds.datei = ds2.datei AND ds2.objekt = 'Artikel'
-      INNER JOIN rechnung_position ap ON ap.artikel = ds2.parameter AND ap.rechnung = '$id'
-      WHERE ds.objekt = 'Adressen' AND ds.parameter = '$adresse'
-      GROUP BY ds.datei LIMIT 1");
+        $zertifikate = $this->app->DatabaseService->selectValue(
+          "SELECT ds.datei
+          FROM datei_stichwoerter ds
+          INNER JOIN datei_stichwoerter ds2 ON ds.datei = ds2.datei AND ds2.objekt = 'Artikel'
+          INNER JOIN rechnung_position ap ON ap.artikel = ds2.parameter AND ap.rechnung = :id
+          WHERE ds.objekt = 'Adressen' AND ds.parameter = :adresse
+          GROUP BY ds.datei LIMIT 1",
+          ['id' => $id, 'adresse' => $adresse]
+        );
         if($zertifikate)
         {
           $zertifikatoption = '<option value="zertifikate">Zertifikate anh&auml;ngen</option>';
           $zertifikatcase = "case 'zertifikate': if(!confirm('Zertifikate wirklich laden?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else window.location.href='index.php?module=rechnung&action=zertifikate&id=%value%'; break; ";
         }
       }
-      
+
     }
 
     if($this->app->erp->RechteVorhanden('belegeimport', 'belegcsvexport'))
-    { 
+    {
       $casebelegeimport = "case 'belegeimport':  window.location.href='index.php?module=belegeimport&action=belegcsvexport&cmd=rechnung&id=%value%'; break;";
       $optionbelegeimport = "<option value=\"belegeimport\">Export als CSV</option>";
     }
 
 
-    
+
     if($checkifgsexists>0) $extendtext = "HINWEIS: Es existiert bereits eine Gutschrift zu dieser Rechnung! "; else $extendtext="";
     $menu ="
       <script type=\"text/javascript\">
@@ -554,7 +559,7 @@ class Rechnung extends GenRechnung
           $zertifikatcase
           $casebelegeimport
           $casecustom
-          $hookcase 
+          $hookcase
           $casehook
         }
 
@@ -562,7 +567,7 @@ class Rechnung extends GenRechnung
     </script>
 
 
-      &nbsp;Aktion:&nbsp;<select id=\"aktion$prefix\" onchange=\"onchangerechnung(this.value)\"> 
+      &nbsp;Aktion:&nbsp;<select id=\"aktion$prefix\" onchange=\"onchangerechnung(this.value)\">
       <option>bitte w&auml;hlen ...</option>
       <option value=\"copy\">Rechnung kopieren</option>
       $freigabe
@@ -580,12 +585,12 @@ class Rechnung extends GenRechnung
       $hookoption
       </select>&nbsp;
       ";
-      
+
       $downloadicon = $this->app->YUI->GetRechnungFileDownloadLinkIcon($id);
-      
+
     $menu .= $downloadicon;
-       
-    $menu .= 
+
+    $menu .=
       "<!--  <a href=\"index.php?module=rechnung&action=edit&id=%value%\" title=\"Bearbeiten\"><img border=\"0\" src=\"./themes/new/images/edit.svg\"></a>
       <a onclick=\"if(!confirm('Wirklich stornieren?')) return false; else window.location.href='index.php?module=rechnung&action=delete&id=%value%';\" title=\"Stornieren\">
       <img src=\"./themes/new/images/delete.svg\" border=\"0\"></a>
@@ -603,13 +608,13 @@ class Rechnung extends GenRechnung
 
   function RechnungLiveTabelle()
   {
-    $id = $this->app->Secure->GetGET('id');
+    $id = (int)$this->app->Secure->GetGET('id');
 
     $table = new EasyTable($this->app);
 
     $table->Query(
       "SELECT ap.bezeichnung as artikel, ap.nummer as Nummer, ap.menge as Menge
-      FROM rechnung_position ap, artikel a 
+      FROM rechnung_position ap, artikel a
       WHERE ap.rechnung='$id' AND a.id=ap.artikel"
     );
     $artikel = $table->DisplayNew('return','Menge','noAction');
@@ -625,9 +630,9 @@ class Rechnung extends GenRechnung
   public function RechnungPDFfromArchiv()
   {
     $id = $this->app->Secure->GetGET('id');
-    $archiv = $this->app->DB->Select("SELECT table_id from pdfarchiv where id = '$id' LIMIT 1");
+    $archiv = $this->app->DatabaseService->selectValue("SELECT table_id from pdfarchiv where id = :id LIMIT 1", ['id' => $id]);
     if($archiv) {
-      $projekt = $this->app->DB->Select("SELECT projekt from rechnung where id = '".(int)$archiv."'");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt from rechnung where id = :archiv", ['archiv' => (int)$archiv]);
     }
     if(class_exists('RechnungPDFCustom')) {
       if($archiv) {
@@ -652,19 +657,19 @@ class Rechnung extends GenRechnung
 
   public function RechnungMiniDetail($parsetarget='',$menu=true)
   {
-    $id = $this->app->Secure->GetGET('id');
-    
-    if(!$this->app->DB->Select("SELECT deckungsbeitragcalc FROM rechnung WHERE  id='$id' LIMIT 1")) {
+    $id = (int)$this->app->Secure->GetGET('id');
+
+    if(!$this->app->DatabaseService->selectValue("SELECT deckungsbeitragcalc FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id])) {
       $this->app->erp->BerechneDeckungsbeitrag($id,'rechnung');
     }
-    
-    $auftragArr = $this->app->DB->SelectArr("SELECT * FROM rechnung WHERE id='$id' LIMIT 1");
-    $kundennummer = $this->app->DB->Select("SELECT kundennummer FROM adresse WHERE id='{$auftragArr[0]['adresse']}' LIMIT 1");
-    $projekt = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='{$auftragArr[0]['projekt']}' LIMIT 1");
-    $kundenname = $this->app->DB->Select("SELECT name FROM adresse WHERE id='{$auftragArr[0]['adresse']}' LIMIT 1");
+
+    $auftragArr = $this->app->DatabaseService->select("SELECT * FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
+    $kundennummer = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id=:adresse LIMIT 1", ['adresse' => $auftragArr[0]['adresse']]);
+    $projekt = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id=:projekt LIMIT 1", ['projekt' => $auftragArr[0]['projekt']]);
+    $kundenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id=:adresse LIMIT 1", ['adresse' => $auftragArr[0]['adresse']]);
 
     $this->app->Tpl->Set('DECKUNGSBEITRAG',0);
-    $this->app->Tpl->Set('DBPROZENT',0);    
+    $this->app->Tpl->Set('DBPROZENT',0);
     $this->app->Tpl->Set('KUNDE',"<a href=\"index.php?module=adresse&action=edit&id=".$auftragArr[0]['adresse']."\">".$kundennummer."</a> ".$kundenname);
 
     if($this->app->erp->RechteVorhanden('projekt','dashboard')){
@@ -684,7 +689,7 @@ class Rechnung extends GenRechnung
       $auftragArr[0]['mahnwesen']='-';
     }
 
-    $mahnwesen_name = $this->app->DB->SelectArr("SELECT name FROM mahnwesen WHERE id='".$auftragArr[0]['mahnwesen']."' LIMIT 1")[0]['name'];
+    $mahnwesen_name = $this->app->DatabaseService->selectValue("SELECT name FROM mahnwesen WHERE id=:mahnwesen LIMIT 1", ['mahnwesen' => $auftragArr[0]['mahnwesen']]);
     $this->app->Tpl->Set('MAHNWESEN',$mahnwesen_name);
 
     if($auftragArr[0]['mahnwesen_datum']=='0000-00-00') {
@@ -696,9 +701,9 @@ class Rechnung extends GenRechnung
       $this->app->Tpl->Set('DEBITORENNUMMER', $auftragArr[0]['kundennummer_buchhaltung']);
     }
 
-    $internet = $this->app->DB->Select("SELECT a.internet FROM rechnung r LEFT JOIN auftrag a ON a.id=r.auftragid WHERE r.id='$id' AND r.id > 0 LIMIT 1");
+    $internet = $this->app->DatabaseService->selectValue("SELECT a.internet FROM rechnung r LEFT JOIN auftrag a ON a.id=r.auftragid WHERE r.id=:id AND r.id > 0 LIMIT 1", ['id' => $id]);
     $this->app->Tpl->Set('INTERNET',$internet);
-    
+
 
     $this->app->Tpl->Set('MAHNWESENDATUM',$this->app->String->Convert($auftragArr[0]['mahnwesen_datum'],"%1-%2-%3","%3.%2.%1"));
 
@@ -706,7 +711,7 @@ class Rechnung extends GenRechnung
 
 
     if($auftragArr[0]['auftragid']==0) $auftragArr[0]['auftrag']="kein Auftrag";
-    $auftragArr[0]['auftrag'] = $this->app->DB->Select("SELECT belegnr FROM auftrag WHERE id='".$auftragArr[0]['auftragid']."' LIMIT 1");
+    $auftragArr[0]['auftrag'] = $this->app->DatabaseService->selectValue("SELECT belegnr FROM auftrag WHERE id=:auftragid LIMIT 1", ['auftragid' => $auftragArr[0]['auftragid']]);
 
     if($auftragArr[0]['auftragid'] > 0)
     {
@@ -716,15 +721,17 @@ class Rechnung extends GenRechnung
     }else{
       $this->app->Tpl->Set('AUFTRAG', '-');
     }
-    $auftraege = $this->app->DB->SelectArr("(SELECT a.belegnr, a.id FROM sammelrechnung_position s 
-    INNER JOIN auftrag_position ap on ap.id = s.auftrag_position_id INNER JOIN auftrag a on a.id = ap.auftrag 
-    WHERE s.rechnung = '".$id."' GROUP BY a.id ORDER BY a.belegnr)
-    union (SELECT 
-    a.belegnr, a.id FROM sammelrechnung_position s INNER JOIN lieferschein_position lp ON lp.id = s.lieferschein_position_id
-    INNER JOIN auftrag_position ap  on ap.id = lp.auftrag_position_id INNER JOIN 
-    auftrag a on a.id = ap.auftrag 
-    WHERE s.rechnung = '".$id."' GROUP BY a.id ORDER BY a.belegnr)
-    ");
+    $auftraege = $this->app->DatabaseService->select(
+      "(SELECT a.belegnr, a.id FROM sammelrechnung_position s
+      INNER JOIN auftrag_position ap on ap.id = s.auftrag_position_id INNER JOIN auftrag a on a.id = ap.auftrag
+      WHERE s.rechnung = :id GROUP BY a.id ORDER BY a.belegnr)
+      union (SELECT
+      a.belegnr, a.id FROM sammelrechnung_position s INNER JOIN lieferschein_position lp ON lp.id = s.lieferschein_position_id
+      INNER JOIN auftrag_position ap on ap.id = lp.auftrag_position_id INNER JOIN
+      auftrag a on a.id = ap.auftrag
+      WHERE s.rechnung = :id2 GROUP BY a.id ORDER BY a.belegnr)",
+      ['id' => $id, 'id2' => $id]
+    );
     if($auftraege)
     {
       $this->app->Tpl->Set('AUFTRAG','');
@@ -746,10 +753,13 @@ class Rechnung extends GenRechnung
     }
 
 
-    $gutschrift = $this->app->DB->SelectArr("SELECT
+    $gutschrift = $this->app->DatabaseService->select(
+      "SELECT
         CONCAT('<a href=\"index.php?module=gutschrift&action=edit&id=',g.id,'\" target=\"_blank\">',if(g.belegnr='0' OR g.belegnr='','ENTWURF',g.belegnr),'&nbsp;<a href=\"index.php?module=gutschrift&action=pdf&id=',g.id,'\"><img src=\"./themes/new/images/pdf.svg\" title=\"Gutschrift PDF\" border=\"0\"></a>&nbsp;
           <a href=\"index.php?module=gutschrift&action=edit&id=',g.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Gutschrift bearbeiten\" border=\"0\"></a>') as gutschrift
-        FROM gutschrift g WHERE g.rechnungid='$id'");
+        FROM gutschrift g WHERE g.rechnungid=:id",
+      ['id' => $id]
+    );
 
     if(!empty($gutschrift))
     {
@@ -807,44 +817,47 @@ class Rechnung extends GenRechnung
     $rechnungid = false;
     $this->app->DB->Select("SELECT rechnungid FROM lieferschein LIMIT 1");
     if(!$this->app->DB->error())$rechnungid =true;
-    
+
+    $idInt = (int)$id;
+    $lieferscheinIdInt = (int)$auftragArr[0]['lieferschein'];
+
     $lieferscheinsql = "
     SELECT CONCAT('<a href=\"index.php?module=lieferschein&action=edit&id=',l.id,'\" target=\"_blank\">',if(l.status!='angelegt',l.belegnr,'ENTWURF'),'</a>&nbsp;<a href=\"index.php?module=lieferschein&action=pdf&id=',l.id,'\">
       <img src=\"./themes/new/images/pdf.svg\" title=\"Lieferschein PDF\" border=\"0\"></a>&nbsp;
     <a href=\"index.php?module=lieferschein&action=edit&id=',l.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Lieferschein bearbeiten\" border=\"0\"></a>') as LS
     FROM lieferschein l
     INNER JOIN (
-      (SELECT id FROM lieferschein WHERE id = '{$auftragArr[0]['lieferschein']}')
+      (SELECT id FROM lieferschein WHERE id = $lieferscheinIdInt)
       ";
     if($rechnungid)
     {
       $lieferscheinsql .= "
-        UNION ALL 
-        (SELECT id FROM lieferschein WHERE rechnungid = '$id')";
+        UNION ALL
+        (SELECT id FROM lieferschein WHERE rechnungid = $idInt)";
     }
     if($sammelrechnung)
     {
-      $lieferscheinsql .=   "UNION ALL 
+      $lieferscheinsql .=   "UNION ALL
         (SELECT l2.id FROM lieferschein l2 INNER JOIN lieferschein_position lp2 ON lp2.lieferschein = l2.id
-      INNER JOIN sammelrechnung_position s ON lp2.id = s.lieferschein_position_id WHERE s.rechnung = '$id' )
+      INNER JOIN sammelrechnung_position s ON lp2.id = s.lieferschein_position_id WHERE s.rechnung = $idInt )
       UNION ALL
-      
+
         (SELECT l3.id   FROM lieferschein l3 INNER JOIN lieferschein_position lp3 ON lp3.lieferschein = l3.id
       INNER JOIN auftrag_position ap3 ON ap3.id = lp3.auftrag_position_id
-      INNER JOIN sammelrechnung_position s3 ON ap3.id = s3.auftrag_position_id WHERE s3.rechnung = '$id'  )
+      INNER JOIN sammelrechnung_position s3 ON ap3.id = s3.auftrag_position_id WHERE s3.rechnung = $idInt  )
       ";
     }
     if($gruppenrechnung)
     {
       $lieferscheinsql .= "
-        UNION ALL 
+        UNION ALL
         (SELECT l4.id FROM lieferschein l4 INNER JOIN lieferschein_position lp4 ON lp4.lieferschein = l4.id
-      INNER JOIN gruppenrechnung_position s4 ON lp4.id = s4.lieferschein_position_id WHERE s4.rechnung = '$id' )
+      INNER JOIN gruppenrechnung_position s4 ON lp4.id = s4.lieferschein_position_id WHERE s4.rechnung = $idInt )
       UNION ALL
-      
+
         (SELECT l5.id   FROM lieferschein l5 INNER JOIN lieferschein_position lp5 ON lp5.lieferschein = l5.id
       INNER JOIN auftrag_position ap5 ON ap5.id = lp5.auftrag_position_id
-      INNER JOIN gruppenrechnung_position s5 ON ap5.id = s5.auftrag_position_id WHERE s5.rechnung = '$id'  )
+      INNER JOIN gruppenrechnung_position s5 ON ap5.id = s5.auftrag_position_id WHERE s5.rechnung = $idInt  )
 
       ";
     }
@@ -852,9 +865,9 @@ class Rechnung extends GenRechnung
     ) ls ON l.id = ls.id
     LEFT JOIN projekt p ON l.projekt = p.id
     WHERE 1 ".$this->app->erp->ProjektRechte('p.id'). " GROUP BY l.id ";
-    
+
     $lieferschein = $this->app->DB->SelectArr($lieferscheinsql);
-    
+
     if($lieferschein=="") $this->app->Tpl->Set('LIEFERSCHEIN','-');
     else{
       $first = true;
@@ -865,9 +878,9 @@ class Rechnung extends GenRechnung
         $this->app->Tpl->Add('LIEFERSCHEIN',$ls['LS']);
         $first = false;
       }
-      
+
     }
-    
+
 
 
     if($auftragArr[0]['ust_befreit']==0)
@@ -885,7 +898,7 @@ class Rechnung extends GenRechnung
     }
     // ARTIKEL
 
-    $status = $this->app->DB->Select("SELECT status FROM rechnung WHERE id='$id' LIMIT 1");
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
 
     $table = new EasyTable($this->app);
 
@@ -922,7 +935,7 @@ class Rechnung extends GenRechnung
       $this->app->Tpl->Set('ANGEBOTFARBE',"grey");
       $this->app->Tpl->Set('ANGEBOTTEXT',"Das Angebot wird bearbeitet und wurde noch nicht freigegeben und abgesendet!");
     }
-  
+
     $this->app->Tpl->Set('ZAHLUNGEN',$this->RechnungZahlung(true));
 
     $this->app->Tpl->Set('RECHNUNGADRESSE',$this->Rechnungsadresse($auftragArr[0]['id']));
@@ -945,12 +958,12 @@ class Rechnung extends GenRechnung
       }
       if($zeit)
       {
-        
+
         $tmp2 = new EasyTable($this->app);
         $tmp2->Query("SELECT concat('<a href=\"index.php?module=mahnwesen&action=mahnpdf&id=',rechnung,'&datum=',DATE_FORMAT(zeit,'%d.%m.%Y'),'&mahnwesen=',LOWER(LEFT(grund,LOCATE(' ',grund))),'\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/pdf.svg\" border=\"0\"></a>') as PDF, Date(zeit) as Datum, bearbeiter,grund FROM rechnung_protokoll WHERE rechnung='$id' AND zeit >= '".$zeit."' ORDER by zeit DESC");
-        $tmp2->DisplayNew('MAHNPROTOKOLL',"Protokoll","noAction");        
+        $tmp2->DisplayNew('MAHNPROTOKOLL',"Protokoll","noAction");
       }
-      
+
 
     }*/
 
@@ -978,7 +991,7 @@ class Rechnung extends GenRechnung
           $tmp3->datasets[] = $tmpr;
         }
       }
-      
+
       $tmp3->DisplayNew('PDFARCHIV','Men&uuml;',"noAction");
     }
 
@@ -998,12 +1011,13 @@ class Rechnung extends GenRechnung
    */
   public function Rechnungsadresse($id)
   {
-    $data = $this->app->DB->SelectArr(
-      "SELECT r.*, a.abweichende_rechnungsadresse 
-      FROM rechnung AS r 
-      INNER JOIN adresse AS a ON r.adresse = a.id 
-      WHERE r.id='$id' 
-      LIMIT 1"
+    $data = $this->app->DatabaseService->select(
+      "SELECT r.*, a.abweichende_rechnungsadresse
+      FROM rechnung AS r
+      INNER JOIN adresse AS a ON r.adresse = a.id
+      WHERE r.id=:id
+      LIMIT 1",
+      ['id' => $id]
     );
 
     foreach($data[0] as $key=>$value)
@@ -1125,7 +1139,7 @@ class Rechnung extends GenRechnung
       $intern = true;
       $freigabe=$intern;
     }
-   
+
     $allowedFrm = true;
     $showDefault = true;
     $this->app->erp->CheckVertrieb($id,'rechnung');
@@ -1136,10 +1150,10 @@ class Rechnung extends GenRechnung
     }
     if($allowedFrm && $freigabe==$id)
     {
-      $belegnr = $this->app->DB->Select("SELECT belegnr FROM rechnung WHERE id='$id' LIMIT 1");
+      $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
 
       if($belegnr=='')
-      {	
+      {
         $this->app->erp->BelegFreigabe('rechnung',$id);
         $this->rechnung_zahlstatus_berechnen($id);
         if($intern) {
@@ -1156,16 +1170,15 @@ class Rechnung extends GenRechnung
     }
 
     if($showDefault){
-      $name = $this->app->DB->Select("SELECT a.name FROM rechnung b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id='$id' LIMIT 1");
-      $summe = $this->app->DB->Select("SELECT soll FROM rechnung WHERE id='$id' LIMIT 1");
-      $waehrung = $this->app->DB->Select("SELECT waehrung FROM rechnung_position
-        WHERE rechnung='$id' LIMIT 1");
+      $name = $this->app->DatabaseService->selectValue("SELECT a.name FROM rechnung b LEFT JOIN adresse a ON a.id=b.adresse WHERE b.id=:id LIMIT 1", ['id' => $id]);
+      $summe = $this->app->DatabaseService->selectValue("SELECT soll FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
+      $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM rechnung_position WHERE rechnung=:id LIMIT 1", ['id' => $id]);
 
-      $this->app->Tpl->Set('TAB1', "<div class=\"info\">Soll die Rechnung an <b>$name</b> im Wert von <b>$summe $waehrung</b> 
+      $this->app->Tpl->Set('TAB1', "<div class=\"info\">Soll die Rechnung an <b>$name</b> im Wert von <b>$summe $waehrung</b>
         jetzt freigegeben werden? <input type=\"button\" class=\"btnImportantLarge\" value=\"Jetzt freigeben\" onclick=\"window.location.href='index.php?module=rechnung&action=freigabe&id=$id&freigabe=$id'\">
         </div>");
     }
-    
+
     $this->RechnungMenu();
     $this->app->Tpl->Parse('PAGE','tabview.tpl');
   }
@@ -1180,7 +1193,7 @@ class Rechnung extends GenRechnung
   public function RechnungDelete()
   {
     $id = $this->app->Secure->GetGET('id');
-    $invoiceArr = $this->app->DB->SelectRow("SELECT belegnr, name FROM rechnung WHERE id='$id' LIMIT 1");
+    $invoiceArr = $this->app->DatabaseService->selectRow("SELECT belegnr, name FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     $belegnr = $invoiceArr['belegnr'];
     $name = $invoiceArr['name'];
     $msg = '';
@@ -1212,17 +1225,17 @@ class Rechnung extends GenRechnung
   function RechnungMahnPDF()
   {
     $id = $this->app->Secure->GetGET('id');
-    $invoiceArr = $this->app->DB->SelectRow("SELECT belegnr, mahnwesen, projekt FROM rechnung WHERE id='$id' LIMIT 1");
+    $invoiceArr = $this->app->DatabaseService->selectRow("SELECT belegnr, mahnwesen, projekt FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     $belegnr = $invoiceArr['belegnr'];
     $mahnwesen = $invoiceArr['mahnwesen'];
     $projekt = $invoiceArr['projekt'];
-    
+
 
     if($belegnr!='' && $belegnr!='0')
     {
       $Brief = new MahnungPDF($this->app,$projekt);
       $Brief->GetRechnung($id,$mahnwesen);
-      $Brief->displayDocument(); 
+      $Brief->displayDocument();
     }
     $this->app->ExitXentral();
   }
@@ -1230,7 +1243,7 @@ class Rechnung extends GenRechnung
   function RechnungInlinePDF()
   {
     $id = $this->app->Secure->GetGET('id');
-    $invoiceArr = $this->app->DB->SelectRow("SELECT schreibschutz, projekt FROM rechnung WHERE id='$id' LIMIT 1");
+    $invoiceArr = $this->app->DatabaseService->selectRow("SELECT schreibschutz, projekt FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     $schreibschutz = $invoiceArr['schreibschutz'];
     if($schreibschutz!='1'){
       $this->app->erp->RechnungNeuberechnen($id);
@@ -1248,7 +1261,7 @@ class Rechnung extends GenRechnung
         $Brief = new RechnungPDF($this->app,$projekt);
       }
       $Brief->GetRechnung($id);
-      $Brief->inlineDocument($schreibschutz); 
+      $Brief->inlineDocument($schreibschutz);
     } else {
       $file = urlencode("../../../../index.php?module=rechnung&action=inlinepdf&id=$id");
       echo "<iframe width=\"100%\" height=\"100%\" style=\"height:calc(100vh - 110px)\" src=\"./js/production/generic/web/viewer.html?file=$file\"></iframe>";
@@ -1261,7 +1274,7 @@ class Rechnung extends GenRechnung
     $id = $this->app->Secure->GetGET('id');
     $this->app->erp->RechnungNeuberechnen($id);
     $doppel = $this->app->Secure->GetGET('doppel');
-    $invoiceArr = $this->app->DB->SelectRow("SELECT schreibschutz, projekt, zuarchivieren FROM rechnung WHERE id='$id' LIMIT 1");
+    $invoiceArr = $this->app->DatabaseService->selectRow("SELECT schreibschutz, projekt, zuarchivieren FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     if(!empty($invoiceArr['schreibschutz']) && !empty($invoiceArr['zuarchivieren'])) {
       $this->app->erp->RechnungArchivieren($id);
     }
@@ -1281,7 +1294,7 @@ class Rechnung extends GenRechnung
     else{
       $Brief->GetRechnung($id);
     }
-    $Brief->displayDocument($schreibschutz); 
+    $Brief->displayDocument($schreibschutz);
 
     $this->RechnungList();
   }
@@ -1290,7 +1303,7 @@ class Rechnung extends GenRechnung
   function RechnungJSON() {
     $this->RechnungSmarty(json: true);
   }
-  
+
   function remove_html_entities_from_array(&$array) {
     foreach ($array as $key => $item) {
         if (is_array($item)) {
@@ -1319,33 +1332,39 @@ class Rechnung extends GenRechnung
         }
         $result = Array();
         $success = true;
-        
+
         $result['rechnungssteller']['name'] = $this->app->erp->Firmendaten('name');
         $result['rechnungssteller']['strasse'] = $this->app->erp->Firmendaten('strasse');
         $result['rechnungssteller']['ort'] = $this->app->erp->Firmendaten('ort');
         $result['rechnungssteller']['plz'] = $this->app->erp->Firmendaten('plz');
         $result['rechnungssteller']['land'] = $this->app->erp->Firmendaten('land');
         $result['rechnungssteller']['steuernummer'] = $this->app->erp->Firmendaten('steuernummer');
-        
-        $rechnung = $this->app->DB->SelectRow("
-            SELECT * FROM rechnung WHERE id = $id LIMIT 1
-        ");
-        $result['kopf'] = $rechnung;
-        $result['kopf']['internet_bestellnummer'] = $this->app->DB->Select("SELECT a.internet FROM rechnung r LEFT JOIN auftrag a ON a.id=r.auftragid WHERE r.id='$id' AND r.id > 0 LIMIT 1");
 
-        $adresse = $this->app->DB->SelectArr("
-            SELECT * FROM adresse WHERE id = (SELECT adresse FROM rechnung WHERE id = $id LIMIT 1)
-        ");
+        $rechnung = $this->app->DatabaseService->selectRow(
+            "SELECT * FROM rechnung WHERE id = :id LIMIT 1",
+            ['id' => $id]
+        );
+        $result['kopf'] = $rechnung;
+        $result['kopf']['internet_bestellnummer'] = $this->app->DatabaseService->selectValue(
+            "SELECT a.internet FROM rechnung r LEFT JOIN auftrag a ON a.id=r.auftragid WHERE r.id=:id AND r.id > 0 LIMIT 1",
+            ['id' => $id]
+        );
+
+        $adresse = $this->app->DatabaseService->select(
+            "SELECT * FROM adresse WHERE id = (SELECT adresse FROM rechnung WHERE id = :id LIMIT 1)",
+            ['id' => $id]
+        );
         $result['adresse'] = $adresse[0];
-                      
-        $positionen = $this->app->DB->SelectArr("
-            SELECT * FROM rechnung_position WHERE rechnung = $id ORDER BY sort ASC
-        ");    
-        
+
+        $positionen = $this->app->DatabaseService->select(
+            "SELECT * FROM rechnung_position WHERE rechnung = :id ORDER BY sort ASC",
+            ['id' => $id]
+        );
+
         if (empty($positionen)) {
             throw new exception("Rechnung enthält keine Positionen!");
         }
-            
+
         $steuern = Array();
         $steuer_gesamt = 0;
         $umsatz_brutto_gesamt = 0;
@@ -1364,7 +1383,7 @@ class Rechnung extends GenRechnung
             $umsatz_brutto_gesamt += round($position['umsatz_brutto_gesamt'],2);
             $steuer_gesamt += round($position['umsatz_brutto_gesamt'],2)-round($position['umsatz_netto_gesamt'],2);
         }
-        
+
         $result['positionen'] = $positionen;
         $result['steuern'] = $steuern;
         $result['umsatz_brutto_gesamt'] = $umsatz_brutto_gesamt;
@@ -1390,7 +1409,7 @@ class Rechnung extends GenRechnung
 </note>';
                 $success = false;
             } else {
-                $template = $this->app->DB->Select("SELECT template from smarty_templates WHERE id = '$template_id' LIMIT 1");
+                $template = $this->app->DatabaseService->selectValue("SELECT template from smarty_templates WHERE id = :template_id LIMIT 1", ['template_id' => $template_id]);
                 $smarty = new Smarty;
                 $directory = $this->app->erp->GetTMP().'/smarty/templates';
                 $smarty->setCompileDir($directory);
@@ -1398,7 +1417,7 @@ class Rechnung extends GenRechnung
                 $output = $smarty->fetch('string:'.$template);
             }
         }
-        
+
         if ($returnvalue) {
             return(Array(
                 'success' => $success,
@@ -1412,7 +1431,7 @@ class Rechnung extends GenRechnung
             }
             echo($output);
             $this->app->ExitXentral();
-        }        
+        }
   }
 
   function RechnungSuche()
@@ -1434,16 +1453,16 @@ class Rechnung extends GenRechnung
       $table = new EasyTable($this->app);
       $this->app->Tpl->Add('ERGEBNISSE',"<h2>Trefferliste:</h2><br>");
       if($name!="")
-        $table->Query("SELECT a.name, a.belegnr as rechnung, adr.kundennummer, a.plz, a.ort, a.strasse, a.status, a.id FROM rechnung a 
+        $table->Query("SELECT a.name, a.belegnr as rechnung, adr.kundennummer, a.plz, a.ort, a.strasse, a.status, a.id FROM rechnung a
             LEFT JOIN adresse adr ON adr.id = a.adresse WHERE (a.name LIKE '%$name%')");
       else if($plz!="")
-        $table->Query("SELECT a.name, a.belegnr as rechnung, adr.kundennummer, a.plz, a.ort, a.strasse, a.status, a.id FROM rechnung a 
+        $table->Query("SELECT a.name, a.belegnr as rechnung, adr.kundennummer, a.plz, a.ort, a.strasse, a.status, a.id FROM rechnung a
             LEFT JOIN adresse adr ON adr.id = a.adresse WHERE (a.plz LIKE '$plz%')");
       else if($kundennummer!="")
-        $table->Query("SELECT a.name, a.belegnr as rechnung, adr.kundennummer, a.plz, a.ort, a.strasse, a.status, a.id FROM rechnung a 
+        $table->Query("SELECT a.name, a.belegnr as rechnung, adr.kundennummer, a.plz, a.ort, a.strasse, a.status, a.id FROM rechnung a
             LEFT JOIN adresse adr ON adr.id = a.adresse WHERE (adr.kundennummer='$kundennummer')");
       else if($auftrag!="")
-        $table->Query("SELECT a.name, a.belegnr as rechnung , adr.kundennummer,a.plz, a.ort, a.strasse, a.status, a.id FROM rechnung a 
+        $table->Query("SELECT a.name, a.belegnr as rechnung , adr.kundennummer,a.plz, a.ort, a.strasse, a.status, a.id FROM rechnung a
             LEFT JOIN adresse adr ON adr.id = a.adresse WHERE (a.belegnr='$auftrag')");
 
       //     $table->DisplayNew('ERGEBNISSE',"<a href=\"index.php?module=rechnung&action=edit&id=%value%\">Lesen</a>");
@@ -1472,7 +1491,7 @@ class Rechnung extends GenRechnung
   public function RechnungMenu()
   {
     $id = $this->app->Secure->GetGET('id');
-    $invoiceArr = $this->app->DB->SelectRow("SELECT belegnr, name,status FROM rechnung WHERE id='$id' LIMIT 1");
+    $invoiceArr = $this->app->DatabaseService->selectRow("SELECT belegnr, name,status FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     $belegnr = $invoiceArr['belegnr'];
     $name = $invoiceArr['name'];
 
@@ -1501,7 +1520,7 @@ class Rechnung extends GenRechnung
     $this->app->erp->MenuEintrag("index.php?module=rechnung&action=dateien&id=$id",'Dateien'.$anzahldateien);
 
 
-    
+
     $this->app->erp->MenuEintrag('index.php?module=rechnung&action=list','Zur&uuml;ck zur &Uuml;bersicht');
     $this->app->erp->RunMenuHook('rechnung');
   }
@@ -1582,7 +1601,7 @@ class Rechnung extends GenRechnung
     }
     $id = $this->app->Secure->GetGET('id');
 
-    $artikel= $this->app->DB->Select("SELECT artikel FROM angebot_position WHERE id='$id' LIMIT 1");
+    $artikel= $this->app->DatabaseService->selectValue("SELECT artikel FROM angebot_position WHERE id=:id LIMIT 1", ['id' => $id]);
 
     // nach page inhalt des dialogs ausgeben
     $filename = 'widgets/widget.rechnung_position_custom.php';
@@ -1594,7 +1613,7 @@ class Rechnung extends GenRechnung
       $widget = new WidgetRechnung_position($this->app,'PAGE');
     }
 
-    $sid= $this->app->DB->Select("SELECT rechnung FROM rechnung_position WHERE id='$id' LIMIT 1");
+    $sid= $this->app->DatabaseService->selectValue("SELECT rechnung FROM rechnung_position WHERE id=:id LIMIT 1", ['id' => $id]);
     $widget->form->SpecialActionAfterExecute('close_refresh',
         "index.php?module=rechnung&action=positionen&id=$sid");
     $widget->Edit();
@@ -1613,15 +1632,12 @@ class Rechnung extends GenRechnung
    */
   public function moveFileUp($invoiceId, $fileKeywordId)
   {
-    $check = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT ds.* 
-        FROM datei_stichwoerter ds 
-        INNER JOIN datei d on ds.datei = d.id 
-        WHERE ds.id = %d and d.geloescht <> 1 
-        LIMIT 1',
-        $fileKeywordId
-      )
+    $check = $this->app->DatabaseService->selectRow(
+      "SELECT ds.* FROM datei_stichwoerter ds
+      INNER JOIN datei d ON ds.datei = d.id
+      WHERE ds.id = :fileKeywordId AND d.geloescht <> 1
+      LIMIT 1",
+      ['fileKeywordId' => (int)$fileKeywordId]
     );
     if(empty($check)) {
       return 0;
@@ -1632,29 +1648,25 @@ class Rechnung extends GenRechnung
       return 0;
     }
 
-    $check2 = $this->app->DB->SelectArr(
-      "SELECT ds.* FROM datei_stichwoerter ds 
-      INNER JOIN datei d on ds.datei = d.id 
-      WHERE ds.objekt like 'rechnung' AND ds.sort = %d AND d.geloescht <> 1 
-        AND ds.parameter = %d 
+    $check2 = $this->app->DatabaseService->selectRow(
+      "SELECT ds.* FROM datei_stichwoerter ds
+      INNER JOIN datei d on ds.datei = d.id
+      WHERE ds.objekt like 'rechnung' AND ds.sort = :sort AND d.geloescht <> 1
+        AND ds.parameter = :invoiceId
         LIMIT 1",
-      $sort, $invoiceId
+      ['sort' => $sort, 'invoiceId' => $invoiceId]
     );
     if(empty($check2)) {
       return 0;
     }
 
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE datei_stichwoerter SET sort = sort - 1 WHERE id = %d LIMIT 1',
-        $fileKeywordId
-      )
+    $this->app->DatabaseService->execute(
+      'UPDATE datei_stichwoerter SET sort = sort - 1 WHERE id = :id LIMIT 1',
+      ['id' => $fileKeywordId]
     );
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE datei_stichwoerter SET sort = sort + 1 WHERE id = %d LIMIT 1',
-        $check2['id']
-      )
+    $this->app->DatabaseService->execute(
+      'UPDATE datei_stichwoerter SET sort = sort + 1 WHERE id = :id LIMIT 1',
+      ['id' => $check2['id']]
     );
 
     return $check2['id'];
@@ -1668,15 +1680,12 @@ class Rechnung extends GenRechnung
    */
   public function moveFileDown($invoiceId, $fileKeywordId)
   {
-    $check = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT ds.* 
-        FROM datei_stichwoerter ds 
-        INNER JOIN datei d on ds.datei = d.id 
-        WHERE ds.id = %d and d.geloescht <> 1 
-        LIMIT 1',
-        $fileKeywordId
-      )
+    $check = $this->app->DatabaseService->selectRow(
+      "SELECT ds.* FROM datei_stichwoerter ds
+      INNER JOIN datei d ON ds.datei = d.id
+      WHERE ds.id = :fileKeywordId AND d.geloescht <> 1
+      LIMIT 1",
+      ['fileKeywordId' => (int)$fileKeywordId]
     );
     if(empty($check)) {
       return 0;
@@ -1687,29 +1696,25 @@ class Rechnung extends GenRechnung
       return 0;
     }
 
-    $check2 = $this->app->DB->SelectArr(
-      "SELECT ds.* FROM datei_stichwoerter ds 
-      INNER JOIN datei d on ds.datei = d.id 
-      WHERE ds.objekt like 'rechnung' AND ds.sort = %d AND d.geloescht <> 1 
-        AND ds.parameter = %d 
+    $check2 = $this->app->DatabaseService->selectRow(
+      "SELECT ds.* FROM datei_stichwoerter ds
+      INNER JOIN datei d on ds.datei = d.id
+      WHERE ds.objekt like 'rechnung' AND ds.sort = :sort AND d.geloescht <> 1
+        AND ds.parameter = :invoiceId
         LIMIT 1",
-      $sort, $invoiceId
+      ['sort' => $sort, 'invoiceId' => $invoiceId]
     );
     if(empty($check2)) {
       return 0;
     }
 
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE datei_stichwoerter SET sort = sort + 1 WHERE id = %d LIMIT 1',
-        $fileKeywordId
-      )
+    $this->app->DatabaseService->execute(
+      'UPDATE datei_stichwoerter SET sort = sort + 1 WHERE id = :id LIMIT 1',
+      ['id' => $fileKeywordId]
     );
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE datei_stichwoerter SET sort = sort - 1 WHERE id = %d LIMIT 1',
-        $check2['id']
-      )
+    $this->app->DatabaseService->execute(
+      'UPDATE datei_stichwoerter SET sort = sort - 1 WHERE id = :id LIMIT 1',
+      ['id' => $check2['id']]
     );
 
     return $check2['id'];
@@ -1717,7 +1722,7 @@ class Rechnung extends GenRechnung
 
   public function RechnungEdit()
   {
-    $id = $this->app->Secure->GetGET('id');
+    $id = (int)$this->app->Secure->GetGET('id');
     // zum aendern vom Vertrieb
     $sid = $this->app->Secure->GetGET('sid');
     $cmd = $this->app->Secure->GetGET('cmd');
@@ -1746,7 +1751,7 @@ class Rechnung extends GenRechnung
       echo json_encode($erg);
       $this->app->ExitXentral();
     }
-    
+
     if($cmd === 'daup')
     {
       $erg['status'] = 0;
@@ -1760,7 +1765,7 @@ class Rechnung extends GenRechnung
       echo json_encode($erg);
       $this->app->ExitXentral();
     }
-    
+
     if($this->app->erp->VertriebAendern('rechnung',$id,$cmd,$sid)){
       return;
     }
@@ -1774,7 +1779,7 @@ class Rechnung extends GenRechnung
       $this->RechnungMenu();
       return;
     }
-    $adresse = $this->app->DB->Select("SELECT adresse FROM rechnung WHERE id='$id' LIMIT 1");
+    $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     if($adresse <=0) {
       $this->app->Tpl->Add('JAVASCRIPT','$(document).ready(function() { if(document.getElementById("adresse"))document.getElementById("adresse").focus(); });');
       $this->app->Tpl->Set('MESSAGE',"<div class=\"error\">Achtung! Dieses Dokument ist mit keiner Kunden-Nr. verlinkt. Bitte geben Sie die Kundennummer an und klicken Sie &uuml;bernehmen oder Speichern!</div>");
@@ -1786,7 +1791,7 @@ class Rechnung extends GenRechnung
     $this->app->erp->CheckBuchhaltung($id,'rechnung');
 
     if($id > 0){
-      $rechnungarr = $this->app->DB->SelectRow("SELECT * FROM rechnung WHERE id='$id' LIMIT 1");
+      $rechnungarr = $this->app->DatabaseService->selectRow("SELECT * FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     }
     $nummer = '';
     $kundennummer = '';
@@ -1803,7 +1808,7 @@ class Rechnung extends GenRechnung
         $bonuspunkte = $rechnungarr['bonuspunkte'];//$this->app->DB->Select("SELECT bonuspunkte FROM rechnung WHERE id='$id' LIMIT 1");
         $soll = $rechnungarr['soll'];//$this->app->DB->Select("SELECT soll FROM rechnung WHERE id='$id' LIMIT 1");
         $projekt = $rechnungarr['projekt'];
-        $skontosoll = $this->app->DB->Select("SELECT TRUNCATE(soll*(1-(zahlungszielskonto/100)),2) as skontosoll FROM rechnung where id = '".$id."' LIMIT 1");
+        $skontosoll = $this->app->DatabaseService->selectValue("SELECT TRUNCATE(soll*(1-(zahlungszielskonto/100)),2) as skontosoll FROM rechnung where id = :id LIMIT 1", ['id' => $id]);
         $xmlrechnung = $rechnungarr['xmlrechnung'];
         $zahlungsweise= $rechnungarr['zahlungsweise'];
         $zahlungszieltage= $rechnungarr['zahlungszieltage'];
@@ -1826,7 +1831,7 @@ class Rechnung extends GenRechnung
             $archiviere = "archivierepdf";
         }
         $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Die Rechnung ist noch nicht archiviert! Bitte versenden oder manuell archivieren. <input type=\"button\" onclick=\"if(!confirm('Soll das Dokument archiviert werden?')) return false;else window.location.href='index.php?module=rechnung&action=$archiviere&id=$id';\" value=\"Manuell archivieren\" /> <input type=\"button\" value=\"Dokument versenden\" onclick=\"DokumentAbschicken('rechnung',$id)\"></div>");
-      }elseif(!$this->app->DB->Select("SELECT versendet FROM rechnung WHERE id = '$id' LIMIT 1"))
+      }elseif(!$this->app->DatabaseService->selectValue("SELECT versendet FROM rechnung WHERE id = :id LIMIT 1", ['id' => $id]))
       {
         $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Die Rechnung wurde noch nicht versendet! <input type=\"button\" value=\"Dokument versenden\" onclick=\"DokumentAbschicken('rechnung',$id)\"></div>");
       }
@@ -1835,7 +1840,7 @@ class Rechnung extends GenRechnung
 
     $this->RechnungMiniDetail('MINIDETAIL',false); //BENE
     $this->app->Tpl->Set('ICONMENU',$this->RechnungIconMenu($id));
-    $this->app->Tpl->Set('ICONMENU2',$this->RechnungIconMenu($id,2)); 
+    $this->app->Tpl->Set('ICONMENU2',$this->RechnungIconMenu($id,2));
 
     $this->app->Tpl->Set('PUNKTE',"<input type=\"text\" name=\"punkte\" value=\"$punkte\" size=\"10\" readonly>");
     $this->app->Tpl->Set('BONUSPUNKTE',"<input type=\"text\" name=\"punkte\" value=\"$bonuspunkte\" size=\"10\" readonly>");
@@ -1852,13 +1857,13 @@ class Rechnung extends GenRechnung
     if($nummer!='') {
 
       $this->app->Tpl->Set('NUMMER',$nummer);
-    
+
       if (($schreibschutz!='1') && $this->app->erp->RechteVorhanden('rechnung','belegnredit')){
         $this->app->Tpl->Set('BELEGNRHIDDEN','hidden');
       } else {
         $this->app->Tpl->Set('BELEGNREDITHIDDEN','hidden');
       }
-      
+
       if($this->app->erp->RechteVorhanden('adresse','edit')){
         $this->app->Tpl->Set('KUNDE', "&nbsp;&nbsp;&nbsp;Kd-Nr. <a href=\"index.php?module=adresse&action=edit&id=$adresse\" target=\"_blank\">" . $kundennummer . "</a>");
       }
@@ -1881,22 +1886,22 @@ class Rechnung extends GenRechnung
     }
     $lieferscheiniddatum = '';
     if($lieferscheinid > 0){
-      $lieferscheiniddatum = $this->app->DB->Select("SELECT datum FROM lieferschein WHERE id='$lieferscheinid' LIMIT 1");
+      $lieferscheiniddatum = $this->app->DatabaseService->selectValue("SELECT datum FROM lieferschein WHERE id=:lieferscheinid LIMIT 1", ['lieferscheinid' => $lieferscheinid]);
     }
     if($lieferdatum=='0000-00-00' && $schreibschutz!='1') {
       if($lieferscheiniddatum!='0000-00-00'){
-        $this->app->DB->Update("UPDATE rechnung SET lieferdatum='$lieferscheiniddatum' WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE rechnung SET lieferdatum=:lieferdatum WHERE id=:id LIMIT 1", ['lieferdatum' => $lieferscheiniddatum, 'id' => $id]);
       }
       else{
-        $this->app->DB->Update("UPDATE rechnung SET lieferdatum='$rechnungsdatum' WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE rechnung SET lieferdatum=:lieferdatum WHERE id=:id LIMIT 1", ['lieferdatum' => $rechnungsdatum, 'id' => $id]);
       }
-    } 
-
-    if($schreibschutz!='1') {
-      $this->app->DB->Update("UPDATE rechnung SET auftrag='' WHERE id='$id' AND auftragid<=0 LIMIT 1");
     }
 
-    $zahlungsweise = $this->app->DB->Select("SELECT zahlungsweise FROM rechnung WHERE id='$id' LIMIT 1");
+    if($schreibschutz!='1') {
+      $this->app->DatabaseService->execute("UPDATE rechnung SET auftrag='' WHERE id=:id AND auftragid<=0 LIMIT 1", ['id' => $id]);
+    }
+
+    $zahlungsweise = $this->app->DatabaseService->selectValue("SELECT zahlungsweise FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     if($this->app->Secure->GetPOST('zahlungsweise')!='') {
       $zahlungsweise = $this->app->Secure->GetPOST('zahlungsweise');
     }
@@ -1927,7 +1932,7 @@ class Rechnung extends GenRechnung
     if($zahlungsweise==='vorkasse' || $zahlungsweise==='kreditkarte' || $zahlungsweise==='paypal' || $zahlungsweise==='bar') {
       $this->app->Tpl->Set('VORKASSE','');
     }
-   
+
     if($schreibschutz=="1" && $this->app->erp->RechteVorhanden('rechnung','schreibschutz'))
     {
       $this->app->Tpl->Set('MESSAGE',"<div class=\"warning\">Diese Rechnung ist schreibgesch&uuml;tzt und darf daher nicht mehr bearbeitet werden!&nbsp;<input type=\"button\" value=\"Schreibschutz entfernen\" onclick=\"if(!confirm('Soll der Schreibschutz f&uuml;r diese Rechnung wirklich entfernt werden? Die gespeicherte Rechnung wird &uuml;berschrieben!')) return false;else window.location.href='index.php?module=rechnung&action=schreibschutz&id=$id';\"></div>");
@@ -1956,7 +1961,7 @@ class Rechnung extends GenRechnung
 
       $this->app->erp->RemoveReadonly('ist');
 
-      if($this->app->erp->Firmendaten('mahnwesenmitkontoabgleich')!='1' || $this->app->DB->Select("SELECT mahnwesenfestsetzen FROM rechnung WHERE id='$id' LIMIT 1")==1)
+      if($this->app->erp->Firmendaten('mahnwesenmitkontoabgleich')!='1' || $this->app->DatabaseService->selectValue("SELECT mahnwesenfestsetzen FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id])==1)
         $this->app->erp->RemoveReadonly('ist');*/
 
       //$auftrag= $this->app->DB->Select("SELECT auftrag FROM rechnung WHERE id='$id' LIMIT 1");
@@ -1964,7 +1969,7 @@ class Rechnung extends GenRechnung
       $this->app->erp->RemoveReadonly('skonto_gegeben');
       $this->app->erp->RemoveReadonly('internebemerkung');
 
-      $alle_gutschriften = $this->app->DB->SelectArr("SELECT id,belegnr FROM gutschrift WHERE rechnungid='$id' AND rechnungid>0");
+      $alle_gutschriften = $this->app->DatabaseService->select("SELECT id,belegnr FROM gutschrift WHERE rechnungid=:id AND rechnungid>0", ['id' => $id]);
       $cgutschriften = !empty($alle_gutschriften)?count($alle_gutschriften):0;
       if($cgutschriften > 1)
       {
@@ -1978,10 +1983,10 @@ class Rechnung extends GenRechnung
     }
 
     $speichern = $this->app->Secure->GetPOST('speichern');
-    
+
     if($speichern!='' && $this->app->erp->RechteVorhanden('rechnung','belegnredit')) {
         $nummer_neu = $this->app->Secure->GetPOST('belegnredit');
-        
+
         if(!$this->app->DatabaseService->selectValue('SELECT id FROM rechnung WHERE belegnr = :belegnr', ['belegnr' => $nummer_neu])) {
             $this->app->DatabaseService->execute('UPDATE rechnung SET belegnr = :belegnr WHERE id = :id', ['belegnr' => $nummer_neu, 'id' => $id]);
         }
@@ -2007,13 +2012,13 @@ class Rechnung extends GenRechnung
       if($mahnwesenfestsetzen!='1') {
         $mahnwesenfestsetzen='0';
       }
-  
+
       $mahnwesen_datum = $this->app->String->Convert($mahnwesen_datum,'%1.%2.%3','%3-%2-%1');
       $bezahlt_am = $this->app->String->Convert($bezahlt_am,'%1.%2.%3','%3-%2-%1');
 
       if($bezahlt_am=='--')$bezahlt_am='0000-00-00';
-      $alte_mahnstufe = $this->app->DB->Select("SELECT mahnwesen FROM rechnung WHERE id='$id' LIMIT 1");
-      if($alte_mahnstufe!=$mahnwesen) $versendet=0; 
+      $alte_mahnstufe = $this->app->DatabaseService->selectValue("SELECT mahnwesen FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
+      if($alte_mahnstufe!=$mahnwesen) $versendet=0;
 
 /*      if($mahnwesenfestsetzen=='1')
       {*/
@@ -2040,11 +2045,11 @@ class Rechnung extends GenRechnung
         $this->app->Tpl->Set('ISTDB',$ist);
         if ($ist > $soll) {
             $this->app->Tpl->addMessage('error','Rechnung ist überzahlt!');
-        }    
+        }
     }
 
     $rechnung_schnelleingabe_konto = $this->app->erp->Firmendaten('rechnung_schnelleingabe_konto');
-        
+
     if (!empty($rechnung_schnelleingabe_konto)) {
         $this->app->Tpl->Set('SCHNELLEINGABE_TOOLTIP_HIDDEN', 'hidden');
         if ($speichern!='' && $this->app->erp->RechteVorhanden('rechnung','manuellbezahltmarkiert') && !empty($zahlbetrag)) {
@@ -2057,8 +2062,8 @@ class Rechnung extends GenRechnung
             );
             $this->app->erp->fibu_buchungen_buchen("kontoauszuege",$kontoauszug, "rechnung", $id, -$zahlbetrag, 'EUR', $bezahlt_am, "Rechnung ".$nummer." Schnelleingabe");
             $this->rechnung_zahlstatus_berechnen($id);
-        }       
-    } else {    
+        }
+    } else {
         $this->app->Tpl->Set('SCHNELLEINGABE_HIDDEN', 'hidden');
     }
 
@@ -2085,7 +2090,10 @@ class Rechnung extends GenRechnung
       //$name = substr($tmp,6);
       $filter_projekt = $this->app->DatabaseService->selectValue('SELECT projekt FROM rechnung WHERE id = :id LIMIT 1', ['id' => $id]);
       //if($filter_projekt)$filter_projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE id= '$filter_projekt' and eigenernummernkreis = 1 LIMIT 1");
-      $adresse =  $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='".$this->app->DB->real_escape_string($kundennummer)."' AND geloescht=0 ".$this->app->erp->ProjektRechte("projekt", true, 'vertrieb')." ORDER by ".($filter_projekt?" projekt = '".intval($filter_projekt)."' DESC, ":"")." projekt LIMIT 1");
+      $adresse =  $this->app->DatabaseService->selectValue(
+        "SELECT id FROM adresse WHERE kundennummer=:kundennummer AND geloescht=0 ".$this->app->erp->ProjektRechte("projekt", true, 'vertrieb')." ORDER by ".($filter_projekt?"projekt = ".intval($filter_projekt)." DESC, ":"")."projekt LIMIT 1",
+        ['kundennummer' => $kundennummer]
+      );
 
       $uebernehmen =$this->app->Secure->GetPOST('uebernehmen');
       if($uebernehmen=='1' && $schreibschutz != '1') // nur neuladen bei tastendruck auf uebernehmen // FRAGEN!!!!
@@ -2097,7 +2105,7 @@ class Rechnung extends GenRechnung
     }
     $rechnungarr = null;
     if($id > 0) {
-      $rechnungarr = $this->app->DB->SelectRow("SELECT * FROM rechnung WHERE id='$id' LIMIT 1");
+      $rechnungarr = $this->app->DatabaseService->selectRow("SELECT * FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     }
     $land = '';
     $ustid = '';
@@ -2115,19 +2123,17 @@ class Rechnung extends GenRechnung
     }
 
 
-    // easy table mit arbeitspaketen YUI als template 
+    // easy table mit arbeitspaketen YUI als template
     $table = new EasyTable($this->app);
     $table->Query("SELECT bezeichnung as artikel, nummer as Nummer, menge, vpe as VPE, FORMAT(preis,4) as preis
         FROM rechnung_position
         WHERE rechnung='$id'",0,"");
     $table->DisplayNew('POSITIONEN',"Preis","noAction");
-    $summe = $this->app->DB->Select("SELECT FORMAT(SUM(menge*preis),2) FROM rechnung_position
-        WHERE rechnung='$id'");
-    $waehrung = $this->app->DB->Select("SELECT waehrung FROM rechnung_position
-        WHERE rechnung='$id' LIMIT 1");
+    $summe = $this->app->DatabaseService->selectValue("SELECT FORMAT(SUM(menge*preis),2) FROM rechnung_position WHERE rechnung=:id", ['id' => $id]);
+    $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM rechnung_position WHERE rechnung=:id LIMIT 1", ['id' => $id]);
 
-    $summebrutto = $this->app->DB->Select("SELECT soll FROM rechnung WHERE id='$id' LIMIT 1");
-    $ust_befreit_check = $this->app->DB->Select("SELECT ust_befreit FROM rechnung WHERE id='$id' LIMIT 1");
+    $summebrutto = $this->app->DatabaseService->selectValue("SELECT soll FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
+    $ust_befreit_check = $this->app->DatabaseService->selectValue("SELECT ust_befreit FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
 
     $tmp = 'Kunde zahlt mit UST';
     if($ust_befreit_check==1) {
@@ -2138,10 +2144,10 @@ class Rechnung extends GenRechnung
       $this->app->Tpl->Add('POSITIONEN', "<br><center>Zu zahlen: <b>$summe (netto) $summebrutto (brutto) $waehrung</b> ($tmp)&nbsp;&nbsp;");
     }
 
-    $status= $this->app->DB->Select("SELECT status FROM rechnung WHERE id='$id' LIMIT 1");
+    $status= $this->app->DatabaseService->selectValue("SELECT status FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     $this->app->Tpl->Set('STATUS',"<input type=\"text\" size=\"30\" value=\"".$status."\" readonly [COMMONREADONLYINPUT]>");
 
-    $internet = $this->app->DB->Select("SELECT a.internet FROM rechnung r LEFT JOIN auftrag a ON a.id=r.auftragid WHERE r.id='$id' AND r.id > 0 LIMIT 1");
+    $internet = $this->app->DatabaseService->selectValue("SELECT a.internet FROM rechnung r LEFT JOIN auftrag a ON a.id=r.auftragid WHERE r.id=:id AND r.id > 0 LIMIT 1", ['id' => $id]);
     if($internet!='') {
       $this->app->Tpl->Set('INTERNET',"<tr><td>Internet:</td><td><input type=\"text\" size=\"30\" value=\"".$internet."\" readonly [COMMONREADONLYINPUT]></td></tr>");
     }
@@ -2150,8 +2156,8 @@ class Rechnung extends GenRechnung
 
     $sollExtSoll = $this->app->DB->SelectRow(
       sprintf(
-        "SELECT extsoll, soll 
-        FROM rechnung 
+        "SELECT extsoll, soll
+        FROM rechnung
         WHERE id = %d AND schreibschutz = 0 AND status = 'versendet' AND extsoll <> 0",
         $id
       )
@@ -2205,10 +2211,10 @@ class Rechnung extends GenRechnung
       $id = $this->CreateRechnung();
       $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id);
     }
-    
+
     $this->app->Tpl->Add('KURZUEBERSCHRIFT','Rechnung');
     $this->app->erp->MenuEintrag('index.php?module=rechnung&action=list','Zur&uuml;ck zur &Uuml;bersicht');
-    
+
     $this->app->Tpl->Set('MESSAGE',"<div class=\"warning\">M&ouml;chten Sie eine Rechnung jetzt anlegen? &nbsp;
         <input type=\"button\" onclick=\"window.location.href='index.php?module=rechnung&action=create&anlegen=1'\" value=\"Ja - Rechnung jetzt anlegen\"></div><br>");
     $this->app->Tpl->Set('TAB1',"
@@ -2221,9 +2227,9 @@ class Rechnung extends GenRechnung
         Offene Auftr&auml;ge, die durch andere Mitarbeiter in Bearbeitung sind.
         <br>
         </td>
-        </tr>  
+        </tr>
         </table>
-        <br> 
+        <br>
         [AUFTRAGE]");
 
 
@@ -2243,7 +2249,7 @@ class Rechnung extends GenRechnung
     $reArr = $this->app->DB->SelectRow(
       sprintf(
         "SELECT projekt,belegnr,status,usereditid,
-        DATE_SUB(NOW(), INTERVAL 30 SECOND) < useredittimestamp AS `open` 
+        DATE_SUB(NOW(), INTERVAL 30 SECOND) < useredittimestamp AS `open`
         FROM rechnung WHERE id=%d LIMIT 1",
         $invoiceId
       )
@@ -2265,9 +2271,9 @@ class Rechnung extends GenRechnung
     );
     $this->app->DB->Update(
       sprintf(
-        "UPDATE rechnung 
-        SET status='versendet' 
-        WHERE id = %d AND status!='storniert' 
+        "UPDATE rechnung
+        SET status='versendet'
+        WHERE id = %d AND status!='storniert'
         LIMIT 1",
         $invoiceId
       )
@@ -2279,7 +2285,7 @@ class Rechnung extends GenRechnung
   public function RechnungList()
   {
 
-    $this->app->DB->Update("UPDATE rechnung SET zahlungsstatus='offen' WHERE zahlungsstatus=''"); 
+    $this->app->DB->Update("UPDATE rechnung SET zahlungsstatus='offen' WHERE zahlungsstatus=''");
 
     if($this->app->Secure->GetPOST('ausfuehren') && $this->app->erp->RechteVorhanden('rechnung', 'edit'))
     {
@@ -2301,10 +2307,21 @@ class Rechnung extends GenRechnung
         switch($aktion)
         {
           case 'bezahlt':
-            $this->app->DB->Update("UPDATE rechnung SET zahlungsstatus='bezahlt', bezahlt_am = now(), mahnwesenfestsetzen='1',mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Manuell als bezahlt markiert am ".date('d.m.Y')."')  WHERE id IN (".implode(', ',$auswahl).')');
+            // $auswahl already int-cast above (lines 2314-2315)
+            $inList = implode(', ', array_map('intval', $auswahl));
+            $today = date('d.m.Y');
+            $this->app->DatabaseService->update(
+                "UPDATE rechnung SET zahlungsstatus='bezahlt', bezahlt_am = now(), mahnwesenfestsetzen='1', mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung, :memo) WHERE id IN ($inList)",
+                ['memo' => "\r\nManuell als bezahlt markiert am $today"]
+            );
           break;
           case 'offen':
-            $this->app->DB->Update("UPDATE rechnung SET zahlungsstatus='offen',bezahlt_am = NULL, mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Manuell als bezahlt entfernt am ".date('d.m.Y')."') WHERE id IN (".implode(', ',$auswahl).')');
+            $inList = implode(', ', array_map('intval', $auswahl));
+            $today = date('d.m.Y');
+            $this->app->DatabaseService->update(
+                "UPDATE rechnung SET zahlungsstatus='offen', bezahlt_am = NULL, mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung, :memo) WHERE id IN ($inList)",
+                ['memo' => "\r\nManuell als bezahlt entfernt am $today"]
+            );
           break;
           case 'mail':
             $auswahl = $this->app->DB->SelectFirstCols(
@@ -2318,21 +2335,23 @@ class Rechnung extends GenRechnung
               if(!$v) {
                 continue;
               }
-              $xmlrechnung = $this->app->DB->Select("SELECT xmlrechnung FROM rechnung WHERE id=$v LIMIT 1");
-              $checkpapier = $this->app->DB->Select(
-                "SELECT a.rechnung_papier FROM rechnung AS r 
-                LEFT JOIN adresse AS a ON r.adresse=a.id 
-                WHERE r.id='$v' 
-                LIMIT 1"
+              $xmlrechnung = $this->app->DatabaseService->selectValue("SELECT xmlrechnung FROM rechnung WHERE id=:v LIMIT 1", ['v' => $v]);
+              $checkpapier = $this->app->DatabaseService->selectValue(
+                "SELECT a.rechnung_papier FROM rechnung AS r
+                LEFT JOIN adresse AS a ON r.adresse=a.id
+                WHERE r.id=:v
+                LIMIT 1",
+                ['v' => $v]
               );
 
               if((($checkpapier !=1) || $erechnung) &&
-                $this->app->DB->Select(
-                  "SELECT r.id 
-                  FROM rechnung AS r 
-                  INNER JOIN adresse AS a ON r.adresse = a.id 
-                  WHERE r.id = '$v' AND r.email <> '' OR a.email <> '' 
-                  LIMIT 1"
+                $this->app->DatabaseService->selectValue(
+                  "SELECT r.id
+                  FROM rechnung AS r
+                  INNER JOIN adresse AS a ON r.adresse = a.id
+                  WHERE r.id = :v AND r.email <> '' OR a.email <> ''
+                  LIMIT 1",
+                  ['v' => $v]
                 )
               ) {
                 $this->app->erp->RechnungArchivieren($v);
@@ -2340,8 +2359,9 @@ class Rechnung extends GenRechnung
               }
               else if($checkpapier && $drucker && !$erechnung) {
                 $this->app->erp->RechnungArchivieren($v);
-                $projekt = $this->app->DB->Select(
-                  "SELECT projekt FROM rechnung WHERE id='$v' LIMIT 1"
+                $projekt = $this->app->DatabaseService->selectValue(
+                  "SELECT projekt FROM rechnung WHERE id=:v LIMIT 1",
+                  ['v' => $v]
                 );
                 if(class_exists('RechnungPDFCustom')) {
                   $Brief = new RechnungPDFCustom($this->app,$projekt);
@@ -2369,7 +2389,7 @@ class Rechnung extends GenRechnung
                 $reArr = $this->app->DB->SelectRow(
                   sprintf(
                     "SELECT projekt,belegnr,status,usereditid,
-                    DATE_SUB(NOW(), INTERVAL 30 SECOND) < useredittimestamp AS `open` 
+                    DATE_SUB(NOW(), INTERVAL 30 SECOND) < useredittimestamp AS `open`
                     FROM rechnung WHERE id=%d LIMIT 1",
                     $v
                   )
@@ -2407,8 +2427,8 @@ class Rechnung extends GenRechnung
                 }
                 $projekt = $reArr['projekt'];//$this->app->DB->Select("SELECT projekt FROM rechnung WHERE id='$v' LIMIT 1");
                 $this->app->erp->RechnungProtokoll($v,'Rechnung gedruckt');
-                $this->app->DB->Update("UPDATE rechnung SET schreibschutz=1, versendet = 1  WHERE id = '$v' LIMIT 1");
-                $this->app->DB->Update("UPDATE rechnung SET status='versendet' WHERE id = '$v' AND status!='storniert' LIMIT 1");
+                $this->app->DatabaseService->execute("UPDATE rechnung SET schreibschutz=1, versendet = 1 WHERE id = :v LIMIT 1", ['v' => $v]);
+                $this->app->DatabaseService->execute("UPDATE rechnung SET status='versendet' WHERE id = :v AND status!='storniert' LIMIT 1", ['v' => $v]);
                 $this->app->erp->RechnungArchivieren($v);
                 if(class_exists('RechnungPDFCustom')) {
                   $Brief = new RechnungPDFCustom($this->app,$projekt);
@@ -2429,11 +2449,11 @@ class Rechnung extends GenRechnung
           case 'pdf':
             $tmpfile = [];
             foreach($auswahl as $v) {
-              $xmlrechnung = $this->app->DB->Select("SELECT xmlrechnung FROM rechnung WHERE id=$v LIMIT 1");
+              $xmlrechnung = $this->app->DatabaseService->selectValue("SELECT xmlrechnung FROM rechnung WHERE id=:v LIMIT 1", ['v' => $v]);
               if ($xmlrechnung) {
                 continue;
               }
-              $projekt = $this->app->DB->Select("SELECT projekt FROM rechnung WHERE id=$v LIMIT 1");
+              $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM rechnung WHERE id=:v LIMIT 1", ['v' => $v]);
               if(class_exists('RechnungPDFCustom')) {
                 $Brief = new RechnungPDFCustom($this->app,$projekt);
               }
@@ -2466,11 +2486,11 @@ class Rechnung extends GenRechnung
             }
           break;
         }
-      }      
+      }
     } // ende ausfuehren
 
     if($this->app->Secure->GetPOST('zahlungsstatus_berechnen') && $this->app->erp->RechteVorhanden('rechnung', 'edit')) {
-        $this->rechnung_zahlstatus_berechnen();   
+        $this->rechnung_zahlstatus_berechnen();
     }
 
     $this->app->Tpl->Set('UEBERSCHRIFT','Rechnungen');
@@ -2575,13 +2595,13 @@ class Rechnung extends GenRechnung
     }
 
     $this->app->Tpl->Set('SELDRUCKER', $this->app->erp->GetSelectDrucker($this->app->User->GetParameter('rechnung_list_drucker')));
-    
+
     $this->app->Tpl->Parse('PAGE','rechnunguebersicht.tpl');
   }
-  
+
   public function GetXMLSmartyTemplate($id) {
-    $adresse = $this->app->DB->Select("SELECT adresse FROM rechnung WHERE id = '".$id."'");
-    $rechnung_smarty_template = $this->app->DB->Select("SELECT rechnung_smarty_template FROM adresse WHERE id = '".$adresse."'");
+    $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM rechnung WHERE id = :id", ['id' => $id]);
+    $rechnung_smarty_template = $this->app->DatabaseService->selectValue("SELECT rechnung_smarty_template FROM adresse WHERE id = :adresse", ['adresse' => $adresse]);
     if (!empty($rechnung_smarty_template)) {
        return($rechnung_smarty_template);
     } else {
@@ -2595,14 +2615,14 @@ class Rechnung extends GenRechnung
     }
     return(null);
   }
- 
+
   // Decide if XML Smarty invoice according to address and group
   public function SetXMLRechnung($id) {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM rechnung WHERE id = '".$id."' LIMIT 1");
+      $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM rechnung WHERE id = :id LIMIT 1", ['id' => $id]);
       if (!empty($adresse)) {
             // Check XML Smarty template
             if (!empty($this->GetXMLSmartyTemplate($id))) {
-                $this->app->DB->Update("UPDATE rechnung SET xmlrechnung = 1 WHERE id = '".$id."' AND schreibschutz <> 1");
+                $this->app->DatabaseService->execute("UPDATE rechnung SET xmlrechnung = 1 WHERE id = :id AND schreibschutz <> 1", ['id' => $id]);
             }
         }
   }
@@ -2623,7 +2643,7 @@ class Rechnung extends GenRechnung
     $usereditid = 0;
     if(isset($this->app->User) && $this->app->User && method_exists($this->app->User,'GetID')){
       $usereditid = $this->app->User->GetID();
-    }   
+    }
 
     if($this->app->erp->StandardZahlungsweise($projekt)==='rechnung')
     {
@@ -2634,10 +2654,9 @@ class Rechnung extends GenRechnung
           $zahlungszieltage = 0;
           $zahlungszieltageskonto = 0;
           $zahlungszielskonto = 0;
-    }       
-       
-    $this->app->DB->Insert("INSERT INTO rechnung (
-            id,
+    }
+
+    $id = $this->app->DatabaseService->insert("INSERT INTO rechnung (
             datum,
             bearbeiter,
             firma,
@@ -2657,28 +2676,38 @@ class Rechnung extends GenRechnung
             abweichendebezeichnung
         )
         VALUES (
-            '',
             NOW(),
             '',
-            '".$this->app->User->GetFirma()."',
-            '$belegmax',
-            '".$this->app->erp->StandardZahlungsweise($projekt)."',
-            '".$zahlungszieltage."',
-            '".$zahlungszieltageskonto."',
-            '".$zahlungszielskonto."',
+            :firma,
+            :belegmax,
+            :zahlungsweise,
+            :zahlungszieltage,
+            :zahlungszieltageskonto,
+            :zahlungszielskonto,
             NOW(),
             'angelegt',
-            '$projekt',
-            '$adresse',
+            :projekt,
+            :adresse,
             0,
-            '".$ohnebriefpapier."',
+            :ohnebriefpapier,
             NOW(),
-            '$usereditid',
-            '$abweichendebezeichnung'
-        )"
+            :usereditid,
+            :abweichendebezeichnung
+        )",
+      [
+        'firma' => $this->app->User->GetFirma(),
+        'belegmax' => $belegmax,
+        'zahlungsweise' => $this->app->erp->StandardZahlungsweise($projekt),
+        'zahlungszieltage' => $zahlungszieltage,
+        'zahlungszieltageskonto' => $zahlungszieltageskonto,
+        'zahlungszielskonto' => $zahlungszielskonto,
+        'projekt' => $projekt,
+        'adresse' => $adresse,
+        'ohnebriefpapier' => $ohnebriefpapier,
+        'usereditid' => $usereditid,
+        'abweichendebezeichnung' => $abweichendebezeichnung,
+      ]
     );
-    
-    $id = $this->app->DB->GetInsertID();
     $this->app->erp->CheckVertrieb($id,'rechnung');
     $this->app->erp->CheckBearbeiter($id,'rechnung');
 
@@ -2688,8 +2717,7 @@ class Rechnung extends GenRechnung
     $this->app->erp->ObjektProtokoll($type,$id,$type.'_create',ucfirst($type).' angelegt');
     $deliverythresholdvatid = $this->app->erp->getDeliverythresholdvatid($projekt);
     if($id > 0 && !empty($deliverythresholdvatid)){
-      $deliverythresholdvatid = $this->app->DB->real_escape_string($deliverythresholdvatid);
-      $this->app->DB->Update("UPDATE rechnung SET deliverythresholdvatid = '$deliverythresholdvatid' WHERE id = $id LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE rechnung SET deliverythresholdvatid = :deliverythresholdvatid WHERE id = :id LIMIT 1", ['deliverythresholdvatid' => $deliverythresholdvatid, 'id' => $id]);
     }
     $this->SetXMLRechnung($id);
     $this->app->erp->SchnellFreigabe('rechnung',$id);
@@ -2708,29 +2736,28 @@ class Rechnung extends GenRechnung
   {
     $this->app->DB->Insert("INSERT INTO rechnung (angelegtam) VALUES (NOW())");
     $newid = $this->app->DB->GetInsertID();
-    $arr = $this->app->DB->SelectRow("SELECT NOW() as datum,projekt,bodyzusatz,freitext,adresse,name,abteilung,unterabteilung,strasse,adresszusatz,plz,ort,land,ustid,email,telefon,telefax,betreff,kundennummer,versandart,bearbeiter,zahlungszieltage,zahlungszieltageskonto,zahlungsweise,ohne_artikeltext,ohne_briefpapier,'angelegt' as status,
+    $arr = $this->app->DatabaseService->selectRow("SELECT NOW() as datum,projekt,bodyzusatz,freitext,adresse,name,abteilung,unterabteilung,strasse,adresszusatz,plz,ort,land,ustid,email,telefon,telefax,betreff,kundennummer,versandart,bearbeiter,zahlungszieltage,zahlungszieltageskonto,zahlungsweise,ohne_artikeltext,ohne_briefpapier,'angelegt' as status,
             zahlungszielskonto,ust_befreit,rabatt,rabatt1,rabatt2,rabatt3,rabatt4,rabatt5,gruppe,vertriebid,bearbeiterid,provision,provision_summe,typ,
-            firma,sprache,anzeigesteuer,waehrung,kurs,kostenstelle FROM rechnung WHERE id='$id' LIMIT 1");
-    $arr['kundennummer'] = $this->app->DB->Select("SELECT kundennummer FROM adresse WHERE id = '".$arr['adresse']."' LIMIT 1");
-    $arr['bundesstaat'] = $this->app->DB->Select("SELECT bundesstaat FROM rechnung WHERE id='$id' LIMIT 1");
+            firma,sprache,anzeigesteuer,waehrung,kurs,kostenstelle FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
+    $arr['kundennummer'] = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => $arr['adresse']]);
+    $arr['bundesstaat'] = $this->app->DatabaseService->selectValue("SELECT bundesstaat FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     $this->app->DB->UpdateArr('rechnung',$newid,'id',$arr, true);
-    
-    $pos = $this->app->DB->SelectArr("SELECT * FROM rechnung_position WHERE rechnung='$id'");
+
+    $pos = $this->app->DatabaseService->select("SELECT * FROM rechnung_position WHERE rechnung=:id", ['id' => $id]);
     $cpos = !empty($pos)?count($pos):0;
     for($i=0;$i<$cpos;$i++){
-      $this->app->DB->Insert("INSERT INTO rechnung_position (rechnung) VALUES($newid)");
-      $newposid = $this->app->DB->GetInsertID();
+      $newposid = $this->app->DatabaseService->insert("INSERT INTO rechnung_position (rechnung) VALUES(:newid)", ['newid' => $newid]);
       $pos[$i]['rechnung']=$newid;
       $this->app->DB->UpdateArr('rechnung_position',$newposid,'id',$pos[$i], true);
       if($pos[$i]['steuersatz'] === null){
-        $this->app->DB->Update("UPDATE rechnung_position SET steuersatz = null WHERE id = '$newposid' LIMIT 1");
+        $this->app->DatabaseService->execute("UPDATE rechnung_position SET steuersatz = null WHERE id = :newposid LIMIT 1", ['newposid' => $newposid]);
       }
     }
     $this->app->erp->CheckFreifelder('rechnung',$newid);
     $this->app->erp->CopyBelegZwischenpositionen('rechnung',$id,'rechnung',$newid);
     $this->app->erp->LoadSteuersaetzeWaehrung($newid,'rechnung');
     $this->app->erp->SchnellFreigabe('rechnung',$newid);
-    
+
     return $newid;
   }
 
@@ -2745,7 +2772,7 @@ class Rechnung extends GenRechnung
     }
     $this->app->erp->StartChangeLog('rechnung', $id);
     // standard adresse von lieferant
-    $arr = $this->app->DB->SelectArr("SELECT *,vertrieb as vertriebid,'' as bearbeiter,innendienst as bearbeiterid FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
+    $arr = $this->app->DatabaseService->select("SELECT *,vertrieb as vertriebid,'' as bearbeiter,innendienst as bearbeiterid FROM adresse WHERE id=:adresse AND geloescht=0 LIMIT 1", ['adresse' => $adresse]);
 
     if($arr[0]['bearbeiterid'] <=0 ){
       $arr[0]['bearbeiterid'] = $this->app->User->GetAdresse();
@@ -2753,11 +2780,11 @@ class Rechnung extends GenRechnung
 
     $arr[0]['gruppe'] = $this->app->erp->GetVerband($adresse);
 
-    $rolle_projekt = $this->app->DB->Select("SELECT parameter FROM adresse_rolle WHERE adresse='$adresse' AND subjekt='Kunde' AND objekt='Projekt' AND (bis ='0000-00-00' OR bis <= NOW()) LIMIT 1");
+    $rolle_projekt = $this->app->DatabaseService->selectValue("SELECT parameter FROM adresse_rolle WHERE adresse=:adresse AND subjekt='Kunde' AND objekt='Projekt' AND (bis ='0000-00-00' OR bis <= NOW()) LIMIT 1", ['adresse' => $adresse]);
 
     if($arr[0]['abweichende_rechnungsadresse']=='1')
     {
-      $arr = $this->app->DB->SelectArr("SELECT projekt, rechnung_name as name,
+      $arr = $this->app->DatabaseService->select("SELECT projekt, rechnung_name as name,
               rechnung_abteilung as abteilung,
               rechnung_ansprechpartner as ansprechpartner,
               rechnung_unterabteilung as unterabteilung,
@@ -2781,7 +2808,7 @@ class Rechnung extends GenRechnung
               innendienst as bearbeiterid,
               '' as bearbeiter,
               rechnung_anschreiben as anschreiben
-              FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
+              FROM adresse WHERE id=:adresse AND geloescht=0 LIMIT 1", ['adresse' => $adresse]);
 
       $arr[0]['gruppe'] = $this->app->erp->GetVerband($adresse);
     }
@@ -2819,11 +2846,11 @@ class Rechnung extends GenRechnung
     $uparr=null;
 
     //liefernantenvorlage
-    $arr = $this->app->DB->SelectArr("SELECT * FROM adresse WHERE id='$adresse' LIMIT 1");
+    $arr = $this->app->DatabaseService->select("SELECT * FROM adresse WHERE id=:adresse LIMIT 1", ['adresse' => $adresse]);
 
     if($arr[0]['abweichende_rechnungsadresse']=='1')
     {
-      $arr = $this->app->DB->SelectArr("SELECT projekt, rechnung_name as name,
+      $arr = $this->app->DatabaseService->select("SELECT projekt, rechnung_name as name,
               rechnung_abteilung as abteilung,
               rechnung_unterabteilung as unterabteilung,
               rechnung_strasse as strasse,
@@ -2837,7 +2864,7 @@ class Rechnung extends GenRechnung
               rechnung_typ as typ,
               zahlungsweise,zahlungszieltage,zahlungszieltageskonto,zahlungszielskonto,versandart,
               rechnung_anschreiben as anschreiben
-              FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
+              FROM adresse WHERE id=:adresse AND geloescht=0 LIMIT 1", ['adresse' => $adresse]);
     }
 
     $field = array('zahlungsweise','zahlungszieltage','zahlungszieltageskonto','zahlungszielskonto','versandart');
@@ -2845,12 +2872,13 @@ class Rechnung extends GenRechnung
     $this->app->erp->LoadZahlungsweise($adresse,$arr);
 
     // falls von Benutzer projekt ueberladen werden soll
-    $projekt_bevorzugt=$this->app->DB->Select("SELECT projekt_bevorzugen FROM user WHERE id='".$this->app->User->GetID()."' LIMIT 1");
+    $userId = $this->app->User->GetID();
+    $projekt_bevorzugt = $this->app->DatabaseService->selectValue("SELECT projekt_bevorzugen FROM user WHERE id=:userId LIMIT 1", ['userId' => $userId]);
     if($projekt_bevorzugt=="1")
     {
-      $uparr['projekt'] = $this->app->DB->Select("SELECT projekt FROM user WHERE id='".$this->app->User->GetID()."' LIMIT 1");
+      $uparr['projekt'] = $this->app->DatabaseService->selectValue("SELECT projekt FROM user WHERE id=:userId LIMIT 1", ['userId' => $userId]);
       $arr[0]['projekt'] = $uparr['projekt'];
-      $this->app->Secure->POST['projekt']=$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='".$arr[0]['projekt']."' AND id > 0 LIMIT 1");
+      $this->app->Secure->POST['projekt'] = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id=:projekt AND id > 0 LIMIT 1", ['projekt' => $arr[0]['projekt']]);
     }
     if(isset($arr[0]['usereditid'])){
       unset($arr[0]['usereditid']);
@@ -2883,11 +2911,11 @@ class Rechnung extends GenRechnung
     if($id <= 0) {
       return;
     }
-    $belegnr = $this->app->DB->Select("SELECT belegnr FROM rechnung WHERE id='$id' LIMIT 1");
+    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     if($belegnr=='' || $belegnr=='0') {
-      $this->app->DB->Delete("DELETE FROM rechnung_position WHERE rechnung='$id'");
-      $this->app->DB->Delete("DELETE FROM rechnung_protokoll WHERE rechnung='$id'");
-      $this->app->DB->Delete("DELETE FROM rechnung WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->execute("DELETE FROM rechnung_position WHERE rechnung=:id", ['id' => $id]);
+      $this->app->DatabaseService->execute("DELETE FROM rechnung_protokoll WHERE rechnung=:id", ['id' => $id]);
+      $this->app->DatabaseService->execute("DELETE FROM rechnung WHERE id=:id LIMIT 1", ['id' => $id]);
     }
   }
 
@@ -2926,10 +2954,13 @@ class Rechnung extends GenRechnung
       $bestellnummer = $artikelarr['nummer'];
     }
 
-    $sort = (int)$this->app->DB->Select("SELECT MAX(sort) FROM rechnung_position WHERE rechnung='$rechnung' LIMIT 1");
+    $sort = (int)$this->app->DatabaseService->selectValue("SELECT MAX(sort) FROM rechnung_position WHERE rechnung=:rechnung LIMIT 1", ['rechnung' => $rechnung]);
     $sort++;
-    $this->app->DB->Insert("INSERT INTO rechnung_position (rechnung,artikel,bezeichnung,nummer,menge,preis, waehrung, sort,lieferdatum, umsatzsteuer, status,projekt,vpe)
-            VALUES ('$rechnung','$artikel','$bezeichnunglieferant','$bestellnummer','$menge','$preis','$waehrung','$sort','$datum','$umsatzsteuer','angelegt','$projekt','$vpe')");
+    $this->app->DatabaseService->insert(
+      "INSERT INTO rechnung_position (rechnung,artikel,bezeichnung,nummer,menge,preis, waehrung, sort,lieferdatum, umsatzsteuer, status,projekt,vpe)
+            VALUES (:rechnung,:artikel,:bezeichnung,:nummer,:menge,:preis,:waehrung,:sort,:datum,:umsatzsteuer,'angelegt',:projekt,:vpe)",
+      ['rechnung' => $rechnung, 'artikel' => $artikel, 'bezeichnung' => $bezeichnunglieferant, 'nummer' => $bestellnummer, 'menge' => $menge, 'preis' => $preis, 'waehrung' => $waehrung, 'sort' => $sort, 'datum' => $datum, 'umsatzsteuer' => $umsatzsteuer, 'projekt' => $projekt, 'vpe' => $vpe]
+    );
   }
 
   /**
@@ -2944,25 +2975,18 @@ class Rechnung extends GenRechnung
    *
    * @return int
    */
-  public function AddRechnungPositionManuell($rechnung, $artikel,$preis, $menge,$bezeichnung,$beschreibung='',$waehrung='EUR',$rabatt=0)
+  public function AddRechnungPositionManuell($rechnung, $artikel,$preis, $menge,$bezeichnung,$beschreibung='',$waehrung='EUR',$rabatt=0,$datum=null)
   {
-    $bezeichnung = $this->app->DB->real_escape_string($bezeichnung);
-    $beschreibung = $this->app->DB->real_escape_string($beschreibung);
-
     $bezeichnunglieferant = $bezeichnung;
-    $artArr = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT nummer, projekt, umsatzsteuer FROM artikel WHERE id = %d',
-        $artikel
-      )
+    $artArr = $this->app->DatabaseService->selectRow(
+      "SELECT nummer, projekt, umsatzsteuer FROM artikel WHERE id = :artikel LIMIT 1",
+      ['artikel' => (int)$artikel]
     );
-    $bestellnummer = !empty($artArr)?$artArr['nummer']: $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$artikel' LIMIT 1");
-    $projekt = !empty($artArr)?$artArr['projekt']:$this->app->DB->Select("SELECT projekt FROM artikel WHERE id='$artikel' LIMIT 1");
-
-    $bestellnummer = $this->app->DB->real_escape_string($bestellnummer);
+    $bestellnummer = !empty($artArr) ? $artArr['nummer'] : $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id=:artikel LIMIT 1", ['artikel' => $artikel]);
+    $projekt = !empty($artArr) ? $artArr['projekt'] : $this->app->DatabaseService->selectValue("SELECT projekt FROM artikel WHERE id=:artikel LIMIT 1", ['artikel' => $artikel]);
 
     if($waehrung!='') {
-      $this->app->DB->Update("UPDATE rechnung SET waehrung='$waehrung' WHERE id='$rechnung' AND waehrung='' LIMIT 1");
+      $this->app->DatabaseService->execute("UPDATE rechnung SET waehrung=:waehrung WHERE id=:rechnung AND waehrung='' LIMIT 1", ['waehrung' => $waehrung, 'rechnung' => $rechnung]);
     }
 
     $keinrabatterlaubt=0;
@@ -2971,16 +2995,16 @@ class Rechnung extends GenRechnung
     }
 
     //$waehrung = $this->app->DB->Select("SELECT waehrung FROM verkaufspreise WHERE id='$verkauf' LIMIT 1");
-    $umsatzsteuer = !empty($artArr)?$artArr['umsatzsteuer']:$this->app->DB->Select("SELECT umsatzsteuer  FROM artikel WHERE id='$artikel' LIMIT 1");
-    $umsatzsteuer = $this->app->DB->real_escape_string($umsatzsteuer);
+    $umsatzsteuer = !empty($artArr) ? $artArr['umsatzsteuer'] : $this->app->DatabaseService->selectValue("SELECT umsatzsteuer FROM artikel WHERE id=:artikel LIMIT 1", ['artikel' => $artikel]);
     $vpe = '';
     //$vpe = $this->app->DB->Select("SELECT vpe FROM verkaufspreise WHERE id='$verkauf' LIMIT 1");
-    $sort = (int)$this->app->DB->Select("SELECT MAX(sort) FROM rechnung_position WHERE rechnung='$rechnung' LIMIT 1");
+    $sort = (int)$this->app->DatabaseService->selectValue("SELECT MAX(sort) FROM rechnung_position WHERE rechnung=:rechnung LIMIT 1", ['rechnung' => $rechnung]);
     $sort++;
-    $this->app->DB->Insert("INSERT INTO rechnung_position (rechnung,artikel,bezeichnung,nummer,menge,preis, waehrung, sort,lieferdatum, umsatzsteuer, status,projekt,vpe,beschreibung,rabatt,keinrabatterlaubt)
-            VALUES ('$rechnung','$artikel','$bezeichnunglieferant','$bestellnummer','$menge','$preis','$waehrung','$sort','$datum','$umsatzsteuer','angelegt','$projekt','$vpe','$beschreibung','$rabatt','$keinrabatterlaubt')");
-
-    return $this->app->DB->GetInsertID();
+    return $this->app->DatabaseService->insert(
+      "INSERT INTO rechnung_position (rechnung,artikel,bezeichnung,nummer,menge,preis, waehrung, sort,lieferdatum, umsatzsteuer, status,projekt,vpe,beschreibung,rabatt,keinrabatterlaubt)
+            VALUES (:rechnung,:artikel,:bezeichnung,:nummer,:menge,:preis,:waehrung,:sort,:datum,:umsatzsteuer,'angelegt',:projekt,:vpe,:beschreibung,:rabatt,:keinrabatterlaubt)",
+      ['rechnung' => $rechnung, 'artikel' => $artikel, 'bezeichnung' => $bezeichnunglieferant, 'nummer' => $bestellnummer, 'menge' => $menge, 'preis' => $preis, 'waehrung' => $waehrung, 'sort' => $sort, 'datum' => $datum ?? null, 'umsatzsteuer' => $umsatzsteuer, 'projekt' => $projekt, 'vpe' => $vpe, 'beschreibung' => $beschreibung, 'rabatt' => $rabatt, 'keinrabatterlaubt' => $keinrabatterlaubt]
+    );
   }
 
 
@@ -2994,7 +3018,7 @@ class Rechnung extends GenRechnung
   {
     $id = $this->app->Secure->GetGET('id');
 
-    $zahlungen = $this->app->erp->GetZahlungen($id,'rechnung'); 
+    $zahlungen = $this->app->erp->GetZahlungen($id,'rechnung');
     if (!empty($zahlungen)) {
         $et = new EasyTable($this->app);
 
@@ -3004,7 +3028,7 @@ class Rechnung extends GenRechnung
             $row = array(
                 $zahlung['datum'],
                 "<a href=\"index.php?module=".$zahlung['doc_typ']."&action=edit&id=".$zahlung['doc_id']."\">
-                    ".ucfirst($zahlung['doc_typ'])." 
+                    ".ucfirst($zahlung['doc_typ'])."
                     ".$zahlung['doc_info']."
                 </a>",
                 $zahlung['betrag'],
@@ -3014,7 +3038,7 @@ class Rechnung extends GenRechnung
         }
 
         $salden = $this->app->erp->GetSaldenDokument($id,'rechnung');
-        foreach ($salden as $saldo) { 
+        foreach ($salden as $saldo) {
             $row = array(
                 '',
                 '<b>Saldo</b>',
@@ -3034,7 +3058,7 @@ class Rechnung extends GenRechnung
     function rechnung_zahlstatus_berechnen($rechnung_id = null) {
         // START RECALCULATE
         $this->app->erp->fibu_rebuild_tables();
-        
+
         $sql_params = [];
         $condition = '';
         if (!empty($rechnung_id)) {
@@ -3085,12 +3109,12 @@ class Rechnung extends GenRechnung
                       'UPDATE rechnung SET ist = ?+soll, zahlungsstatus = IF(? = 0,\'bezahlt\',\'offen\') WHERE id=?',
                       [(float)$saldo['betrag'], (float)$saldo['betrag'], (int)$offene_rechnung['id']]
                     );
-                } 
+                }
             }
             else {
-                $this->app->DB->Update("UPDATE rechnung SET ist = null WHERE id=".$offene_rechnung['id']);
+                $this->app->DatabaseService->execute("UPDATE rechnung SET ist = null WHERE id=:id", ['id' => $offene_rechnung['id']]);
             }
-        }  
+        }
         $this->app->erp->fibu_rebuild_tables();
         // END RECALCULATE
     }

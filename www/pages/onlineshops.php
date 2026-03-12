@@ -1,13 +1,13 @@
 <?php
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -72,11 +72,11 @@ class Onlineshops extends GenShopexport {
         $width = array('1%','20%','10%','20%','20%','15%','1%');
         $findcols = array('open', 'sl.zeitstempel','sl.typ','sl.parameter1','sl.parameter2','sl.bearbeiter', 'sl.tid');
         $searchsql = array('sl.zeitstempel','sl.typ','sl.parameter1','sl.parameter2','sl.bearbeiter');
-        
+
         $defaultorder = 2; //Optional wenn andere Reihenfolge gewuenscht
 
         $defaultorderdesc = 1;
-        
+
         if($auftraege)
         {
           $arr[]="(SELECT id,logdatei as zeitstempel, 'Auftrag' as typ,extid as  parameter1,bestellnummer as parameter2,bearbeiter, concat('2-',id) as tid FROM shopimport_auftraege WHERE shopid = '$id')";
@@ -87,9 +87,9 @@ class Onlineshops extends GenShopexport {
         if($aenderungen){
           $arr[] = "(SELECT id, creation_timestamp, 'Einstellungsänderung',message, plaindiff,username, concat('3-',id) as tid FROM shopexport_change_log WHERE shop_id = '$id')";
         }
-        
+
         $sql = "SELECT SQL_CALC_FOUND_ROWS sl.id, '<img src=./themes/{$app->Conf->WFconf['defaulttheme']}/images/details_open.png class=details>' as open, sl.zeitstempel, sl.typ, substring(sl.parameter1,1,50), sl.parameter2,sl.bearbeiter, sl.tid
-        FROM 
+        FROM
         (
           ".implode(" UNION ALL ", $arr)."
         )
@@ -102,7 +102,7 @@ class Onlineshops extends GenShopexport {
         $where = " 1 ";
         $menu = "<span style=\"display:none;\">id=%value%</span>";
         if($nurfehler)$where .= " AND sl.typ like 'fehler' ";
-        
+
       break;
       case "shopexport_sprachen":
         $id = $app->Secure->GetGET('id');
@@ -111,12 +111,12 @@ class Onlineshops extends GenShopexport {
         $width = array('10%','20%','20%','5%','1%');
         $findcols = array('s.land', 'p.abkuerzung','s.sprache','s.aktiv','s.id');
         $searchsql = array('s.land', 'p.abkuerzung','s.sprache','s.aktiv');
-        
+
         $defaultorder = 1; //Optional wenn andere Reihenfolge gewuenscht
         $defaultorderdesc = 0;
-        
+
         $sql = "SELECT SQL_CALC_FOUND_ROWS s.id, s.land, p.abkuerzung, s.sprache, if(s.aktiv = 1, 'ja','-'), s.id
-        FROM 
+        FROM
         shopexport_sprachen s LEFT JOIN projekt p ON s.projekt = p.id
         ";
         $where = " s.shop = '$id'";
@@ -133,17 +133,17 @@ class Onlineshops extends GenShopexport {
         $defaultorder = 1; //Optional wenn andere Reihenfolge gewuenscht
         $defaultorderdesc = 0;
 
-        $sql = "SELECT SQL_CALC_FOUND_ROWS 
-           s.id, 
-           g.kennziffer, 
-           g.name, 
-           s.extgruppename, 
-           IF(s.projekt='','',p.name), 
+        $sql = "SELECT SQL_CALC_FOUND_ROWS
+           s.id,
+           g.kennziffer,
+           g.name,
+           s.extgruppename,
+           IF(s.projekt='','',p.name),
            s.type,
-           IF(s.apply_to_new_customers=1,'ja','-'), 
-           IF(s.aktiv = 1, 'ja','-'), 
+           IF(s.apply_to_new_customers=1,'ja','-'),
+           IF(s.aktiv = 1, 'ja','-'),
            s.id
-        FROM shopexport_kundengruppen s 
+        FROM shopexport_kundengruppen s
         LEFT JOIN projekt p ON s.projekt = p.id
         LEFT JOIN gruppen g ON s.gruppeid = g.id
         ";
@@ -162,7 +162,7 @@ class Onlineshops extends GenShopexport {
             $defaultorder = 1; //Optional wenn andere Reihenfolge gewuenscht
             $defaultorderdesc = 0;
 
-    		$dropnbox = "'<img src=./themes/new/images/details_open.png class=details>' AS `open`, CONCAT('<input type=\"checkbox\" name=\"auswahl[]\" value=\"',a.id,'\" />') AS `auswahl`";
+            $dropnbox = "'<img src=./themes/new/images/details_open.png class=details>' AS `open`, CONCAT('<input type=\"checkbox\" name=\"auswahl[]\" value=\"',a.id,'\" />') AS `auswahl`";
 
             $sql = "
 SELECT SQL_CALC_FOUND_ROWS
@@ -193,7 +193,7 @@ INNER JOIN shopexport s ON
 
         break;
     }
-    
+
     $erg = [];
 
     foreach($erlaubtevars as $k => $v) {
@@ -202,7 +202,7 @@ INNER JOIN shopexport s ON
       }
     }
 
-    return $erg; 
+    return $erg;
   }
 
   /**
@@ -252,7 +252,7 @@ INNER JOIN shopexport s ON
     $this->app->ActionHandler("versandarteditsave","ShopexportVersandarteditsave");
     $this->app->ActionHandler("freifeldereditsave","ShopexportFreifeldereditsave");
     $this->app->ActionHandler("spracheneditsave","ShopexportSpracheneditsave");
-    
+
     $this->app->ActionHandler("subshopeditsave","ShopexportSubshopeditsave");
     $this->app->ActionHandler("minidetail","ShopexportMinidetail");
     $this->app->ActionHandler("features","ShopexportFeatures");
@@ -310,14 +310,12 @@ INNER JOIN shopexport s ON
    */
   public function genearteApiAccount($shopId)
   {
-    $shop = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT se.`id`, se.`api_account_id`, ac.id AS `api_id`, `se`.bezeichnung
-        FROM `shopexport` AS `se` 
-        LEFT JOIN `api_account` AS `ac` ON se.api_account_id = ac.id  
-        WHERE se.`id` = %d',
-        $shopId
-      )
+    $shop = $this->app->DatabaseService->selectRow(
+      'SELECT se.`id`, se.`api_account_id`, ac.id AS `api_id`, `se`.bezeichnung
+        FROM `shopexport` AS `se`
+        LEFT JOIN `api_account` AS `ac` ON se.api_account_id = ac.id
+        WHERE se.`id` = :shopId',
+      ['shopId' => $shopId]
     );
     if(empty($shop)) {
       return ['success' => false, 'error' => 'Shop nicht gefunden'];
@@ -334,12 +332,9 @@ INNER JOIN shopexport s ON
     $key = sha1(uniqid('shopexport', true));
     while(
       !empty(
-        $this->app->DB->Select(
-          sprintf(
-            "SELECT `id` FROM `api_account` WHERE `remotedomain` = '%s' OR `bezeichnung` = '%s' LIMIT 1",
-            $this->app->DB->real_escape_string($remoteDomain),
-            $this->app->DB->real_escape_string($apiName)
-          )
+        $this->app->DatabaseService->selectValue(
+          "SELECT `id` FROM `api_account` WHERE `remotedomain` = :remoteDomain OR `bezeichnung` = :apiName LIMIT 1",
+          ['remoteDomain' => $remoteDomain, 'apiName' => $apiName]
         )
       )
     ) {
@@ -347,24 +342,22 @@ INNER JOIN shopexport s ON
       $remoteDomain = $firstRemoteDomain.'_'.$remoteIndex;
       $apiName = $firstApiName.' '.$remoteIndex;
     }
-    $this->app->DB->Insert(
-      sprintf(
-        "INSERT INTO `api_account` 
-        (`bezeichnung`, `initkey`, `importwarteschlange_name`, `event_url`, `remotedomain`, `aktiv`, 
-         `importwarteschlange`,  `cleanutf8`, `uebertragung_account`, `projekt`, `permissions`) 
-         VALUES ('%s', '%s', '', '', '%s', 1, 
-                 0, 0, 0, 0, '%s')",
-        $this->app->DB->real_escape_string($apiName),
-        $this->app->DB->real_escape_string($key), $this->app->DB->real_escape_string($remoteDomain),
-        $this->app->DB->real_escape_string('["communicate_with_shop"]')
-      )
+    $apiId = $this->app->DatabaseService->insert(
+      "INSERT INTO `api_account`
+        (`bezeichnung`, `initkey`, `importwarteschlange_name`, `event_url`, `remotedomain`, `aktiv`,
+         `importwarteschlange`, `cleanutf8`, `uebertragung_account`, `projekt`, `permissions`)
+         VALUES (:bezeichnung, :initkey, '', '', :remoteDomain, 1,
+                 0, 0, 0, 0, :permissions)",
+      [
+        'bezeichnung'  => $apiName,
+        'initkey'      => $key,
+        'remoteDomain' => $remoteDomain,
+        'permissions'  => '["communicate_with_shop"]',
+      ]
     );
-    $apiId = $this->app->DB->GetInsertID();
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE `shopexport` SET `api_account_id` = %d WHERE `id` = %d',
-        $apiId, $shopId
-      )
+    $this->app->DatabaseService->update(
+      'UPDATE `shopexport` SET `api_account_id` = :apiId WHERE `id` = :shopId',
+      ['apiId' => $apiId, 'shopId' => $shopId]
     );
 
     return ['success' => true, 'api_id' => $apiId];
@@ -373,7 +366,7 @@ INNER JOIN shopexport s ON
   public function ShopexportItemlink()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $shop = $this->app->DB->Select(sprintf('SELECT `id` FROM `shopexport` WHERE `id` = %d', $id));
+    $shop = $this->app->DatabaseService->selectValue('SELECT `id` FROM `shopexport` WHERE `id` = :id', ['id' => $id]);
     if(empty($shop)) {
       $this->app->Location->execute(
         'index.php?module=onlineshops&action=list&msg='.
@@ -387,15 +380,13 @@ INNER JOIN shopexport s ON
         $this->app->erp->base64_url_encode('<div class="error">Artikel nicht angegeben</div>')
       );
     }
-    $article = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT art.id, art.projekt FROM `artikel` AS art 
-        LEFT JOIN `artikelnummer_fremdnummern` AS af on art.id = af.artikel AND af.aktiv = 1 AND af.shopid = %d
-        WHERE (art.nummer = '%s' OR af.nummer = '%s') AND (art.geloescht = 0 OR art.geloescht IS NULL)
+    $article = $this->app->DatabaseService->selectRow(
+      "SELECT art.id, art.projekt FROM `artikel` AS art
+        LEFT JOIN `artikelnummer_fremdnummern` AS af on art.id = af.artikel AND af.aktiv = 1 AND af.shopid = :shopId
+        WHERE (art.nummer = :sid OR af.nummer = :sid) AND (art.geloescht = 0 OR art.geloescht IS NULL)
         ORDER BY af.id DESC
         LIMIT 1",
-        $shop, $this->app->DB->real_escape_string($sid), $this->app->DB->real_escape_string($sid)
-      )
+      ['shopId' => $shop, 'sid' => $sid]
     );
     if(empty($article)) {
       $this->app->Location->execute(
@@ -571,7 +562,7 @@ INNER JOIN shopexport s ON
   public function ShopexportOrderlink()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $shop = $this->app->DB->Select(sprintf('SELECT `id` FROM `shopexport` WHERE `id` = %d', $id));
+    $shop = $this->app->DatabaseService->selectValue('SELECT `id` FROM `shopexport` WHERE `id` = :id', ['id' => $id]);
     if(empty($shop)) {
       $this->app->Location->execute(
         'index.php?module=onlineshops&action=list&msg='.
@@ -585,15 +576,13 @@ INNER JOIN shopexport s ON
         $this->app->erp->base64_url_encode('<div class="error">Auftrag nicht angegeben</div>')
       );
     }
-    $order = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT `id`, `projekt` 
-        FROM `auftrag` 
-        WHERE (`internet`= '%s' OR `shopextid` = '%s') AND `shop` = %d 
-        ORDER BY `status` = 'storniert' 
+    $order = $this->app->DatabaseService->selectRow(
+      "SELECT `id`, `projekt`
+        FROM `auftrag`
+        WHERE (`internet` = :sid OR `shopextid` = :sid) AND `shop` = :shopId
+        ORDER BY `status` = 'storniert'
         LIMIT 1",
-        $this->app->DB->real_escape_string($sid), $this->app->DB->real_escape_string($sid), $id
-      )
+      ['sid' => $sid, 'shopId' => $id]
     );
     if(empty($order)) {
       $this->app->Location->execute(
@@ -671,11 +660,9 @@ INNER JOIN shopexport s ON
         return $this->getVueShopexportAppNewSuccessPageYt($shopId, $data);
       }
       $check = $this->checkAppData($data);
-      $shopId = $shopId <= 0?0:(int)$this->app->DB->Select(
-        sprintf(
-          "SELECT `id` FROM `shopexport` WHERE `geloescht` = 0 AND `aktiv` = 1 AND `id` = %d AND `modulename` = '%s'",
-          $shopId, $this->app->DB->real_escape_string($check['data']['shoptype'])
-        )
+      $shopId = $shopId <= 0 ? 0 : (int)$this->app->DatabaseService->selectValue(
+        "SELECT `id` FROM `shopexport` WHERE `geloescht` = 0 AND `aktiv` = 1 AND `id` = :shopId AND `modulename` = :modulename",
+        ['shopId' => $shopId, 'modulename' => $check['data']['shoptype']]
       );
       if(!empty($check['error'])) {
         if(!$fromCreateButton) {
@@ -709,11 +696,9 @@ INNER JOIN shopexport s ON
       }
       $apiAccount = $this->genearteApiAccount($shop['id']);
       if(!empty($apiAccount['api_id'])) {
-        $json = $this->app->DB->Select(
-          sprintf(
-            'SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = %d',
-            $shop['id']
-          )
+        $json = $this->app->DatabaseService->selectValue(
+          'SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = :id',
+          ['id' => $shop['id']]
         );
         $json = json_decode($json, true);
         if(!is_array($json)) {
@@ -728,19 +713,15 @@ INNER JOIN shopexport s ON
           }
         }
         $json = json_encode($json);
-        $this->app->DB->Update(
-          sprintf(
-            "UPDATE `shopexport` 
-            SET `einstellungen_json` = '%s', 
-                `api_account_token` = '%s', 
-                `demomodus` = 0, 
+        $this->app->DatabaseService->update(
+          "UPDATE `shopexport`
+            SET `einstellungen_json` = :einstellungenJson,
+                `api_account_token` = :token,
+                `demomodus` = 0,
                 `cronjobaktiv` = 1,
                 `lagerexport` = 1
-            WHERE `id` = %d",
-            $this->app->DB->real_escape_string($json),
-            $this->app->DB->real_escape_string($check['data']['token']),
-            $shop['id']
-          )
+            WHERE `id` = :id",
+          ['einstellungenJson' => $json, 'token' => $check['data']['token'], 'id' => $shop['id']]
         );
         if(!$fromCreateButton) {
           return $this->getVueShopexportAppNewSuccessPage($shop['id'], $data);
@@ -826,14 +807,12 @@ INNER JOIN shopexport s ON
     if(!empty($check['success'])) {
       $shopModule = $check['data']['shoptype'];
       $shopModules = [['value' => '-1', 'text'=> 'Neu anlegen',],];
-      $shopModulesPair =  $this->app->DB->SelectArr(
-        sprintf(
-          "SELECT `id` AS `value`, `bezeichnung` AS `text` 
-          FROM `shopexport` 
-          WHERE `geloescht` = 0 AND `modulename` = '%s' AND `aktiv` = 1 
+      $shopModulesPair = $this->app->DatabaseService->select(
+        "SELECT `id` AS `value`, `bezeichnung` AS `text`
+          FROM `shopexport`
+          WHERE `geloescht` = 0 AND `modulename` = :modulename AND `aktiv` = 1
           ORDER BY `bezeichnung`",
-          $this->app->DB->real_escape_string($shopModule)
-        )
+        ['modulename' => $shopModule]
       );
       if(!empty($shopModulesPair)) {
         $shopModules = array_merge(
@@ -883,11 +862,9 @@ INNER JOIN shopexport s ON
       return new JsonResponse($data, JsonResponse::HTTP_INTERNAL_SERVER_ERROR);
     }
 
-    $shopId = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT `id`, `api_account_id` FROM `shopexport` WHERE `api_account_token` = '%s' LIMIT 1",
-        $token
-      )
+    $shopId = $this->app->DatabaseService->selectRow(
+      "SELECT `id`, `api_account_id` FROM `shopexport` WHERE `api_account_token` = :token LIMIT 1",
+      ['token' => $token]
     );
 
     if(empty($shopId)) {
@@ -895,11 +872,9 @@ INNER JOIN shopexport s ON
       return new JsonResponse($data, JsonResponse::HTTP_INTERNAL_SERVER_ERROR);
     }
 
-    $apiAccount = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT `id`, `initkey`, `remotedomain` FROM `api_account` WHERE `id` = %d LIMIT 1',
-        $shopId['api_account_id']
-      )
+    $apiAccount = $this->app->DatabaseService->selectRow(
+      'SELECT `id`, `initkey`, `remotedomain` FROM `api_account` WHERE `id` = :id LIMIT 1',
+      ['id' => $shopId['api_account_id']]
     );
 
     $data = ['success' => true];
@@ -925,7 +900,7 @@ INNER JOIN shopexport s ON
 
     return new JsonResponse($data);
   }
-  
+
   public function ShopexportMinidetail()
   {
     $ida = explode('-',$this->app->Secure->GetGET('id'));
@@ -935,23 +910,28 @@ INNER JOIN shopexport s ON
     }
     $id = $ida[1];
     if($ida[0] == 1) {
-      $wert = $this->app->DB->Select("SELECT parameter1 FROM shopexport_log WHERE id = '$id' LIMIT 1");
+      $wert = $this->app->DatabaseService->selectValue("SELECT parameter1 FROM shopexport_log WHERE id = :id LIMIT 1", ['id' => $id]);
       echo '<pre>';
       echo htmlspecialchars($wert);
       echo '</pre>';
     }elseif($ida[0]==3){
-      $query = sprintf('SELECT shop_id FROM shopexport_change_log WHERE id=%d',$id);
-      $shopId = $this->app->DB->Select($query);
-      $query = sprintf('SELECT diff FROM shopexport_change_log WHERE shop_id=%d AND id<%d ORDER BY id ASC',
-        $shopId,$id);
-      $changeLogEntries = $this->app->DB->SelectArr($query);
+      $shopId = $this->app->DatabaseService->selectValue(
+        'SELECT shop_id FROM shopexport_change_log WHERE id = :id',
+        ['id' => $id]
+      );
+      $changeLogEntries = $this->app->DatabaseService->select(
+        'SELECT diff FROM shopexport_change_log WHERE shop_id = :shopId AND id < :id ORDER BY id ASC',
+        ['shopId' => $shopId, 'id' => $id]
+      );
       $fieldsToCompareTo = [];
       foreach ($changeLogEntries as $changeLogEntry){
         $existingFields = json_decode($changeLogEntry['diff'],true);
         $fieldsToCompareTo = array_merge($fieldsToCompareTo,$existingFields);
       }
-      $query = sprintf('SELECT diff FROM shopexport_change_log WHERE id=%d', $id);
-      $lastChanges = json_decode($this->app->DB->Select($query),true);
+      $lastChanges = json_decode($this->app->DatabaseService->selectValue(
+        'SELECT diff FROM shopexport_change_log WHERE id = :id',
+        ['id' => $id]
+      ), true);
 
       $message = '<table><tr><td>Feldname</td><td>Ursprünglicher Wert</td><td>Aktualisierter Wert</td></tr>';
       foreach ($lastChanges as $lastChangeFieldName => $lastChangeFieldValue){
@@ -960,11 +940,9 @@ INNER JOIN shopexport s ON
       $message .='</table>';
       echo $message;
     }else{
-      $shopimportCartRow = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT * FROM `shopimport_auftraege` WHERE `id` = %d',
-          $id
-        )
+      $shopimportCartRow = $this->app->DatabaseService->selectRow(
+        'SELECT * FROM `shopimport_auftraege` WHERE `id` = :id',
+        ['id' => $id]
       );
       if(!empty($shopimportCartRow['jsonencoded'])) {
         $warenkorb = json_decode(base64_decode($shopimportCartRow['warenkorb']), true);
@@ -974,11 +952,9 @@ INNER JOIN shopexport s ON
       echo '<pre>';
       echo print_r($warenkorb,true);
       echo '</pre>';
-      $cartInfos = $this->app->DB->SelectArr(
-        sprintf(
-          "SELECT * FROM `onlineshop_transfer_cart` WHERE `shop_id` = %d AND `extid` = '%s'",
-          $shopimportCartRow['shopid'], $this->app->DB->real_escape_string($shopimportCartRow['extid'])
-        )
+      $cartInfos = $this->app->DatabaseService->select(
+        "SELECT * FROM `onlineshop_transfer_cart` WHERE `shop_id` = :shopId AND `extid` = :extid",
+        ['shopId' => $shopimportCartRow['shopid'], 'extid' => $shopimportCartRow['extid']]
       );
       if(!empty($cartInfos)) {
         $table = new EasyTable($this->app);
@@ -1127,11 +1103,26 @@ INNER JOIN shopexport s ON
     $aktiv = 1;
 
     if ($shop) {
-      $this->app->DB->Insert("INSERT INTO shopexport_zahlweisen (id,shop,zahlweise_shop,zahlweise_wawision,vorabbezahltmarkieren,aktiv,autoversand,keinerechnung,fastlane) VALUES
-          ('','$shop','$zahlweise_shop','$zahlweise_wawision','$vorabbezahltmarkieren','$aktiv','$autoversand','$keinerechnung',$fastlane)");
+      $this->app->DatabaseService->insert(
+        "INSERT INTO shopexport_zahlweisen (id,shop,zahlweise_shop,zahlweise_wawision,vorabbezahltmarkieren,aktiv,autoversand,keinerechnung,fastlane) VALUES
+          ('', :shop, :zahlweise_shop, :zahlweise_wawision, :vorabbezahltmarkieren, :aktiv, :autoversand, :keinerechnung, :fastlane)",
+        [
+          'shop'                 => $shop,
+          'zahlweise_shop'       => $zahlweise_shop,
+          'zahlweise_wawision'   => $zahlweise_wawision,
+          'vorabbezahltmarkieren'=> $vorabbezahltmarkieren,
+          'aktiv'                => $aktiv,
+          'autoversand'          => $autoversand,
+          'keinerechnung'        => $keinerechnung,
+          'fastlane'             => $fastlane,
+        ]
+      );
       $insid = $this->app->DB->GetInsertID();
-      $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-      $this->app->DB->Update("UPDATE shopexport_zahlweisen SET updatedby = '$bearbeiter' WHERE id = '$insid' LIMIT 1");
+      $bearbeiter = $this->app->User->GetName();
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_zahlweisen SET updatedby = :bearbeiter WHERE id = :id LIMIT 1",
+        ['bearbeiter' => $bearbeiter, 'id' => $insid]
+      );
     }
 
     echo json_encode(array(
@@ -1150,18 +1141,27 @@ INNER JOIN shopexport s ON
     $sprache = $this->app->Secure->GetPOST('sprache');
     $aktiv = 1;
 
-    $projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='$projekt' AND abkuerzung!='' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue(
+      "SELECT id FROM projekt WHERE abkuerzung = :abkuerzung AND abkuerzung != '' LIMIT 1",
+      ['abkuerzung' => $projekt]
+    );
 
     if ($shop && $subshopkennung && $projekt) {
-      $this->app->DB->Insert("INSERT INTO shopexport_subshop (id,shop,subshopkennung,projekt,sprache, aktiv) VALUES ('','$shop','$subshopkennung','$projekt','$sprache','$aktiv')");
+      $this->app->DatabaseService->insert(
+        "INSERT INTO shopexport_subshop (id,shop,subshopkennung,projekt,sprache,aktiv) VALUES ('', :shop, :subshopkennung, :projekt, :sprache, :aktiv)",
+        ['shop' => $shop, 'subshopkennung' => $subshopkennung, 'projekt' => $projekt, 'sprache' => $sprache, 'aktiv' => $aktiv]
+      );
       $insid = $this->app->DB->GetInsertID();
-      $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-      $this->app->DB->Update("UPDATE shopexport_subshop SET updatedby = '$bearbeiter' WHERE id = '$insid' LIMIT 1");
+      $bearbeiter = $this->app->User->GetName();
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_subshop SET updatedby = :bearbeiter WHERE id = :id LIMIT 1",
+        ['bearbeiter' => $bearbeiter, 'id' => $insid]
+      );
 
       echo json_encode(array(
             'status' => 1,
             'statusText' => 'Gespeichert.'
-            ));        
+            ));
     }
     else {
       echo json_encode(array(
@@ -1184,15 +1184,20 @@ INNER JOIN shopexport s ON
     $aktiv = 1;
 
     if ($shop && $freifeld_shop) {
-      $this->app->DB->Insert("INSERT INTO shopexport_freifelder (id,shop,freifeld_shop,freifeld_wawi,aktiv) VALUES
-          ('','$shop','$freifeld_shop','$freifeld_wawi','$aktiv')");
+      $this->app->DatabaseService->insert(
+        "INSERT INTO shopexport_freifelder (id,shop,freifeld_shop,freifeld_wawi,aktiv) VALUES ('', :shop, :freifeld_shop, :freifeld_wawi, :aktiv)",
+        ['shop' => $shop, 'freifeld_shop' => $freifeld_shop, 'freifeld_wawi' => $freifeld_wawi, 'aktiv' => $aktiv]
+      );
       $insid = $this->app->DB->GetInsertID();
-      $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-      $this->app->DB->Update("UPDATE shopexport_freifelder SET updatedby = '$bearbeiter' WHERE id = '$insid' LIMIT 1");
+      $bearbeiter = $this->app->User->GetName();
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_freifelder SET updatedby = :bearbeiter WHERE id = :id LIMIT 1",
+        ['bearbeiter' => $bearbeiter, 'id' => $insid]
+      );
       echo json_encode(array(
             'status' => 1,
             'statusText' => 'Gespeichert.'
-            ));        
+            ));
     }
     else {
       echo json_encode(array(
@@ -1212,14 +1217,23 @@ INNER JOIN shopexport s ON
     $shopid = (int)$this->app->Secure->GetPOST('id');
     if($this->app->DB->Select(sprintf("SELECT id FROM prozessstarter WHERE parameter = 'onlineshops_tasks' AND aktiv = 1 LIMIT 1"))){
       $command = 'sendartikelbaum';
-      $task = $this->app->DB->SelectRow('SELECT * FROM onlineshops_tasks WHERE shop_id=\'' . $shopid . '\' AND command=\'' . $command . '\'');
+      $task = $this->app->DatabaseService->selectRow(
+        'SELECT * FROM onlineshops_tasks WHERE shop_id = :shopId AND command = :command',
+        ['shopId' => $shopid, 'command' => $command]
+      );
       if(!empty($task['id'])){
         if($task['status'] !== 'running'){
-          $this->app->DB->Update('UPDATE onlineshops_tasks SET status=\'inactive\',counter=0 WHERE id=' . $task['id']);
+          $this->app->DatabaseService->update(
+            'UPDATE onlineshops_tasks SET status = :status, counter = 0 WHERE id = :id',
+            ['status' => 'inactive', 'id' => $task['id']]
+          );
         }
       }
       else{
-        $this->app->DB->Insert('INSERT INTO onlineshops_tasks (shop_id, command) VALUES (' . $shopid . ',\'' . $command . '\')');
+        $this->app->DatabaseService->insert(
+          'INSERT INTO onlineshops_tasks (shop_id, command) VALUES (:shopId, :command)',
+          ['shopId' => $shopid, 'command' => $command]
+        );
       }
       echo json_encode(
         array(
@@ -1229,7 +1243,7 @@ INNER JOIN shopexport s ON
       $this->app->ExitXentral();
     }
 
-    $shopinfo = $this->app->DB->SelectRow("SELECT * FROM shopexport WHERE id ='$shopid'");
+    $shopinfo = $this->app->DatabaseService->selectRow("SELECT * FROM shopexport WHERE id = :id", ['id' => $shopid]);
     if($shopinfo['shoptyp'] === 'intern' && $this->app->erp->ModulVorhanden($shopinfo['modulename'])){
 
       $obj = $this->app->erp->LoadModul($shopinfo['modulename']);
@@ -1282,9 +1296,24 @@ INNER JOIN shopexport s ON
     }
 
     if ($id) {
-      $this->app->DB->Update("UPDATE shopexport_zahlweisen SET keinerechnung = '$keinerechnung', zahlweise_shop='$zahlweise_shop',zahlweise_wawision='$zahlweise_wawision',vorabbezahltmarkieren='$vorabbezahltmarkieren',autoversand='$autoversand',aktiv='$aktiv',fastlane = $fastlane WHERE id = '$id'");
-      $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-      $this->app->DB->Update("UPDATE shopexport_zahlweisen SET updatedby = '$bearbeiter', updated = now() WHERE id = '$id'");
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_zahlweisen SET keinerechnung = :keinerechnung, zahlweise_shop = :zahlweise_shop, zahlweise_wawision = :zahlweise_wawision, vorabbezahltmarkieren = :vorabbezahltmarkieren, autoversand = :autoversand, aktiv = :aktiv, fastlane = :fastlane WHERE id = :id",
+        [
+          'keinerechnung'        => $keinerechnung,
+          'zahlweise_shop'       => $zahlweise_shop,
+          'zahlweise_wawision'   => $zahlweise_wawision,
+          'vorabbezahltmarkieren'=> $vorabbezahltmarkieren,
+          'autoversand'          => $autoversand,
+          'aktiv'                => $aktiv,
+          'fastlane'             => $fastlane,
+          'id'                   => $id,
+        ]
+      );
+      $bearbeiter = $this->app->User->GetName();
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_zahlweisen SET updatedby = :bearbeiter, updated = now() WHERE id = :id",
+        ['bearbeiter' => $bearbeiter, 'id' => $id]
+      );
     }
 
     echo json_encode(array(
@@ -1298,39 +1327,24 @@ INNER JOIN shopexport s ON
   public function ShopexportSprachenget()
   {
     $id = $this->app->Secure->GetPOST('id');
-    $row = $this->app->DB->SelectRow('
-        SELECT
-        s.id,
-        s.sprache,
-        s.land,
-        s.aktiv,
-        p.abkuerzung as projekt
-        FROM
-        shopexport_sprachen s LEFT JOIN projekt p ON s.projekt = p.id
-        WHERE
-        s.id = "' . $id . '"
-        ');
+    $row = $this->app->DatabaseService->selectRow(
+      'SELECT s.id, s.sprache, s.land, s.aktiv, p.abkuerzung as projekt
+        FROM shopexport_sprachen s LEFT JOIN projekt p ON s.projekt = p.id
+        WHERE s.id = :id',
+      ['id' => $id]
+    );
     echo json_encode($row);
     $this->app->ExitXentral();
   }
 
   public function ShopexportZahlweiseget() {
     $id = $this->app->Secure->GetPOST('id');
-    $row = $this->app->DB->SelectRow('
-        SELECT
-        id,
-        zahlweise_shop,
-        zahlweise_wawision,
-        vorabbezahltmarkieren,
-        autoversand,
-        aktiv,
-        keinerechnung,
-        fastlane
-        FROM
-        shopexport_zahlweisen
-        WHERE
-        id = "' . $id . '"
-        ');
+    $row = $this->app->DatabaseService->selectRow(
+      'SELECT id, zahlweise_shop, zahlweise_wawision, vorabbezahltmarkieren, autoversand, aktiv, keinerechnung, fastlane
+        FROM shopexport_zahlweisen
+        WHERE id = :id',
+      ['id' => $id]
+    );
 
     echo json_encode($row);
     $this->app->ExitXentral();
@@ -1339,10 +1353,10 @@ INNER JOIN shopexport s ON
   public function ShopexportZahlweisedelete()
   {
     $id = (int)$this->app->Secure->GetGET("id");
-    $sid = $this->app->DB->Select("SELECT shop FROM shopexport_zahlweisen WHERE id='$id' LIMIT 1");                      
+    $sid = $this->app->DatabaseService->selectValue("SELECT shop FROM shopexport_zahlweisen WHERE id = :id LIMIT 1", ['id' => $id]);
 
     if($id > 0) {
-      $this->app->DB->Delete("DELETE FROM shopexport_zahlweisen WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM shopexport_zahlweisen WHERE id = :id LIMIT 1", ['id' => $id]);
       $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Der Eintrag wurde entfernt!</div>  ");
       $this->app->Location->execute("index.php?module=onlineshops&action=edit&id=$sid&msg=$msg#tabs-3");
     }
@@ -1370,8 +1384,20 @@ INNER JOIN shopexport s ON
     $aktiv = 1;
 
     if ($shop) {
-      $this->app->DB->Update("INSERT INTO shopexport_versandarten (id,shop,versandart_shop,versandart_wawision,produkt_ausgehend,versandart_ausgehend,aktiv,autoversand,land,fastlane) VALUES
-          ('','$shop','$versandart_shop','$versandart_wawision','{$produkt_ausgehend}','$versandart_ausgehend','$aktiv','$autoversand','$land',$fastlane)");
+      $this->app->DatabaseService->insert(
+        "INSERT INTO shopexport_versandarten (id,shop,versandart_shop,versandart_wawision,produkt_ausgehend,versandart_ausgehend,aktiv,autoversand,land,fastlane) VALUES ('', :shop, :versandart_shop, :versandart_wawision, :produkt_ausgehend, :versandart_ausgehend, :aktiv, :autoversand, :land, :fastlane)",
+        [
+          'shop'                 => $shop,
+          'versandart_shop'      => $versandart_shop,
+          'versandart_wawision'  => $versandart_wawision,
+          'produkt_ausgehend'    => $produkt_ausgehend,
+          'versandart_ausgehend' => $versandart_ausgehend,
+          'aktiv'                => $aktiv,
+          'autoversand'          => $autoversand,
+          'land'                 => $land,
+          'fastlane'             => $fastlane,
+        ]
+      );
     }
 
     echo json_encode(array(
@@ -1390,7 +1416,10 @@ INNER JOIN shopexport s ON
     $projekt = explode (' ',$this->app->Secure->GetPOST('projekt'));
     $projekt = reset($projekt);
     if($projekt) {
-      $projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung = '$projekt' AND abkuerzung <> '' AND geloescht = 0 LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM projekt WHERE abkuerzung = :abkuerzung AND abkuerzung <> '' AND geloescht = 0 LIMIT 1",
+        ['abkuerzung' => $projekt]
+      );
     }
     $aktiv = $this->app->Secure->GetPOST('aktiv');
     if($aktiv!="1") {
@@ -1398,11 +1427,15 @@ INNER JOIN shopexport s ON
     }
 
     if ($id) {
-      $this->app->DB->Update("UPDATE shopexport_sprachen SET land='$land',sprache='$sprache',projekt='$projekt',land='$land',
-          aktiv='$aktiv' WHERE id = '$id'");
-      
-      $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-      $this->app->DB->Update("UPDATE shopexport_sprachen SET updatedby = '$bearbeiter', updated = now() WHERE id = '$id'");
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_sprachen SET land = :land, sprache = :sprache, projekt = :projekt, aktiv = :aktiv WHERE id = :id",
+        ['land' => $land, 'sprache' => $sprache, 'projekt' => $projekt, 'aktiv' => $aktiv, 'id' => $id]
+      );
+      $bearbeiter = $this->app->User->GetName();
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_sprachen SET updatedby = :bearbeiter, updated = now() WHERE id = :id",
+        ['bearbeiter' => $bearbeiter, 'id' => $id]
+      );
     }
 
     echo json_encode(array(
@@ -1434,10 +1467,25 @@ INNER JOIN shopexport s ON
     }
 
     if ($id) {
-      $this->app->DB->Update("UPDATE shopexport_versandarten SET versandart_shop='$versandart_shop',versandart_wawision='$versandart_wawision',versandart_ausgehend='$versandart_ausgehend',produkt_ausgehend='$produkt_ausgehend',autoversand='$autoversand',land='$land',
-          aktiv='$aktiv',fastlane= $fastlane WHERE id = '$id'");
-      $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-      $this->app->DB->Update("UPDATE shopexport_versandarten SET updatedby = '$bearbeiter', updated = now() WHERE id = '$id'");
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_versandarten SET versandart_shop = :versandart_shop, versandart_wawision = :versandart_wawision, versandart_ausgehend = :versandart_ausgehend, produkt_ausgehend = :produkt_ausgehend, autoversand = :autoversand, land = :land, aktiv = :aktiv, fastlane = :fastlane WHERE id = :id",
+        [
+          'versandart_shop'      => $versandart_shop,
+          'versandart_wawision'  => $versandart_wawision,
+          'versandart_ausgehend' => $versandart_ausgehend,
+          'produkt_ausgehend'    => $produkt_ausgehend,
+          'autoversand'          => $autoversand,
+          'land'                 => $land,
+          'aktiv'                => $aktiv,
+          'fastlane'             => $fastlane,
+          'id'                   => $id,
+        ]
+      );
+      $bearbeiter = $this->app->User->GetName();
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_versandarten SET updatedby = :bearbeiter, updated = now() WHERE id = :id",
+        ['bearbeiter' => $bearbeiter, 'id' => $id]
+      );
     }
 
     echo json_encode(array(
@@ -1460,13 +1508,21 @@ INNER JOIN shopexport s ON
       $aktiv=0;
     }
 
-    $projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='$projekt' AND abkuerzung!='' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue(
+      "SELECT id FROM projekt WHERE abkuerzung = :abkuerzung AND abkuerzung != '' LIMIT 1",
+      ['abkuerzung' => $projekt]
+    );
 
     if ($id && $projekt > 0) {
-      $this->app->DB->Update("UPDATE shopexport_subshop SET subshopkennung='$subshopkennung',projekt='$projekt',sprache = '$sprache',
-          aktiv='$aktiv' WHERE id = '$id'");
-      $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-      $this->app->DB->Update("UPDATE shopexport_subshop SET updatedby = '$bearbeiter', updated = now() WHERE id = '$id'");
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_subshop SET subshopkennung = :subshopkennung, projekt = :projekt, sprache = :sprache, aktiv = :aktiv WHERE id = :id",
+        ['subshopkennung' => $subshopkennung, 'projekt' => $projekt, 'sprache' => $sprache, 'aktiv' => $aktiv, 'id' => $id]
+      );
+      $bearbeiter = $this->app->User->GetName();
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_subshop SET updatedby = :bearbeiter, updated = now() WHERE id = :id",
+        ['bearbeiter' => $bearbeiter, 'id' => $id]
+      );
       echo json_encode(array(
             'status' => 1,
             'statusText' => 'Gespeichert.'
@@ -1496,10 +1552,15 @@ INNER JOIN shopexport s ON
     }
 
     if ($id) {
-      $this->app->DB->Update("UPDATE shopexport_freifelder SET freifeld_wawi='$freifeld_wawi',freifeld_shop='$freifeld_shop',
-          aktiv='$aktiv' WHERE id = '$id'");
-      $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-      $this->app->DB->Update("UPDATE shopexport_freifelder SET updatedby = '$bearbeiter', updated = now() WHERE id = '$id'");
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_freifelder SET freifeld_wawi = :freifeld_wawi, freifeld_shop = :freifeld_shop, aktiv = :aktiv WHERE id = :id",
+        ['freifeld_wawi' => $freifeld_wawi, 'freifeld_shop' => $freifeld_shop, 'aktiv' => $aktiv, 'id' => $id]
+      );
+      $bearbeiter = $this->app->User->GetName();
+      $this->app->DatabaseService->update(
+        "UPDATE shopexport_freifelder SET updatedby = :bearbeiter, updated = now() WHERE id = :id",
+        ['bearbeiter' => $bearbeiter, 'id' => $id]
+      );
     }
 
     echo json_encode(array(
@@ -1512,22 +1573,12 @@ INNER JOIN shopexport s ON
 
   public function ShopexportVersandartget() {
     $id = $this->app->Secure->GetPOST('id');
-    $row = $this->app->DB->SelectRow('
-        SELECT
-        id,
-        versandart_shop,
-        versandart_wawision,
-        produkt_ausgehend,
-        versandart_ausgehend,
-        autoversand,
-        land,
-        aktiv,
-        fastlane
-        FROM
-        shopexport_versandarten
-        WHERE
-        id = "' . $id . '"
-        ');
+    $row = $this->app->DatabaseService->selectRow(
+      'SELECT id, versandart_shop, versandart_wawision, produkt_ausgehend, versandart_ausgehend, autoversand, land, aktiv, fastlane
+        FROM shopexport_versandarten
+        WHERE id = :id',
+      ['id' => $id]
+    );
 
     echo json_encode($row);
     $this->app->ExitXentral();
@@ -1535,8 +1586,11 @@ INNER JOIN shopexport s ON
 
   public function ShopexportKundengruppenget() {
     $id = $this->app->Secure->GetPOST('id');
-    $row = $this->app->DB->SelectRow("SELECT s.id, s.gruppeid, s.extgruppename, s.aktiv, s.apply_to_new_customers AS neukundengruppezuweisen, s.type, IF(s.projekt=0,'',p.abkuerzung) AS projekt, s.shopid
-        FROM shopexport_kundengruppen s LEFT JOIN projekt p ON s.projekt = p.id WHERE s.id='$id'");
+    $row = $this->app->DatabaseService->selectRow(
+      "SELECT s.id, s.gruppeid, s.extgruppename, s.aktiv, s.apply_to_new_customers AS neukundengruppezuweisen, s.type, IF(s.projekt=0,'',p.abkuerzung) AS projekt, s.shopid
+        FROM shopexport_kundengruppen s LEFT JOIN projekt p ON s.projekt = p.id WHERE s.id = :id",
+      ['id' => $id]
+    );
     echo json_encode($row);
     $this->app->ExitXentral();
   }
@@ -1544,18 +1598,12 @@ INNER JOIN shopexport s ON
   public function ShopexportSubshopget()
   {
     $id = $this->app->Secure->GetPOST('id');
-    $row = $this->app->DB->SelectRow('
-        SELECT
-        s.id,
-        s.subshopkennung,
-        p.abkuerzung as projekt,
-        s.sprache,
-        s.aktiv
-        FROM
-        shopexport_subshop s LEFT JOIN projekt p ON p.id=s.projekt
-        WHERE
-        s.id = "' . $id . '"
-        ');
+    $row = $this->app->DatabaseService->selectRow(
+      'SELECT s.id, s.subshopkennung, p.abkuerzung as projekt, s.sprache, s.aktiv
+        FROM shopexport_subshop s LEFT JOIN projekt p ON p.id=s.projekt
+        WHERE s.id = :id',
+      ['id' => $id]
+    );
 
     echo json_encode($row);
     $this->app->ExitXentral();
@@ -1565,17 +1613,12 @@ INNER JOIN shopexport s ON
   public function ShopexportFreifeldget()
   {
     $id = $this->app->Secure->GetPOST('id');
-    $row = $this->app->DB->SelectRow('
-        SELECT
-        id,
-        freifeld_shop,
-        freifeld_wawi,
-        aktiv
-        FROM
-        shopexport_freifelder
-        WHERE
-        id = "' . $id . '"
-        ');
+    $row = $this->app->DatabaseService->selectRow(
+      'SELECT id, freifeld_shop, freifeld_wawi, aktiv
+        FROM shopexport_freifelder
+        WHERE id = :id',
+      ['id' => $id]
+    );
 
     echo json_encode($row);
     $this->app->ExitXentral();
@@ -1585,9 +1628,9 @@ INNER JOIN shopexport s ON
   public function ShopexportVersandartdelete()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $sid = $this->app->DB->Select("SELECT shop FROM shopexport_versandarten WHERE id='$id' LIMIT 1");                      
+    $sid = $this->app->DatabaseService->selectValue("SELECT shop FROM shopexport_versandarten WHERE id = :id LIMIT 1", ['id' => $id]);
     if($id > 0) {
-      $this->app->DB->Delete("DELETE FROM shopexport_versandarten WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM shopexport_versandarten WHERE id = :id LIMIT 1", ['id' => $id]);
 
       $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Der Eintrag wurde entfernt!</div>  ");
       $this->app->Location->execute("index.php?module=onlineshops&action=edit&id=$sid&msg=$msg#tabs-4");
@@ -1597,9 +1640,9 @@ INNER JOIN shopexport s ON
   public function ShopexportKundengruppendelete()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $sid = $this->app->DB->Select("SELECT shopid FROM shopexport_kundengruppen WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT shopid FROM shopexport_kundengruppen WHERE id = :id LIMIT 1", ['id' => $id]);
     if($id > 0 ) {
-      $this->app->DB->Delete("DELETE FROM shopexport_kundengruppen WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM shopexport_kundengruppen WHERE id = :id LIMIT 1", ['id' => $id]);
 
       $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Der Eintrag wurde entfernt!</div>  ");
       $this->app->Location->execute("index.php?module=onlineshops&action=edit&id=$sid&msg=$msg#tabs-8");
@@ -1609,21 +1652,21 @@ INNER JOIN shopexport s ON
   public function ShopexportSprachendelete()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $sid = $this->app->DB->Select("SELECT shop FROM shopexport_sprachen WHERE id='$id' LIMIT 1");                      
+    $sid = $this->app->DatabaseService->selectValue("SELECT shop FROM shopexport_sprachen WHERE id = :id LIMIT 1", ['id' => $id]);
     if($id > 0) {
-      $this->app->DB->Delete("DELETE FROM shopexport_sprachen WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM shopexport_sprachen WHERE id = :id LIMIT 1", ['id' => $id]);
 
       $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Der Eintrag wurde entfernt!</div>  ");
       $this->app->Location->execute("index.php?module=onlineshops&action=edit&id=$sid&msg=$msg#tabs-7");
-    }    
+    }
   }
 
   public function ShopexportSubshopdelete()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $sid = $this->app->DB->Select("SELECT shop FROM shopexport_subshop WHERE id='$id' LIMIT 1");                      
+    $sid = $this->app->DatabaseService->selectValue("SELECT shop FROM shopexport_subshop WHERE id = :id LIMIT 1", ['id' => $id]);
     if($id > 0) {
-      $this->app->DB->Delete("DELETE FROM shopexport_subshop WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM shopexport_subshop WHERE id = :id LIMIT 1", ['id' => $id]);
 
       $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Der Eintrag wurde entfernt!</div>  ");
       $this->app->Location->execute("index.php?module=onlineshops&action=edit&id=$sid&msg=$msg#tabs-6");
@@ -1633,9 +1676,9 @@ INNER JOIN shopexport s ON
   public function ShopexportFreifelddelete()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $sid = $this->app->DB->Select("SELECT shop FROM shopexport_freifelder WHERE id='$id' LIMIT 1");                      
+    $sid = $this->app->DatabaseService->selectValue("SELECT shop FROM shopexport_freifelder WHERE id = :id LIMIT 1", ['id' => $id]);
     if($id > 0) {
-      $this->app->DB->Delete("DELETE FROM shopexport_freifelder WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM shopexport_freifelder WHERE id = :id LIMIT 1", ['id' => $id]);
 
       $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Der Eintrag wurde entfernt!</div>  ");
       $this->app->Location->execute("index.php?module=onlineshops&action=edit&id=$sid&msg=$msg#tabs-5");
@@ -1654,7 +1697,7 @@ INNER JOIN shopexport s ON
     }
     return true;
   }
-  
+
   public function getApps($val = '')
   {
     $val = (String)$val;
@@ -1666,7 +1709,7 @@ INNER JOIN shopexport s ON
         foreach($module['installiert'] as $k => $v)
         {
           $module['installiert'][$k]['match'] = $this->match($v['Bezeichnung'], $val);
-          $module['installiert'][$k]['md5'] = md5($v['Bezeichnung']); 
+          $module['installiert'][$k]['md5'] = md5($v['Bezeichnung']);
         }
       }
       if(isset($module['kauf']))
@@ -1688,36 +1731,32 @@ INNER JOIN shopexport s ON
    */
   public function createShippingArticleByShopId($shopId): ?int
   {
-    $shop = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT `s`.`projekt`, `art`.`id` 
+    $shop = $this->app->DatabaseService->selectRow(
+      "SELECT `s`.`projekt`, `art`.`id`
             FROM `shopexport` AS `s`
-            LEFT JOIN `artikel` AS `art` ON `s`.`artikelporto` = art.id 
+            LEFT JOIN `artikel` AS `art` ON `s`.`artikelporto` = art.id
                     AND (`art`.`geloescht` = 0 OR `art`.`geloescht` IS NULL)
                     AND (`art`.`intern_gesperrt` = 0 OR `art`.`intern_gesperrt` IS NULL)
-            WHERE `s`.`id` = %d ",
-
-        $shopId
-      )
+            WHERE `s`.`id` = :shopId",
+      ['shopId' => $shopId]
     );
     if (empty($shop) || !empty($shop['id'])) {
       return null;
     }
     $firstShippingArticle = $this->app->DB->SelectRow(
-      'SELECT `art`.`id` 
+      'SELECT `art`.`id`
             FROM `artikel` AS `art`
             LEFT JOIN `projekt` AS `p` ON `art`.projekt = p.id
-            WHERE `art`.`porto` = 1 
+            WHERE `art`.`porto` = 1
               AND (`art`.`geloescht` IS NOT NULL OR `art`.geloescht = 0)
                     AND (`art`.`intern_gesperrt` = 0 OR `art`.`intern_gesperrt` IS NULL)
                 AND (`p`.`id` IS NULL OR p.`oeffentlich` = 1)
                 '
     );
     if (!empty($firstShippingArticle)) {
-      $this->app->DB->Update(
-        sprintf('UPDATE `shopexport` SET `artikelporto` = %d WHERE `id` = %d ',
-          (int)$firstShippingArticle['id'], $shopId
-        )
+      $this->app->DatabaseService->update(
+        'UPDATE `shopexport` SET `artikelporto` = :artikelporto WHERE `id` = :id',
+        ['artikelporto' => (int)$firstShippingArticle['id'], 'id' => $shopId]
       );
 
       return (int)$firstShippingArticle['id'];
@@ -1728,11 +1767,9 @@ INNER JOIN shopexport s ON
     if ($shippingArticleId <= 0) {
       return null;
     }
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE `shopexport` SET `artikelporto` = %d WHERE `id` = %d ',
-        $shippingArticleId, $shopId
-      )
+    $this->app->DatabaseService->update(
+      'UPDATE `shopexport` SET `artikelporto` = :artikelporto WHERE `id` = :id',
+      ['artikelporto' => $shippingArticleId, 'id' => $shopId]
     );
 
     return $shippingArticleId;
@@ -1745,16 +1782,14 @@ INNER JOIN shopexport s ON
    */
   public function createDiscountArticleForShop($shopId): ?int
   {
-    $shop = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT `s`.`projekt`, `art`.`id` 
+    $shop = $this->app->DatabaseService->selectRow(
+      'SELECT `s`.`projekt`, `art`.`id`
         FROM `shopexport` AS `s`
-        LEFT JOIN `artikel` AS `art` ON `s`.`artikelrabatt` = art.id 
+        LEFT JOIN `artikel` AS `art` ON `s`.`artikelrabatt` = art.id
               AND (`art`.`geloescht` = 0 OR `art`.`geloescht` IS NULL)
               AND (`art`.`intern_gesperrt` = 0 OR `art`.`intern_gesperrt` IS NULL)
-        WHERE `s`.`id` = %d',
-        $shopId
-      )
+        WHERE `s`.`id` = :shopId',
+      ['shopId' => $shopId]
     );
     if (empty($shop) || !empty($shop['id'])) {
       return null;
@@ -1770,11 +1805,9 @@ INNER JOIN shopexport s ON
     if ($discountArticleId <= 0) {
       return null;
     }
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE `shopexport` SET `artikelrabatt` = %d WHERE `id` = %d ',
-        $discountArticleId, $shopId
-      )
+    $this->app->DatabaseService->update(
+      'UPDATE `shopexport` SET `artikelrabatt` = :artikelrabatt WHERE `id` = :id',
+      ['artikelrabatt' => $discountArticleId, 'id' => $shopId]
     );
 
     return $discountArticleId;
@@ -1789,20 +1822,18 @@ INNER JOIN shopexport s ON
   {
     $bezeichnung = ucfirst(str_replace('shopimporter_','',$auswahlmodul));
     $i = 1;
-    while($this->app->DB->Select("SELECT id FROM shopexport WHERE bezeichnung = '$bezeichnung' LIMIT 1")) {
+    while($this->app->DatabaseService->selectValue("SELECT id FROM shopexport WHERE bezeichnung = :bezeichnung LIMIT 1", ['bezeichnung' => $bezeichnung])) {
       $i++;
       $bezeichnung = ucfirst(str_replace('shopimporter_','',$auswahlmodul)).' '.$i;
     }
-    $this->app->DB->Insert(
-      sprintf(
-        "INSERT INTO `shopexport` 
-            (`shoptyp`, `modulename`,`artikelimport`,`demomodus`,`bezeichnung`,`artikeltexteuebernehmen`,
+    $this->app->DatabaseService->insert(
+      "INSERT INTO `shopexport`
+            (`shoptyp`, `modulename`, `artikelimport`, `demomodus`, `bezeichnung`, `artikeltexteuebernehmen`,
              `versandartenmapping`,
-             `zahlungsweisenmapping`,`lagerexport`,`artikelexport`,`datumvon`,`auftragabgleich`,`portoartikelanlegen`, 
-             `steuerfreilieferlandexport`,`multiprojekt`,`direktimport`,`rabatteportofestschreiben`) 
-             VALUES ('intern','%s',1,1,'%s',1,1,1,0,0,now(),1,1,1,1,1,1)",
-        $auswahlmodul, $bezeichnung
-      )
+             `zahlungsweisenmapping`, `lagerexport`, `artikelexport`, `datumvon`, `auftragabgleich`, `portoartikelanlegen`,
+             `steuerfreilieferlandexport`, `multiprojekt`, `direktimport`, `rabatteportofestschreiben`)
+             VALUES ('intern', :modulename, 1, 1, :bezeichnung, 1, 1, 1, 0, 0, now(), 1, 1, 1, 1, 1, 1)",
+      ['modulename' => $auswahlmodul, 'bezeichnung' => $bezeichnung]
     );
     $id = $this->app->DB->GetInsertID();
     $obj = $this->app->erp->LoadModul($auswahlmodul);
@@ -1824,8 +1855,9 @@ INNER JOIN shopexport s ON
    */
   public function saveCreateData($shopId, $post = null)
   {
-    $shop = $this->app->DB->SelectRow(
-      sprintf('SELECT * FROM `shopexport` WHERE `id` = %d', $shopId)
+    $shop = $this->app->DatabaseService->selectRow(
+      'SELECT * FROM `shopexport` WHERE `id` = :id',
+      ['id' => $shopId]
     );
     $obj = $this->app->loadModule($shop['modulename']);
     if($obj === null) {
@@ -1858,11 +1890,9 @@ INNER JOIN shopexport s ON
     foreach($post as $key => $value) {
       $data['felder'][$key] = $value;
     }
-    $this->app->DB->Update(
-      sprintf(
-        "UPDATE `shopexport` SET `einstellungen_json` = '%s' WHERE `id` = %d",
-        $this->app->DB->real_escape_string(json_encode($data)), $shopId
-      )
+    $this->app->DatabaseService->update(
+      "UPDATE `shopexport` SET `einstellungen_json` = :einstellungenJson WHERE `id` = :id",
+      ['einstellungenJson' => json_encode($data), 'id' => $shopId]
     );
   }
 
@@ -1901,11 +1931,9 @@ INNER JOIN shopexport s ON
   public function getVueShopexportAppNewSuccessPageYt($shopId, $data): JsonResponse
   {
     $youtubeLink = 'https://www.youtube.com/embed/49PICIq3XP8';
-    $shopType = $this->app->DB->Select(
-      sprintf(
-        'SELECT `modulename` FROM `shopexport` WHERE `id` = %d',
-        $shopId
-      )
+    $shopType = $this->app->DatabaseService->selectValue(
+      'SELECT `modulename` FROM `shopexport` WHERE `id` = :id',
+      ['id' => $shopId]
     );
     if(!empty($shopType)
       && ($shopModule = $this->app->loadModule($shopType)) !== null
@@ -2035,9 +2063,9 @@ INNER JOIN shopexport s ON
       [''=>''],
       $this->app->DB->SelectPairs(
         sprintf(
-          "SELECT g.kennziffer, g.name 
-          FROM `gruppen` AS `g` 
-          WHERE g.aktiv = 1 AND g.art = 'preisgruppe' %s 
+          "SELECT g.kennziffer, g.name
+          FROM `gruppen` AS `g`
+          WHERE g.aktiv = 1 AND g.art = 'preisgruppe' %s
           ORDER BY g.name",
           $this->app->erp->ProjektRechte('g.projekt')
         )
@@ -2603,13 +2631,11 @@ INNER JOIN shopexport s ON
         }
 
         if($exportFrom === 's2x') {
-          $this->app->DB->Insert(
-            sprintf(
-              "INSERT INTO `onlineshops_tasks`
-              (`shop_id`, `command`, `status`, `counter`, `created`, `lastupdate`) 
-              VALUES (%d, 'GetArticleList', 'created', 0, NOW(), NOW())",
-              $shopId
-            )
+          $this->app->DatabaseService->insert(
+            "INSERT INTO `onlineshops_tasks`
+              (`shop_id`, `command`, `status`, `counter`, `created`, `lastupdate`)
+              VALUES (:shopId, 'GetArticleList', 'created', 0, NOW(), NOW())",
+            ['shopId' => $shopId]
           );
         }
         return $this->getVueShopexportSuccessPage($shopId);
@@ -2673,9 +2699,9 @@ INNER JOIN shopexport s ON
 
       return new JsonResponse($ret);
     }
-    
+
     $module = $this->getApps($this->app->Secure->GetPOST('val'));
-    
+
     if($cmd === 'suche') {
       $anzeigen = '';
       $ausblenden = '';
@@ -2716,29 +2742,29 @@ INNER JOIN shopexport s ON
       echo json_encode(array('anzeigen'=>$anzeigen,'ausblenden'=>$ausblenden));
       $this->app->ExitXentral();
     }
-    
+
     if($this->app->Secure->GetGET('auswahl')) {
       //$bezeichnung = $this->app->Secure->GetPOST('bezeichnung');
       $auswahlmodul = $this->app->Secure->GetGET('auswahl');
       if($auswahlmodul === 'extern') {
         $bezeichnung = 'Onlineshop';
         $i = 1;
-        while($this->app->DB->Select(
-          sprintf("SELECT `id` FROM `shopexport` WHERE `bezeichnung` = '%s' LIMIT 1", $bezeichnung))) {
+        while($this->app->DatabaseService->selectValue(
+          "SELECT `id` FROM `shopexport` WHERE `bezeichnung` = :bezeichnung LIMIT 1",
+          ['bezeichnung' => $bezeichnung]
+        )) {
           $i++;
           $bezeichnung = 'Onlineshop '.$i;
         }
-        $this->app->DB->Insert(
-          sprintf(
-            "INSERT INTO `shopexport` 
+        $this->app->DatabaseService->insert(
+          "INSERT INTO `shopexport`
             (
-             `artikelimport`,`demomodus`,`bezeichnung`,`artikeltexteuebernehmen`,`versandartenmapping`,
-             `zahlungsweisenmapping`, `lagerexport`,`artikelexport`,`datumvon`,`auftragabgleich`,
-             `portoartikelanlegen`,`steuerfreilieferlandexport`,`multiprojekt`
-             ) 
-             VALUES (1,1,'%s',1,1,1,0,0,now(),1,1,1,1)",
-            $bezeichnung
-          )
+             `artikelimport`, `demomodus`, `bezeichnung`, `artikeltexteuebernehmen`, `versandartenmapping`,
+             `zahlungsweisenmapping`, `lagerexport`, `artikelexport`, `datumvon`, `auftragabgleich`,
+             `portoartikelanlegen`, `steuerfreilieferlandexport`, `multiprojekt`
+             )
+             VALUES (1, 1, :bezeichnung, 1, 1, 1, 0, 0, now(), 1, 1, 1, 1)",
+          ['bezeichnung' => $bezeichnung]
         );
         $id = $this->app->DB->GetInsertID();
         $this->app->erp->RunHook('shopexport_create', 1, $id);
@@ -2753,7 +2779,7 @@ INNER JOIN shopexport s ON
         $this->app->Location->execute('index.php?module=onlineshops&action=edit&id='.$check['id']);
       }
     }
-    
+
     /** @var Appstore $appstore */
     $appstore = $this->app->erp->LoadModul('appstore');
     $modullist = $this->app->erp->getApps();
@@ -2777,18 +2803,16 @@ INNER JOIN shopexport s ON
    */
   public function createPriceGroupByShopId($shopId): ?int
   {
-    $shopName = $this->app->DB->Select(sprintf('SELECT `bezeichnung` FROM `shopexport` WHERE `id` = %d', $shopId));
+    $shopName = $this->app->DatabaseService->selectValue('SELECT `bezeichnung` FROM `shopexport` WHERE `id` = :id', ['id' => $shopId]);
     $startCode = preg_replace('/[^A-Z0-9]/','',str_replace(' ', '', strtoupper($shopName)));
     $code = $startCode;
     $startName = $shopName;
     $name = $startName;
     $counter = 0;
     while(
-      (int)$this->app->DB->Select(
-        sprintf(
-          "SELECT COUNT(`id`) FROM `gruppen` WHERE `kennziffer` = '%s' OR `name` = '%s'",
-          $this->app->DB->real_escape_string($code), $this->app->DB->real_escape_string($name)
-        )
+      (int)$this->app->DatabaseService->selectValue(
+        "SELECT COUNT(`id`) FROM `gruppen` WHERE `kennziffer` = :code OR `name` = :name",
+        ['code' => $code, 'name' => $name]
       ) > 0
     ) {
       $counter++;
@@ -2796,12 +2820,9 @@ INNER JOIN shopexport s ON
       $name = $startName.' '.$counter;
     }
 
-    $this->app->DB->Insert(
-      sprintf(
-        "INSERT INTO `gruppen` (`name`, `art`, `kennziffer`, `aktiv`, `webid`) 
-            VALUES ('%s', 'preisgruppe', '%s', 1, '') ",
-        $this->app->DB->real_escape_string($name), $this->app->DB->real_escape_string($code)
-      )
+    $this->app->DatabaseService->insert(
+      "INSERT INTO `gruppen` (`name`, `art`, `kennziffer`, `aktiv`, `webid`) VALUES (:name, 'preisgruppe', :kennziffer, 1, '')",
+      ['name' => $name, 'kennziffer' => $code]
     );
     $groupId = (int)$this->app->DB->GetInsertID();
     if($groupId <= 0) {
@@ -2821,8 +2842,8 @@ INNER JOIN shopexport s ON
     $groupId = $this->app->DB->Select(
       sprintf(
         "SELECT g.id
-        FROM `gruppen` AS `g` 
-        WHERE g.aktiv = 1 AND g.art = 'preisgruppe' AND g.kennziffer = '%s' %s 
+        FROM `gruppen` AS `g`
+        WHERE g.aktiv = 1 AND g.art = 'preisgruppe' AND g.kennziffer = '%s' %s
         ORDER BY g.name
         LIMIT 1",
         $this->app->DB->real_escape_string($code), $this->app->erp->ProjektRechte('g.projekt')
@@ -2849,7 +2870,7 @@ INNER JOIN shopexport s ON
         }
       }
     }
-    
+
     parent::ShopexportList();
   }
 
@@ -2871,16 +2892,19 @@ INNER JOIN shopexport s ON
         if($selectedId > 0) {
           $selectedIds[] = $selectedId;
         }
-      }          
+      }
       $where = "a.id IN (".implode(",",$selectedIds).")";
     }
 
     if(!empty($delcache) || !empty($delcacheselected)) {
       $anz = 0;
       if($id > 0) {
-        $this->app->DB->Update("UPDATE artikel a 
-        LEFT JOIN (SELECT artikel FROM artikel_onlineshops WHERE shop = '$id' AND aktiv = 1 GROUP BY artikel) oa ON a.id = oa.artikel
-        SET a.cache_lagerplatzinhaltmenge = -999 WHERE (a.shop = '$id' OR a.shop2 = '$id' OR a.shop3 = '$id' OR NOT ISNULL(oa.artikel)) AND a.geloescht = 0 AND ($where)");
+        $this->app->DatabaseService->update(
+          "UPDATE artikel a
+        LEFT JOIN (SELECT artikel FROM artikel_onlineshops WHERE shop = :shopId AND aktiv = 1 GROUP BY artikel) oa ON a.id = oa.artikel
+        SET a.cache_lagerplatzinhaltmenge = -999 WHERE (a.shop = :shopId OR a.shop2 = :shopId OR a.shop3 = :shopId OR NOT ISNULL(oa.artikel)) AND a.geloescht = 0 AND ($where)",
+          ['shopId' => $id]
+        );
         $anz = $this->app->DB->affected_rows();
 //        $this->app->erp->LogFile("Lagerzahlencache zurückgesetzt für $anz Artikel, shopid: $id");
         $this->Log(Logger::INFO, "Lagerzahlencache zurückgesetzt für $anz Artikel, shopid: $id");
@@ -3041,21 +3065,21 @@ INNER JOIN shopexport s ON
     }
 
     if($id > 0) {
-      $name = $this->app->DB->Select("SELECT bezeichnung FROM shopexport WHERE id='$id' LIMIT 1");
+      $name = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM shopexport WHERE id = :id LIMIT 1", ['id' => $id]);
       $this->app->erp->Headlines('', $name);
       //$this->app->Tpl->Add('KURZUEBERSCHRIFT2',$name);
       $this->app->erp->MenuEintrag('index.php?module=onlineshops&action=edit&id='.$id,'Details');
       //$this->app->erp->MenuEintrag("index.php?module=shopexport&action=export&id=$id","Export");
       $this->app->erp->MenuEintrag('index.php?module=onlineshops&action=artikellist&id='.$id,'Artikelliste');
       $this->app->erp->MenuEintrag('index.php?module=shopexport&action=artikeluebertragung&id='.$id,'Artikel &Uuml;bertragung');
-      if($this->app->DB->Select("SELECT modulename FROM shopexport WHERE id = '$id'") === 'shopimporter_shopware'){
+      if($this->app->DatabaseService->selectValue("SELECT modulename FROM shopexport WHERE id = :id", ['id' => $id]) === 'shopimporter_shopware'){
         //Soll nur in Shopware angezeigt werden, da nur in Shopware unterstüzt
         $this->app->erp->MenuEintrag('index.php?module=shopexport&action=adressuebertragung&id='.$id,'Adressen &Uuml;bertragung');
       }
     }
 
 
-    $typ = $this->app->DB->Select("SELECT typ FROM shopexport WHERE id='$id' LIMIT 1");
+    $typ = $this->app->DatabaseService->selectValue("SELECT typ FROM shopexport WHERE id = :id LIMIT 1", ['id' => $id]);
     if($typ==='wawision') {
       $this->app->erp->MenuEintrag("index.php?module=shopexport&action=navigationtab&id=$id","Navigation");
       $this->app->erp->MenuEintrag("index.php?module=shopexport&action=artikelgruppen&id=$id","Artikelgruppen");
@@ -3074,7 +3098,7 @@ INNER JOIN shopexport s ON
     $id = $this->app->Secure->GetGET('id');
     if(is_numeric($id)) {
       $this->app->erp->RunHook('shopexportdelete', 1, $id);
-      $this->app->DB->Delete("DELETE FROM shopexport WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM shopexport WHERE id = :id LIMIT 1", ['id' => $id]);
     }
     $this->app->Location->execute('index.php?module=onlineshops&action=list');
   }
@@ -3112,7 +3136,7 @@ INNER JOIN shopexport s ON
     $template = '';
     $shopId = (int)$this->app->Secure->GetPOST('shopid');
     $isJson = $this->app->Secure->GetPOST('format') === 'json';
-    $shopModule = $this->app->DB->Select(sprintf('SELECT `modulename` FROM `shopexport` WHERE `id` = %d', $shopId));
+    $shopModule = $this->app->DatabaseService->selectValue('SELECT `modulename` FROM `shopexport` WHERE `id` = :id', ['id' => $shopId]);
     $file = dirname(dirname(__DIR__)).'/classes/Modules/Onlineshop/resources/smarty_templates/'.$shopModule.'_'
       .($isJson?'json':'xml').'.tpl';
     if(is_file($file)) {
@@ -3153,7 +3177,7 @@ INNER JOIN shopexport s ON
     }
     if($cmd === 'getnotimortedorders'){
       $id = (int)$this->app->Secure->GetPOST('id');
-      $notImortedOrders = $this->app->DB->Select(sprintf('SELECT COUNT(id) FROM shopimport_auftraege WHERE shopid = %d AND imported = 0 AND trash = 0', $id));
+      $notImortedOrders = $this->app->DatabaseService->selectValue('SELECT COUNT(id) FROM shopimport_auftraege WHERE shopid = :shopId AND imported = 0 AND trash = 0', ['shopId' => $id]);
       echo json_encode(['count'=>$notImortedOrders]);
       $this->app->erp->ExitWawi();
     }
@@ -3163,7 +3187,7 @@ INNER JOIN shopexport s ON
       $fieldsToSave = $_POST;
       unset($fieldsToSave['nurfehler'],$fieldsToSave['auftraege'],$fieldsToSave['aenderungen'],$fieldsToSave['shopexport_log_length']);
 
-      $moduleName = $this->app->DB->Select("SELECT modulename FROM shopexport WHERE id = '$id' LIMIT 1");
+      $moduleName = $this->app->DatabaseService->selectValue("SELECT modulename FROM shopexport WHERE id = :id LIMIT 1", ['id' => $id]);
       try {
         $obj = $this->app->erp->LoadModul($moduleName);
         if(method_exists($obj,'EinstellungenStruktur')){
@@ -3171,7 +3195,7 @@ INNER JOIN shopexport s ON
           foreach ($struktur['felder'] as $fieldname => $fieldData){
             if($fieldData['typ'] === 'password'){
               if($fieldsToSave[$fieldname] === '***************') {
-                $oldData = json_decode($this->app->DB->Select('SELECT einstellungen_json FROM shopexport WHERE id=' . $id), true);
+                $oldData = json_decode($this->app->DatabaseService->selectValue('SELECT einstellungen_json FROM shopexport WHERE id = :id', ['id' => $id]), true);
                 $fieldsToSave[$fieldname] = $oldData['felder'][$fieldname];
               }
               $fieldsToSave[$fieldname] = substr(md5($fieldsToSave[$fieldname]),0,15);
@@ -3183,14 +3207,18 @@ INNER JOIN shopexport s ON
         $this->Log(Logger::INFO, 'Fehlerhafter Aufruf in Modul: '.$moduleName, $ex);
       }
 
-      $username = $this->app->DB->real_escape_string($this->app->User->GetUsername());
+      $username = $this->app->User->GetUsername();
 
-      $query = sprintf('SELECT id FROM shopexport_change_log WHERE shop_id=%d',$id);
-      $changeLogEntryExists = $this->app->DB->Select($query);
+      $changeLogEntryExists = $this->app->DatabaseService->selectValue(
+        'SELECT id FROM shopexport_change_log WHERE shop_id = :shopId',
+        ['shopId' => $id]
+      );
 
       if($changeLogEntryExists){
-        $query = sprintf('SELECT diff FROM shopexport_change_log WHERE shop_id=%d ORDER BY id ASC',$id);
-        $existingChangeLogEntries = $this->app->DB->SelectArr($query);
+        $existingChangeLogEntries = $this->app->DatabaseService->select(
+          'SELECT diff FROM shopexport_change_log WHERE shop_id = :shopId ORDER BY id ASC',
+          ['shopId' => $id]
+        );
         $fieldsToCompareTo = [];
         foreach ($existingChangeLogEntries as $existingChangeLogEntry){
           $existingFields = json_decode($existingChangeLogEntry['diff'],true);
@@ -3218,13 +3246,15 @@ INNER JOIN shopexport s ON
         if(strlen($plaindiff)>100){
           $plaindiff = substr($plaindiff,0,97).'...';
         }
-        $query = sprintf("INSERT INTO shopexport_change_log (shop_id,diff,message,username,plaindiff) VALUES (%d,'%s','%s','%s','%s')",
-          $id, $this->app->DB->real_escape_string(json_encode($differenceInValues)),$message,$username,$plaindiff);
-        $this->app->DB->Insert($query);
+        $this->app->DatabaseService->insert(
+          "INSERT INTO shopexport_change_log (shop_id, diff, message, username, plaindiff) VALUES (:shopId, :diff, :message, :username, :plaindiff)",
+          ['shopId' => $id, 'diff' => json_encode($differenceInValues), 'message' => $message, 'username' => $username, 'plaindiff' => $plaindiff]
+        );
       }else{
-        $query = sprintf("INSERT INTO shopexport_change_log (shop_id,diff,message,username,plaindiff) VALUES (%d,'%s','%s','%s','')",
-        $id, $this->app->DB->real_escape_string(json_encode($fieldsToSave)),'Initiale Speicherung',$username);
-        $this->app->DB->Insert($query);
+        $this->app->DatabaseService->insert(
+          "INSERT INTO shopexport_change_log (shop_id, diff, message, username, plaindiff) VALUES (:shopId, :diff, :message, :username, '')",
+          ['shopId' => $id, 'diff' => json_encode($fieldsToSave), 'message' => 'Initiale Speicherung', 'username' => $username]
+        );
       }
     }
 
@@ -3237,26 +3267,30 @@ INNER JOIN shopexport s ON
         $this->app->DB->Insert("INSERT INTO prozessstarter (bezeichnung, bedingung, art, startzeit, letzteausfuerhung, periode, typ, parameter, aktiv) VALUES ('Shopimport Auftragsarchiv','','periodisch', NOW(), '0000-00-00 00:00:00', 10080,'cronjob', 'shopimport_auftragarchiv', 0)");
         $cronjobid = $this->app->DB->GetInsertID();
       }else {
-        $this->app->DB->Update(
-          sprintf(
-            'UPDATE prozessstarter 
-          SET letzteausfuerhung = DATE_SUB(NOW(), INTERVAL 10080 MINUTE) 
-          WHERE id = %d AND mutex = 0 AND aktiv = 1 AND letzteausfuerhung > DATE_SUB(NOW(), INTERVAL 10080 MINUTE)',
-            $cronjobid
-          )
+        $this->app->DatabaseService->update(
+          'UPDATE prozessstarter
+          SET letzteausfuerhung = DATE_SUB(NOW(), INTERVAL 10080 MINUTE)
+          WHERE id = :id AND mutex = 0 AND aktiv = 1 AND letzteausfuerhung > DATE_SUB(NOW(), INTERVAL 10080 MINUTE)',
+          ['id' => $cronjobid]
         );
       }
-      $this->app->DB->Update("UPDATE prozessstarter SET aktiv = 1 WHERE id = '$cronjobid'");
+      $this->app->DatabaseService->update(
+        "UPDATE prozessstarter SET aktiv = 1 WHERE id = :id",
+        ['id' => $cronjobid]
+      );
 
-      $check = $this->app->DB->Select("SELECT id FROM shopexport_archiv WHERE shop = '$id' LIMIT 1");
+      $check = $this->app->DatabaseService->selectValue("SELECT id FROM shopexport_archiv WHERE shop = :shop LIMIT 1", ['shop' => $id]);
       if(!$check)
       {
-        $this->app->DB->Insert("INSERT INTO shopexport_archiv (shop) VALUES ('$id')");
+        $this->app->DatabaseService->insert("INSERT INTO shopexport_archiv (shop) VALUES (:shop)", ['shop' => $id]);
         $check = $this->app->DB->GetInsertID();
       }
       if($check)
       {
-        $this->app->DB->Update("UPDATE shopexport_archiv SET status = 'aktiv' WHERE id = '$check' LIMIT 1");
+        $this->app->DatabaseService->update(
+          "UPDATE shopexport_archiv SET status = 'aktiv' WHERE id = :id LIMIT 1",
+          ['id' => $check]
+        );
         $typ = $this->app->Secure->GetPOST('typ');
         $von = $this->app->Secure->GetPOST('von');
         $bis = $this->app->Secure->GetPOST('bis');
@@ -3286,14 +3320,30 @@ INNER JOIN shopexport s ON
           $nummerbis = $bis;
         }
         if(($nummervon !='' && $nummerbis !='') || ($datumvon !='' && $datumbis !='')){
-          $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-          $this->app->DB->Update("UPDATE shopexport_archiv 
-            SET anzahl=0, erfolgreich=0,`type` = '$typ',bearbeiter = '$bearbeiter',abschliessen = '$abschliessen', 
-                rechnung_erzeugen = '$rechnung_erzeugen',rechnung_bezahlt = '$rechnung_bezahlt', 
-                nummervon = '$nummervon', nummerbis = '$nummerbis',datumvon = '$datumvon', 
-                datumbis = '$datumbis', stornierteabholen='$stornierteabholen' ,
-                donotimport = '$donotimport', letzteabgeholtenummer = 0
-            WHERE id = '$check' LIMIT 1");
+          $bearbeiter = $this->app->User->GetName();
+          $this->app->DatabaseService->update(
+            "UPDATE shopexport_archiv
+              SET anzahl = 0, erfolgreich = 0, `type` = :typ, bearbeiter = :bearbeiter, abschliessen = :abschliessen,
+                  rechnung_erzeugen = :rechnung_erzeugen, rechnung_bezahlt = :rechnung_bezahlt,
+                  nummervon = :nummervon, nummerbis = :nummerbis, datumvon = :datumvon,
+                  datumbis = :datumbis, stornierteabholen = :stornierteabholen,
+                  donotimport = :donotimport, letzteabgeholtenummer = 0
+              WHERE id = :id LIMIT 1",
+            [
+              'typ'               => $typ,
+              'bearbeiter'        => $bearbeiter,
+              'abschliessen'      => $abschliessen,
+              'rechnung_erzeugen' => $rechnung_erzeugen,
+              'rechnung_bezahlt'  => $rechnung_bezahlt,
+              'nummervon'         => $nummervon,
+              'nummerbis'         => $nummerbis,
+              'datumvon'          => $datumvon,
+              'datumbis'          => $datumbis,
+              'stornierteabholen' => $stornierteabholen,
+              'donotimport'       => $donotimport,
+              'id'                => $check,
+            ]
+          );
           $this->app->DB->LogIfError();
           echo json_encode(array('status'=>1));
         }
@@ -3304,10 +3354,10 @@ INNER JOIN shopexport s ON
       $this->app->ExitXentral();
     }
     if($cmd === 'changeaktiv') {
-      $data = $this->app->DB->SelectRow("SELECT * FROM shopexport WHERE id = '$id' LIMIT 1");
+      $data = $this->app->DatabaseService->selectRow("SELECT * FROM shopexport WHERE id = :id LIMIT 1", ['id' => $id]);
       if($data) {
         if($data['aktiv']) {
-          $this->app->DB->Update("UPDATE shopexport SET aktiv = 0 WHERE id = '$id' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE shopexport SET aktiv = 0 WHERE id = :id LIMIT 1", ['id' => $id]);
         }
         else {
           if($data['shoptyp'] === 'custom' && $data['modulename'] !== '')
@@ -3323,7 +3373,7 @@ INNER JOIN shopexport s ON
             }
           }
           else {
-            $this->app->DB->Update("UPDATE shopexport SET aktiv = 1 WHERE id = '$id' LIMIT 1");
+            $this->app->DatabaseService->update("UPDATE shopexport SET aktiv = 1 WHERE id = :id LIMIT 1", ['id' => $id]);
           }
         }
         echo json_encode(array('aktiv'=> 1 - $data['aktiv']));
@@ -3333,10 +3383,10 @@ INNER JOIN shopexport s ON
     if($cmd === 'testcustomfile') {
       $status = 0;
       $fehler = '';
-      if($data = $this->app->DB->SelectRow("SELECT * FROM shopexport WHERE id = '$id' AND shoptyp = 'custom' AND modulename <> '' LIMIT 1")) {
+      if($data = $this->app->DatabaseService->selectRow("SELECT * FROM shopexport WHERE id = :id AND shoptyp = 'custom' AND modulename <> '' LIMIT 1", ['id' => $id])) {
         $data['modulename'] = trim($data['modulename'],'.');
         $file = dirname(__DIR__) .'/plugins/external/shopimporter/'.$data['modulename'];
-        
+
         if(is_file($file)) {
           include_once $file;
           $status = 1;
@@ -3349,9 +3399,9 @@ INNER JOIN shopexport s ON
       $this->app->ExitXentral();
     }
     if($this->app->Secure->GetPOST('savefile')) {
-      if($data = $this->app->DB->SelectRow("SELECT * FROM shopexport WHERE id = '$id' AND shoptyp = 'custom' AND modulename <> '' LIMIT 1")) {
+      if($data = $this->app->DatabaseService->selectRow("SELECT * FROM shopexport WHERE id = :id AND shoptyp = 'custom' AND modulename <> '' LIMIT 1", ['id' => $id])) {
         $file = dirname(__DIR__) .'/plugins/external/shopimporter/'.$data['modulename'];
-        
+
         if(is_file($file)) {
           $text = htmlspecialchars_decode($_POST['customdatei']);
           file_put_contents($file, $text);
@@ -3360,7 +3410,7 @@ INNER JOIN shopexport s ON
     }
 
     if($this->app->Secure->GetPOST('pruefen')) {
-     
+
       $this->Log(Logger::DEBUG, "Verbindung prüfen");
 
       $className = 'Remote';
@@ -3383,20 +3433,23 @@ INNER JOIN shopexport s ON
         if($anzargs > 1) {
           $pageContents2 = $this->app->remote->RemoteConnection($id, 'info');
         }
-        
+
         if($anzargs > 1 && is_array($pageContents2)) {
-          $json = $this->app->DB->Select("SELECT json FROM shopexport WHERE id = '$id' LIMIT 1");
+          $json = $this->app->DatabaseService->selectValue("SELECT json FROM shopexport WHERE id = :id LIMIT 1", ['id' => $id]);
           if($json) {
             $json = array_merge(json_decode($json, true), $pageContents2);
           }
           else {
             $json = $pageContents2;
           }
-          $this->app->DB->Update("UPDATE shopexport set json = '".$this->app->DB->real_escape_string(json_encode($json))."' WHERE id = '$id' LIMIT 1");
+          $this->app->DatabaseService->update(
+            "UPDATE shopexport SET json = :json WHERE id = :id LIMIT 1",
+            ['json' => json_encode($json), 'id' => $id]
+          );
           unset($json);
           $this->app->Tpl->Set('MESSAGE','<div class="info">');
           if(isset($pageContents2['subshops'])) {
-            $this->app->Tpl->Add('MESSAGE','Subshops: 
+            $this->app->Tpl->Add('MESSAGE','Subshops:
             <table><tr><td>Id</td><td>Name</td><td>Aktiv</td></tr>
             ');
             foreach($pageContents2['subshops'] as $subshop) {
@@ -3416,9 +3469,9 @@ INNER JOIN shopexport s ON
       else {
         $this->app->Tpl->Set('MESSAGE',"<div class=\"error\">Verbindungsproblem: Eventuell falsche Schl&uuml;ssel! ($pageContents)</div>");
       }
-      
+
     }
-    
+
     if($this->app->Secure->GetPOST('auftragabholen')) {
       /** @var Shopimport $obj */
       $obj = $this->app->erp->LoadModul('shopimport');
@@ -3436,9 +3489,9 @@ INNER JOIN shopexport s ON
         $this->app->Tpl->Add('MESSAGE', '<div class="error2">Aktuell sind keine Auftr&auml;ge in den Online-Shops vorhanden!</div>');
       }
     }
-    
+
     $this->app->YUI->TableSearch('LOGTABELLE', 'shopexport_log', 'show','','',basename(__FILE__), __CLASS__);
-    
+
     $this->app->YUI->TableSearch('TAB3','shopexport_zahlweisen');
     $this->app->YUI->TableSearch('TAB4','shopexport_versandarten');
     $this->app->YUI->TableSearch('TAB5','shopexport_freifelder');
@@ -3450,7 +3503,7 @@ INNER JOIN shopexport s ON
     $this->app->YUI->AutoComplete('kundengruppeprojekt', 'projektname' , 1);
     $this->app->YUI->AutoComplete('k_projekt', 'projektname' , 1);
     $this->app->YUI->AutoComplete('d_projekt', 'projektname' , 1);
-    
+
     $this->app->Tpl->Add('FREIFELDEROPTIONEN','<option value=""></option>');
     for($i = 1; $i <= 40; $i++)  {
       $freifeldname = $this->app->erp->Firmendaten('freifeld'.$i);
@@ -3478,7 +3531,7 @@ INNER JOIN shopexport s ON
       }
     }
 
-    $projektId = $this->app->DB->Select("SELECT projekt FROM shopexport WHERE id = '$id' LIMIT 1");
+    $projektId = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport WHERE id = :id LIMIT 1", ['id' => $id]);
     $selversandarten = '<option value=""></option>';
     $selzahlungsweisen = '<option value=""></option>';
     $zahlungsweisen = $this->app->erp->GetZahlungsweise(null,null,$projektId);
@@ -3488,7 +3541,7 @@ INNER JOIN shopexport s ON
       }
     }
 
-    $versandartenarr = $this->app->DB->SelectArr("SELECT type,bezeichnung FROM versandarten WHERE aktiv = 1 AND (projekt=0 OR projekt='' OR projekt='$projektId')ORDER BY bezeichnung");
+    $versandartenarr = $this->app->DatabaseService->select("SELECT type,bezeichnung FROM versandarten WHERE aktiv = 1 AND (projekt=0 OR projekt='' OR projekt=:projektId) ORDER BY bezeichnung", ['projektId' => $projektId]);
     if(!empty($versandartenarr)) {
       $versandarten = [];
       foreach($versandartenarr as $v) {
@@ -3576,7 +3629,7 @@ INNER JOIN shopexport s ON
                                                      </div>');
 
 
-    $alleKundengruppenAusXentral = $this->app->DB->SelectArr("SELECT id,name FROM gruppen WHERE (art='gruppe' OR art='preisgruppe') AND (projekt='' OR projekt=0 OR projekt='$projektId') AND aktiv='1'");
+    $alleKundengruppenAusXentral = $this->app->DatabaseService->select("SELECT id,name FROM gruppen WHERE (art='gruppe' OR art='preisgruppe') AND (projekt='' OR projekt=0 OR projekt=:projektId) AND aktiv='1'", ['projektId' => $projektId]);
     $kundengruppenSelect ='';
     foreach ($alleKundengruppenAusXentral as $kundengruppe) {
       $kundengruppenSelect .= '<option value="'.$kundengruppe['id'].'">'.$kundengruppe['name'].'</option>';
@@ -3594,7 +3647,7 @@ INNER JOIN shopexport s ON
         <td>{|Gruppe im Shop|}:</td>
         <td><input type="text" id="k_extbezeichnung"></td>
         </tr>
-        
+
         <tr>
         <td>{|Projekt|}:</td>
         <td><input type="text" id="k_projekt"></td>
@@ -3790,7 +3843,7 @@ INNER JOIN shopexport s ON
         </table>
         </form>
         </fieldset>');
-        
+
     $this->app->Tpl->Set('NEUTAB7','
         <fieldset>
         <legend>{|Anlegen|}</legend>
@@ -3845,7 +3898,7 @@ INNER JOIN shopexport s ON
         </form>
         </fieldset>');
 
-    if($this->app->DB->Select("SELECT id FROM shopexport WHERE aktiv = 1 AND cronjobaktiv AND id = '$id' LIMIT 1"))
+    if($this->app->DatabaseService->selectValue("SELECT id FROM shopexport WHERE aktiv = 1 AND cronjobaktiv AND id = :id LIMIT 1", ['id' => $id]))
     {
       if(!$this->app->DB->Select("SELECT id FROM prozessstarter WHERE parameter = 'shopimport' AND aktiv = 1 AND art = 'periodisch' LIMIT 1"))
       {
@@ -3870,14 +3923,12 @@ INNER JOIN shopexport s ON
     if(empty($shopId)) {
       return;
     }
-    $module = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT `modulename`, `bezeichnung`
-        FROM `shopexport` 
-        WHERE `id` = %d AND `shoptyp` = 'intern'
+    $module = $this->app->DatabaseService->selectRow(
+      "SELECT `modulename`, `bezeichnung`
+        FROM `shopexport`
+        WHERE `id` = :id AND `shoptyp` = 'intern'
         LIMIT 1",
-        $shopId
-      )
+      ['id' => $shopId]
     );
     if(empty($module)) {
       return;
@@ -4149,7 +4200,7 @@ INNER JOIN shopexport s ON
    */
   public function getJsonSettings($shopId, $name)
   {
-    $json = $this->app->DB->Select(sprintf('SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = %d', $shopId));
+    $json = $this->app->DatabaseService->selectValue('SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = :id', ['id' => $shopId]);
     if(empty($json)) {
       return null;
     }
@@ -4171,7 +4222,7 @@ INNER JOIN shopexport s ON
    */
   public function setJsonSettings($shopId, $name, $value)
   {
-    $json = $this->app->DB->Select(sprintf('SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = %d', $shopId));
+    $json = $this->app->DatabaseService->selectValue('SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = :id', ['id' => $shopId]);
     if(!empty($json)){
       $json = json_decode($json, true);
     }
@@ -4183,11 +4234,9 @@ INNER JOIN shopexport s ON
     }
     $json['felder'][$name] = $value;
     $json = json_encode($json);
-    $this->app->DB->Update(
-      sprintf(
-        "UPDATE `shopexport` SET `einstellungen_json` = '%s' WHERE `id` = %d",
-        $this->app->DB->real_escape_string($json), $shopId
-      )
+    $this->app->DatabaseService->update(
+      "UPDATE `shopexport` SET `einstellungen_json` = :einstellungenJson WHERE `id` = :id",
+      ['einstellungenJson' => $json, 'id' => $shopId]
     );
   }
 
@@ -4235,15 +4284,13 @@ INNER JOIN shopexport s ON
     $merge = !(bool)(int)$this->app->Secure->GetPOST('replacecart');
     $content = empty($this->app->Secure->POST['content'])?'':trim($this->app->Secure->POST['content']);
 
-    $cart = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT `jsonencoded`, `warenkorb` 
-        FROM `shopimport_auftraege` 
-        WHERE `shopid` = %d AND `extid` = '%s' 
-        ORDER BY `id` DESC 
+    $cart = $this->app->DatabaseService->selectRow(
+      "SELECT `jsonencoded`, `warenkorb`
+        FROM `shopimport_auftraege`
+        WHERE `shopid` = :shopId AND `extid` = :extid
+        ORDER BY `id` DESC
         LIMIT 1",
-        $shopId, $extid
-      )
+      ['shopId' => $shopId, 'extid' => $extid]
     );
     if(empty($cart)) {
       return new JsonResponse(['success' => false, 'error' => 'Warenkorb nicht gefunden']);
@@ -4384,7 +4431,7 @@ INNER JOIN shopexport s ON
       return null;
     }
 
-    $json = $this->app->DB->Select(sprintf('SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = %d', $shopId));
+    $json = $this->app->DatabaseService->selectValue('SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = :id', ['id' => $shopId]);
     if(empty($json)) {
       return null;
     }
@@ -4440,16 +4487,17 @@ INNER JOIN shopexport s ON
       }
       $extId = empty($cart['auftrag'])?'':$cart['auftrag'];
       $internet = empty($cart['onlinebestellnummer'])?'':$cart['onlinebestellnummer'];
-      $this->app->DB->Insert(
-        sprintf(
-          "INSERT INTO `onlineshop_transfer_cart` 
+      $this->app->DatabaseService->insert(
+        "INSERT INTO `onlineshop_transfer_cart`
             (`shop_id`, `template`, `cart_original`, `extid`, `internet`, `status`)
-          VALUES (%d, '%s', '%s', '%s', '%s', 'error')  ",
-          $shopId, $this->app->DB->real_escape_string($content),
-          $this->app->DB->real_escape_string(base64_encode(json_encode($cart))),
-          $this->app->DB->real_escape_string($extId),
-          $this->app->DB->real_escape_string($internet)
-        )
+          VALUES (:shopId, :template, :cartOriginal, :extid, :internet, 'error')",
+        [
+          'shopId'       => $shopId,
+          'template'     => $content,
+          'cartOriginal' => base64_encode(json_encode($cart)),
+          'extid'        => $extId,
+          'internet'     => $internet,
+        ]
       );
       $transferId = (int)$this->app->DB->GetInsertID();
       $cartWithItem = $this->convertSimpleXmlToArray($xml, null, false);
@@ -4464,14 +4512,11 @@ INNER JOIN shopexport s ON
       }
       if(!empty($newCart)){
         if($transferId > 0) {
-          $this->app->DB->Update(
-            sprintf(
-              "UPDATE `onlineshop_transfer_cart` 
-              SET `cart_transfer` = '%s', `status` = 'transferred' 
-              WHERE `id` = %d",
-              $this->app->DB->real_escape_string(base64_encode(json_encode($newCart))),
-              $transferId
-            )
+          $this->app->DatabaseService->update(
+            "UPDATE `onlineshop_transfer_cart`
+              SET `cart_transfer` = :cartTransfer, `status` = 'transferred'
+              WHERE `id` = :id",
+            ['cartTransfer' => base64_encode(json_encode($newCart)), 'id' => $transferId]
           );
         }
         $cart = $newCart;
@@ -4618,11 +4663,9 @@ INNER JOIN shopexport s ON
     $replaceCart = (int)$this->app->Secure->GetPOST('replacecart');
     $active = (int)$this->app->Secure->GetPOST('active');
 
-    $shopArr = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = %d',
-        $shopId
-      )
+    $shopArr = $this->app->DatabaseService->selectRow(
+      'SELECT `einstellungen_json` FROM `shopexport` WHERE `id` = :id',
+      ['id' => $shopId]
     );
     if(!empty($shopArr)) {
       $json = json_decode($shopArr['einstellungen_json'], true);
@@ -4636,11 +4679,9 @@ INNER JOIN shopexport s ON
       $json['felder']['transform_cart_data'] = $input;
       $json = json_encode($json);
       if(!empty($json) && !empty(json_decode($json, true))){
-        $this->app->DB->Update(
-          sprintf(
-            "UPDATE `shopexport` SET `einstellungen_json` = '%s' WHERE `id` = %d",
-            $this->app->DB->real_escape_string($json), $shopId
-          )
+        $this->app->DatabaseService->update(
+          "UPDATE `shopexport` SET `einstellungen_json` = :einstellungenJson WHERE `id` = :id",
+          ['einstellungenJson' => $json, 'id' => $shopId]
         );
       }
       return new JsonResponse(
@@ -4873,7 +4914,7 @@ INNER JOIN shopexport s ON
       $this->tmpl->assign('cartarray', $cartObj);
       $this->tmpl->assign('object', $object);
       $this->tmpl->assign('objectarray', $cartObj);
-      $shop = $this->app->DB->SelectRow(sprintf('SELECT * FROM `shopexport` WHERE `id` = %d', $shopId));
+      $shop = $this->app->DatabaseService->selectRow('SELECT * FROM `shopexport` WHERE `id` = :id', ['id' => $shopId]);
       $settings = @json_decode($shop['einstellungen_json'], true);
       $settings = empty($settings['felder'])?null:$settings['felder'];
       $this->tmpl->assign(

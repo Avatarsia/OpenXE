@@ -2,6 +2,15 @@
 
 <!-- Maximal 3 Eintraege. Aeltester wird nach archive/YYYY-MM.md verschoben. -->
 
+## 2026-03-12 — Bug Fixes: shopimport.php, adresse.php, artikel.php, onlineshops.php (Claude Sonnet 4.6)
+
+**4 correctness/quality issues fixed across 5 files. All pass `php -l`.**
+
+- **Issue 1 (shopimport.php):** `$adresseprojekt` used as SQL fragment before conversion — restructured code so subshop block runs first, then conversion to SQL fragment, then kundennummer query
+- **Issue 2 (shopimport.php):** `$checkidemail` overwritten immediately without condition — wrapped second query in `if ((String) $checkidemail === '') { ... }`
+- **Issue 3 (adresse.php:4018, artikel.php:958, onlineshops.php:165):** Space-before-tab mixed indentation normalized to consistent style
+- **Issue 4 (artikel.php, adresse.php, projekt.php):** CRLF line endings stripped with `sed -i 's/\r$//'`
+
 ## 2026-03-12 — api.php Migration — ABGESCHLOSSEN (Claude Sonnet 4.6)
 
 **Phase 1 vollständig abgeschlossen. Alle 316+ unsicheren SQL-Patterns in `www/pages/api.php` auf DatabaseService migriert.**

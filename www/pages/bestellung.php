@@ -1,13 +1,13 @@
 <?php
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -113,21 +113,22 @@ class Bestellung extends GenBestellung
 
   function BestellungSteuer()
   {
-    
+
   }
-  
+
   function BestellungUndelete()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $bestellungRow = $this->app->DB->SelectRow(
-      sprintf("SELECT status, belegnr, name FROM bestellung WHERE id=%d LIMIT 1", $id)
+    $bestellungRow = $this->app->DatabaseService->selectRow(
+      "SELECT status, belegnr, name FROM bestellung WHERE id = :id LIMIT 1",
+      ['id' => $id]
     );
     $status = $bestellungRow['status'];
     $belegnr = $bestellungRow['belegnr'];
     $name = $bestellungRow['name'];
 
     if($status==='storniert')
-    { 
+    {
       $this->app->erp->BestellungProtokoll($id,"Bestellung Storno rückgängig");
       $this->app->DatabaseService->update("UPDATE bestellung SET status='freigegeben' WHERE id = :id LIMIT 1", ['id' => $id]);
       $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Bestellung \"$name\" ($belegnr) wurde wieder freigegeben!</div>  ");
@@ -212,20 +213,25 @@ class Bestellung extends GenBestellung
     if($id <= 0) {
       return;
     }
-    $status = $this->app->DB->Select("SELECT status FROM bestellung WHERE id = '$id' LIMIT 1");
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM bestellung WHERE id = :id LIMIT 1", ['id' => $id]);
     if(($status === 'versendet' || $status === 'freigegeben'))
     {
-      $sql = "SELECT bp.id FROM bestellung_position bp LEFT JOIN artikel a ON a.id=bp.artikel WHERE bp.bestellung = '$id' AND a.lagerartikel=1";
-      $alleLagerArtikelVonBestellung = $this->app->DB->SelectArr($sql);
+      $alleLagerArtikelVonBestellung = $this->app->DatabaseService->select(
+        "SELECT bp.id FROM bestellung_position bp LEFT JOIN artikel a ON a.id=bp.artikel WHERE bp.bestellung = :id AND a.lagerartikel=1",
+        ['id' => $id]
+      );
 
       //nur wenn auch Lagerartikel enthalten sind, soll automatisch abgeschlossen werden können.
       if((!empty($alleLagerArtikelVonBestellung)?count($alleLagerArtikelVonBestellung):0)>0){
         $lagerArtikelIds = [];
         foreach ($alleLagerArtikelVonBestellung as $l){
-          $lagerArtikelIds[] = $l['id'];
+          $lagerArtikelIds[] = (int)$l['id'];
         }
-        $sql = "SELECT bp.id FROM bestellung_position bp LEFT JOIN artikel a ON a.id=bp.artikel WHERE bp.geliefert < bp.menge AND bp.id IN (".implode(',',$lagerArtikelIds).")";
-        $offenePositionen = $this->app->DB->SelectArr($sql);
+        $placeholders = implode(',', array_fill(0, count($lagerArtikelIds), '?'));
+        $offenePositionen = $this->app->DatabaseService->select(
+          "SELECT bp.id FROM bestellung_position bp LEFT JOIN artikel a ON a.id=bp.artikel WHERE bp.geliefert < bp.menge AND bp.id IN ($placeholders)",
+          $lagerArtikelIds
+        );
 
         if(empty($offenePositionen)){
           $this->BestellungAbschliessen($id,true);
@@ -241,7 +247,7 @@ class Bestellung extends GenBestellung
     $this->app->YUI->TableSearch('TAB1','bestellung_offenepositionen');
     $this->app->Tpl->Parse('PAGE','bestellung_offenepositionen.tpl');
   }
-  
+
   function BestellungArchivierePDF()
   {
     $id = (int)$this->app->Secure->GetGET('id');
@@ -268,7 +274,7 @@ class Bestellung extends GenBestellung
   function BestellungSchreibschutz()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $this->app->DB->Update(sprintf('UPDATE bestellung SET zuarchivieren=1, schreibschutz = 0 WHERE id=%d', $id));
+    $this->app->DatabaseService->update("UPDATE bestellung SET zuarchivieren=1, schreibschutz = 0 WHERE id = :id", ['id' => $id]);
     $this->app->erp->BestellungProtokoll($id,'Schreibschutz entfernt');
     $this->app->Location->execute('index.php?module=bestellung&action=edit&id='.$id);
   }
@@ -301,8 +307,8 @@ class Bestellung extends GenBestellung
     header('Content-type: application/pdf');
     header('Content-Disposition: attachment; filename="Fehler.pdf"');
     $this->app->ExitXentral();
-  }  
-  
+  }
+
   function BestellungMiniDetail($parsetarget='',$menu=true)
   {
     $id = (int)$this->app->Secure->GetGET('id');
@@ -312,10 +318,10 @@ class Bestellung extends GenBestellung
       if($this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE id = :id AND lagerartikel = 1 LIMIT 1", ['id' => $id]))
       {
         $table = new EasyTable($this->app);
-        $table->Query("SELECT ".$this->app->erp->FormatMenge("sum(lpi.menge)")." as menge, l.bezeichnung as Lager 
-        FROM lager l 
-        INNER JOIN lager_platz lp ON l.id = lp.lager AND l.geloescht = 0 
-        INNER JOIN lager_platz_inhalt lpi ON lp.id = lpi.lager_platz AND lpi.artikel = $id 
+        $table->Query("SELECT ".$this->app->erp->FormatMenge("sum(lpi.menge)")." as menge, l.bezeichnung as Lager
+        FROM lager l
+        INNER JOIN lager_platz lp ON l.id = lp.lager AND l.geloescht = 0
+        INNER JOIN lager_platz_inhalt lpi ON lp.id = lpi.lager_platz AND lpi.artikel = $id
         GROUP BY l.id
         ORDER BY l.bezeichnung");
         $table->align[0] = 'right';
@@ -335,6 +341,7 @@ class Bestellung extends GenBestellung
       $auftragsnummer = $auftragPost[0];
 
       $auftrag_positionen = $this->app->DatabaseService->select("SELECT ap.id,ap.artikel,ap.menge FROM auftrag_position ap LEFT JOIN auftrag a on a.id=ap.auftrag WHERE a.belegnr = :belegnr AND a.belegnr != ''", ['belegnr' => $auftragsnummer]);
+      $a_positionen = [];
        foreach($auftrag_positionen as $value){
         $a_positionen[$value['artikel']]['id'] = $value['id'];
         $a_positionen[$value['artikel']]['menge'] = $value['menge'];
@@ -417,11 +424,9 @@ class Bestellung extends GenBestellung
     if($cmd === 'savepreis')
     {
       $bpid = (int)$this->app->Secure->GetPOST('bp');
-      $bpRow = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT artikel, bestellung FROM bestellung_position WHERE id = %d LIMIT 1'
-          ,$bpid
-        )
+      $bpRow = $this->app->DatabaseService->selectRow(
+        "SELECT artikel, bestellung FROM bestellung_position WHERE id = :id LIMIT 1",
+        ['id' => $bpid]
       );
       $artikel = $bpRow['artikel'];
       $preis = str_replace(',','.',$this->app->Secure->GetPOST('preis'));
@@ -433,24 +438,20 @@ class Bestellung extends GenBestellung
       $ab_menge = str_replace(',','.',$this->app->Secure->GetPOST('ab_menge'));
       $menge = str_replace(',','.',$this->app->Secure->GetPOST('menge'));
       $bestellung = $bpRow['bestellung'];
-      
+
       // Schreibschutz entfernen
       $this->app->DatabaseService->update("UPDATE bestellung SET schreibschutz=0 WHERE id = :id LIMIT 1", ['id' => (int)$bestellung]);
-      $bRow = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT schreibschutz, adresse FROM bestellung WHERE id=%d LIMIT 1',
-          (int)$bestellung
-        )
+      $bRow = $this->app->DatabaseService->selectRow(
+        "SELECT schreibschutz, adresse FROM bestellung WHERE id = :id LIMIT 1",
+        ['id' => (int)$bestellung]
       );
       $schreibschutz = $bRow['schreibschutz'];
       $adresse = $bRow['adresse'];
       if(!$schreibschutz)
       {
-        $this->app->DB->Update(
-          sprintf(
-            'UPDATE bestellung_position SET preis = %f WHERE id = %d LIMIT 1',
-            (float)$preis, $bpid
-          )
+        $this->app->DatabaseService->update(
+          "UPDATE bestellung_position SET preis = :preis WHERE id = :id LIMIT 1",
+          ['preis' => (float)$preis, 'id' => $bpid]
         );
         if((String)$bestellnummer !== '') {
           $this->app->DatabaseService->update(
@@ -465,11 +466,9 @@ class Bestellung extends GenBestellung
           );
         }
         if($menge) {
-          $this->app->DB->Update(
-            sprintf(
-              "UPDATE bestellung_position SET menge = %f WHERE id = %d LIMIT 1",
-              (float)$menge, $bpid
-            )
+          $this->app->DatabaseService->update(
+            "UPDATE bestellung_position SET menge = :menge WHERE id = :id LIMIT 1",
+            ['menge' => (float)$menge, 'id' => $bpid]
           );
         }
         $this->app->erp->ANABREGSNeuberechnen($bestellung,'bestellung');
@@ -478,14 +477,12 @@ class Bestellung extends GenBestellung
       {
         $this->app->erp->AddEinkaufspreis($artikel,$ab_menge,$adresse,$bestellnummer,$bezeichnung, $preis, $waehrung);
       }
-      $data = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT id, %s as preis, bestellnummer, trim(menge)+0 as menge 
-            FROM bestellung_position 
-            WHERE id = %d 
-            LIMIT 1',
-          $this->app->erp->FormatPreis('preis'),$bpid
-        )
+      $data = $this->app->DatabaseService->selectRow(
+        "SELECT id, " . $this->app->erp->FormatPreis('preis') . " as preis, bestellnummer, trim(menge)+0 as menge
+          FROM bestellung_position
+          WHERE id = :id
+          LIMIT 1",
+        ['id' => $bpid]
       );
       if(!empty($data))
       {
@@ -495,16 +492,14 @@ class Bestellung extends GenBestellung
       echo json_encode($data);
       $this->app->ExitXentral();
     }
-    $bestRow = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT belegnr, name, status, zahlungsweise, adresse, verbindlichkeiteninfo,preisanfrageid, 
-          DATE_FORMAT(gewuenschteslieferdatum,\'%%d.%%m.%%Y\') as gewuenschteslieferdatum, bestellungbestaetigtabnummer,
-          DATE_FORMAT(bestaetigteslieferdatum,\'%%d.%%m.%%Y\') as bestaetigteslieferdatum, datum, projekt
-          FROM bestellung 
-          WHERE id=%d 
-          LIMIT 1',
-        $id
-      )
+    $bestRow = $this->app->DatabaseService->selectRow(
+      "SELECT belegnr, name, status, zahlungsweise, adresse, verbindlichkeiteninfo, preisanfrageid,
+        DATE_FORMAT(gewuenschteslieferdatum,'%d.%m.%Y') as gewuenschteslieferdatum, bestellungbestaetigtabnummer,
+        DATE_FORMAT(bestaetigteslieferdatum,'%d.%m.%Y') as bestaetigteslieferdatum, datum, projekt
+        FROM bestellung
+        WHERE id = :id
+        LIMIT 1",
+      ['id' => $id]
     );
     $belegnr = $bestRow['belegnr'];
     $name = $bestRow['name'];
@@ -562,12 +557,12 @@ class Bestellung extends GenBestellung
       $this->app->Tpl->Set('PROJEKT',$projekt);
 
     $md5 = md5(microtime(true));
-    
+
     $table = new EasyTable($this->app);
 
     $anzahlzeichen = 200;
     $artikelIdList = [];
-    $artikelArr = $this->app->DB->SelectArr(sprintf('SELECT DISTINCT artikel FROM bestellung_position WHERE bestellung = %d', $id));
+    $artikelArr = $this->app->DatabaseService->select("SELECT DISTINCT artikel FROM bestellung_position WHERE bestellung = :id", ['id' => $id]);
     if(!empty($artikelArr))
     {
       foreach($artikelArr as $row)
@@ -575,24 +570,24 @@ class Bestellung extends GenBestellung
         $artikelIdList[] = $row['artikel'];
       }
     }
-    $table->Query("SELECT CONCAT(SUBSTRING(ap.bezeichnunglieferant,1,$anzahlzeichen),'<br>Best-Nr.:<span id=\"spanbestellnummer".$md5."',ap.id,'\">',ap.bestellnummer,'</span>') as artikel, 
-        CONCAT('<a href=\"index.php?module=artikel&action=edit&id=',a.id,'\"  target=\"_blank\">',a.nummer,'</a>') as nummer, 
+    $table->Query("SELECT CONCAT(SUBSTRING(ap.bezeichnunglieferant,1,$anzahlzeichen),'<br>Best-Nr.:<span id=\"spanbestellnummer".$md5."',ap.id,'\">',ap.bestellnummer,'</span>') as artikel,
+        CONCAT('<a href=\"index.php?module=artikel&action=edit&id=',a.id,'\"  target=\"_blank\">',a.nummer,'</a>') as nummer,
         CONCAT('<span id=\"spanmenge".$md5."',ap.id,'\">',(TRIM(ap.menge)+0),'</span>') as Menge,
         TRIM(ap.geliefert)+0 as geliefert,
         IF(a.lagerartikel = 1,CONCAT( ".$this->app->erp->FormatMenge('IFNULL(lag.menge,0)').",'lagermehr(',ap.artikel,')'),'-') as Lager,
-        if(ap.lieferdatum!='0000-00-00',DATE_FORMAT(ap.lieferdatum,'%d.%m.%Y'),'sofort') as lieferdatum, 
+        if(ap.lieferdatum!='0000-00-00',DATE_FORMAT(ap.lieferdatum,'%d.%m.%Y'),'sofort') as lieferdatum,
         concat('<span id=\"spanpreis".$md5."',ap.id,'\">',FORMAT(ap.preis,2,'de_DE'),'".
         "&nbsp;<a href=\"#\" onclick=\"changepreis".$md5."(',ap.id,');\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" border=\"0\"></a>"
         ."','</span>') as preis
         FROM bestellung_position AS ap
         INNER JOIN artikel AS a ON ap.artikel = a.id
         LEFT JOIN (
-          SELECT SUM(lpi.menge) as menge, lpi.artikel 
+          SELECT SUM(lpi.menge) as menge, lpi.artikel
           FROM lager_platz_inhalt AS lpi
           INNER JOIN lager_platz AS lp ON lpi.lager_platz = lp.id AND IFNULL(lp.sperrlager,0) = 0 AND IFNULL(lp.autolagersperre,0) = 0
           ".(!empty($artikelIdList)?' AND lpi.artikel IN ('.implode(',', $artikelIdList).')':'')."
           GROUP BY lpi.artikel
-        ) as lag ON a.id = lag.artikel 
+        ) as lag ON a.id = lag.artikel
         WHERE ap.bestellung = $id
         ORDER by ap.sort");
     foreach($table->datasets as $tablerowKey => $tableRow)
@@ -612,23 +607,26 @@ class Bestellung extends GenBestellung
       {
         $table->datasets[$k]['geliefert'] = '<b>'.$table->datasets[$k]['geliefert'].'</b>';
         $table->datasets[$k]['Menge'] = '<b>'.$table->datasets[$k]['Menge'].'</b>';
-        
+
       } else {
         $table->datasets[$k]['geliefert'] = '<b style="color:red;">'.$table->datasets[$k]['geliefert'].'</b>';
         $table->datasets[$k]['Menge'] = '<b style="color:red;">'.$table->datasets[$k]['Menge'].'</b>';
       }
-      
-      
+
+
       $table->datasets[$k]['preis'] = '<div style="float:right;text-align:right;"><b>'.$table->datasets[$k]['preis'];
       if(preg_match("/&id=([0-9]*)/",$row['nummer'],$treffer)){
         $artid = (int)$treffer[1];
-        if($epreise = $this->app->DB->SelectArr("SELECT ab_menge, preis FROM einkaufspreise WHERE artikel='".$artid."' AND adresse='$adresse' AND (gueltig_bis>='".$datum."' OR gueltig_bis='0000-00-00') and (preis_anfrage_vom = '0000-00-00' or preis_anfrage_vom <= '".$datum."') and ab_menge > ".(int)strip_tags($row['Menge'])." order by ab_menge"))
+        if($epreise = $this->app->DatabaseService->select(
+          "SELECT ab_menge, preis FROM einkaufspreise WHERE artikel = :artikel AND adresse = :adresse AND (gueltig_bis >= :datum1 OR gueltig_bis = '0000-00-00') AND (preis_anfrage_vom = '0000-00-00' OR preis_anfrage_vom <= :datum2) AND ab_menge > :ab_menge ORDER BY ab_menge",
+          ['artikel' => $artid, 'adresse' => $adresse, 'datum1' => $datum, 'datum2' => $datum, 'ab_menge' => (int)strip_tags($row['Menge'])]
+        ))
         {
           $table->datasets[$k]['preis'] .= '</b>&nbsp;&nbsp;<br /><table style="float:right;">';
           foreach($epreise as $key => $pr)
           {
             $table->datasets[$k]['preis'] .= "<tr style=\"background-color: transparent;text-align:right;\"><td><small>(".floatval($pr['ab_menge']).":</small></td><td><small>".number_format($pr['preis'],2,',','.').")</small></td></tr>";
-            
+
           }
           $table->datasets[$k]['preis'] .= '</table>';
         }
@@ -636,7 +634,7 @@ class Bestellung extends GenBestellung
         $table->datasets[$k]['preis'] .= '</b>';
       }
       $table->datasets[$k]['preis'] .= "</div>";
-      
+
     }
 
     $check = $this->app->DatabaseService->select("SELECT a.belegnr, a.id
@@ -656,8 +654,8 @@ class Bestellung extends GenBestellung
                             <a href="index.php?module=auftrag&action=edit&id='.$row['id'].'" target="_blank"><img src="./themes/new/images/edit.svg" title="Auftrag bearbeiten" border="0"></a>';
 
         $lieferscheineTemp = $this->app->DB->SelectPairs(
-          "SELECT 
-            l.id, 
+          "SELECT
+            l.id,
             CONCAT(
             '<a href=\"index.php?module=lieferschein&action=edit&id=',
             l.id,'\" target=\"_blank\"',
@@ -670,7 +668,7 @@ class Bestellung extends GenBestellung
             l.id,
             '\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Lieferschein bearbeiten\" border=\"0\"></a>'
             ) as lieferschein
-            FROM lieferschein l 
+            FROM lieferschein l
             WHERE l.auftragid='".$row['id']."'"
         );
 
@@ -681,8 +679,8 @@ class Bestellung extends GenBestellung
         }
 
         $rechnungenTemp = $this->app->DB->SelectPairs(
-          "SELECT 
-          r.id, 
+          "SELECT
+          r.id,
           CONCAT(
           '<a href=\"index.php?module=rechnung&action=edit&id=',
           r.id,
@@ -697,7 +695,7 @@ class Bestellung extends GenBestellung
           r.id,
           '\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Rechnung bearbeiten\" border=\"0\"></a>'
           ) as rechnung
-          FROM rechnung r 
+          FROM rechnung r
           WHERE r.auftragid='".$row['id']."'"
         );
 
@@ -738,14 +736,14 @@ class Bestellung extends GenBestellung
     $tmp->DisplayNew('PROTOKOLL',"Protokoll","noAction");
 
     $this->app->Tpl->Set('RECHNUNGLIEFERADRESSE',$this->BestellungRechnungsLieferadresse($id));
-    
+
     if(class_exists('BestellungPDFCustom'))
     {
       $Brief = new BestellungPDFCustom($this->app,$projekt);
     }else{
       $Brief = new BestellungPDF($this->app,$projekt);
     }
-    
+
     $Dokumentenliste = $Brief->getArchivedFiles($id, 'bestellung');
     if(!empty($Dokumentenliste))
     {
@@ -766,12 +764,12 @@ class Bestellung extends GenBestellung
           $tmp3->datasets[] = $tmpr;
         }
       }
-      
+
       $tmp3->DisplayNew('PDFARCHIV','Men&uuml;',"noAction");
     }
 
 /*
-    $wareneingangsbelege = $this->app->DB->SelectFirstCols("SELECT 
+    $wareneingangsbelege = $this->app->DB->SelectFirstCols("SELECT
         CONCAT('<a href=\"index.php?module=receiptdocument&action=edit&id=',r.id,'\" target=\"_blank\"',if(r.status='storniert',' title=\"Wareneingangsbeleg storniert\"><s>','>'),if(r.document_number='0' OR document_number='','ENTWURF',r.document_number),if(r.status='storniert','</s>',''),'</a>&nbsp;<a href=\"index.php?module=receiptdocument&action=pdf&id=',r.id,'\" target=\"_blank\"><img src=\"./themes/new/images/pdf.svg\" title=\"Wareneingangsbeleg PDF\" border=\"0\"></a>&nbsp;
           <a href=\"index.php?module=receiptdocument&action=edit&id=',r.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Wareneingangsbeleg bearbeiten\" border=\"0\"></a>') as wareneingangsbeleg
         FROM receiptdocument r WHERE r.supplier_order_id='$id'");
@@ -783,36 +781,30 @@ class Bestellung extends GenBestellung
       $this->app->Tpl->Set('WARENEINGANGSBELEG', '-');
     }
   */
-  
-    $sql = "SELECT
-    CONCAT('<a href =\"index.php?module=wareneingang&action=distriinhalt&id=',pa.id,'\">',pa.id,'</a>') as wareneingang
-FROM
-    paketannahme pa
-INNER JOIN paketdistribution pd ON
-    pd.paketannahme = pa.id
-INNER JOIN bestellung_position bp ON
-    pd.bestellung_position = bp.id
-INNER JOIN bestellung b ON
-    b.id = bp.bestellung
-WHERE
-    b.id = $id
-GROUP BY
-    pa.id";    			
-//	 echo($sql);        
-	 $wareneingangsbelege = $this->app->DB->SelectArr($sql);     
+
+    $wareneingangsbelege = $this->app->DatabaseService->select(
+      "SELECT CONCAT('<a href =\"index.php?module=wareneingang&action=distriinhalt&id=',pa.id,'\">',pa.id,'</a>') as wareneingang
+      FROM paketannahme pa
+      INNER JOIN paketdistribution pd ON pd.paketannahme = pa.id
+      INNER JOIN bestellung_position bp ON pd.bestellung_position = bp.id
+      INNER JOIN bestellung b ON b.id = bp.bestellung
+      WHERE b.id = :id
+      GROUP BY pa.id",
+      ['id' => $id]
+    );
     if(!empty($wareneingangsbelege)){
       $this->app->Tpl->Add('WARENEINGANGSBELEG', implode('<br />', array_column($wareneingangsbelege , 'wareneingang' )));
     }
     else{
       $this->app->Tpl->Set('WARENEINGANGSBELEG', '-');
     }
-    
+
 
     $this->app->Tpl->Set('ID', $id);
     $this->app->Tpl->Set('MD5', $md5);
     $this->app->Tpl->Parse('ARTIKEL', 'bestellung_minidetail_popup.tpl');
-   
-    
+
+
     if($parsetarget=='')
     {
       $this->app->Tpl->Output("bestellung_minidetail.tpl");
@@ -952,7 +944,7 @@ GROUP BY
       {
         $this->app->Location->execute("index.php?module=bestellung&action=freigabe&id=$id&freigabe=$id");
       } else {
-        $this->app->Tpl->Set('TAB1', "<div class=\"info\">Soll die Bestellung an <b>$name</b> im Wert von <b>$summe $waehrung</b> 
+        $this->app->Tpl->Set('TAB1', "<div class=\"info\">Soll die Bestellung an <b>$name</b> im Wert von <b>$summe $waehrung</b>
         jetzt freigegeben werden? <input type=\"button\" class=\"btnImportantLarge\" value=\"Jetzt freigeben\" onclick=\"window.location.href='index.php?module=bestellung&action=freigabe&id=$id&freigabe=$id'\">&nbsp;$extra
         </div>");
       }
@@ -983,7 +975,7 @@ GROUP BY
   function BestellungLiveTabelle()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $status = $this->app->DB->Select("SELECT status FROM bestellung WHERE id='$id' LIMIT 1");
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM bestellung WHERE id = :id LIMIT 1", ['id' => $id]);
 
     $table = new EasyTable($this->app);
 
@@ -1044,9 +1036,9 @@ GROUP BY
       $maxbelegnr = $this->app->DB->Select("SELECT MAX(belegnr) FROM bestellung");
       if(0)//$maxbelegnr == $belegnr)
       {
-        $this->app->DB->Delete("DELETE FROM bestellung_position WHERE bestellung='$id'");
-        $this->app->DB->Delete("DELETE FROM bestellung_protokoll WHERE bestellung='$id'");
-        $this->app->DB->Delete("DELETE FROM bestellung WHERE id='$id'");
+        $this->app->DatabaseService->delete("DELETE FROM bestellung_position WHERE bestellung = :id", ['id' => $id]);
+        $this->app->DatabaseService->delete("DELETE FROM bestellung_protokoll WHERE bestellung = :id", ['id' => $id]);
+        $this->app->DatabaseService->delete("DELETE FROM bestellung WHERE id = :id", ['id' => $id]);
         $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Rechnung \"$name\" ($belegnr) wurde ge&ouml;scht !</div>");
       } else
       {
@@ -1085,7 +1077,7 @@ GROUP BY
       $this->app->ExitXentral();
     }
 
-    $projekt = $this->app->DB->Select("SELECT projekt FROM bestellung WHERE id=$id LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM bestellung WHERE id = :id LIMIT 1", ['id' => $id]);
 
     if(class_exists('BestellungPDFCustom'))
     {
@@ -1102,7 +1094,7 @@ GROUP BY
     $id = (int)$this->app->Secure->GetGET('id');
 
     //$belegnr = $this->app->DB->Select("SELECT belegnr FROM bestellung WHERE id='$id' LIMIT 1");
-    $projekt = $this->app->DB->Select("SELECT projekt FROM bestellung WHERE id='$id' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM bestellung WHERE id = :id LIMIT 1", ['id' => $id]);
 
     //    if(is_numeric($belegnr) && $belegnr!=0)
     {
@@ -1113,7 +1105,7 @@ GROUP BY
         $Brief = new BestellungPDF($this->app,$projekt);
       }
       $Brief->GetBestellung($id);
-      $Brief->displayDocument(); 
+      $Brief->displayDocument();
     } //else
     //     $this->app->Tpl->Set(MESSAGE,"<div class=\"error\">Noch nicht freigegebene Bestellungen k&ouml;nnen nicht als PDF betrachtet werden.!</div>");
 
@@ -1126,7 +1118,7 @@ GROUP BY
   {
     $id = (int)$this->app->Secure->GetGET('id');
 
-    $bestellungRow = $this->app->DB->SelectRow(sprintf('SELECT belegnr, name,status FROM bestellung WHERE id=%d LIMIT 1', $id));
+    $bestellungRow = $this->app->DatabaseService->selectRow("SELECT belegnr, name, status FROM bestellung WHERE id = :id LIMIT 1", ['id' => $id]);
     $belegnr = !empty($bestellungRow)?$bestellungRow['belegnr']:'';
     $name = !empty($bestellungRow)?$bestellungRow['name']:'';
 
@@ -1147,10 +1139,10 @@ GROUP BY
     $this->app->erp->MenuEintrag("index.php?module=bestellung&action=edit&id=$id","Details");
 
     if($status==='bestellt')
-    { 
+    {
       $this->app->erp->MenuEintrag("index.php?module=bestellung&action=wareneingang&id=$id","Wareneingang<br>R&uuml;ckst&auml;nde");
       $this->app->erp->MenuEintrag("index.php?module=bestellung&action=wareneingang&id=$id","Mahnstufen");
-    } 
+    }
     //    $this->app->erp->MenuEintrag("index.php?module=bestellung&action=abschicken&id=$id","Abschicken / Protokoll");
     //    $this->app->erp->MenuEintrag("index.php?module=bestellung&action=protokoll&id=$id","Protokoll");
 
@@ -1179,7 +1171,7 @@ GROUP BY
         $this->app->erp->MenuEintrag("index.php?module=bestellung&action=list","Zur&uuml;ck zur &Uuml;bersicht");
       }
     }
-      
+
 
     $this->app->erp->RunMenuHook('bestellung');
     $this->app->Tpl->Parse('MENU',"bestellung_menu.tpl");
@@ -1202,7 +1194,7 @@ GROUP BY
     $this->app->erp->AuftragNeuberechnen($id);
     $this->app->YUI->AARLGPositionen(false);
   }
-  
+
   function CopyBestellungPosition()
   {
     $this->app->YUI->SortListEvent("copy","bestellung_position","bestellung");
@@ -1290,11 +1282,11 @@ GROUP BY
       $storno = "<option value=\"storno\">Bestellung stornieren</option>";
 
     if($this->app->erp->RechteVorhanden('belegeimport', 'belegcsvexport'))
-    {  
+    {
       $casebelegeimport = "case 'belegeimport':  window.location.href='index.php?module=belegeimport&action=belegcsvexport&cmd=bestellung&id=%value%'; break;";
       $optionbelegeimport = "<option value=\"belegeimport\">Export als CSV</option>";
     }
-    
+
 
     $hookoption = '';
     $hookcase = '';
@@ -1311,7 +1303,7 @@ GROUP BY
         switch(cmd)
         {
           case 'storno': if(!confirm('Wirklich stornieren?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else window.location.href='index.php?module=bestellung&action=delete&id=%value%'; break;
-          case 'unstorno':    if(!confirm('Wirklich stornierte Bestellung wieder freigeben?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else window.location.href='index.php?module=bestellung&action=undelete&id=%value%'; break; 
+          case 'unstorno':    if(!confirm('Wirklich stornierte Bestellung wieder freigeben?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else window.location.href='index.php?module=bestellung&action=undelete&id=%value%'; break;
           case 'copy': if(!confirm('Wirklich kopieren?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else window.location.href='index.php?module=bestellung&action=copy&id=%value%'; break;
           case 'pdf': window.location.href='index.php?module=bestellung&action=pdf&id=%value%'; document.getElementById('aktion$prefix').selectedIndex = 0; break;
           case 'abschicken':  ".$this->app->erp->DokumentAbschickenPopup()." break;
@@ -1428,10 +1420,11 @@ GROUP BY
       $this->app->DatabaseService->update("UPDATE bestellung SET verbindlichkeiteninfo = :verbindlichkeiteninfo WHERE id = :id LIMIT 1", ['verbindlichkeiteninfo' => $verbindlichkeiteninfo, 'id' => $id]);
 
     //$this->BestellungMiniDetail(MINIDETAIL,false);
-    $arr = $this->app->DB->SelectArr(
-      "SELECT b.belegnr, b.adresse, b.status, b.schreibschutz, b.langeartikelnummern, b.zuarchivieren 
+    $arr = $this->app->DatabaseService->select(
+      "SELECT b.belegnr, b.adresse, b.status, b.schreibschutz, b.langeartikelnummern, b.zuarchivieren
         FROM `bestellung` AS `b`
-        WHERE b.id = '$id' LIMIT 1"
+        WHERE b.id = :id LIMIT 1",
+      ['id' => $id]
     );
     if($arr){
       $arr = reset($arr);
@@ -1441,7 +1434,7 @@ GROUP BY
       $status = $arr['status'];
       $schreibschutz = $arr['schreibschutz'];
       $zuArchivieren = $arr['zuarchivieren'];
-      $lieferantennummer = $this->app->DB->Select("SELECT lieferantennummer FROM adresse WHERE id='$adresse' LIMIT 1");
+      $lieferantennummer = $this->app->DatabaseService->selectValue("SELECT lieferantennummer FROM adresse WHERE id = :id LIMIT 1", ['id' => $adresse]);
     }
 
     if($id > 0 && $zuArchivieren == 1 && $schreibschutz == 1) {
@@ -1470,10 +1463,10 @@ GROUP BY
         $this->app->Tpl->Add('MESSAGE',"<div class=\"error\">Die Bestellung wurde noch nicht versendet! <input type=\"button\" value=\"Dokument versenden\" onclick=\"DokumentAbschicken('bestellung',$id)\"></div>");
       }
     }
-    
-    if($schreibschutz!="1")// && $this->app->erp->RechteVorhanden("bestellung","schreibschutz"))    {      
+
+    if($schreibschutz!="1")// && $this->app->erp->RechteVorhanden("bestellung","schreibschutz"))    {
     {
-      $this->app->erp->AnsprechpartnerButton($adresse);      
+      $this->app->erp->AnsprechpartnerButton($adresse);
       $this->app->erp->LieferadresseButton($adresse);
       $this->app->erp->AnsprechpartnerAlsLieferadresseButton($adresse);
       $this->app->erp->AdresseAlsLieferadresseButton($adresse);
@@ -1492,11 +1485,14 @@ GROUP BY
         $this->app->Tpl->Set('LIEFERANT',"&nbsp;&nbsp;&nbsp;Lf-Nr. ".$lieferantennummer);
     }
 
-    $check = $this->app->DB->SelectArr("SELECT a.belegnr, a.id, a.name
-    FROM bestellung_position bp 
-    INNER JOIN auftrag_position ap ON ap.id = bp.auftrag_position_id
-    INNER JOIN auftrag a ON ap.auftrag = a.id
-    WHERE bp.bestellung='$id' GROUP BY a.belegnr, a.id ORDER BY a.belegnr, a.id");
+    $check = $this->app->DatabaseService->select(
+      "SELECT a.belegnr, a.id, a.name
+      FROM bestellung_position bp
+      INNER JOIN auftrag_position ap ON ap.id = bp.auftrag_position_id
+      INNER JOIN auftrag a ON ap.auftrag = a.id
+      WHERE bp.bestellung = :id GROUP BY a.belegnr, a.id ORDER BY a.belegnr, a.id",
+      ['id' => $id]
+    );
     if($check)
     {
       $this->app->Tpl->Add('MESSAGE',"<div class=\"info\">Zu dieser Bestellung geh&ouml;r".((!empty($check)?count($check):0) == 1?'t der Auftrag':'en die Auftr&auml;ge:'));
@@ -1541,12 +1537,12 @@ GROUP BY
 
       $speichern = $this->app->Secure->GetPOST("speichern");
       if($speichern!="")
-      { 
+      {
         $bestellung_bestaetigt = $this->app->Secure->GetPOST("bestellung_bestaetigt");
         $bestaetigteslieferdatum = $this->app->Secure->GetPOST("bestaetigteslieferdatum");
         $bestellungbestaetigtabnummer = $this->app->Secure->GetPOST("bestellungbestaetigtabnummer");
         $bestellungbestaetigtper = $this->app->Secure->GetPOST("bestellungbestaetigtper");
-        
+
         if($bestellung_bestaetigt!="1") $bestellung_bestaetigt="0";
 
         $bestaetigteslieferdatum = $this->app->String->Convert($bestaetigteslieferdatum,"%1.%2.%3","%3-%2-%1");
@@ -1562,12 +1558,12 @@ GROUP BY
       }
       $this->app->erp->CommonReadonly();
     } else {
-      $portofreilieferant_aktiv = $this->app->DB->Select("SELECT portofreilieferant_aktiv FROM adresse WHERE id='$adresse' LIMIT 1");
-      $portofreiablieferant = $this->app->DB->Select("SELECT portofreiablieferant FROM adresse WHERE id='$adresse' LIMIT 1");
+      $portofreilieferant_aktiv = $this->app->DatabaseService->selectValue("SELECT portofreilieferant_aktiv FROM adresse WHERE id = :id LIMIT 1", ['id' => $adresse]);
+      $portofreiablieferant = $this->app->DatabaseService->selectValue("SELECT portofreiablieferant FROM adresse WHERE id = :id LIMIT 1", ['id' => $adresse]);
       $gesamtsumme = $this->app->erp->BEGesamtsummeOhnePorto($id,"bestellung");
       if($portofreilieferant_aktiv == 1 && $portofreiablieferant > 0 && $gesamtsumme <= $portofreiablieferant)
       {
-        $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Die Lieferung wird ab ".number_format($portofreiablieferant,2,',','.')." EUR (netto) Portofrei. 
+        $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Die Lieferung wird ab ".number_format($portofreiablieferant,2,',','.')." EUR (netto) Portofrei.
             Aktuell sind nur ".number_format($gesamtsumme,2,',','.')." EUR (netto) in der Bestellung.</div>");
       }
     }
@@ -1590,14 +1586,17 @@ GROUP BY
       $lieferantennummer = $this->app->erp->FirstTillSpace($tmp);
 
       //$name = substr($tmp,6);
-      
-      $filter_projekt = $this->app->DB->Select("SELECT projekt FROM bestellung WHERE id = '$id' LIMIT 1");
+
+      $filter_projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM bestellung WHERE id = :id LIMIT 1", ['id' => $id]);
       //if($filter_projekt)$filter_projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE id= '$filter_projekt' and eigenernummernkreis = 1 LIMIT 1");
-      $adresse =  $this->app->DB->Select("SELECT a.id FROM adresse a 
-      LEFT JOIN adresse_rolle ar ON a.id = ar.adresse AND ar.projekt > 0 ".$this->app->erp->ProjektRechte("ar.projekt")."
-      WHERE a.lieferantennummer='$lieferantennummer' AND a.geloescht=0 AND
-      (1 ".$this->app->erp->ProjektRechte("a.projekt")." OR not isnull(ar.id))
-      ORDER by ".($filter_projekt?" a.projekt = '$filter_projekt' DESC, ":"")." a.projekt LIMIT 1");
+      $adresse = $this->app->DatabaseService->selectValue(
+        "SELECT a.id FROM adresse a
+        LEFT JOIN adresse_rolle ar ON a.id = ar.adresse AND ar.projekt > 0 " . $this->app->erp->ProjektRechte("ar.projekt") . "
+        WHERE a.lieferantennummer = :lieferantennummer AND a.geloescht = 0 AND
+        (1 " . $this->app->erp->ProjektRechte("a.projekt") . " OR NOT ISNULL(ar.id))
+        ORDER BY " . ($filter_projekt ? "a.projekt = :filter_projekt DESC, " : "") . "a.projekt LIMIT 1",
+        array_filter(['lieferantennummer' => $lieferantennummer, 'filter_projekt' => $filter_projekt ?: null], fn($v) => $v !== null)
+      );
 
       $uebernehmen =$this->app->Secure->GetPOST("uebernehmen");
       if($schreibschutz != '1' && $uebernehmen=="1" && $adresse > 0) // nur neuladen bei tastendruck auf uebernehmen // FRAGEN!!!!
@@ -1609,7 +1608,7 @@ GROUP BY
 
 
 
-    /* 
+    /*
        $table = new EasyTable($this->app);
        $table->Query("SELECT a.bezeichnung as artikel, a.nummer as Nummer, b.menge, b.vpe as VPE, FORMAT(b.preis,4) as preis
        FROM bestellung_position b LEFT JOIN artikel a ON a.id=b.artikel
@@ -1653,7 +1652,7 @@ GROUP BY
     $this->app->Tpl->Set('AKTIV_TAB1',"selected");
     parent::BestellungEdit();
 
-    $this->app->erp->MessageHandlerStandardForm();	
+    $this->app->erp->MessageHandlerStandardForm();
     /*
        if($this->app->Secure->GetPOST("speichern")!="" && $storno=="")
        {
@@ -1668,7 +1667,7 @@ GROUP BY
        header("Location: index.php?module=bestellung&action=edit&id=$id&msg=$msg");
        exit;
 
-       } 
+       }
      */
 
     /*
@@ -1802,7 +1801,7 @@ GROUP BY
             {
               $v = (int)$v;
               if($v){
-                $bestellungarr = $this->app->DB->SelectRow("SELECT email,adresse,projekt,name,sprache FROM bestellung WHERE id = '$v' LIMIT 1");
+                $bestellungarr = $this->app->DatabaseService->selectRow("SELECT email,adresse,projekt,name,sprache FROM bestellung WHERE id = :id LIMIT 1", ['id' => $v]);
                 if(!empty($bestellungarr))
                 {
                   $email = (String)$bestellungarr['email'];//$this->app->DB->Select("SELECT email FROM auftrag WHERE id = '$v' LIMIT 1");
@@ -1819,7 +1818,7 @@ GROUP BY
                 }
 
                 if($sprache==''){
-                  $sprache = $this->app->DB->Select("SELECT sprache FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
+                  $sprache = $this->app->DatabaseService->selectValue("SELECT sprache FROM adresse WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => $adresse]);
                 }
 
                 if($sprache=='') {
@@ -1830,7 +1829,7 @@ GROUP BY
 
                 if($email === '')
                 {
-                  $email = (String)$this->app->DB->Select("SELECT email FROM adresse WHERE id = '$adresse' LIMIT 1");
+                  $email = (String)$this->app->DatabaseService->selectValue("SELECT email FROM adresse WHERE id = :id LIMIT 1", ['id' => $adresse]);
                 }
                 if($email !== '')
                 {
@@ -1860,13 +1859,15 @@ GROUP BY
                   $this->app->erp->AddDateiStichwort($fileid,'bestellung','bestellung',$v);
                   $this->app->erp->DokumentSend($adresse,'bestellung', $v, 'email',$emailtext['betreff'],$emailtext['text'],array($tmpfile),"","",$projekt,$email, $name);
                   $ansprechpartner = $name." <".$email.">";
-                  $this->app->DB->Insert("INSERT INTO dokumente_send
-                      (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,versendet,dateiid) VALUES ('','bestellung',NOW(),'".$this->app->DB->real_escape_string($this->app->User->GetName())."',
-                        '$adresse','$v','email','".$this->app->DB->real_escape_string($emailtext['betreff'])."','".$this->app->DB->real_escape_string($emailtext['text'])."','$projekt','$ansprechpartner',1,'$fileid')");
-                  $tmpid = $this->app->DB->GetInsertID();
+                  $tmpid = $this->app->DatabaseService->insert(
+                    "INSERT INTO dokumente_send (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,versendet,dateiid) VALUES ('','bestellung',NOW(),:bearbeiter,:adresse,:parameter,'email',:betreff,:text,:projekt,:ansprechpartner,1,:dateiid)",
+                    ['bearbeiter' => $this->app->User->GetName(), 'adresse' => $adresse, 'parameter' => $v, 'betreff' => $emailtext['betreff'], 'text' => $emailtext['text'], 'projekt' => $projekt, 'ansprechpartner' => $ansprechpartner, 'dateiid' => $fileid]
+                  );
                   unlink($tmpfile);
-                  $this->app->DB->Update("UPDATE bestellung SET versendet=1, versendet_am=NOW(),
-                    versendet_per='email',versendet_durch='".$this->app->DB->real_escape_string($this->app->User->GetName())."',schreibschutz='1' WHERE id='$v' LIMIT 1");
+                  $this->app->DatabaseService->update(
+                    "UPDATE bestellung SET versendet=1, versendet_am=NOW(), versendet_per='email', versendet_durch=:bearbeiter, schreibschutz='1' WHERE id = :id LIMIT 1",
+                    ['bearbeiter' => $this->app->User->GetName(), 'id' => $v]
+                  );
                   $this->app->erp->BestellungProtokoll($v,'Bestellung versendet');
                 }
               }
@@ -1877,7 +1878,7 @@ GROUP BY
             {
               $v = (int)$v;
               if($v){
-                if($this->app->DB->Select("SELECT id FROM bestellung WHERE id = '$v' AND status <> 'storniert' LIMIT 1")){
+                if($this->app->DatabaseService->selectValue("SELECT id FROM bestellung WHERE id = :id AND status <> 'storniert' LIMIT 1", ['id' => $v])){
                   $this->BestellungFreigegeben($v);
                 }
               }
@@ -1888,7 +1889,7 @@ GROUP BY
             {
               $v = (int)$v;
               if($v) {
-                $projekt = $this->app->DB->Select("SELECT projekt FROM bestellung WHERE id='$v' LIMIT 1");
+                $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM bestellung WHERE id = :id LIMIT 1", ['id' => $v]);
                 if(class_exists('BestellungPDFCustom'))
                 {
                   $Brief = new BestellungPDFCustom($this->app,$projekt);
@@ -1900,7 +1901,7 @@ GROUP BY
                 $Brief->ArchiviereDocument();
                 $this->app->erp->BestellungProtokoll($v,"Bestellung versendet");
                 $this->app->erp->closeInvoice($v);
-                $this->app->DB->Update("UPDATE bestellung SET schreibschutz=1, versendet = 1, status='versendet' WHERE id = '$v' LIMIT 1");
+                $this->app->DatabaseService->update("UPDATE bestellung SET schreibschutz=1, versendet = 1, status='versendet' WHERE id = :id LIMIT 1", ['id' => $v]);
               }
             }
             break;
@@ -1909,7 +1910,7 @@ GROUP BY
             {
               $v = (int)$v;
               if($v){
-                if($this->app->DB->Select("SELECT id FROM bestellung WHERE id = '$v' AND status != 'angelegt' AND status != 'abgeschlossen' LIMIT 1")){
+                if($this->app->DatabaseService->selectValue("SELECT id FROM bestellung WHERE id = :id AND status != 'angelegt' AND status != 'abgeschlossen' LIMIT 1", ['id' => $v])){
                   $this->BestellungAbschliessen($v);
                 }
               }
@@ -1922,7 +1923,7 @@ GROUP BY
               {
                 $v = (int)$v;
                 if($v){
-                  $bestellungsdaten = $this->app->DB->Select("SELECT projekt, adresse FROM bestellung WHERE id='$v' LIMIT 1");
+                  $bestellungsdaten = $this->app->DatabaseService->selectRow("SELECT projekt, adresse FROM bestellung WHERE id = :id LIMIT 1", ['id' => $v]);
                   $projekt = $bestellungsdaten['projekt'];
                   $adressId = $bestellungsdaten['adresse'];
                   $this->app->erp->BriefpapierHintergrunddisable = !$this->app->erp->BriefpapierHintergrunddisable;
@@ -1960,7 +1961,7 @@ GROUP BY
             {
               $v = (int)$v;
               if($v){
-                $projekt = $this->app->DB->Select("SELECT projekt FROM bestellung WHERE id='$v' LIMIT 1");
+                $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM bestellung WHERE id = :id LIMIT 1", ['id' => $v]);
                 $this->app->erp->BriefpapierHintergrunddisable = !$this->app->erp->BriefpapierHintergrunddisable;
                 if(class_exists('BestellungPDFCustom'))
                 {
@@ -2009,7 +2010,7 @@ GROUP BY
         }
       }
     }
-    
+
     $speichern = $this->app->Secure->GetPOST("speichern");
     $verbindlichkeiteninfo = $this->app->Secure->GetPOST("verbindlichkeiteninfo");
     $bestellungid = $this->app->Secure->GetPOST("bestellungid");
@@ -2181,7 +2182,7 @@ GROUP BY
        <br>Kostenstelle pro Position
        <br>Terminbestellung (am xx.xx.xxxx raus damit)
        <br>vorschlagsdaten für positionen
-       <br>proposition reinklicken zum ändern und reihenfolge tabelle 
+       <br>proposition reinklicken zum ändern und reihenfolge tabelle
        <br>Bestellung muss werden wie bestellung (bestellung beschreibung = allgemein)
        <br>Positionen (wie stueckliste)
        <br>Wareneingang / Rückstand
@@ -2262,12 +2263,12 @@ GROUP BY
     {
       return;
     }
-    $belegnr = $this->app->DB->Select("SELECT belegnr FROM bestellung WHERE id='$id' LIMIT 1");
+    $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM bestellung WHERE id = :id LIMIT 1", ['id' => $id]);
     if($belegnr=='' || $belegnr=='0')
     {
-      $this->app->DB->Delete("DELETE FROM bestellung_position WHERE bestellung='$id'");
-      $this->app->DB->Delete("DELETE FROM bestellung_protokoll WHERE bestellung='$id'");
-      $this->app->DB->Delete("DELETE FROM bestellung WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM bestellung_position WHERE bestellung = :id", ['id' => $id]);
+      $this->app->DatabaseService->delete("DELETE FROM bestellung_protokoll WHERE bestellung = :id", ['id' => $id]);
+      $this->app->DatabaseService->delete("DELETE FROM bestellung WHERE id = :id LIMIT 1", ['id' => $id]);
     }
   }
 
@@ -2281,9 +2282,10 @@ GROUP BY
     $eigenartikelnummer = $this->app->erp->Firmendaten('bestellungeigeneartikelnummer');
     $bestellunglangeartikelnummern = $this->app->erp->Firmendaten('bestellunglangeartikelnummern');
 
-    $this->app->DB->Insert("INSERT INTO bestellung (datum,bearbeiter,firma,belegnr,adresse,status,artikelnummerninfotext,ohne_briefpapier,bestellungohnepreis,projekt,langeartikelnummern)
-            VALUES (NOW(),'".$this->app->User->GetName()."','".$this->app->User->GetFirma()."','$belegmax','$adresse','angelegt',".($eigenartikelnummer?'1':'0').",'".$ohnebriefpapier."','".$bestellungohnepreis."','".$projekt."',".($bestellunglangeartikelnummern?'1':'0').')');
-    $id = $this->app->DB->GetInsertID();
+    $id = $this->app->DatabaseService->insert(
+      "INSERT INTO bestellung (datum,bearbeiter,firma,belegnr,adresse,status,artikelnummerninfotext,ohne_briefpapier,bestellungohnepreis,projekt,langeartikelnummern) VALUES (NOW(),:bearbeiter,:firma,:belegnr,:adresse,'angelegt',:artikelnummerninfotext,:ohne_briefpapier,:bestellungohnepreis,:projekt,:langeartikelnummern)",
+      ['bearbeiter' => $this->app->User->GetName(), 'firma' => $this->app->User->GetFirma(), 'belegnr' => $belegmax, 'adresse' => $adresse, 'artikelnummerninfotext' => ($eigenartikelnummer ? '1' : '0'), 'ohne_briefpapier' => $ohnebriefpapier, 'bestellungohnepreis' => $bestellungohnepreis, 'projekt' => $projekt, 'langeartikelnummern' => ($bestellunglangeartikelnummern ? '1' : '0')]
+    );
 
     $this->app->erp->ObjektProtokoll('bestellung',$id,'bestellung_create','Bestellung angelegt');
     $this->app->erp->SchnellFreigabe('bestellung',$id);
@@ -2295,26 +2297,24 @@ GROUP BY
 
   public function AddBestellungPosition($bestellung, $einkauf,$menge,$datum, $beschreibung = '',$artikel='',$einheit='', $waehrung = '')
   {
-    $beschreibung = $this->app->DB->real_escape_string($beschreibung);
-
     if($artikel<=0)
     {
       if($einkauf > 0){
-        $einkaufarr = $this->app->DB->SelectRow("SELECT * FROM einkaufspreise WHERE id='$einkauf' LIMIT 1");
+        $einkaufarr = $this->app->DatabaseService->selectRow("SELECT * FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => $einkauf]);
       }
       if(!empty($einkaufarr))
       {
         $artikel = $einkaufarr['artikel'];
-        $article = $this->app->DB->SelectRow(
-          "SELECT `nummer`, `name_de`, `name_en`, `umsatzsteuer` 
-          FROM `artikel` WHERE `id` = {$artikel}"
+        $article = $this->app->DatabaseService->selectRow(
+          "SELECT `nummer`, `name_de`, `name_en`, `umsatzsteuer` FROM `artikel` WHERE `id` = :id",
+          ['id' => (int)$artikel]
         );
         $preis = $einkaufarr['preis'];
         $projekt = $einkaufarr['projekt'];
         $waehrung = $einkaufarr['waehrung'];
         $vpe = $einkaufarr['vpe'];
-        $bezeichnunglieferant = $this->app->DB->real_escape_string($einkaufarr['bezeichnunglieferant']);
-        $bestellnummer = $this->app->DB->real_escape_string($einkaufarr['bestellnummer']);
+        $bezeichnunglieferant = $einkaufarr['bezeichnunglieferant'];
+        $bestellnummer = $einkaufarr['bestellnummer'];
       }else{
         $artikel = 0;
         $preis = 0;
@@ -2325,29 +2325,29 @@ GROUP BY
         $bestellnummer = '';
       }
     }else{
-      $article = $this->app->DB->SelectRow(
-        "SELECT `nummer`, `name_de`, `name_en`, `umsatzsteuer` 
-        FROM `artikel` WHERE `id` = {$artikel}"
+      $article = $this->app->DatabaseService->selectRow(
+        "SELECT `nummer`, `name_de`, `name_en`, `umsatzsteuer` FROM `artikel` WHERE `id` = :id",
+        ['id' => (int)$artikel]
       );
       $bestellnummer = $article['nummer'];
-      $bezeichnunglieferant = $this->app->DB->real_escape_string($article['name_de']);
-      $projekt = $projekt = $this->app->DB->Select("SELECT projekt FROM bestellung WHERE id='$bestellung' LIMIT 1");
+      $bezeichnunglieferant = $article['name_de'];
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM bestellung WHERE id = :id LIMIT 1", ['id' => $bestellung]);
       $preis = 0;
     }
 
     if($projekt <= 0) {
-      $projekt = $this->app->DB->Select("SELECT projekt FROM bestellung WHERE id='$bestellung' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM bestellung WHERE id = :id LIMIT 1", ['id' => $bestellung]);
     }
 
     if($bezeichnunglieferant==''){
       $languageIso = $this->app->erp->GetSpracheBelegISO('bestellung', $bestellung);
 
       if($languageIso === 'EN'){
-        $bezeichnunglieferant = $this->app->DB->real_escape_string($article['name_en']);
+        $bezeichnunglieferant = $article['name_en'];
       }
 
       if(empty($bezeichnunglieferant)){
-        $bezeichnunglieferant = $this->app->DB->real_escape_string($article['name_de']);
+        $bezeichnunglieferant = $article['name_de'];
       }
     }
 
@@ -2355,39 +2355,42 @@ GROUP BY
     if($umsatzsteuer=='') {
       $umsatzsteuer='normal';
     }
-    $sort = $this->app->DB->Select("SELECT MAX(sort) FROM bestellung_position WHERE bestellung='$bestellung' LIMIT 1");
+    $sort = (int)$this->app->DatabaseService->selectValue("SELECT MAX(sort) FROM bestellung_position WHERE bestellung = :bestellung", ['bestellung' => $bestellung]);
     $sort++;
-    $this->app->DB->Insert("INSERT INTO bestellung_position (bestellung,artikel,bezeichnunglieferant,bestellnummer,menge,preis, waehrung, sort,lieferdatum, umsatzsteuer, status,projekt,vpe, beschreibung,einheit)
-            VALUES ('$bestellung','$artikel','$bezeichnunglieferant','$bestellnummer','$menge','$preis','$waehrung','$sort','$datum','$umsatzsteuer','angelegt','$projekt','$vpe','$beschreibung','$einheit')");
-    return $this->app->DB->GetInsertID();
+    return $this->app->DatabaseService->insert(
+      "INSERT INTO bestellung_position (bestellung,artikel,bezeichnunglieferant,bestellnummer,menge,preis,waehrung,sort,lieferdatum,umsatzsteuer,status,projekt,vpe,beschreibung,einheit) VALUES (:bestellung,:artikel,:bezeichnunglieferant,:bestellnummer,:menge,:preis,:waehrung,:sort,:datum,:umsatzsteuer,'angelegt',:projekt,:vpe,:beschreibung,:einheit)",
+      ['bestellung' => $bestellung, 'artikel' => $artikel, 'bezeichnunglieferant' => $bezeichnunglieferant, 'bestellnummer' => $bestellnummer, 'menge' => $menge, 'preis' => $preis, 'waehrung' => $waehrung, 'sort' => $sort, 'datum' => $datum, 'umsatzsteuer' => $umsatzsteuer, 'projekt' => $projekt, 'vpe' => $vpe, 'beschreibung' => $beschreibung, 'einheit' => $einheit]
+    );
   }
 
   public function CopyBestellung($id)
   {
     $this->app->DB->Insert('INSERT INTO bestellung (id) VALUES (NULL)');
     $newid = $this->app->DB->GetInsertID();
-    $arr = $this->app->DB->SelectRow("SELECT NOW() as datum,projekt,bodyzusatz,freitext,adresse,name,abteilung,unterabteilung,strasse,adresszusatz,plz,ort,land,ustid,email,telefon,telefax,betreff,kundennummer,versandart,einkaeufer,zahlungsweise,zahlungszieltage,'angelegt' as status,typ,
-            zahlungszieltageskonto,zahlungszielskonto,firma,'angelegt' as status,abweichendelieferadresse,liefername,lieferabteilung,lieferunterabteilung,ust_befreit,
-            lieferland,lieferstrasse,lieferort,lieferplz,lieferadresszusatz,lieferansprechpartner,sprache,anzeigesteuer,waehrung,kostenstelle FROM bestellung WHERE id='$id' LIMIT 1");
-    $arr['bundesstaat'] = $this->app->DB->Select("SELECT bundesstaat FROM bestellung WHERE id='$id' LIMIT 1");
+    $arr = $this->app->DatabaseService->selectRow(
+      "SELECT NOW() as datum,projekt,bodyzusatz,freitext,adresse,name,abteilung,unterabteilung,strasse,adresszusatz,plz,ort,land,ustid,email,telefon,telefax,betreff,kundennummer,versandart,einkaeufer,zahlungsweise,zahlungszieltage,'angelegt' as status,typ,
+      zahlungszieltageskonto,zahlungszielskonto,firma,'angelegt' as status,abweichendelieferadresse,liefername,lieferabteilung,lieferunterabteilung,ust_befreit,
+      lieferland,lieferstrasse,lieferort,lieferplz,lieferadresszusatz,lieferansprechpartner,sprache,anzeigesteuer,waehrung,kostenstelle FROM bestellung WHERE id = :id LIMIT 1",
+      ['id' => $id]
+    );
+    $arr['bundesstaat'] = $this->app->DatabaseService->selectValue("SELECT bundesstaat FROM bestellung WHERE id = :id LIMIT 1", ['id' => $id]);
     $this->app->DB->UpdateArr('bestellung',$newid,'id',$arr, true);
-    $pos = $this->app->DB->SelectArr("SELECT * FROM bestellung_position WHERE bestellung='$id'");
+    $pos = $this->app->DatabaseService->select("SELECT * FROM bestellung_position WHERE bestellung = :id", ['id' => $id]);
     $cpos = !empty($pos)?count($pos):0;
     for($i=0;$i<$cpos;$i++){
-      $this->app->DB->Insert("INSERT INTO bestellung_position (bestellung) VALUES ($newid)");
-      $newposid = $this->app->DB->GetInsertID();
+      $newposid = $this->app->DatabaseService->insert("INSERT INTO bestellung_position (bestellung) VALUES (:bestellung)", ['bestellung' => $newid]);
       $pos[$i]['bestellung']=$newid;
       $pos[$i]['auftrag_position_id']=0;
       $this->app->DB->UpdateArr('bestellung_position',$newposid,'id',$pos[$i], true);
       if(is_null($pos[$i]['steuersatz'])){
-        $this->app->DB->Update("UPDATE bestellung_position SET steuersatz = null WHERE id = '$newposid' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE bestellung_position SET steuersatz = null WHERE id = :id LIMIT 1", ['id' => $newposid]);
       }
     }
 
     $this->app->erp->CheckFreifelder('bestellung',$newid);
     $this->app->erp->CopyBelegZwischenpositionen('bestellung',$id,'bestellung',$newid);
 
-    $this->app->DB->Update("UPDATE bestellung_position SET geliefert=0, mengemanuellgeliefertaktiviert=0,abgeschlossen='0',abgerechnet='0' WHERE bestellung='$newid'");
+    $this->app->DatabaseService->update("UPDATE bestellung_position SET geliefert=0, mengemanuellgeliefertaktiviert=0,abgeschlossen='0',abgerechnet='0' WHERE bestellung = :id", ['id' => $newid]);
     $this->app->erp->LoadSteuersaetzeWaehrung($newid,'bestellung');
 
     $this->app->erp->SchnellFreigabe('bestellung',$newid);
@@ -2398,8 +2401,8 @@ GROUP BY
   public function LoadBestellungStandardwerte($id,$adresse)
   {
     // standard adresse von lieferant
-    $arr = $this->app->DB->SelectArr("SELECT * FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
-    $rolle_projekt = $this->app->DB->Select("SELECT parameter FROM adresse_rolle WHERE adresse='$adresse' AND subjekt='Lieferant' AND objekt='Projekt' AND (bis ='0000-00-00' OR bis <= NOW()) LIMIT 1");
+    $arr = $this->app->DatabaseService->select("SELECT * FROM adresse WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => $adresse]);
+    $rolle_projekt = $this->app->DatabaseService->selectValue("SELECT parameter FROM adresse_rolle WHERE adresse = :adresse AND subjekt='Lieferant' AND objekt='Projekt' AND (bis = '0000-00-00' OR bis <= NOW()) LIMIT 1", ['adresse' => $adresse]);
 
     if($rolle_projekt > 0)
     {
@@ -2423,23 +2426,19 @@ GROUP BY
     $uparr=null;
 
     //liefernantenvorlage
-    $arr = $this->app->DB->SelectArr("SELECT
-            kundennummerlieferant as kundennummer,
-            zahlungsweiselieferant as zahlungsweise,
-            zahlungszieltagelieferant as zahlungszieltage,
-            zahlungszieltageskontolieferant as zahlungszieltageskonto,
-            zahlungszielskontolieferant as zahlungszielskonto,
-            versandartlieferant as versandart,
-            waehrung
-            FROM adresse WHERE id='$adresse' LIMIT 1");
+    $arr = $this->app->DatabaseService->select(
+      "SELECT kundennummerlieferant as kundennummer, zahlungsweiselieferant as zahlungsweise, zahlungszieltagelieferant as zahlungszieltage, zahlungszieltageskontolieferant as zahlungszieltageskonto, zahlungszielskontolieferant as zahlungszielskonto, versandartlieferant as versandart, waehrung FROM adresse WHERE id = :id LIMIT 1",
+      ['id' => $adresse]
+    );
 
     // falls von Benutzer projekt ueberladen werden soll
-    $projekt_bevorzugt=$this->app->DB->Select("SELECT projekt_bevorzugen FROM user WHERE id='".$this->app->User->GetID()."' LIMIT 1");
+    $userId = (int)$this->app->User->GetID();
+    $projekt_bevorzugt = $this->app->DatabaseService->selectValue("SELECT projekt_bevorzugen FROM user WHERE id = :id LIMIT 1", ['id' => $userId]);
     if($projekt_bevorzugt=='1')
     {
-      $uparr['projekt'] = $this->app->DB->Select("SELECT projekt FROM user WHERE id='".$this->app->User->GetID()."' LIMIT 1");
+      $uparr['projekt'] = $this->app->DatabaseService->selectValue("SELECT projekt FROM user WHERE id = :id LIMIT 1", ['id' => $userId]);
       $arr[0]['projekt'] = $uparr['projekt'];
-      $this->app->Secure->POST['projekt']=$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='".$arr[0]['projekt']."' AND id > 0 LIMIT 1");
+      $this->app->Secure->POST['projekt'] = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id AND id > 0 LIMIT 1", ['id' => $arr[0]['projekt']]);
     }
 
     $field = array('kundennummer','zahlungsweise','zahlungszieltage','zahlungszieltageskonto','zahlungszielskonto','versandart','waehrung');

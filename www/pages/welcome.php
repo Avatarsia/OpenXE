@@ -1,13 +1,13 @@
 <?php
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -91,14 +91,14 @@ class Welcome
     $this->app->ActionHandler("spooler","WelcomeSpooler");
     $this->app->ActionHandler("redirect","WelcomeRedirect");
     $this->app->ActionHandler("startseite","WelcomeStartseite");
-    
+
     $this->app->ActionHandler("addnote","WelcomeAddNote");
     $this->app->ActionHandler("addpinwand","WelcomeAddPinwand");
     $this->app->ActionHandler("movenote","WelcomeMoveNote");
     $this->app->ActionHandler("oknote","WelcomeOkNote");
     $this->app->ActionHandler("delnote","WelcomeDelNote");
     $this->app->ActionHandler("pinwand","WelcomePinwand");
-    
+
     $this->app->ActionHandler("css","WelcomeCss");
     $this->app->ActionHandler("logo","WelcomeLogo");
     $this->app->ActionHandler("unlock","WelcomeUnlock");
@@ -235,7 +235,7 @@ class Welcome
   {
     $this->app->acl->Passwortvergessen();
   }
- 
+
   public function MenuHook()
   {
 /*    if($this->GetMeineApps())
@@ -433,7 +433,7 @@ class Welcome
         $this->app->Tpl->Add('APPLIST', $modulHtml);
       }
     }
-    
+
     $this->app->Tpl->Parse('PAGE','welcome_meineapps.tpl');
   }
 
@@ -467,7 +467,7 @@ class Welcome
     return new JsonResponse(['anzeigen'=>$anzeigen,'ausblenden'=>$ausblenden,'gefunden'=>$moduleGefunden]);
   }
 
-  
+
   public function WelcomePoll()
   {
     //$saction = $this->app->Secure->GetGET("saction"); //Edit Bruno 14.12.17 wird nicht verwendet
@@ -483,7 +483,7 @@ class Welcome
       $smodule = $this->app->Secure->GetGET('smodule');
       $this->app->erp->TimeoutUseredit($smodule,$sid,$user);
     }
-   
+
     $inv = false;
     $invisible = (String)$this->app->Secure->GetPOST('invisible');
     if($invisible == '1'){
@@ -500,7 +500,7 @@ class Welcome
     }
 
     $this->app->ExitXentral();
-  }	
+  }
 
 
   function WelcomeDirektzugriff()
@@ -583,7 +583,7 @@ class Welcome
         "INSERT INTO `device_jobs` (`id`,`zeitstempel`,`deviceidsource`,`deviceiddest`,`job`,`art`) VALUES ('',NOW(),'000000000',:serial,:job,'labelprinter')",
         ['serial' => $serial, 'job' => $job]
       );
-    }	
+    }
 
 
     // update ip
@@ -592,7 +592,7 @@ class Welcome
     }
 
     $this->app->erp->ExitWawi();
-  }	
+  }
 
 
 
@@ -673,14 +673,14 @@ class Welcome
       }
     }
     $eigenlinks = $this->app->User->GetParameter('welcome_links_eigen');
-    
+
     if($eigenlinks)
     {
       for($i = 1; $i <= 8; $i++)
       {
         $links[] = array('name'=>$this->app->User->GetParameter('welcome_linkname'.$i),'link'=>$this->app->User->GetParameter('welcome_linklink'.$i),'intern'=>$this->app->User->GetParameter('welcome_linkintern'.$i));
-      }       
-      
+      }
+
     }else{
       $links = array(
         array('name'=>'Eigene Einstellungen','link'=>'index.php?module=welcome&action=settings'),
@@ -720,7 +720,7 @@ class Welcome
 
     //fenster rechts offene vorgaenge ***
     $this->app->Tpl->Set('SUBSUBHEADING','Vorg&auml;nge');
-    $arrVorgaenge = $this->app->DB->SelectArr("SELECT * FROM offenevorgaenge WHERE adresse='{$this->app->User->GetAdresse()}' ORDER by id DESC");
+    $arrVorgaenge = $this->app->DatabaseService->select("SELECT * FROM offenevorgaenge WHERE adresse = :adresse ORDER by id DESC", ['adresse' => (int)$this->app->User->GetAdresse()]);
     $this->app->Tpl->Set('INHALT','');
     $carrVorgaenge = !empty($arrVorgaenge)?count($arrVorgaenge):0;
     for($i=0;$i<$carrVorgaenge;$i++)
@@ -835,7 +835,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
         'timeout' => 1
         )
     )
-    ); 
+    );
 
 /*
     $result_news = file_get_contents("https://{$this->app->Conf->updateHost}/news.php?version=".$this->app->erp->Version(),0, $ctx);
@@ -897,7 +897,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
             ],
         ]
         );
-        $this->app->Tpl->Parse('AUFGABENPOPUP', 'welcome_firststart.tpl');        
+        $this->app->Tpl->Parse('AUFGABENPOPUP', 'welcome_firststart.tpl');
       }
     }
 
@@ -959,7 +959,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
     $farbe2 = '#e43f25'; // rot im artikel
     $farbe3 = '#a6e0be'; // hell tyrkis im artikel kreis
-    $farbe4 = '#449cbe'; // dunkelblau im artikel rechteck 
+    $farbe4 = '#449cbe'; // dunkelblau im artikel rechteck
 
     $xml = str_replace('#3fb9cd',$farbe1,$xml);
     $xml = str_replace('#e43f25',$farbe2,$xml);
@@ -1000,7 +1000,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       if($file==='grid.css'){
         $tmp = file_get_contents('./themes/new/css/grid.css');
       }
-    }	
+    }
     $tmpfirmendatenfkt = 'Firmendaten';
     if(method_exists($this->app->erp,'TplFirmendaten')){
       $tmpfirmendatenfkt = 'TplFirmendaten';
@@ -1035,12 +1035,12 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     if($navigationfarbe2 ==''){
       $navigationfarbe2 = $navigationfarbeschrift;
     }
-    
+
     $navigationfarbeschrift2 = $this->app->erp->$tmpfirmendatenfkt('navigationfarbeschrift2');
     if($navigationfarbeschrift2 ==''){
       $navigationfarbeschrift2 = $navigationfarbe;
     }
-    
+
     $unternavigationfarbe = $this->app->erp->$tmpfirmendatenfkt('unternavigationfarbe');
     if($unternavigationfarbe ==''){
       $unternavigationfarbe = '#d5ecf2';
@@ -1061,7 +1061,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     if($navigationfarbeschrift2 ==''){
       $navigationfarbeschrift2 = '#ffffff';
     }
-  
+
     $tmp = str_replace('[TPLSYSTEMBASE]',$firmenfarbe,$tmp);
 
     if($this->app->erp->Firmendaten('iconset_dunkel')=='1'){
@@ -1107,7 +1107,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     $this->app->erp->ExitWawi();
   }
 
-  
+
   public function WelcomeAddPinwand()
   {
 
@@ -1199,7 +1199,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     else {
       if($aufgabeid)
       {
-        $aufg = $this->app->DB->SelectArr('SELECT * FROM aufgabe WHERE id = '.$aufgabeid.' LIMIT 1');
+        $aufg = $this->app->DatabaseService->select("SELECT * FROM aufgabe WHERE id = :id LIMIT 1", ['id' => (int)$aufgabeid]);
         if($aufg)
         {
           $aufg = reset($aufg);
@@ -1211,12 +1211,12 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
           });
           </script>
           ");
-          
+
         }
       }
 
       $this->app->YUI->CkEditor('notebody','belege');//,array("height"=>"450"));
-     
+
       $this->app->Tpl->Parse('PAGE','welcome_pinwand_addnote.tpl');
     }
 
@@ -1346,7 +1346,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       {
         $tmp = $this->app->DatabaseService->select("SELECT * FROM aufgabe WHERE pinwand = '1' AND pinwand_id = :pinwand_id AND status = 'offen'", ['pinwand_id' => (int)$pinwand]);
       }
-    }  
+    }
     $ctmp = !empty($tmp)?count($tmp):0;
     for($i=0;$i<$ctmp;$i++)
     {
@@ -1362,7 +1362,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
         $text = $tmp[$i]['aufgabe'];
       }
       $id = $tmp[$i]['id'];
-      $projekt = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='".$tmp[$i]['projekt']."' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$tmp[$i]['projekt']]);
 
       $width = $tmp[$i]['note_w']?$tmp[$i]['note_w']:130;
       $height = $tmp[$i]['note_h']?$tmp[$i]['note_h']:130;
@@ -1385,18 +1385,18 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
         case 'blue': $color='#41b3ce'; break;
         case 'green': $color='#a9ca45'; break;
         case 'coral': $color='#be3978'; break;
-      } 
+      }
 
       $result = ' <div class="note" id="note'.$id.'" style="border-left-color:'.$color.';left:'.$left.'px;top:'.$top.'px;  z-index:'.$zindex.'; width:'.$width.'px;height:'.$height.'px;">
-        <div id="notehtml'.$id.'">'.$text.'</div> 
+        <div id="notehtml'.$id.'">'.$text.'</div>
         <div class="author">'.$projekt.'&nbsp;
-          <a href="#" onclick="PinwandEdit('.$pinwand.','.$id.');">      
+          <a href="#" onclick="PinwandEdit('.$pinwand.','.$id.');">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path fill-rule="evenodd" clip-rule="evenodd" d="M13.9442 2.05599C13.5429 1.65638 12.9986 1.43371 12.4323 1.43755C11.866 1.44138 11.3247 1.6714 10.9289 2.07641L2.47058 10.5347L1.4375 14.5627L5.46542 13.5296L13.9238 5.07124C14.3288 4.67543 14.5588 4.13416 14.5626 3.56787C14.5664 3.00158 14.3438 2.45725 13.9442 2.05599Z" stroke="#929292" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="M10.6875 2.31836L13.6823 5.31319" stroke="#929292" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="M9.46484 3.54004L12.4597 6.53487" stroke="#929292" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="M2.46875 10.5347L5.4665 13.5266" stroke="#929292" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>      
+            </svg>
           </a>&nbsp;
           <a href="#" onclick="AufgabenEdit('.$id.');return false;" target="_blank" title="Aufgabe bearbeiten" >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1438,8 +1438,8 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     $this->app->Tpl->Set('POPUPWIDTH','700');
     $this->app->Tpl->Set('POPUPHEIGHT','600');
 
-    $tmp = $this->app->DB->SelectArr("SELECT DISTINCT p.id,p.name FROM pinwand p 
-      LEFT JOIN pinwand_user pu ON pu.pinwand=p.id WHERE (pu.user='".$this->app->User->GetID()."' OR p.user='".$this->app->User->GetID()."') ORDER by p.name");
+    $tmp = $this->app->DatabaseService->select("SELECT DISTINCT p.id,p.name FROM pinwand p
+      LEFT JOIN pinwand_user pu ON pu.pinwand=p.id WHERE (pu.user = :user_id OR p.user = :user_id) ORDER by p.name", ['user_id' => (int)$this->app->User->GetID()]);
     $ctmp = !empty($tmp)?count($tmp):0;
     for($i=0;$i<$ctmp;$i++)
     {
@@ -1474,15 +1474,13 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
     $coords = ['note_x'=>0,'note_y'=>0];
 
-    $oldCoords = $this->app->DB->Select(
-      sprintf(
-        'SELECT MAX(a.note_x) 
-        FROM `aufgabe` AS `a` 
-        WHERE a.id != %d 
-        AND (a.note_x = a.note_y OR (a.note_x IS NULL AND a.note_y IS NULL))
-        ORDER BY a.note_x',
-        $taskId
-      )
+    $oldCoords = $this->app->DatabaseService->selectValue(
+      'SELECT MAX(a.note_x)
+      FROM `aufgabe` AS `a`
+      WHERE a.id != :task_id
+      AND (a.note_x = a.note_y OR (a.note_x IS NULL AND a.note_y IS NULL))
+      ORDER BY a.note_x',
+      ['task_id' => (int)$taskId]
     );
 
     if(!empty($oldCoords) || $oldCoords==0){
@@ -1522,7 +1520,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 <li> <a href="index.php?module=wiki&amp;action=list" target="_blank"> Wiki</a></li>
 </ul>';
 
-        $this->app->DB->Insert("INSERT INTO wiki (name,content) VALUES ('StartseiteWiki','".$wikifirstpage."')");
+        $this->app->DatabaseService->insert("INSERT INTO wiki (name, content) VALUES ('StartseiteWiki', :content)", ['content' => $wikifirstpage]);
       }
       $data = $this->app->DB->SelectArr("SELECT * FROM accordion ORDER BY position");
 
@@ -1550,7 +1548,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
     $out .= "<!--<h3><a href=\"#\">Startseite</a></h3>-->
       <div><div class=\"wiki\"><!--$edit<br/>-->$entry<br><br></div></div>";
-    
+
     return $out;
   }
 
@@ -1559,10 +1557,10 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     $userid = $this->app->User->GetID();
 
     if(is_numeric($userid)) {
-      $termine = $this->app->DB->SelectArr("SELECT DISTINCT color,von,bis,bezeichnung,allDay,ke.id FROM kalender_user AS ka
+      $termine = $this->app->DatabaseService->select("SELECT DISTINCT color,von,bis,bezeichnung,allDay,ke.id FROM kalender_user AS ka
           RIGHT JOIN kalender_event AS ke ON ka.event=ke.id
-          WHERE (ka.userid='$userid' OR ke.public='1') AND DATE(von)='$date'
-          ORDER BY von");
+          WHERE (ka.userid = :userid OR ke.public = '1') AND DATE(von) = :date
+          ORDER BY von", ['userid' => (int)$userid, 'date' => $date]);
       $out = '';
       if($termine)
       {
@@ -1586,7 +1584,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
           $out .= "<li $color onclick=\"openeventdialog(".$t['id'].",'".$von."','".$bis."','".$t['allDay']."','".htmlspecialchars($t['bezeichnung'])."')\"><span class=\"description\">{$t['bezeichnung']}<br>$von $bis&nbsp;&nbsp;</span></li>";
         }
-        $out .= '		<script>		
+        $out .= '		<script>
         function openeventdialog(id, start, end, allday, task)
         {
         if($("#TerminDialog").SetFormData(id, start, end, allday,task))
@@ -1684,9 +1682,10 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     }
 
     // Einstellungen laden
-    $settings = $this->app->DB->SelectRow(
-      "SELECT u.startseite, u.chat_popup, u.callcenter_notification, u.defaultcolor, u.sprachebevorzugen 
-       FROM `user` AS u WHERE u.id = '" . $this->app->User->GetID() . "' LIMIT 1"
+    $settings = $this->app->DatabaseService->selectRow(
+      "SELECT u.startseite, u.chat_popup, u.callcenter_notification, u.defaultcolor, u.sprachebevorzugen
+       FROM `user` AS u WHERE u.id = :user_id LIMIT 1",
+      ['user_id' => (int)$this->app->User->GetID()]
     );
 
     $this->app->Tpl->Set('STARTSEITE', $settings['startseite']);
@@ -1702,7 +1701,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
     // Profilbild laden
     $adresse = $this->app->User->GetAdresse();
-    $dateiversion = (int)$this->app->DB->Select("SELECT dv.id FROM datei_stichwoerter ds INNER JOIN datei d ON ds.datei = d.id INNER JOIN datei_version dv ON dv.datei = d.id WHERE d.geloescht = 0 AND objekt like 'Adressen' AND parameter = '" . $adresse . "' AND subjekt like 'Profilbild' ORDER by d.id DESC, dv.id DESC LIMIT 1");
+    $dateiversion = (int)$this->app->DatabaseService->selectValue("SELECT dv.id FROM datei_stichwoerter ds INNER JOIN datei d ON ds.datei = d.id INNER JOIN datei_version dv ON dv.datei = d.id WHERE d.geloescht = 0 AND objekt LIKE 'Adressen' AND parameter = :adresse AND subjekt LIKE 'Profilbild' ORDER by d.id DESC, dv.id DESC LIMIT 1", ['adresse' => (string)$adresse]);
     if($dateiversion){
       $this->app->Tpl->Add('DATEI', "<span id=\"profilbild\" style=\"padding:0;margin:0;height:100px;width:100px;display:inline-block;position:relative;background-repeat:no-repeat; background-image: url('index.php?module=ajax&action=profilbild&id=" . $this->app->User->GetID() . "'); \"></span>");
     }else{
@@ -1717,7 +1716,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     $hasMobileAppsPermission = (bool)$this->app->erp->RechteVorhanden('welcome','mobileapps');
     if ($hasMobileAppsPermission){
       $apiAccountId = (int)$this->app->User->GetParameter('mobile_apps_api_account_id');
-      $apiAccountData = $this->app->DB->SelectRow("SELECT a.remotedomain, a.initkey, a.aktiv FROM api_account AS a WHERE a.id = '{$apiAccountId}'");
+      $apiAccountData = $this->app->DatabaseService->selectRow("SELECT a.remotedomain, a.initkey, a.aktiv FROM api_account AS a WHERE a.id = :api_account_id", ['api_account_id' => (int)$apiAccountId]);
       $apiAccountActive = isset($apiAccountData['aktiv']) && (int)$apiAccountData['aktiv'] === 1;
       $apiAccountExisting = isset($apiAccountData['remotedomain']) && !empty($apiAccountData['remotedomain']);
 
@@ -1856,16 +1855,16 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
         }
 
         // SQL statement
-        $sql = "SELECT 
-                  SQL_CALC_FOUND_ROWS d.id, 
+        $sql = "SELECT
+                  SQL_CALC_FOUND_ROWS d.id,
                   CONCAT('<input type=\"checkbox\" name=\"selection[]\" value=\"', d.id, '\">'),
-                  DATE_FORMAT(d.zeitstempel,'%d.%m.%Y %H:%i:%s'), 
-                  IF(d.filename != '', d.filename, 'Kein Dateiname vorhanden'), 
+                  DATE_FORMAT(d.zeitstempel,'%d.%m.%Y %H:%i:%s'),
+                  IF(d.filename != '', d.filename, 'Kein Dateiname vorhanden'),
                   a.name,
                   IF(d.gedruckt = 1, 'ja', '') as gedruckt,
-                  d.id 
-                FROM drucker_spooler AS d 
-                LEFT JOIN `user` AS u ON u.id = d.user 
+                  d.id
+                FROM drucker_spooler AS d
+                LEFT JOIN `user` AS u ON u.id = d.user
                 LEFT JOIN adresse AS a ON a.id = u.adresse ";
         $where = " d.drucker = '{$id}' " . $subwhere;
         $count = "SELECT COUNT(d.id) FROM drucker_spooler AS d WHERE " . $where;
@@ -2179,7 +2178,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       }
     }
     return is_dir($dir) && @rmdir($dir);
-  } 
+  }
 
   public function WelcomeInfo()
   {
@@ -2229,7 +2228,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
     $phpmailer = file_get_contents('../www/plugins/phpmailer/LICENSE');
     $this->app->Tpl->Add('PHPMAILER',nl2br($phpmailer));
-  
+
     $this->app->Tpl->Add('TAB1',nl2br($tmp));
 
     $this->app->Tpl->Add('TAB1','</td></tr>');
@@ -2270,7 +2269,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
   public function WelcomeLogin()
   {
-    
+
     if($this->app->User->GetID()>0)
     {
       // alle cookies SpryMedia loeschen
@@ -2280,7 +2279,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       $startseite = '';
       if($code = $this->app->Secure->GetPOST('code'))
       {
-        $result = $this->app->DB->SelectArr("SELECT url, reduziert FROM stechuhrdevice WHERE code = '$code' AND aktiv = 1 LIMIT 1");
+        $result = $this->app->DatabaseService->select("SELECT url, reduziert FROM stechuhrdevice WHERE code = :code AND aktiv = 1 LIMIT 1", ['code' => (string)$code]);
 
         $startseite = $result[0]['url'] ;
         $isReduziert = $result[0]['reduziert'];
@@ -2324,7 +2323,8 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     // sperre entfernen bzw umschreiben
     if($gui==='angebot' || $gui==='auftrag' || $gui==='rechnung' || $gui==='bestellung' || $gui==='gutschrift' || $gui==='lieferschein' || $gui==='retoure' || $gui==='adresse' || $gui==='artikel' || $gui==='produktion' || $gui==='reisekosten' || $gui==='preisanfrage')
     {
-      $this->app->DB->Update("UPDATE $gui SET usereditid='".$this->app->User->GetID()."'  WHERE id='$id' LIMIT 1");
+      $safeTable = $this->app->DatabaseService->validateIdentifier($gui);
+      $this->app->DatabaseService->update("UPDATE `{$safeTable}` SET usereditid = :user_id WHERE id = :id LIMIT 1", ['user_id' => (int)$this->app->User->GetID(), 'id' => (int)$id]);
       if(!empty($backlink))
       {
         header('Location: '.$backlink);
@@ -2587,7 +2587,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     $feed_contents = file_get_contents($allChangesInVersionCacheFile);
 
     $allChangesInVersion = json_decode($feed_contents, TRUE);
-    
+
     $this->app->Tpl->Add('TAB2', '<div class="row">
                                   <div class="row-height">
                                   <div class="col-md-12 col-md-height">
@@ -2646,7 +2646,7 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     $this->app->erp->RenameOffenenVorgangID($vorgang,$titel);
     header('Location: '.$_SERVER['HTTP_REFERER']);
     exit;
-  } 
+  }
 
   public function VorgangEntfernen()
   {
@@ -2916,11 +2916,9 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     if($addressId > $lastAddressIdInExampleDataset) {
       return $addressId;
     }
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE `adresse` SET `id` = %d WHERE `id` = %d',
-        $lastAddressIdInExampleDataset + 1, $addressId
-      )
+    $this->app->DatabaseService->update(
+      'UPDATE `adresse` SET `id` = :new_id WHERE `id` = :old_id',
+      ['new_id' => $lastAddressIdInExampleDataset + 1, 'old_id' => $addressId]
     );
     if($this->app->DB->affected_rows() > 0) {
       $addressId = $lastAddressIdInExampleDataset + 1;
@@ -2940,11 +2938,9 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     if($userId > $lastUserIdInExampleDataset) {
       return $userId;
     }
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE `user` SET `id` = %d WHERE `id` = %d',
-        $lastUserIdInExampleDataset + 1 , $userId
-      )
+    $this->app->DatabaseService->update(
+      'UPDATE `user` SET `id` = :new_id WHERE `id` = :old_id',
+      ['new_id' => $lastUserIdInExampleDataset + 1, 'old_id' => $userId]
     );
     if($this->app->DB->affected_rows() > 0) {
       $userId = $lastUserIdInExampleDataset + 1;
@@ -2975,8 +2971,8 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       }
       $userRole = $this->app->Secure->GetPOST('teamMemberRole'.($i > 0?(string)$i:''));
       if(
-        $this->app->DB->Select(sprintf("SELECT COUNT(`id`) FROM `user` WHERE `username` = '%s'", $userName)) > 0
-        || $this->app->DB->Select(sprintf("SELECT COUNT(`id`) FROM `adresse` WHERE `name` = '%s'", $userName)) > 0
+        $this->app->DatabaseService->selectValue("SELECT COUNT(`id`) FROM `user` WHERE `username` = :username", ['username' => (string)$userName]) > 0
+        || $this->app->DatabaseService->selectValue("SELECT COUNT(`id`) FROM `adresse` WHERE `name` = :username", ['username' => (string)$userName]) > 0
       ) {
         return new JsonResponse(
           ['error'=>sprintf('Usernamen %s existiert bereits', $userName)],
@@ -2993,34 +2989,29 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     );
     foreach($members as $member) {
       $password = $member['username'];
-      $this->app->DB->Insert(
-        sprintf(
-          "INSERT INTO `adresse` (`name`, `email`, `projekt`)
-            VALUES ('%s', '%s', %d)",
-          $member['username'], $member['email'], $projectId
-        )
+      $this->app->DatabaseService->insert(
+        "INSERT INTO `adresse` (`name`, `email`, `projekt`) VALUES (:username, :email, :projekt)",
+        ['username' => (string)$member['username'], 'email' => (string)$member['email'], 'projekt' => (int)$projectId]
       );
       $addressId = (int)$this->app->DB->GetInsertID();
       $this->app->erp->AddRolleZuAdresse($addressId, 'Mitarbeiter', 'von', 'Projekt', $projectId);
-      $vorlage =
-        $this->app->DB->real_escape_string(
-          $this->app->DB->Select(
-            sprintf(
-              "SELECT `bezeichnung` FROM `uservorlage` WHERE `bezeichnung` = '%s'",
-              $member['role']
-            )
-          )
-        );
-      $this->app->DB->Insert(
-        sprintf(
-          "INSERT INTO `user`
-            (`username`, `passwordmd5`, `hwtoken`, `type`, `repassword`, `externlogin`,`firma`,`fehllogins`, 
-             `adresse`,`standarddrucker`,`settings`, `activ`,`vorlage`,`role`) 
-            VALUES ('%s', '%s', 0, 'benutzer', 0, 1,1,0,
-                    %d,0,'',1,'%s','%s')",
-          $member['username'], md5($password),
-          $addressId, $vorlage, $member['role']
-        )
+      $vorlage = (string)$this->app->DatabaseService->selectValue(
+        "SELECT `bezeichnung` FROM `uservorlage` WHERE `bezeichnung` = :bezeichnung",
+        ['bezeichnung' => (string)$member['role']]
+      );
+      $this->app->DatabaseService->insert(
+        "INSERT INTO `user`
+          (`username`, `passwordmd5`, `hwtoken`, `type`, `repassword`, `externlogin`, `firma`, `fehllogins`,
+           `adresse`, `standarddrucker`, `settings`, `activ`, `vorlage`, `role`)
+          VALUES (:username, :passwordmd5, 0, 'benutzer', 0, 1, 1, 0,
+                  :adresse, 0, '', 1, :vorlage, :role)",
+        [
+          'username'    => (string)$member['username'],
+          'passwordmd5' => md5($password),
+          'adresse'     => (int)$addressId,
+          'vorlage'     => $vorlage,
+          'role'        => (string)$member['role'],
+        ]
       );
       $newUserId = (int)$this->app->DB->GetInsertID();
       $this->app->erp->insertDefaultUserRights($newUserId);
@@ -3068,11 +3059,9 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
         JsonResponse::HTTP_BAD_REQUEST
       );
     }
-    $this->app->DB->Update(
-      sprintf(
-        "UPDATE `user` SET `role` = '%s' WHERE `id` = %d",
-        $role, $this->app->User->GetID()
-      )
+    $this->app->DatabaseService->update(
+      "UPDATE `user` SET `role` = :role WHERE `id` = :user_id",
+      ['role' => (string)$role, 'user_id' => (int)$this->app->User->GetID()]
     );
 
     return new JsonResponse(['success'=>true]);
@@ -3092,10 +3081,9 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       $role = $otherRole;
     }
     if(!$hasUserRole && $role === ''
-      && (string)$this->app->DB->Select(
-        sprintf(
-          'SELECT `role` FROM `user` WHERE `id` = %d', $this->app->User->GetID()
-        )
+      && (string)$this->app->DatabaseService->selectValue(
+        'SELECT `role` FROM `user` WHERE `id` = :user_id',
+        ['user_id' => (int)$this->app->User->GetID()]
       )
     ) {
       return new JsonResponse(
@@ -3134,11 +3122,9 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
 
     $this->changeUserPassword($password, $passwordunescaped);
     if(!empty($role)) {
-      $this->app->DB->Update(
-        sprintf(
-          "UPDATE `user` SET `role` = '%s' WHERE `id` = %d",
-          $role, $this->app->User->GetID()
-        )
+      $this->app->DatabaseService->update(
+        "UPDATE `user` SET `role` = :role WHERE `id` = :user_id",
+        ['role' => (string)$role, 'user_id' => (int)$this->app->User->GetID()]
       );
     }
 
@@ -3154,57 +3140,61 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
   protected function changeUserPassword($password, $passwordunescaped)
   {
     if(!empty($password) && $password !== $this->app->User->GetUsername()){
-      $this->app->DB->Select("SELECT u.passwordhash FROM `user` AS u WHERE u.id = '" . $this->app->User->GetID() . "' LIMIT 1");
+      $this->app->DatabaseService->selectValue("SELECT u.passwordhash FROM `user` AS u WHERE u.id = :user_id LIMIT 1", ['user_id' => (int)$this->app->User->GetID()]);
       if(!$this->app->DB->error()){
         $options = array(
           'cost' => 12,
         );
         $passwordhash = @password_hash($passwordunescaped, PASSWORD_BCRYPT, $options);
         if(!empty($passwordhash)){
-          $this->app->DB->Update(
-            "UPDATE `user` SET 
-            `passwordhash` = '" . $this->app->DB->real_escape_string($passwordhash) . "',
-            `password` = '', 
-            `passwordmd5` = '', 
-            `passwordsha512` = '', 
-            `salt` = '' 
-            WHERE `id` = '" . $this->app->User->GetID() . "' LIMIT 1"
+          $this->app->DatabaseService->update(
+            "UPDATE `user` SET
+            `passwordhash` = :passwordhash,
+            `password` = '',
+            `passwordmd5` = '',
+            `passwordsha512` = '',
+            `salt` = ''
+            WHERE `id` = :user_id LIMIT 1",
+            ['passwordhash' => (string)$passwordhash, 'user_id' => (int)$this->app->User->GetID()]
           );
 
           return '<div class="warning">{|Passwort wurde erfolgreich ge&auml;ndert!|}</div>';
         }
       }else{
-        $salt = $this->app->DB->Select("SELECT u.salt FROM `user` AS u WHERE u.id = '" . $this->app->User->GetID() . "' LIMIT 1");
+        $salt = $this->app->DatabaseService->selectValue("SELECT u.salt FROM `user` AS u WHERE u.id = :user_id LIMIT 1", ['user_id' => (int)$this->app->User->GetID()]);
         if(!$this->app->DB->error()){
           if(empty($salt)){
             $salt = hash('sha512', microtime(true));
           }
           $passwordsha512 = hash('sha512', $password . $salt);
           if(!empty($salt) && !empty($passwordsha512)){
-            $this->app->DB->Update(
-              "UPDATE `user` SET 
-               `password` = '', 
-               `passwordmd5` = '', 
-               `salt` = '{$salt}', 
-               `passwordsha512` = '{$passwordsha512}' 
-               WHERE `id` = '" . $this->app->User->GetID() . "' LIMIT 1"
+            $this->app->DatabaseService->update(
+              "UPDATE `user` SET
+               `password` = '',
+               `passwordmd5` = '',
+               `salt` = :salt,
+               `passwordsha512` = :passwordsha512
+               WHERE `id` = :user_id LIMIT 1",
+              ['salt' => (string)$salt, 'passwordsha512' => (string)$passwordsha512, 'user_id' => (int)$this->app->User->GetID()]
             );
           }else{
-            $this->app->DB->Update(
-              "UPDATE `user` SET 
-               `password` = '', 
-               `passwordmd5` = MD5('{$password}'), 
-               `salt` = '{$salt}', 
-               `passwordsha512` = '{$passwordsha512}' 
-               WHERE `id` = '" . $this->app->User->GetID() . "' LIMIT 1"
+            $this->app->DatabaseService->update(
+              "UPDATE `user` SET
+               `password` = '',
+               `passwordmd5` = MD5(:password),
+               `salt` = :salt,
+               `passwordsha512` = :passwordsha512
+               WHERE `id` = :user_id LIMIT 1",
+              ['password' => (string)$password, 'salt' => (string)$salt, 'passwordsha512' => (string)$passwordsha512, 'user_id' => (int)$this->app->User->GetID()]
             );
           }
         }else{
-          $this->app->DB->Update(
-            "UPDATE `user` SET 
+          $this->app->DatabaseService->update(
+            "UPDATE `user` SET
              `password` = '',
-             `passwordmd5` = MD5('{$password}') 
-             WHERE `id`='" . $this->app->User->GetID() . "' LIMIT 1"
+             `passwordmd5` = MD5(:password)
+             WHERE `id` = :user_id LIMIT 1",
+            ['password' => (string)$password, 'user_id' => (int)$this->app->User->GetID()]
           );
         }
       }
@@ -3258,23 +3248,30 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     // umzug in tabelle user
     if($this->app->User->GetParameter('welcome_defaultcolor_fuer_kalender') != ''){
       $defaultcolor = $this->app->Secure->GetPOST('defaultcolor');
-      $this->app->DB->Update("UPDATE `user` SET `defaultcolor` = '{$defaultcolor}' WHERE `id` = '" . $this->app->User->GetID() . "' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE `user` SET `defaultcolor` = :defaultcolor WHERE `id` = :user_id LIMIT 1", ['defaultcolor' => (string)$defaultcolor, 'user_id' => (int)$this->app->User->GetID()]);
       $this->app->User->SetParameter('welcome_defaultcolor_fuer_kalender', '');
     }
 
     if($sprachebevorzugen != ''){
       $sprachebevorzugen = $this->app->Secure->GetPOST('sprachebevorzugen');
-      $this->app->DB->Update("UPDATE `user` SET `sprachebevorzugen` = '$sprachebevorzugen' WHERE `id` = '" . $this->app->User->GetID() . "' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE `user` SET `sprachebevorzugen` = :sprachebevorzugen WHERE `id` = :user_id LIMIT 1", ['sprachebevorzugen' => (string)$sprachebevorzugen, 'user_id' => (int)$this->app->User->GetID()]);
     }
 
     if($submit_startseite != ''){
-      $this->app->DB->Update(
-        "UPDATE `user` SET 
-        `startseite` = '{$startseite}', 
-        `chat_popup` = '{$chat_popup}', 
-        `callcenter_notification` = '{$callcenter_notification}', 
-        `defaultcolor` = '{$defaultcolor}' 
-        WHERE `id` = '" . $this->app->User->GetID() . "' LIMIT 1"
+      $this->app->DatabaseService->update(
+        "UPDATE `user` SET
+        `startseite` = :startseite,
+        `chat_popup` = :chat_popup,
+        `callcenter_notification` = :callcenter_notification,
+        `defaultcolor` = :defaultcolor
+        WHERE `id` = :user_id LIMIT 1",
+        [
+          'startseite'              => (string)$startseite,
+          'chat_popup'              => (int)$chat_popup,
+          'callcenter_notification' => (int)$callcenter_notification,
+          'defaultcolor'            => (string)$defaultcolor,
+          'user_id'                 => (int)$this->app->User->GetID(),
+        ]
       );
     }
   }
@@ -3288,12 +3285,13 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
   {
     if(!empty($this->app->Secure->GetPOST('delete_datei'))){
       $adresse = $this->app->User->GetAdresse();
-      $dateien = $this->app->DB->SelectArr(
-        "SELECT d.id 
-         FROM datei AS d 
+      $dateien = $this->app->DatabaseService->select(
+        "SELECT d.id
+         FROM datei AS d
          INNER JOIN datei_stichwoerter AS ds ON d.id = ds.datei
-         WHERE d.geloescht = 0 AND ds.objekt LIKE 'Adressen' AND ds.parameter = '" . $adresse . "' AND ds.subjekt LIKE 'Profilbild' 
-         ORDER BY d.id DESC"
+         WHERE d.geloescht = 0 AND ds.objekt LIKE 'Adressen' AND ds.parameter = :adresse AND ds.subjekt LIKE 'Profilbild'
+         ORDER BY d.id DESC",
+        ['adresse' => (string)$adresse]
       );
       if(!empty($dateien)){
         foreach ($dateien as $datei) {
@@ -3345,23 +3343,22 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
       $username = $this->app->User->GetUsername() . '_dashboard';
       $password = md5(uniqid('', true));
 
-      $sql = sprintf(
-        "INSERT INTO `api_account` 
-          (`id`, `bezeichnung`, `initkey`, `importwarteschlange_name`, `event_url`, `remotedomain`, `aktiv`, 
+      $this->app->DatabaseService->insert(
+        "INSERT INTO `api_account`
+          (`id`, `bezeichnung`, `initkey`, `importwarteschlange_name`, `event_url`, `remotedomain`, `aktiv`,
           `importwarteschlange`, `cleanutf8`, `uebertragung_account`, `permissions`)
-              VALUES (NULL, '%s', '%s', '', '', '%s', 1, 0, 1, 0 , '%s')",
-        $this->app->DB->real_escape_string($title),
-        $this->app->DB->real_escape_string($password),
-        $this->app->DB->real_escape_string($username),
-        $this->app->DB->real_escape_string(json_encode(['mobile_app_communication']))
+              VALUES (NULL, :bezeichnung, :initkey, '', '', :remotedomain, 1, 0, 1, 0, :permissions)",
+        [
+          'bezeichnung'  => (string)$title,
+          'initkey'      => (string)$password,
+          'remotedomain' => (string)$username,
+          'permissions'  => json_encode(['mobile_app_communication']),
+        ]
       );
-      $this->app->DB->Insert($sql);
 
-      $apiAccountId = (int)$this->app->DB->Select(
-        sprintf(
-          "SELECT a.id FROM `api_account` AS `a` WHERE a.remotedomain = '%s' LIMIT 1",
-          $this->app->DB->real_escape_string($username)
-        )
+      $apiAccountId = (int)$this->app->DatabaseService->selectValue(
+        "SELECT a.id FROM `api_account` AS `a` WHERE a.remotedomain = :remotedomain LIMIT 1",
+        ['remotedomain' => (string)$username]
       );
       $this->app->User->SetParameter('mobile_apps_api_account_id', $apiAccountId);
 
@@ -3373,13 +3370,13 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     // API-Account aktivieren
     if(!empty($this->app->Secure->GetPOST('mobile_app_api_activate'))){
       $apiAccountId = (int)$this->app->User->GetParameter('mobile_apps_api_account_id');
-      $this->app->DB->Update("UPDATE api_account SET aktiv = 1 WHERE id = '{$apiAccountId}' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE api_account SET aktiv = 1 WHERE id = :api_account_id LIMIT 1", ['api_account_id' => (int)$apiAccountId]);
     }
 
     // API-Account deaktivieren
     if(!empty($this->app->Secure->GetPOST('mobile_app_api_deactivate'))){
       $apiAccountId = (int)$this->app->User->GetParameter('mobile_apps_api_account_id');
-      $this->app->DB->Update("UPDATE api_account SET aktiv = 0 WHERE id = '{$apiAccountId}' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE api_account SET aktiv = 0 WHERE id = :api_account_id LIMIT 1", ['api_account_id' => (int)$apiAccountId]);
     }
   }
 

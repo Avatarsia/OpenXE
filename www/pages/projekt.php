@@ -1,13 +1,13 @@
 <?php
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -63,7 +63,7 @@ class Projekt extends GenProjekt {
         $width = array('20%','25%','20%','15%','14%','1%');
         $findcols = array( 'a.mitarbeiternummer','a.name','tgz.bezeichnung','tgz.stunden','tgz.stundensatz', 'a.id');
         $searchsql = array('a.mitarbeiternummer','a.name','tgz.bezeichnung','tgz.stunden','tgz.stundensatz', 'a.id');
-        
+
         $defaultorder = 1; //Optional wenn andere Reihenfolge gewuenscht
 
         $defaultorderdesc = 1;
@@ -71,30 +71,30 @@ class Projekt extends GenProjekt {
         $teilprojekt = (int)$app->User->GetParameter("teilprojekt_geplante_zeiten_teilprojekt");
         $id = (int)$app->Secure->GetGET('id');
         $sql = "SELECT SQL_CALC_FOUND_ROWS a.id,a.mitarbeiternummer, a.name as name,
-            concat('<input onchange=\"changestundensatzname(',a.id,',$teilprojekt)\" type=\"text\" value=\"',ifnull(tgz.bezeichnung,ifnull((SELECT zk.beschreibung FROM zeiterfassung_kosten zk WHERE zk.adresse = a.id AND (zk.gueltig_ab = '0000-00-00' OR zk.gueltig_ab <= curdate()) ORDER by zk.gueltig_ab DESC LIMIT 1 ),'')),'\" name=\"stundensatzname_',a.id,'\" id=\"stundensatzname_',a.id,'\" />') , 
-            concat('<input onchange=\"changestundensatzname(',a.id,',$teilprojekt)\" type=\"text\" value=\"',ifnull(tgz.stunden,0),'\" name=\"stunden_',a.id,'\" id=\"stunden_',a.id,'\" />') , 
+            concat('<input onchange=\"changestundensatzname(',a.id,',$teilprojekt)\" type=\"text\" value=\"',ifnull(tgz.bezeichnung,ifnull((SELECT zk.beschreibung FROM zeiterfassung_kosten zk WHERE zk.adresse = a.id AND (zk.gueltig_ab = '0000-00-00' OR zk.gueltig_ab <= curdate()) ORDER by zk.gueltig_ab DESC LIMIT 1 ),'')),'\" name=\"stundensatzname_',a.id,'\" id=\"stundensatzname_',a.id,'\" />') ,
+            concat('<input onchange=\"changestundensatzname(',a.id,',$teilprojekt)\" type=\"text\" value=\"',ifnull(tgz.stunden,0),'\" name=\"stunden_',a.id,'\" id=\"stunden_',a.id,'\" />') ,
             concat('<input onchange=\"changestundensatzname(',a.id,',$teilprojekt)\" type=\"text\" value=\"',ifnull(tgz.stundensatz,ifnull((SELECT zk.stundensatz FROM zeiterfassung_kosten zk WHERE zk.adresse = a.id AND (zk.gueltig_ab = '0000-00-00' OR zk.gueltig_ab <= curdate()) ORDER by zk.gueltig_ab DESC LIMIT 1 ),0)),'\" name=\"stundensatz_',a.id,'\" id=\"stundensatz_',a.id,'\" />')
             , a.id as menu
-            FROM adresse a 
-            INNER JOIN adresse_rolle a2 ON a2.adresse=a.id 
+            FROM adresse a
+            INNER JOIN adresse_rolle a2 ON a2.adresse=a.id
             INNER JOIN projekt p ON p.id=a2.projekt OR p.id = a.projekt
             LEFT JOIN teilprojekt_geplante_zeiten tgz ON a.id = tgz.adresse AND tgz.teilprojekt = '$teilprojekt'";
         $groupby = " group by a.id";
         $where = " (a2.projekt='$id' AND (a2.bis='0000-00-00' OR a2.bis >= date(NOW())) AND a2.objekt like 'Projekt' AND a.geloescht != 1 AND mitarbeiternummer != '') OR not isnull(tgz.id) ";
-        
-        $count = "SELECT count(distinct a.id) FROM adresse a 
-                                           
-                                           INNER JOIN adresse_rolle a2 ON a2.adresse=a.id 
+
+        $count = "SELECT count(distinct a.id) FROM adresse a
+
+                                           INNER JOIN adresse_rolle a2 ON a2.adresse=a.id
                                            INNER JOIN projekt p ON p.id=a2.projekt OR p.id = a.projekt
                                            LEFT JOIN teilprojekt_geplante_zeiten tgz ON a.id = tgz.adresse AND tgz.teilprojekt = '$teilprojekt'
                                            WHERE $where";
-            
+
       break;
       case "projekt_verbindlichkeiten":
         $allowed['projekt'] = array('dashboard');
         $id = (int)$app->Secure->GetGET('id');
-        
-        
+
+
         $heading = array('','Nr', 'Teilprojekt', 'Lf-Nr.','Lieferant','RE-Datum','RE-Nr','Verwendungszweck','IBAN/BIC','Betrag (netto)', 'Betrag (brutto)', 'Skonto Bis', 'Zahlbar Bis', 'Skonto','Zahlweise','Bezahlt','Monitor', 'Men&uuml;');
         $width = array('1%','5%', '5%', '5%', '20%', '5%','5%', '20%','10%', '10%','20%','5%', '5%', '1%', '1%', '1%', '8%');
         $findcols = array('','v.belegnr', 'ap.aufgabe', 'a.lieferantennummer','a.name','v.rechnungsdatum','v.rechnung','v.verwendungszweck', "CONCAT('a.iban','/','a.swift')","if((SELECT SUM(bestellung_betrag_netto) FROM verbindlichkeit_bestellungen WHERE verbindlichkeit = v.id AND bestellung_projekt = '$id'), ".$app->erp->FormatPreis("(SELECT SUM(bestellung_betrag_netto) FROM verbindlichkeit_bestellungen WHERE verbindlichkeit = v.id AND bestellung_projekt = '$id')",2).",".$app->erp->FormatPreis("v.betrag-v.summenormal-v.summeermaessigt-v.summesatz3-v.summesatz4",2).")",
@@ -119,7 +119,7 @@ class Projekt extends GenProjekt {
         $sql = "SELECT SQL_CALC_FOUND_ROWS v.id, '<img src=./themes/{$app->Conf->WFconf[defaulttheme]}/images/details_open.png class=details>' as open,
               v.belegnr as 'nr.', ap.aufgabe, a.lieferantennummer,a.name as lieferant,DATE_FORMAT(v.rechnungsdatum, '%d.%m.%Y'), if(v.betrag <0, CONCAT('<font color=red>',v.verwendungszweck,' ',if(v.rechnung!='','RE ',''),v.rechnung,'</font>'),v.rechnung),v.verwendungszweck,
                 CONCAT(if(a.iban='',CONCAT('<a href=\"index.php?module=adresse&action=edit&id=',a.id,'#tabs-2\" target=\"_blank\"><font color=red>fehlt - bitte nachtragen</font></a>'),a.iban),' / ',
-                if(a.swift='',CONCAT('<a href=\"index.php?module=adresse&action=edit&id=',a.id,'#tabs-2\" target=\"_blank\"><font color=red>fehlt - bitte nachtragen</font></a>'),a.swift)) as BIC, 
+                if(a.swift='',CONCAT('<a href=\"index.php?module=adresse&action=edit&id=',a.id,'#tabs-2\" target=\"_blank\"><font color=red>fehlt - bitte nachtragen</font></a>'),a.swift)) as BIC,
                   if((SELECT SUM(bestellung_betrag_netto) FROM verbindlichkeit_bestellungen WHERE verbindlichkeit = v.id AND bestellung_projekt = '$id'), ".$app->erp->FormatPreis("(SELECT SUM(bestellung_betrag_netto) FROM verbindlichkeit_bestellungen WHERE verbindlichkeit = v.id AND bestellung_projekt = '$id')",2).",".$app->erp->FormatPreis("v.betrag-v.summenormal-v.summeermaessigt-v.summesatz3-v.summesatz4",2)."), if((SELECT SUM(bestellung_betrag) FROM verbindlichkeit_bestellungen WHERE verbindlichkeit = v.id AND bestellung_projekt = '$id'), ".$app->erp->FormatPreis("(SELECT SUM(bestellung_betrag) FROM verbindlichkeit_bestellungen WHERE verbindlichkeit = v.id AND bestellung_projekt = '$id')",2).",".$app->erp->FormatPreis("v.betrag",2)."),
                     if(v.skontobis='0000-00-00','-',if(v.skontobis >=NOW(),
                           CONCAT('<font color=red>',DATE_FORMAT(v.skontobis,'%d.%m.%Y'),'</font>'),DATE_FORMAT(v.skontobis,'%d.%m.%Y'))) as skonto_bis,
@@ -134,10 +134,10 @@ class Projekt extends GenProjekt {
         $where = " (v.projekt = '$id' OR v.id IN(SELECT DISTINCT v.id FROM verbindlichkeit v JOIN verbindlichkeit_bestellungen vb ON v.id = vb.verbindlichkeit WHERE vb.bestellung_projekt = '$id') ";
         for($i = 1; $i <= 15; $i++)$where .= " OR v.bestellung".$i."projekt = '$id' ";
         $where .= ") AND v.status_beleg != 'storniert' ";
-        
+
         // gesamt anzahl
         $count = "SELECT COUNT(v.id) FROM `verbindlichkeit` AS `v` WHERE $where ";
-       
+
       break;
       case 'projekttabelle':
         $allowed['projekt'] = array('list');
@@ -258,7 +258,7 @@ class Projekt extends GenProjekt {
             a.gesendet,
             a.pdf,
             a.did
-          FROM 
+          FROM
           (
             (
               SELECT
@@ -275,7 +275,7 @@ class Projekt extends GenProjekt {
                 dokumente d
               LEFT JOIN projekt p ON p.id=d.projekt
               LEFT JOIN adresse a2 ON a2.id=adresse_from
-              WHERE 
+              WHERE
                 p.id = '.$id.'
             )
 
@@ -308,7 +308,7 @@ class Projekt extends GenProjekt {
                 LEFT JOIN angebot d5 ON ds.parameter = d5.id AND ds.dokument = \'angebot\'
                 LEFT JOIN bestellung d6 ON ds.parameter = d6.id AND ds.dokument = \'bestellung\'
                 LEFT JOIN projekt p ON p.id=ds.projekt
-              WHERE 
+              WHERE
                 p.id = '.$id.'
             )
 
@@ -326,10 +326,10 @@ class Projekt extends GenProjekt {
                 "" as pdf,
                 concat("6","-",k.id) as did,k.beschreibung COLLATE utf8_general_ci as suchtext,\'\' as internebezeichnung
               FROM
-                kalender_event k 
+                kalender_event k
                 LEFT JOIN adresse a2 ON k.adresseintern = a2.id
                 LEFT JOIN projekt p ON p.id=k.projekt
-              WHERE 
+              WHERE
                 p.id = '.$id.'
             )
 
@@ -351,7 +351,7 @@ class Projekt extends GenProjekt {
                 ticket
                 LEFT JOIN ticket_nachricht ON ticket.schluessel = ticket_nachricht.ticket
                 LEFT JOIN projekt ON projekt.id=ticket.projekt
-              WHERE 
+              WHERE
                 projekt.id = '.$id.'
             )';
 
@@ -394,7 +394,7 @@ class Projekt extends GenProjekt {
               FROM
                 emailbackup_mails e
                 LEFT JOIN projekt p ON p.id=e.projekt
-              WHERE 
+              WHERE
                 p.id = '.$id.'
 
             )';
@@ -417,7 +417,7 @@ class Projekt extends GenProjekt {
               FROM
                 wiedervorlage w left join adresse adr on w.bearbeiter = adr.id
                 LEFT JOIN projekt p ON p.id=w.projekt
-              WHERE 
+              WHERE
                 p.id = '.$id.'
             )';
         }
@@ -437,7 +437,7 @@ class Projekt extends GenProjekt {
         $count = '
           SELECT
             SUM(anzahl)
-          FROM 
+          FROM
           (
             (
               SELECT
@@ -459,7 +459,7 @@ class Projekt extends GenProjekt {
         if(1){
           $count .= '
             UNION ALL
-            ( 
+            (
               SELECT
                 COUNT(ticket.id) as anzahl
               FROM
@@ -472,11 +472,11 @@ class Projekt extends GenProjekt {
 
         $count .= '
             UNION ALL
-            ( 
+            (
               SELECT
                 COUNT(k.id) as anzahl
               FROM
-                kalender_event k 
+                kalender_event k
                 LEFT JOIN adresse a2 ON k.adresseintern = a2.id
                 LEFT JOIN projekt p ON p.id=k.projekt
               WHERE
@@ -591,22 +591,22 @@ class Projekt extends GenProjekt {
         $aligncenter = array(9);
 
         $sql = 'SELECT  SQL_CALC_FOUND_ROWS w.id,"<img src=./themes/' . $app->Conf->WFconf['defaulttheme'] . '/images/details_open.png class=details>" as open,
-                '.$app->YUI->Stroke("w.abgeschlossen",'DATE_FORMAT(datum_erinnerung, "%d.%m.%Y")').' as datum_ang, 
-                concat('.$app->YUI->Redify('w.prio', $app->YUI->Stroke('w.abgeschlossen','w.bezeichnung')).',if(w.module=\'angebot\' AND w.parameter > 0,CONCAT(\' <a href="index.php?module=angebot&action=edit&id=\',w.parameter,\'"" target="_blank">(zum Angebot)</a>\'),if(w.module=\'ticket\' AND w.parameter > 0,CONCAT(\' <a href="index.php?module=ticket&action=assistent&id=\',w.parameter,\'"" target="_blank">(zum Ticket)</a>\'),\'\'))), 
-                '.$app->YUI->Stroke('w.abgeschlossen','a3.name').', 
-                '.$app->YUI->Stroke('w.abgeschlossen','if(p2.abkuerzung !="",p2.abkuerzung,IFNULL(p.abkuerzung,""))').' AS abkuerzung, 
-                
-                '.$app->YUI->Stroke('w.abgeschlossen','IF(a4.name != "",a4.name,a2.name)').', 
-                '.$app->YUI->Stroke('w.abgeschlossen',$app->erp->FormatPreis('w.betrag')).', 
+                '.$app->YUI->Stroke("w.abgeschlossen",'DATE_FORMAT(datum_erinnerung, "%d.%m.%Y")').' as datum_ang,
+                concat('.$app->YUI->Redify('w.prio', $app->YUI->Stroke('w.abgeschlossen','w.bezeichnung')).',if(w.module=\'angebot\' AND w.parameter > 0,CONCAT(\' <a href="index.php?module=angebot&action=edit&id=\',w.parameter,\'"" target="_blank">(zum Angebot)</a>\'),if(w.module=\'ticket\' AND w.parameter > 0,CONCAT(\' <a href="index.php?module=ticket&action=assistent&id=\',w.parameter,\'"" target="_blank">(zum Ticket)</a>\'),\'\'))),
+                '.$app->YUI->Stroke('w.abgeschlossen','a3.name').',
+                '.$app->YUI->Stroke('w.abgeschlossen','if(p2.abkuerzung !="",p2.abkuerzung,IFNULL(p.abkuerzung,""))').' AS abkuerzung,
+
+                '.$app->YUI->Stroke('w.abgeschlossen','IF(a4.name != "",a4.name,a2.name)').',
+                '.$app->YUI->Stroke('w.abgeschlossen',$app->erp->FormatPreis('w.betrag')).',
                 '.$app->YUI->Stroke('w.abgeschlossen',"concat(w.chance,' %')").' AS chance,
                 '.$app->YUI->Stroke('w.abgeschlossen',"if(ws.kurzbezeichnung!='',ws.kurzbezeichnung,ws.name)").',
                 '.$app->YUI->Stroke("w.abgeschlossen",'DATE_FORMAT(datum_abschluss, "%d.%m.%Y")').' as datum_abschluss,
                 '.$additionalFieldsSql.'
                 if(w.datum_erinnerung = date(now()),\'#D2EC9D\',if(w.datum_erinnerung < date(now()) AND w.datum_erinnerung <> \'0000-00-00\',\'#F1B19F\',\'\')) as tr,
                 w.id
-                
+
                 from wiedervorlage w
-                
+
                 LEFT JOIN adresse a2 on w.bearbeiter = a2.id
                 LEFT JOIN adresse a3 on w.adresse = a3.id
                 LEFT JOIN adresse a4 ON w.adresse_mitarbeiter = a4.id
@@ -618,7 +618,7 @@ class Projekt extends GenProjekt {
         break;
 
     }
-    
+
     $erg = [];
 
     foreach($erlaubtevars as $k => $v)
@@ -627,7 +627,7 @@ class Projekt extends GenProjekt {
         $erg[$v] = $$v;
       }
     }
-    return $erg; 
+    return $erg;
   }
 
   /** @var Application $app */
@@ -659,14 +659,14 @@ class Projekt extends GenProjekt {
     $this->app->ActionHandler("getnextnumber","ProjektGetNextNumber");
     $this->app->ActionHandler("neueaufgabe","ProjektNeueAufgabe");
     $this->app->ActionHandler("artikeledit","ProjektArtikelEdit");
-    
+
     $this->app->ActionHandler("minidetailarbeitspaket","ProjektMiniDetailArbeitspaket");
-    
+
     $this->app->ActionHandler("plan","ProjektPlan");
 
     $this->app->ActionHandler("kostenstellen","ProjektKostenstellen");
     $this->app->ActionHandler("schaltung","ProjektSchaltung");
-    
+
     $this->app->ActionHandler("mitgliederdelete","ProjektMitgliederDelete");
     $this->app->ActionHandler("copy","ProjektCopy");
     $this->app->ActionHandler("minidetailprojektuebersicht", "ProjektuebersichtMinidetail");
@@ -678,7 +678,7 @@ class Projekt extends GenProjekt {
 
     $this->app->ActionHandlerListen($app);
   }
-  
+
   function getStueckliste(&$ret, $artikel, $menge, $lvl = 0)
   {
     if($lvl > 6) {
@@ -686,7 +686,7 @@ class Projekt extends GenProjekt {
     }
     $parent = -1;
     if(!empty($ret))$parent = (!empty($ret)?count($ret):0)-1;
-    $stueckliste = $this->app->DB->SelectArr("SELECT id, menge, artikel,stuecklistevonartikel FROM  stueckliste WHERE stuecklistevonartikel = '$artikel'");
+    $stueckliste = $this->app->DatabaseService->select("SELECT id, menge, artikel,stuecklistevonartikel FROM  stueckliste WHERE stuecklistevonartikel = :artikel", ['artikel' => $artikel]);
     if($stueckliste)
     {
       foreach($stueckliste as $art)
@@ -696,7 +696,7 @@ class Projekt extends GenProjekt {
         if(is_array($ret)) {
           $art['parent'] = $parent;
         }
-        
+
         $ret[] = $art;
         $res = $this->getStueckliste($ret, $art['artikel'], $art['menge'] , $lvl+1);
         if($res)
@@ -714,32 +714,37 @@ class Projekt extends GenProjekt {
 
   function UpdateProjektartikelCache($id, $nurwe = false)
   {
-    $artikel = $this->app->DB->Select("SELECT artikel FROM projekt_artikel WHERE id = '$id' LIMIT 1");
+    $artikel = $this->app->DatabaseService->selectValue("SELECT artikel FROM projekt_artikel WHERE id = :id LIMIT 1", ['id' => $id]);
     if(!$artikel)
     {
       return false;
     }
     if(!$nurwe)
     {
-      $belege = array('PR'=>'produktion','AN'=>'angebot','AB'=>'auftrag','LS'=>'lieferschein','GS'=>'gutschrift','RE'=>'rechnung','PF'=>'preisanfrage','PRO','proformarechnung'); //WE Wareneingang
+      $belege = array('PR'=>'produktion','AN'=>'angebot','AB'=>'auftrag','LS'=>'lieferschein','GS'=>'gutschrift','RE'=>'rechnung','PF'=>'preisanfrage','PRO'=>'proformarechnung'); //WE Wareneingang
       foreach($belege as $cache => $beleg)
       {
-        $count = $this->app->DB->Select("SELECT sum(bp.menge) as co FROM $beleg"."_position bp INNER JOIN $beleg b ON bp.$beleg = b.id WHERE bp.teilprojekt > 0 AND bp.artikel = '$artikel' AND b.status!='storniert' AND b.status!='abgelehnt' AND b.status != 'angelegt' AND b.status != '' ".($cache != 'PRO'?" AND b.belegnr != '' ":''));
-        $this->app->DB->Update("UPDATE projekt_artikel SET cache_".$cache." = '$count' WHERE id = '$id' LIMIT 1");
+        $belegTable = $this->app->DatabaseService->validateIdentifier($beleg);
+        $belegPos = $this->app->DatabaseService->validateIdentifier($beleg . '_position');
+        $cacheCol = $this->app->DatabaseService->validateIdentifier('cache_' . $cache);
+        $belegJoinCol = $this->app->DatabaseService->validateIdentifier($beleg);
+        $extraCond = ($cache != 'PRO') ? " AND b.belegnr != '' " : '';
+        $count = $this->app->DatabaseService->selectValue("SELECT sum(bp.menge) as co FROM {$belegPos} bp INNER JOIN {$belegTable} b ON bp.{$belegJoinCol} = b.id WHERE bp.teilprojekt > 0 AND bp.artikel = :artikel AND b.status!='storniert' AND b.status!='abgelehnt' AND b.status != 'angelegt' AND b.status != ''{$extraCond}", ['artikel' => $artikel]);
+        $this->app->DatabaseService->update("UPDATE projekt_artikel SET {$cacheCol} = :count WHERE id = :id LIMIT 1", ['count' => $count, 'id' => $id]);
       }
       $beleg = 'lieferschein';
       $cache = 'WA';
-      $count = $this->app->DB->Select("SELECT sum(bp.geliefert) as co FROM $beleg"."_position bp INNER JOIN $beleg b ON bp.$beleg = b.id WHERE bp.teilprojekt > 0 AND bp.artikel = '$artikel' AND b.status!='storniert' AND b.status!='abgelehnt' AND b.status != 'angelegt' AND b.belegnr != ''");
-      $this->app->DB->Update("UPDATE projekt_artikel SET cache_".$cache." = '$count',lastcheck = now() WHERE id = '$id' LIMIT 1");
+      $count = $this->app->DatabaseService->selectValue("SELECT sum(bp.geliefert) as co FROM lieferschein_position bp INNER JOIN lieferschein b ON bp.lieferschein = b.id WHERE bp.teilprojekt > 0 AND bp.artikel = :artikel AND b.status!='storniert' AND b.status!='abgelehnt' AND b.status != 'angelegt' AND b.belegnr != ''", ['artikel' => $artikel]);
+      $this->app->DatabaseService->update("UPDATE projekt_artikel SET cache_WA = :count, lastcheck = now() WHERE id = :id LIMIT 1", ['count' => $count, 'id' => $id]);
     }
-    
-    $count = $this->app->DB->SelectArr("SELECT sum(geliefert) as cogeliefert, sum(menge) as comenge FROM bestellung_position WHERE teilprojekt > 0 AND artikel = '$artikel' ");
+
+    $count = $this->app->DatabaseService->select("SELECT sum(geliefert) as cogeliefert, sum(menge) as comenge FROM bestellung_position WHERE teilprojekt > 0 AND artikel = :artikel", ['artikel' => $artikel]);
     if($count)
     {
       $count = reset($count);
       $menge = $count['comenge'];
       $geliefert = $count['cogeliefert'];
-      $this->app->DB->Update("UPDATE projekt_artikel SET cache_WE = '$geliefert', cache_BE = '$menge' WHERE id = '$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE projekt_artikel SET cache_WE = :geliefert, cache_BE = :menge WHERE id = :id LIMIT 1", ['geliefert' => $geliefert, 'menge' => $menge, 'id' => $id]);
     }
   }
 
@@ -756,10 +761,10 @@ class Projekt extends GenProjekt {
   function ProjektArtikelEdit()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    $artikelid = $this->app->DB->Select("SELECT artikel FROM projekt_artikel WHERE id='$id' LIMIT 1");
+    $artikelid = $this->app->DatabaseService->selectValue("SELECT artikel FROM projekt_artikel WHERE id = :id LIMIT 1", ['id' => $id]);
     $this->app->Location->execute('index.php?module=artikel&action=edit&id='.$artikelid);
   }
-  
+
   function ProjektCopy()
   {
     $id = (int)$this->app->Secure->GetGET('id');
@@ -771,13 +776,13 @@ class Projekt extends GenProjekt {
         $msg = $this->app->erp->base64_url_encode("<div class=\"info\">Das Projekt wurde erfolgreich kopiert.</div>");
         $this->app->Location->execute('index.php?module=projekt&action=list&msg='.$msg);
       }
-      $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Fehler beim Kopieren des Projekts.</div>"); 
+      $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Fehler beim Kopieren des Projekts.</div>");
     }else{
-      $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Fehlende Projektrechte: Das Projekt wurde nicht kopiert.</div>"); 
+      $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Fehlende Projektrechte: Das Projekt wurde nicht kopiert.</div>");
     }
     $this->app->Location->execute('index.php?module=projekt&action=list&msg='.$msg);
   }
-  
+
   function ProjektMitgliederDelete()
   {
     $id = (int)$this->app->Secure->GetGET('id');
@@ -794,13 +799,13 @@ class Projekt extends GenProjekt {
   {
     $id = (int)$this->app->Secure->GetGET('id');
     $this->app->Tpl->Set('ID',$id);
-    
+
     if($this->app->Secure->GetGET('cmd') === 'adresse')
     {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM adresse_rolle WHERE id = '$id' LIMIT 1");
+      $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM adresse_rolle WHERE id = :id LIMIT 1", ['id' => $id]);
       $this->app->Location->execute('index.php?module=adresse&action=edit&id='.$adresse);
     }
-    
+
     if($this->app->Secure->GetPOST('hinzufuegen'))
     {
       $adresse = explode(' ',$this->app->Secure->GetPOST('adresse'));
@@ -820,10 +825,10 @@ class Projekt extends GenProjekt {
         $this->app->Tpl->Add('MESSAGE','<div class="info">Rolle '.$rolle.' angelegt</div>');
       }
     }
-    
+
     $this->ProjektMenu();
     $projektabgeschlossen = false;
-    if($this->app->DB->Select("SELECT id FROM projekt WHERE id = '$id' AND status = 'abgeschlossen' LIMIT 1"))$projektabgeschlossen = true;
+    if($this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => $id]))$projektabgeschlossen = true;
     if($projektabgeschlossen)$this->app->Tpl->Set('BUTTONDISABLED',' disabled ');
     $this->app->YUI->AutoComplete('adresse','adresse');
     $this->app->YUI->TableSearch('TAB1',"projekt_mitglieder");
@@ -834,7 +839,7 @@ class Projekt extends GenProjekt {
 
   /**
    * @param int $projectId
-   *                           
+   *
    * @return array
    */
   protected function BuildProjectScheduleData($projectId)
@@ -865,14 +870,13 @@ class Projekt extends GenProjekt {
       'abgerechnet' => 'ganttBlue',
     ];
     $data = [];
-    $packages = $this->app->DB->SelectArr(
-      sprintf(
-        "SELECT 
-         ap.id, ap.aufgabe AS title, ap.beschreibung AS description, ap.status, 
-       ap.farbe AS color, 
-         ap.vorgaenger AS predecessor, ap.sort AS sorting, 
-       ap.startdatum AS date_from, ap.abgabedatum AS date_to, 
-         ad.name AS responsible_name, 
+    $packages = $this->app->DatabaseService->select(
+        "SELECT
+         ap.id, ap.aufgabe AS title, ap.beschreibung AS description, ap.status,
+       ap.farbe AS color,
+         ap.vorgaenger AS predecessor, ap.sort AS sorting,
+       ap.startdatum AS date_from, ap.abgabedatum AS date_to,
+         ad.name AS responsible_name,
        IFNULL(
            (SELECT COUNT(`id`) FROM `wiedervorlage` WHERE `subproject_id` = ap.id AND `abgeschlossen` = 0)
            ,0
@@ -894,12 +898,11 @@ class Projekt extends GenProjekt {
            )
            AS `tasks_closed`
        FROM `arbeitspaket` AS `ap`
-       LEFT JOIN `adresse` AS `ad` ON ap.adresse = ad.id AND ad.geloescht = 0 
+       LEFT JOIN `adresse` AS `ad` ON ap.adresse = ad.id AND ad.geloescht = 0
              AND ad.mitarbeiternummer != '' AND ad.mitarbeiternummer != '0'
-       WHERE ap.geloescht != 1 AND ap.projektplanausblenden != 1 AND ap.projekt = %d 
+       WHERE ap.geloescht != 1 AND ap.projektplanausblenden != 1 AND ap.projekt = :projectId
        ORDER BY ap.vorgaenger, ap.sort, ap.aufgabe",
-      $projectId
-      )
+        ['projectId' => $projectId]
     );
     $packages = $this->SortProjectSchedulePackagesData($packages);
 
@@ -970,13 +973,14 @@ class Projekt extends GenProjekt {
   {
     $projectId = (int)$projectId;
 
-    $milestones = $this->app->DB->SelectArr(
-      "SELECT 
+    $milestones = $this->app->DatabaseService->select(
+      "SELECT
          e.id, e.bezeichnung AS title, e.beschreibung AS description, e.color,
          e.von AS datetime_from, e.bis AS datetime_to
-       FROM kalender_event AS e 
-       WHERE e.typ = 'meilenstein' AND e.projekt = '{$projectId}' AND e.von != '0000-00-00 00:00:00'
-       ORDER BY e.von ASC, e.bis ASC"
+       FROM kalender_event AS e
+       WHERE e.typ = 'meilenstein' AND e.projekt = :projectId AND e.von != '0000-00-00 00:00:00'
+       ORDER BY e.von ASC, e.bis ASC",
+      ['projectId' => $projectId]
     );
 
     $values = [];
@@ -1095,17 +1099,18 @@ class Projekt extends GenProjekt {
   {
     $projectId = (int)$projectId;
 
-    $packages = $this->app->DB->SelectArr(
-      "SELECT 
-         ap.id, ap.aufgabe AS title, ap.beschreibung AS description, ap.status, ap.farbe AS color, 
+    $packages = $this->app->DatabaseService->select(
+      "SELECT
+         ap.id, ap.aufgabe AS title, ap.beschreibung AS description, ap.status, ap.farbe AS color,
          ap.vorgaenger AS predecessor, ap.sort AS sorting, ap.startdatum AS date_from, ap.abgabedatum AS date_to,
          ad.name AS person_name, ad.mitarbeiternummer AS person_number,
          p.id AS project_id, p.name AS project_name, p.abkuerzung AS project_abbr
-       FROM arbeitspaket AS ap 
-       INNER JOIN projekt AS p ON ap.projekt = p.id     
+       FROM arbeitspaket AS ap
+       INNER JOIN projekt AS p ON ap.projekt = p.id
        LEFT JOIN adresse AS ad ON ap.adresse = ad.id
-       WHERE ap.geloescht != 1 AND ap.projektplanausblenden != 1 AND ap.projekt = '{$projectId}' 
-       ORDER BY ap.vorgaenger, ap.sort, ap.aufgabe"
+       WHERE ap.geloescht != 1 AND ap.projektplanausblenden != 1 AND ap.projekt = :projectId
+       ORDER BY ap.vorgaenger, ap.sort, ap.aufgabe",
+      ['projectId' => $projectId]
     );
     $packages = $this->SortProjectSchedulePackagesData($packages);
 
@@ -1186,15 +1191,14 @@ class Projekt extends GenProjekt {
     $id = (int)$this->app->Secure->GetGET('id');
     $nummer = $this->app->Secure->GetGET('nummer');
     $cmd = $this->app->Secure->GetGET('cmd');
-    $projekt = $this->app->DB->SelectRow(sprintf('SELECT * from projekt where id = %d LIMIT 1',$id));
+    $projekt = $this->app->DatabaseService->selectRow("SELECT * FROM projekt WHERE id = :id LIMIT 1", ['id' => $id]);
     if($cmd != '' && !empty($projekt))
     {
       if(isset($projekt['next_'.$cmd])){
-        $this->app->DB->Update(
-          sprintf(
-          "UPDATE projekt set `%s` = '%s' where id = %d"
-            ,'next_'.$cmd, $nummer, $id
-          )
+        $colName = $this->app->DatabaseService->validateIdentifier('next_' . $cmd);
+        $this->app->DatabaseService->update(
+          "UPDATE projekt SET `{$colName}` = :nummer WHERE id = :id LIMIT 1",
+          ['nummer' => $nummer, 'id' => $id]
         );
       }
     }
@@ -1204,10 +1208,10 @@ class Projekt extends GenProjekt {
   function ProjektGetNextNumber()
   {
     $id = $this->app->Secure->GetGET('id');
-    $projekt = $this->app->DB->SelectArr(sprintf('SELECT * from projekt where id = %d LIMIT 1', $id));
+    $projekt = $this->app->DatabaseService->selectRow("SELECT * FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($projekt)
     {
-      echo json_encode($projekt[0]);
+      echo json_encode($projekt);
     }
     $this->app->ExitXentral();
   }
@@ -1237,7 +1241,7 @@ class Projekt extends GenProjekt {
 
     asort($arbeitspakete);
 
-    $beschreibung = $this->app->DB->Select("SELECT beschreibung FROM projekt WHERE id='".$id."'");
+    $beschreibung = $this->app->DatabaseService->selectValue("SELECT beschreibung FROM projekt WHERE id = :id", ['id' => (int)$id]);
     $this->app->Tpl->Add('TAB1',"<h1>&Uuml;bersicht</h1><br><style>.border {border: 1px solid black;}</style>");
 
     $this->app->Tpl->Add('TAB1',"<table width=700><tr><td>".nl2br($beschreibung)."</td></tr></table><br>");
@@ -1248,7 +1252,7 @@ class Projekt extends GenProjekt {
 
     foreach($arbeitspakete as $key=>$value)
     {
-      $arbeitspaketeArr = $this->app->DB->SelectRow(sprintf('SELECT * FROM arbeitspaket WHERE id= %d ', (int)$key));
+      $arbeitspaketeArr = $this->app->DatabaseService->selectRow("SELECT * FROM arbeitspaket WHERE id = :id", ['id' => (int)$key]);
       $aufgabe = $arbeitspaketeArr['aufgabe'];
       $vorgaenger = $arbeitspaketeArr['vorgaenger'];
       $art = $arbeitspaketeArr['art'];
@@ -1282,21 +1286,21 @@ class Projekt extends GenProjekt {
     $pos = 1;
     foreach($arbeitspakete as $key=>$value)
     {
-      $aufgabe = $this->app->DB->Select("SELECT aufgabe FROM arbeitspaket WHERE id='".$key."'");	
-      $vorgaenger = $this->app->DB->Select("SELECT vorgaenger FROM arbeitspaket WHERE id='".$key."'");	
-      $art = $this->app->DB->Select("SELECT UPPER(art) FROM arbeitspaket WHERE id='".$key."'");	
-      $beschreibung = $this->app->DB->Select("SELECT beschreibung FROM arbeitspaket WHERE id='".$key."'");	
-      $vorgaenger_aufgabe = $this->app->DB->Select("SELECT aufgabe FROM arbeitspaket WHERE id='".$vorgaenger."'");	
-      $abgabe_bis = $this->app->DB->Select("SELECT DATE_FORMAT(abgabedatum,'%d.%m.%Y') FROM arbeitspaket WHERE id='".$key."'");	
-      $startdatum = $this->app->DB->Select("SELECT DATE_FORMAT(startdatum,'%d.%m.%Y') FROM arbeitspaket WHERE id='".$key."'");	
+      $aufgabe = $this->app->DatabaseService->selectValue("SELECT aufgabe FROM arbeitspaket WHERE id = :id", ['id' => (int)$key]);
+      $vorgaenger = $this->app->DatabaseService->selectValue("SELECT vorgaenger FROM arbeitspaket WHERE id = :id", ['id' => (int)$key]);
+      $art = $this->app->DatabaseService->selectValue("SELECT UPPER(art) FROM arbeitspaket WHERE id = :id", ['id' => (int)$key]);
+      $beschreibung = $this->app->DatabaseService->selectValue("SELECT beschreibung FROM arbeitspaket WHERE id = :id", ['id' => (int)$key]);
+      $vorgaenger_aufgabe = $this->app->DatabaseService->selectValue("SELECT aufgabe FROM arbeitspaket WHERE id = :id", ['id' => (int)$vorgaenger]);
+      $abgabe_bis = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(abgabedatum,'%d.%m.%Y') FROM arbeitspaket WHERE id = :id", ['id' => (int)$key]);
+      $startdatum = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(startdatum,'%d.%m.%Y') FROM arbeitspaket WHERE id = :id", ['id' => (int)$key]);
 
       if($abgabe_bis!=="00.00.0000" && $abgabe_bis!="")
         $abgabe_bis = "<br>Abgabe bis $abgabe_bis";
 
 
 
-      $zeit_geplant = $this->app->DB->Select("SELECT zeit_geplant FROM arbeitspaket WHERE id='".$key."'");	
-      $kosten_geplant = $this->app->DB->Select("SELECT kosten_geplant FROM arbeitspaket WHERE id='".$key."'");	
+      $zeit_geplant = $this->app->DatabaseService->selectValue("SELECT zeit_geplant FROM arbeitspaket WHERE id = :id", ['id' => (int)$key]);
+      $kosten_geplant = $this->app->DatabaseService->selectValue("SELECT kosten_geplant FROM arbeitspaket WHERE id = :id", ['id' => (int)$key]);
 
       $gesamt_zeit = $gesamt_zeit + $zeit_geplant;
       $gesamt_kosten = $gesamt_kosten + $kosten_geplant;
@@ -1325,14 +1329,13 @@ class Projekt extends GenProjekt {
           $abgabe_bis
           </td></tr></table>");
       $pos++;
-    }	
+    }
 
 
     //Material
     $this->app->Tpl->Add('TAB1',"<h1>Material</h1>");
 
-    $material = $this->app->DB->SelectArr("SELECT * FROM arbeitspaket 
-        WHERE projekt='$id' AND art='material'");
+    $material = $this->app->DatabaseService->select("SELECT * FROM arbeitspaket WHERE projekt = :id AND art = 'material'", ['id' => (int)$id]);
     if(!empty($material)){
       foreach($material as $materialRow) {
         $aufgabe = $materialRow['aufgabe'];
@@ -1351,7 +1354,7 @@ class Projekt extends GenProjekt {
       }
     }
 
-    $stundensatz = "65";	
+    $stundensatz = "65";
 
     $gesamt = $gesamt_kosten + $gesamt_zeit*$stundensatz;
 
@@ -1377,7 +1380,7 @@ class Projekt extends GenProjekt {
 
   function ProjektPlanArbeitspaketeinReihenfolge($id,$baumtiefe)
   {
-    $arbeitspakete = $this->app->DB->SelectArr("SELECT * FROM arbeitspaket WHERE projekt='$id' AND art!='material'");
+    $arbeitspakete = $this->app->DatabaseService->select("SELECT * FROM arbeitspaket WHERE projekt = :id AND art != 'material'", ['id' => (int)$id]);
     if(empty($arbeitspakete)) {
       return [];
     }
@@ -1399,8 +1402,7 @@ class Projekt extends GenProjekt {
 
   function ProjektPlanRekrusiv($projekt,$id)
   {
-    $arbeitspakete = $this->app->DB->SelectArr("SELECT * FROM arbeitspaket 
-        WHERE projekt='$projekt' AND vorgaenger='".$id."' AND art!='material'");
+    $arbeitspakete = $this->app->DatabaseService->select("SELECT * FROM arbeitspaket WHERE projekt = :projekt AND vorgaenger = :vorgaenger AND art != 'material'", ['projekt' => (int)$projekt, 'vorgaenger' => (int)$id]);
 
     if(empty($arbeitspakete)) {
       return 0;
@@ -1471,10 +1473,10 @@ class Projekt extends GenProjekt {
     }
     return $artikel;
   }
-  
+
   function getProjektArtikelBaum(&$artikel, $parent, $projekt, $teilprojekt, $nr = '', $i = 0)
   {
-    $res = $this->app->DB->SelectArr("SELECT pa.*, a.nummer, a.name_de FROM projekt_artikel pa LEFT JOIN artikel a ON pa.artikel = a.id WHERE pa.parent = '$parent' AND pa.projekt = '$projekt' AND pa.teilprojekt = '$teilprojekt' ORDER by pa.sort, a.name_de");
+    $res = $this->app->DatabaseService->select("SELECT pa.*, a.nummer, a.name_de FROM projekt_artikel pa LEFT JOIN artikel a ON pa.artikel = a.id WHERE pa.parent = :parent AND pa.projekt = :projekt AND pa.teilprojekt = :teilprojekt ORDER BY pa.sort, a.name_de", ['parent' => $parent, 'projekt' => $projekt, 'teilprojekt' => $teilprojekt]);
     if($res)
     {
       foreach($res as $k => $v)
@@ -1493,7 +1495,7 @@ class Projekt extends GenProjekt {
     }
     return $i;
   }
-  
+
   function getProjektBaum(&$projekte, $vorgaenger, $projekt, $nr = '', $liste = null, $onlynummertitel = false)
   {
     if($liste  === null)
@@ -1525,8 +1527,8 @@ class Projekt extends GenProjekt {
     $gesamt_rohertrag_zeit_geplant = $liste[20];
     $gesamt_rohertrag_artikel_geplant = $liste[21];
     $gesamt_rohertrag_gesamt_geplant = $liste[22];
-    
-    $res = $this->app->DB->SelectArr("SELECT * FROM arbeitspaket WHERE geloescht != 1 AND vorgaenger = '$vorgaenger' AND projekt = '$projekt' ORDER by sort, aufgabe");
+
+    $res = $this->app->DatabaseService->select("SELECT * FROM arbeitspaket WHERE geloescht != 1 AND vorgaenger = :vorgaenger AND projekt = :projekt ORDER BY sort, aufgabe", ['vorgaenger' => $vorgaenger, 'projekt' => $projekt]);
     if($res)
     {
       $i = 0;
@@ -1544,14 +1546,14 @@ class Projekt extends GenProjekt {
         {
           if($v['adresse'])
           {
-            $v['verantwortlicher'] = $this->app->DB->Select("SELECT name FROM adresse WHERE id = '".$v['adresse']."' LIMIT 1");
+            $v['verantwortlicher'] = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = :id LIMIT 1", ['id' => $v['adresse']]);
           }else{
             $v['verantwortlicher'] = '';
           }
           $zeit_summiert += $v['zeit_geplant'];
           if($v['artikel_geplant']){
-            
-            $v['nummer'] = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id = '".$v['artikel_geplant']."' LIMIT 1");
+
+            $v['nummer'] = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => $v['artikel_geplant']]);
             /*$v['BE'] = $this->app->DB->Select("SELECT sum(bp.menge) FROM bestellung b INNER JOIN bestellung_position bp ON b.id = bp.bestellung WHERE bp.artikel = '".$v['artikel_geplant']."' ");
             $v['PR'] = $this->app->DB->Select("SELECT sum(bp.menge) FROM produktion b INNER JOIN produktion_position bp ON b.id = bp.produktion WHERE bp.artikel = '".$v['artikel_geplant']."' ");
             $v['AN'] = $this->app->DB->Select("SELECT sum(bp.menge) FROM angebot b INNER JOIN angebot_position bp ON b.id = bp.angebot WHERE bp.artikel = '".$v['artikel_geplant']."' ");
@@ -1577,47 +1579,47 @@ class Projekt extends GenProjekt {
             $v['GS'] = '-';
           }
           $v['status'] = strtoupper($v['status']);
-          $v['zeit_gebucht'] = ((int)$this->app->DB->Select("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = '".$v['id']."'  "))/3600;
-          $v['zeit_abgerechnet'] = ((int)$this->app->DB->Select("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = '".$v['id']."' AND abgerechnet = 1"))/3600;
-          //$v['zeit_abgerechnet'] = ((int)$this->app->DB->Select("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = '".$v['id']."' AND abgerechnet = 1"))/3600;
-          //$v['zeit_offen'] = ((int)$this->app->DB->Select("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = '".$v['id']."' AND status <> 'abgeschlossen' "))/3600;
-          $v['zeit_offen'] = $v['zeit_geplant'] - ((int)$this->app->DB->Select("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = '".$v['id']."'"))/3600;;
+          $v['zeit_gebucht'] = ((int)$this->app->DatabaseService->selectValue("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = :apid", ['apid' => $v['id']]))/3600;
+          $v['zeit_abgerechnet'] = ((int)$this->app->DatabaseService->selectValue("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = :apid AND abgerechnet = 1", ['apid' => $v['id']]))/3600;
+          //$v['zeit_abgerechnet'] = ((int)$this->app->DatabaseService->selectValue("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = :apid AND abgerechnet = 1", ['apid' => $v['id']]))/3600;
+          //$v['zeit_offen'] = ((int)$this->app->DatabaseService->selectValue("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = :apid AND status <> 'abgeschlossen'", ['apid' => $v['id']]))/3600;
+          $v['zeit_offen'] = $v['zeit_geplant'] - ((int)$this->app->DatabaseService->selectValue("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = :apid", ['apid' => $v['id']]))/3600;
           $gebucht_summiert += $v['zeit_gebucht'];
           $abgerechnet_summiert += $v['zeit_abgerechnet'];
           $offen_summiert += $v['zeit_offen'];
-          
+
           $v['zeit_ek_geplant'] = $v['ek_geplant']*($v['kalkulationbasis'] === 'pauschale'?1:$v['zeit_geplant']);
           $v['zeit_ek_gebucht'] = 0;//$v['ek_geplant']*($v['kalkulationbasis'] == 'pauschale'?1:$v['zeit_gebucht']);
-          
+
           if($v['zeit_gebucht'])
           {
-            $stundenmitstundensatz = (float)$this->app->DB->Select("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) ) / 3600) FROM `zeiterfassung` WHERE arbeitspaket = '".$v['id']."' AND stundensatz > 0");
-            $zeitmitstundensatz = (float)$this->app->DB->Select("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) ) / 3600 * stundensatz ) FROM `zeiterfassung` WHERE arbeitspaket = '".$v['id']."' AND stundensatz > 0");
+            $stundenmitstundensatz = (float)$this->app->DatabaseService->selectValue("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) ) / 3600) FROM `zeiterfassung` WHERE arbeitspaket = :apid AND stundensatz > 0", ['apid' => $v['id']]);
+            $zeitmitstundensatz = (float)$this->app->DatabaseService->selectValue("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) ) / 3600 * stundensatz ) FROM `zeiterfassung` WHERE arbeitspaket = :apid AND stundensatz > 0", ['apid' => $v['id']]);
             if($v['kalkulationbasis'] === 'pauschale')
             {
               $v['zeit_ek_gebucht'] = $zeitmitstundensatz+(($v['zeit_gebucht']-$stundenmitstundensatz) / ($v['zeit_geplant']?$v['zeit_geplant']:1))*$v['ek_geplant'];
             }else{
-              $v['zeit_ek_gebucht'] = $zeitmitstundensatz+($v['zeit_gebucht']-$stundenmitstundensatz)*$v['ek_geplant']; 
+              $v['zeit_ek_gebucht'] = $zeitmitstundensatz+($v['zeit_gebucht']-$stundenmitstundensatz)*$v['ek_geplant'];
             }
-            
+
           }
           $v['zeit_ek_offen'] = $v['ek_geplant']*($v['kalkulationbasis'] === 'pauschale'?($v['zeit_ek_gebucht'] > 0?0:1):$v['zeit_offen']);
           $v['zeit_vk_geplant'] = $v['vk_geplant']*($v['vkkalkulationbasis'] === 'pauschale'?1:$v['zeit_geplant']);
           $v['zeit_vk_gebucht'] = 0;//$v['vk_geplant']*($v['vkkalkulationbasis'] == 'pauschale'?1:$v['zeit_gebucht']);
           $v['zeit_vk_offen'] = $v['vk_geplant']*($v['vkkalkulationbasis'] === 'pauschale'?($v['zeit_vk_gebucht'] > 0?0:1):$v['zeit_offen']);
 
-          
+
           $v['rohertrag_zeit'] = $v['zeit_vk_geplant'] - $v['zeit_ek_gebucht'];
           $v['rohertrag_zeit_geplant'] = $v['zeit_vk_geplant'] - $v['zeit_ek_geplant'];
-          
-          
-          $artikelliste = $this->app->DB->SelectArr("SELECT pa.* FROM projekt_artikel pa INNER JOIN artikel a ON pa.artikel = a.id WHERE pa.projekt = '$projekt' AND pa.teilprojekt = '".$v['id']."' AND a.geloescht <> 1 AND a.nummer <> 'DEL'");
+
+
+          $artikelliste = $this->app->DatabaseService->select("SELECT pa.* FROM projekt_artikel pa INNER JOIN artikel a ON pa.artikel = a.id WHERE pa.projekt = :projekt AND pa.teilprojekt = :teilprojekt AND a.geloescht <> 1 AND a.nummer <> 'DEL'", ['projekt' => $projekt, 'teilprojekt' => $v['id']]);
           $v['artikel_vk_geplant'] = 0;
           $v['artikel_vk_gebucht'] = 0;
-          
+
           $v['artikel_ek_geplant'] = 0;
           $v['artikel_ek_gebucht'] = 0;
-          
+
           if($artikelliste)
           {
             foreach($artikelliste as $art)
@@ -1641,23 +1643,23 @@ class Projekt extends GenProjekt {
               }
               if($vk_geplant)
               {
-                $v['artikel_vk_gebucht'] += (float)$this->app->DB->Select("SELECT sum(rp.menge) FROM rechnung r INNER JOIN rechnung_position rp ON r.id = rp.rechnung AND rp.artikel = '".$art['artikel']."' AND r.status != 'storniert' AND r.status != 'angelegt' AND rp.teilprojekt = '".$v['id']."'");
-                $v['artikel_vk_gebucht'] -= (float)$this->app->DB->Select("SELECT sum(rp.menge) FROM gutschrift r INNER JOIN gutschrift_position rp ON r.id = rp.gutschrift AND rp.artikel = '".$art['artikel']."' AND r.status != 'storniert' AND r.status != 'angelegt' AND rp.teilprojekt  = '".$v['id']."'");
+                $v['artikel_vk_gebucht'] += (float)$this->app->DatabaseService->selectValue("SELECT sum(rp.menge) FROM rechnung r INNER JOIN rechnung_position rp ON r.id = rp.rechnung AND rp.artikel = :artikel AND r.status != 'storniert' AND r.status != 'angelegt' AND rp.teilprojekt = :teilprojekt", ['artikel' => $art['artikel'], 'teilprojekt' => $v['id']]);
+                $v['artikel_vk_gebucht'] -= (float)$this->app->DatabaseService->selectValue("SELECT sum(rp.menge) FROM gutschrift r INNER JOIN gutschrift_position rp ON r.id = rp.gutschrift AND rp.artikel = :artikel AND r.status != 'storniert' AND r.status != 'angelegt' AND rp.teilprojekt = :teilprojekt", ['artikel' => $art['artikel'], 'teilprojekt' => $v['id']]);
               }
               if($ek_geplant)
               {
-                $v['artikel_ek_gebucht'] += (float)$this->app->DB->Select("SELECT sum(rp.menge) FROM bestellung r INNER JOIN bestellung_position rp ON r.id = rp.bestellung AND rp.artikel = '".$art['artikel']."' AND r.status != 'storniert' AND r.status != 'angelegt' AND rp.teilprojekt = '".$v['id']."'");
+                $v['artikel_ek_gebucht'] += (float)$this->app->DatabaseService->selectValue("SELECT sum(rp.menge) FROM bestellung r INNER JOIN bestellung_position rp ON r.id = rp.bestellung AND rp.artikel = :artikel AND r.status != 'storniert' AND r.status != 'angelegt' AND rp.teilprojekt = :teilprojekt", ['artikel' => $art['artikel'], 'teilprojekt' => $v['id']]);
               }
-            }            
+            }
           }
-          
+
           $v['artikel_ek_offen'] = $v['artikel_ek_geplant']-$v['artikel_ek_gebucht'];
           $v['artikel_vk_offen'] = $v['artikel_vk_geplant']-$v['artikel_vk_gebucht'];
           $v['rohertrag_artikel'] = $v['artikel_vk_gebucht'] - $v['artikel_ek_gebucht'];
           $v['rohertrag_gesamt'] = $v['rohertrag_zeit']+$v['rohertrag_artikel'];
           $v['rohertrag_artikel_geplant'] = $v['artikel_vk_geplant'] - $v['artikel_ek_geplant'];
           $v['rohertrag_gesamt_geplant'] = $v['rohertrag_zeit_geplant']+$v['rohertrag_artikel_geplant'];
-          
+
           $v['prognose_artikel'] = $v['artikel_vk_geplant']-$v['artikel_ek_geplant'];
           $v['prognose_zeit'] = $v['zeit_vk_geplant'] - $v['zeit_ek_gebucht'];
           $v['prognose_zeit_geplant'] = $v['zeit_vk_geplant'] - $v['zeit_ek_geplant'];
@@ -1667,28 +1669,28 @@ class Projekt extends GenProjekt {
           $gesamt_artikel_ek_geplant += $v['artikel_ek_geplant'];
           $gesamt_artikel_vk_gebucht += $v['artikel_vk_gebucht'];
           $gesamt_artikel_vk_offen += $v['artikel_vk_offen'];
-          $gesamt_artikel_vk_geplant += $v['artikel_vk_geplant'];          
-          
+          $gesamt_artikel_vk_geplant += $v['artikel_vk_geplant'];
+
           $gesamt_zeit_ek_gebucht += $v['zeit_ek_gebucht'];
           $gesamt_zeit_ek_offen += $v['zeit_ek_offen'];
           $gesamt_zeit_ek_geplant += $v['zeit_ek_geplant'];
           $gesamt_zeit_vk_gebucht += $v['zeit_vk_gebucht'];
           $gesamt_zeit_vk_offen += $v['zeit_vk_offen'];
           $gesamt_zeit_vk_geplant += $v['zeit_vk_geplant'];
-          
+
           $gesamt_rohertrag_artikel += $v['rohertrag_artikel'];
           $gesamt_rohertrag_zeit += $v['rohertrag_zeit'];
           $gesamt_rohertrag_gesamt += $v['rohertrag_gesamt'];
-          
+
           $gesamt_rohertrag_artikel_geplant += $v['rohertrag_artikel_geplant'];
           $gesamt_rohertrag_zeit_geplant += $v['rohertrag_zeit_geplant'];
           $gesamt_rohertrag_gesamt_geplant += $v['rohertrag_gesamt_geplant'];
-          
+
           $v['prognose_artikel'] = number_format($v['prognose_artikel'],2,'.','');
           $v['prognose_zeit'] = number_format($v['prognose_zeit'],2,'.','');
           $v['prognose_zeit_geplant'] = number_format($v['prognose_zeit_geplant'],2,'.','');
           $v['prognose_gesamt'] = number_format($v['prognose_gesamt'],2,'.','');
-          
+
           $v['rohertrag_zeit'] = number_format($v['rohertrag_zeit'],2,'.','');
           $v['rohertrag_artikel'] = number_format($v['rohertrag_artikel'],2,'.','');
           $v['rohertrag_gesamt'] = number_format($v['rohertrag_gesamt'],2,'.','');
@@ -1696,21 +1698,21 @@ class Projekt extends GenProjekt {
           $v['rohertrag_zeit_geplant'] = number_format($v['rohertrag_zeit_geplant'],2,'.','');
           $v['rohertrag_artikel_geplant'] = number_format($v['rohertrag_artikel_geplant'],2,'.','');
           $v['rohertrag_gesamt_geplant'] = number_format($v['rohertrag_gesamt_geplant'],2,'.','');
-          
+
           $v['zeit_ek_geplant'] = number_format($v['zeit_ek_geplant'],2,'.','');
           $v['zeit_ek_gebucht'] = number_format($v['zeit_ek_gebucht'],2,'.','');
           $v['zeit_ek_offen'] = number_format($v['zeit_ek_offen'],2,'.','');
           $v['zeit_vk_geplant'] = number_format($v['zeit_vk_geplant'],2,'.','');
           $v['zeit_vk_gebucht'] = number_format($v['zeit_vk_gebucht'],2,'.','');
           $v['zeit_vk_offen'] = number_format($v['zeit_vk_offen'],2,'.','');
-          
+
           $v['artikel_vk_geplant'] = number_format($v['artikel_vk_geplant'],2,'.','');
           $v['artikel_vk_gebucht'] = number_format($v['artikel_vk_gebucht'],2,'.','');
           $v['artikel_vk_offen'] = number_format($v['artikel_vk_offen'],2,'.','');
           $v['artikel_ek_geplant'] = number_format($v['artikel_ek_geplant'],2,'.','');
           $v['artikel_ek_gebucht'] = number_format($v['artikel_ek_gebucht'],2,'.','');
           $v['artikel_ek_offen'] = number_format($v['artikel_ek_offen'],2,'.','');
-          
+
           $v['zeit_gebucht'] = number_format($v['zeit_gebucht'],2,'.','');
           $v['zeit_abgerechnet'] = number_format($v['zeit_abgerechnet'],2,'.','');
           $v['gebucht_summiert'] = $v['zeit_gebucht'];//number_format($gebucht_summiert,2,'.','');
@@ -1719,7 +1721,7 @@ class Projekt extends GenProjekt {
           $v['zeit_summiert'] = number_format($v['zeit_geplant'],2,'.','') ;  //number_format($zeit_summiert,2,'.','');
           $kosten_summiert += (float)$v['kosten_geplant'];
           $v['kosten_geplant']  = number_format($v['kosten_geplant'],2,',','.');
-          
+
         }
         $projekteindex = empty($projekte)?0:(!empty($projekte)?count($projekte):0);
 
@@ -1727,18 +1729,18 @@ class Projekt extends GenProjekt {
         //foreach($v as $v_key=>$v_value)
         //  if(trim(strip_tags($v[$v_key]))=="0.00") $v[$v_key]="";
         $v['editierbar'] = true;
-        
-        if($v['zeit_geplant'] > 0 && $this->app->DB->Select("SELECT id FROM `teilprojekt_geplante_zeiten` WHERE teilprojekt = '".$v['id']."' AND stundensatz > 0 AND stunden > 0 LIMIT 1"))
+
+        if($v['zeit_geplant'] > 0 && $this->app->DatabaseService->selectValue("SELECT id FROM `teilprojekt_geplante_zeiten` WHERE teilprojekt = :teilprojekt AND stundensatz > 0 AND stunden > 0 LIMIT 1", ['teilprojekt' => $v['id']]))
         {
-          $v['editierbar'] = false;  
+          $v['editierbar'] = false;
         }
-        
+
         $projekte[] = $v;
         $oldgebucht_summiert = $gebucht_summiert;
         $oldzeit_summiert = $zeit_summiert;
-        
+
         $anzahlteilprojekte = (!empty($projekte)?count($projekte):0);
-        $liste = $this->getProjektBaum($projekte, $v['id'], $projekt, $v['nr'], 
+        $liste = $this->getProjektBaum($projekte, $v['id'], $projekt, $v['nr'],
         array($zeit_summiert,$gebucht_summiert, $kosten_summiert, $abgerechnet_summiert,$offen_summiert
         ,$gesamt_zeit_ek_geplant,$gesamt_zeit_ek_gebucht,$gesamt_zeit_ek_offen
         ,$gesamt_zeit_vk_geplant,$gesamt_zeit_vk_gebucht,$gesamt_zeit_vk_offen
@@ -1747,13 +1749,13 @@ class Projekt extends GenProjekt {
         ,$gesamt_rohertrag_zeit,$gesamt_rohertrag_artikel,$gesamt_rohertrag_gesamt
         ,$gesamt_rohertrag_zeit_geplant,$gesamt_rohertrag_artikel_geplant,$gesamt_rohertrag_gesamt_geplant
         ), $onlynummertitel);
-        
+
         if((!empty($projekte)?count($projekte):0) == $anzahlteilprojekte)
         {
           //$projekte[(!empty($projekte)?count($projekte):0)-1]['editierbar'] = true;
         }
-        
-        
+
+
 
         $zeit_summiert = $liste[0];
         $gebucht_summiert = $liste[1];
@@ -1821,7 +1823,7 @@ class Projekt extends GenProjekt {
       $v['zeit_vk_geplant'] = '<b>'.number_format($gesamt_zeit_vk_geplant,2,'.','').'</b>';
       $v['zeit_vk_gebucht'] = '<b>'.number_format($gesamt_zeit_vk_gebucht,2,'.','').'</b>';
       $v['zeit_vk_offen'] = '<b'.($gesamt_zeit_vk_offen < 0?' style="color:red;"':'').'>'.number_format($gesamt_zeit_vk_offen,2,'.','').'</b>';
-      
+
       $v['artikel_ek_geplant'] = '<b>'.number_format($gesamt_artikel_ek_geplant,2,'.','').'</b>';
       $v['artikel_ek_gebucht'] = '<b>'.number_format($gesamt_artikel_ek_gebucht,2,'.','').'</b>';
       $v['artikel_ek_offen'] = '<b'.($gesamt_artikel_ek_offen < 0?' style="color:red;"':'').'>'.number_format($gesamt_artikel_ek_offen,2,'.','').'</b>';
@@ -1849,7 +1851,7 @@ class Projekt extends GenProjekt {
 
   function ProjektArbeitspaketMonitor($id)
   {
-    $arbeitspaket = $this->app->DB->SelectRow("SELECT * FROM arbeitspaket WHERE id = '$id' LIMIT 1");
+    $arbeitspaket = $this->app->DatabaseService->selectRow("SELECT * FROM arbeitspaket WHERE id = :id LIMIT 1", ['id' => $id]);
 
     if(empty($arbeitspaket)) {
       return '';
@@ -1861,19 +1863,19 @@ class Projekt extends GenProjekt {
 
     if($arbeitspaket['status'] !== 'abgeschlossen' && $arbeitspaket['status'] !== 'abgerechnet')
     {
-      if(empty($arbeitspaket['abgabedatum']) || $arbeitspaket['abgabedatum'] == '0000-00-00' || $this->app->DB->Select("select '".$arbeitspaket['abgabedatum']."' >= date(now())"))
+      if(empty($arbeitspaket['abgabedatum']) || $arbeitspaket['abgabedatum'] == '0000-00-00' || $arbeitspaket['abgabedatum'] >= date('Y-m-d'))
       {
         $termin = 1;
       }else{
         $termin = 2;
       }
-      if(round(((int)$this->app->DB->Select("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = '".$id."' "))/3600,2) > $arbeitspaket['zeit_geplant'])
+      if(round(((int)$this->app->DatabaseService->selectValue("SELECT sum( TIME_TO_SEC( TIMEDIFF( bis, von ) )) FROM `zeiterfassung` WHERE arbeitspaket = :apid", ['apid' => $id]))/3600,2) > $arbeitspaket['zeit_geplant'])
       {
         $check = 2;
       }else{
         $check = 1;
       }
-      $bestellungsumme = $this->app->DB->Select("SELECT sum(bp.preis*bp.menge) FROM bestellung_position bp INNER JOIN projekt_artikel pa ON pa.artikel = bp.artikel AND pa.teilprojekt = '$id'");
+      $bestellungsumme = $this->app->DatabaseService->selectValue("SELECT sum(bp.preis*bp.menge) FROM bestellung_position bp INNER JOIN projekt_artikel pa ON pa.artikel = bp.artikel AND pa.teilprojekt = :id", ['id' => $id]);
       if(($bestellungsumme > $arbeitspaket['kosten_geplant']) && $arbeitspaket['kosten_geplant'] > 0)
       {
         $budget = 2;
@@ -1883,7 +1885,7 @@ class Projekt extends GenProjekt {
     }
     return '<img src="./themes/new/images/'.($check==0?'grey':($check==1?'checkgo':'checkstop')).'.png" title="'.($check==0?'Teilprojekt abgeschlossen / abgerechnet':($check==1?'Gebuchte Zeit noch in geplanter Zeit':'Gebuchte Zeit nicht in geplanter Zeit')).'"><img src="./themes/new/images/'.($termin==0?'grey':($termin==1?'termingo':'terminstop')).'.png" title="'.($termin==0?'Teilprojekt abgeschlossen / abgerechnet':($termin==1?'Keine Termine &uuml;berschritten':'Termine wurden &uuml;berschritten')).'"><img src="./themes/new/images/'.($budget==0?'grey':($budget==1?'kreditlimitgo':'kreditlimitstop')).'.png" title="'.($budget==0?'Teilprojekt abgeschlossen / abgerechnet':($budget==1?'Material im Budget':'Budget wurde &uuml;berschritten')).'">';
   }
- 
+
   function ProjektUebersicht()
   {
     $id = (int)$this->app->Secure->GetGET('id');
@@ -1914,17 +1916,17 @@ class Projekt extends GenProjekt {
       if($checkprojekt > 0)
       {
         $checkprojekt++;
-        $this->app->Secure->POST["abkuerzung"]=$this->app->Secure->POST["abkuerzung"]."-".$checkprojekt; 
+        $this->app->Secure->POST["abkuerzung"]=$this->app->Secure->POST["abkuerzung"]."-".$checkprojekt;
 
-        $msg = $this->app->erp->base64_url_encode("<div class=\"warning\">Die Kennung gibt es bereits. Es wurde automatisch eine Folgenummer angelegt.</div>"); 
+        $msg = $this->app->erp->base64_url_encode("<div class=\"warning\">Die Kennung gibt es bereits. Es wurde automatisch eine Folgenummer angelegt.</div>");
         $error = true;
-      }    
+      }
 
       if($this->app->Secure->POST["abkuerzung"]=="")
       {
-        $kennung = $this->app->DB->Select("SELECT COUNT(id) FROM projekt WHERE abkuerzung LIKE 'PROJEKT%' ") + 1;
+        $kennung = $this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM projekt WHERE abkuerzung LIKE 'PROJEKT%'") + 1;
         $this->app->Secure->POST["abkuerzung"]="PROJEKT-".$kennung;
-        $msg = $this->app->erp->base64_url_encode("<div class=\"warning\">Die Kennung ist ein Pflichtfeld. Es wurde eine automatische Kennung vergeben.</div>"); 
+        $msg = $this->app->erp->base64_url_encode("<div class=\"warning\">Die Kennung ist ein Pflichtfeld. Es wurde eine automatische Kennung vergeben.</div>");
         $error = true;
       }
 
@@ -1939,13 +1941,12 @@ class Projekt extends GenProjekt {
     }
 
     $this->app->FormHandler->FormGetVars("projekt",$id);
-    $data = $this->app->DB->SelectArr("SELECT CONCAT(a.kundennummer,' ',a.name) as kunde, CONCAT(a2.id,' ',a2.name) as mitarbeiter, status, uebergeordnetes_projekt, abkuerzung FROM projekt p
-      LEFT JOIN adresse a ON a.id=p.kunde LEFT JOIN adresse a2 ON a2.id=p.verantwortlicher WHERE p.id='$id' LIMIT 1");
+    $data = $this->app->DatabaseService->select("SELECT CONCAT(a.kundennummer,' ',a.name) as kunde, CONCAT(a2.id,' ',a2.name) as mitarbeiter, status, uebergeordnetes_projekt, abkuerzung FROM projekt p LEFT JOIN adresse a ON a.id=p.kunde LEFT JOIN adresse a2 ON a2.id=p.verantwortlicher WHERE p.id = :id LIMIT 1", ['id' => $id]);
     if(isset($data[0]))
-    {  
+    {
       $this->app->Tpl->Set('KUNDE',$data[0]['kunde']);
       $this->app->Tpl->Set('VERANTWORTLICHER',$data[0]['mitarbeiter']);
-      $this->app->Tpl->Set('UEBERGEORDNETES_PROJEKT',$this->app->erp->ReplaceProjektName(false,$data[0]['uebergeordnetes_projekt'],false));    
+      $this->app->Tpl->Set('UEBERGEORDNETES_PROJEKT',$this->app->erp->ReplaceProjektName(false,$data[0]['uebergeordnetes_projekt'],false));
       switch($data[0]['status']){
         case 'gestartet':
         case 'geplant':
@@ -1995,21 +1996,26 @@ class Projekt extends GenProjekt {
       {
         case 'checkbox':
         if($speichern!="" && $this->app->Secure->GetPOST('freifeld'.$v['index'])==""){
-          $this->app->DB->Update("UPDATE projekt SET freifeld".$v['index']."='0' WHERE id = '$id' LIMIT 1");
-        } 
-          $output .= '<input  type="checkbox" name="freifeld'.$v['index'].'" id="freifeld'.$v['index'].'" value="1" '.($this->app->DB->Select("SELECT freifeld".$v['index']." FROM projekt WHERE id = '$id' LIMIT 1")?' checked="checked" ':'').' />';
+          $freiCol = $this->app->DatabaseService->validateIdentifier('freifeld'.$v['index']);
+          $this->app->DatabaseService->update("UPDATE projekt SET {$freiCol} = '0' WHERE id = :id LIMIT 1", ['id' => $id]);
+        }
+          $freiCol = $this->app->DatabaseService->validateIdentifier('freifeld'.$v['index']);
+          $output .= '<input  type="checkbox" name="freifeld'.$v['index'].'" id="freifeld'.$v['index'].'" value="1" '.($this->app->DatabaseService->selectValue("SELECT {$freiCol} FROM projekt WHERE id = :id LIMIT 1", ['id' => $id])?' checked="checked" ':'').' />';
         break;
         case 'mehrzeilig':
-          $output .= '<textarea  cols="40" name="freifeld'.$v['index'].'" id="freifeld'.$v['index'].'">'.$this->app->DB->Select("SELECT freifeld".$v['index']." FROM projekt WHERE id = '$id' LIMIT 1").'</textarea>';
+          $freiCol = $this->app->DatabaseService->validateIdentifier('freifeld'.$v['index']);
+          $output .= '<textarea  cols="40" name="freifeld'.$v['index'].'" id="freifeld'.$v['index'].'">'.$this->app->DatabaseService->selectValue("SELECT {$freiCol} FROM projekt WHERE id = :id LIMIT 1", ['id' => $id]).'</textarea>';
         break;
         case 'datum':
-          $output .='<input type="text" size="10" id="freifeld'.$v['index'].'" name="freifeld'.$v['index'].'" value="'.$this->app->DB->Select("SELECT freifeld".$v['index']." FROM projekt WHERE id = '$id' LIMIT 1").'" />';
+          $freiCol = $this->app->DatabaseService->validateIdentifier('freifeld'.$v['index']);
+          $output .='<input type="text" size="10" id="freifeld'.$v['index'].'" name="freifeld'.$v['index'].'" value="'.$this->app->DatabaseService->selectValue("SELECT {$freiCol} FROM projekt WHERE id = :id LIMIT 1", ['id' => $id]).'" />';
           $this->app->YUI->DatePicker('freifeld'.$v['index']);
         break;
 
         case 'select':
+              $freiCol = $this->app->DatabaseService->validateIdentifier('freifeld'.$v['index']);
               $output .= '<select name="freifeld'.$v['index'].'" id="freifeld'.$v['index'].'">';
-              $tmpv = $this->app->DB->Select("SELECT freifeld".$v['index']." FROM projekt WHERE id = '$id' LIMIT 1");
+              $tmpv = $this->app->DatabaseService->selectValue("SELECT {$freiCol} FROM projekt WHERE id = :id LIMIT 1", ['id' => $id]);
               if(isset($optionen) && $optionen)
               {
                 $found = false;
@@ -2040,7 +2046,8 @@ class Projekt extends GenProjekt {
               $output .= '</select>';
             break;
         default:
-          $output .= '<input type="text" size="30" id="freifeld'.$v['index'].'" name="freifeld'.$v['index'].'" value="'.$this->app->DB->Select("SELECT freifeld".$v['index']." FROM projekt WHERE id = '$id' LIMIT 1").'" />';
+          $freiCol = $this->app->DatabaseService->validateIdentifier('freifeld'.$v['index']);
+          $output .= '<input type="text" size="30" id="freifeld'.$v['index'].'" name="freifeld'.$v['index'].'" value="'.$this->app->DatabaseService->selectValue("SELECT {$freiCol} FROM projekt WHERE id = :id LIMIT 1", ['id' => $id]).'" />';
         break;
       }
       $output .= "</td></tr>";
@@ -2098,8 +2105,8 @@ class Projekt extends GenProjekt {
     $this->app->YUI->CkEditor("sonstiges","internal");
     $this->app->Tpl->Parse('PAGE','projekt_uebersicht.tpl');
   }
- 
-  
+
+
   function ProjektMiniDetailArbeitspaket()
   {
     $this->ProjektMiniDetailTeilprojekt();
@@ -2124,23 +2131,23 @@ class Projekt extends GenProjekt {
 
     $table = new EasyTable($this->app);
     $table->Query("
-        SELECT 
+        SELECT
         CONCAT('<input type=\"checkbox\" checked name=\"z_id[]\" value=\"',z.id,'\">') as '',
-        DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum, 
+        DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum,
         DATE_FORMAT(z.von,'%H:%i') as von, DATE_FORMAT(z.bis,'%H:%i') as bis,
         FORMAT(TIME_TO_SEC(TIMEDIFF(z.bis, z.von))/3600,2) AS Dauer,
         a.name as Mitarbeiter,
-        IF(LENGTH(z.aufgabe) > 40, CONCAT('<a title=\"',z.aufgabe,'\" style=\"font-weight:normal\">',LEFT(z.aufgabe, 37), '...</a>'), 
-          CONCAT('<a title=\"',z.aufgabe,'\" style=\"font-weight:normal\">',z.aufgabe,'</a>')) as Taetigkeit, 
+        IF(LENGTH(z.aufgabe) > 40, CONCAT('<a title=\"',z.aufgabe,'\" style=\"font-weight:normal\">',LEFT(z.aufgabe, 37), '...</a>'),
+          CONCAT('<a title=\"',z.aufgabe,'\" style=\"font-weight:normal\">',z.aufgabe,'</a>')) as Taetigkeit,
         CONCAT(v.nummer,' ',v.beschreibung) as verrechnungsart,
 
         if(z.arbeitsnachweis > 0,CONCAT('<a href=\"index.php?module=arbeitsnachweis&action=edit&id=',z.arbeitsnachweis,'\" target=\"_blank\">gebucht</a>'),'-')  as arbeitsnachweis,
 
         CONCAT('<a href=\"#\" onclick=\"if(!confirm(\'Wirklich stornieren?\')) return false; else window.location.href=\'index.php?module=zeiterfassung&action=list&do=stornieren&lid=', z.id, '&back=projekt&back_id=$projekt\'\"><img src=\"./themes/new/images/delete.svg\"></a>&nbsp;<a href=\"index.php?module=zeiterfassung&action=create&id=', z.id, '&back=projekt&back_id=$projekt\" ><img src=\"./themes/new/images/edit.svg\"></a>')
-        FROM zeiterfassung z 
-        LEFT JOIN adresse a ON a.id=z.adresse 
+        FROM zeiterfassung z
+        LEFT JOIN adresse a ON a.id=z.adresse
         LEFT JOIN adresse b ON b.id=z.adresse_abrechnung
-        LEFT JOIN projekt p ON p.id=z.projekt 
+        LEFT JOIN projekt p ON p.id=z.projekt
         LEFT JOIN arbeitspaket ap ON z.arbeitspaket=ap.id
         LEFT JOIN verrechnungsart v ON v.nummer=z.verrechnungsart
         WHERE z.arbeitspaket='$id' AND (z.arbeitsnachweis IS NULL OR z.arbeitsnachweis=0) AND ist_abgerechnet!=1 AND abgerechnet!=1 ORDER by z.von
@@ -2148,22 +2155,22 @@ class Projekt extends GenProjekt {
     $table->DisplayNew('OFFENEZEIT', "Menü","Action");
 
     $table->Query("
-        SELECT 
-        DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum, 
+        SELECT
+        DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum,
         DATE_FORMAT(z.von,'%H:%i') as von, DATE_FORMAT(z.bis,'%H:%i') as bis,
         FORMAT(TIME_TO_SEC(TIMEDIFF(z.bis, z.von))/3600,2) AS Dauer,
         a.name as Mitarbeiter,
-        IF(LENGTH(z.aufgabe) > 40, CONCAT('<a title=\"',z.aufgabe,'\" style=\"font-weight:normal\">',LEFT(z.aufgabe, 37), '...</a>'), 
-          CONCAT('<a title=\"',z.aufgabe,'\" style=\"font-weight:normal\">',z.aufgabe,'</a>')) as Taetigkeit, 
+        IF(LENGTH(z.aufgabe) > 40, CONCAT('<a title=\"',z.aufgabe,'\" style=\"font-weight:normal\">',LEFT(z.aufgabe, 37), '...</a>'),
+          CONCAT('<a title=\"',z.aufgabe,'\" style=\"font-weight:normal\">',z.aufgabe,'</a>')) as Taetigkeit,
         CONCAT(v.nummer,' ',v.beschreibung) as verrechnungsart,
 
         if(z.arbeitsnachweis > 0,CONCAT('<a href=\"index.php?module=arbeitsnachweis&action=edit&id=',z.arbeitsnachweis,'\" target=\"_blank\">gebucht</a>'),'-')  as arbeitsnachweis,
 
         CONCAT('<a href=\"#\" onclick=\"if(!confirm(\'Wirklich stornieren?\')) return false; else window.location.href=\'index.php?module=zeiterfassung&action=list&do=stornieren&lid=', z.id, '&back=projekt&back_id=$projekt\'\"><img src=\"./themes/new/images/delete.svg\"></a>&nbsp;<a href=\"index.php?module=zeiterfassung&action=create&id=', z.id, '&back=projekt&back_id=$projekt\" ><img src=\"./themes/new/images/edit.svg\"></a>')
-        FROM zeiterfassung z 
-        LEFT JOIN adresse a ON a.id=z.adresse 
+        FROM zeiterfassung z
+        LEFT JOIN adresse a ON a.id=z.adresse
         LEFT JOIN adresse b ON b.id=z.adresse_abrechnung
-        LEFT JOIN projekt p ON p.id=z.projekt 
+        LEFT JOIN projekt p ON p.id=z.projekt
         LEFT JOIN arbeitspaket ap ON z.arbeitspaket=ap.id
         LEFT JOIN verrechnungsart v ON v.nummer=z.verrechnungsart
         WHERE z.arbeitspaket='$id' AND (z.arbeitsnachweis >0 OR z.ist_abgerechnet=1 OR z.abgerechnet=1) ORDER by z.von
@@ -2229,7 +2236,7 @@ class Projekt extends GenProjekt {
 
     $options="<option>Alle</option>";
 
-    if($sid=="ohne")	
+    if($sid=="ohne")
     $options.="<option value=\"ohne\">Ohne</option>";
     else
     $options.="<option value=\"ohne\">Ohne</option>";
@@ -2265,14 +2272,14 @@ class Projekt extends GenProjekt {
 
     $table = new EasyTable($this->app);
 
-    $table->Query("SELECT 
-    if(z.abgerechnet,'&nbsp;&nbsp;-',CONCAT('<input type=\"checkbox\" value=\"',z.id,'\" name=\"z_id[]\" checked>')) as 'übernehmen', 
-    DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum, 
+    $table->Query("SELECT
+    if(z.abgerechnet,'&nbsp;&nbsp;-',CONCAT('<input type=\"checkbox\" value=\"',z.id,'\" name=\"z_id[]\" checked>')) as 'übernehmen',
+    DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum,
     a.name as mitarbeiter,
     DATE_FORMAT(z.von,'%H:%i') as start, DATE_FORMAT(z.bis,'%H:%i') as ende,
     TIMEDIFF(z.bis, z.von) AS Dauer,
-    ap.aufgabe as 'unterprojekt/Aufgabe', 
-    z.aufgabe as Taetigkeit, 
+    ap.aufgabe as 'unterprojekt/Aufgabe',
+    z.aufgabe as Taetigkeit,
     if(abgerechnet,'ja','nein') as abgrechnet,
       CONCAT('<a href=\"index.php?module=zeiterfassung&action=create&id=',z.id,'&back=projekt&back_id=$id&back_sid=$sid\"><img src=\"themes/new/images/edit.svg\"></a>&nbsp;
           <a href=\"#\" onclick=\"if(!confirm(\'Wirklich stornieren?\')) return false; else window.location.href=\'index.php?module=zeiterfassung&action=list&do=stornieren&back=projekt&back_id=$id&back_sid=$sid&lid=',z.id,'\'\"><img src=\"themes/new/images/delete.svg\"></a>&nbsp;') as Menü
@@ -2311,12 +2318,12 @@ class Projekt extends GenProjekt {
     $this->app->Tpl->Set('TABTEXT',"Materialeinsatz");
     $this->app->Tpl->Set('SUBSUBHEADING',"Positionen aus Bestellungen");
     $table = new EasyTable($this->app);
-    $table->Query("SELECT  bp.bezeichnunglieferant as artikel, a.name as lieferant,b.belegnr as bestellung, bp.menge, bp.preis,menge*preis as gesamt, if(bp.abgerechnet,'ja','nein') as rechnung FROM bestellung_position bp 
+    $table->Query("SELECT  bp.bezeichnunglieferant as artikel, a.name as lieferant,b.belegnr as bestellung, bp.menge, bp.preis,menge*preis as gesamt, if(bp.abgerechnet,'ja','nein') as rechnung FROM bestellung_position bp
         LEFT JOIN bestellung b ON bp.bestellung=b.id LEFT JOIN adresse a ON b.adresse=a.id WHERE bp.projekt='$id' ORDER By bp.bestellung");
 
     $table->DisplayNew('MATERIAL', "abgerechnet","noAction");
 
-    $summe = $this->app->DB->Select("SELECT  SUM(menge*preis) FROM bestellung_position WHERE projekt='$id' AND abgerechnet!='1' ORDER By bestellung");
+    $summe = $this->app->DatabaseService->selectValue("SELECT SUM(menge*preis) FROM bestellung_position WHERE projekt = :id AND abgerechnet != '1'", ['id' => $id]);
     $summevk= $this->ProjektOffenesMaterial($id);
     //$summegesamt = $summe;
 
@@ -2327,7 +2334,7 @@ class Projekt extends GenProjekt {
 
     $this->app->Tpl->Set('SUBSUBHEADING',"Positionen aus Lieferungen");
     $table = new EasyTable($this->app);
-    $table->Query("SELECT  bp.menge, bp.bezeichnung as artikel, bp.seriennummer, b.belegnr as lieferschein, if(bp.abgerechnet,'ja','nein') as rechnung FROM lieferschein_position bp 
+    $table->Query("SELECT  bp.menge, bp.bezeichnung as artikel, bp.seriennummer, b.belegnr as lieferschein, if(bp.abgerechnet,'ja','nein') as rechnung FROM lieferschein_position bp
         LEFT JOIN lieferschein b ON bp.lieferschein=b.id LEFT JOIN adresse a ON b.adresse=a.id WHERE b.projekt='$id' ORDER By bp.lieferschein");
 
     $table->DisplayNew('MATERIAL', "abgerechnet","noAction");
@@ -2354,7 +2361,7 @@ class Projekt extends GenProjekt {
 
   function ProjektOffenesMaterial($id)
   {
-    $summe = $this->app->DB->Select("SELECT  SUM(menge*preis) FROM bestellung_position WHERE projekt='$id' AND abgerechnet!='1' ORDER By bestellung");
+    $summe = $this->app->DatabaseService->selectValue("SELECT SUM(menge*preis) FROM bestellung_position WHERE projekt = :id AND abgerechnet != '1'", ['id' => $id]);
     $summevk= $summe*((100 + $this->app->erp->GetStandardMarge())/100);
     //$summegesamt = $summe;
     return $summevk;
@@ -2362,7 +2369,7 @@ class Projekt extends GenProjekt {
 
   function ProjektOffeneZeit($id)
   {
-    $summe = $this->app->DB->Select("SELECT FORMAT(SUM(TIMEDIFF(z.bis, z.von))/10000,2) FROM zeiterfassung z LEFT JOIN arbeitspaket ap ON z.arbeitspaket = ap.id AND ap.projekt = '$id' WHERE (z.art='' OR z.art='Arbeit') AND (z.projekt='$id' OR not isnull(ap.id)) AND z.abgerechnet!='1'");
+    $summe = $this->app->DatabaseService->selectValue("SELECT FORMAT(SUM(TIMEDIFF(z.bis, z.von))/10000,2) FROM zeiterfassung z LEFT JOIN arbeitspaket ap ON z.arbeitspaket = ap.id AND ap.projekt = :id WHERE (z.art='' OR z.art='Arbeit') AND (z.projekt = :id2 OR not isnull(ap.id)) AND z.abgerechnet != '1'", ['id' => $id, 'id2' => $id]);
     $summeeur = $summe*$this->app->erp->GetStandardStundensatz();
 
     return $summeeur;
@@ -2459,7 +2466,7 @@ class Projekt extends GenProjekt {
    */
   public function getProjectIdByProjectShortName($shortName)
   {
-    return $this->app->DB->Select(sprintf("SELECT `id` FROM `projekt` WHERE `abkuerzung` = '%s' LIMIT 1", $shortName));
+    return $this->app->DatabaseService->selectValue("SELECT `id` FROM `projekt` WHERE `abkuerzung` = :shortName LIMIT 1", ['shortName' => $shortName]);
   }
 
   public function handleCopyProjectFromFormSubmit()
@@ -2485,21 +2492,17 @@ class Projekt extends GenProjekt {
     if(empty($customerId)) {
       return ['shortcode' => $shortCode, 'error' => 'Kein Kunde ausgew&auml;lt.'];
     }
-    $customerNumber = $this->app->DB->Select(
-      sprintf(
-        'SELECT a.kundennummer FROM `adresse` AS `a` WHERE a.id = %d LIMIT 1',
-        $customerId
-      )
+    $customerNumber = $this->app->DatabaseService->selectValue(
+      "SELECT a.kundennummer FROM `adresse` AS `a` WHERE a.id = :id LIMIT 1",
+      ['id' => (int)$customerId]
     );
     if(empty($customerNumber)) {
       return ['shortcode' => $shortCode, 'error' => 'Keine Kundennummer gefunden.'];
     }
 
-    $shortCodes = $this->app->DB->SelectFirstCols(
-        sprintf(
-          "SELECT `abkuerzung` FROM `projekt` WHERE `abkuerzung` LIKE '%s.%%'",
-          $this->app->DB->real_escape_string($customerNumber)
-        )
+    $shortCodes = $this->app->DatabaseService->selectColumn(
+        "SELECT `abkuerzung` FROM `projekt` WHERE `abkuerzung` LIKE :pattern",
+        ['pattern' => $customerNumber . '.%']
       );
     if(empty($shortCodes)) {
       return ['shortcode' => $customerNumber.'.1'];
@@ -2617,7 +2620,7 @@ class Projekt extends GenProjekt {
 
     $id = $this->app->Secure->GetGET('id');
     if($id > 0) {
-      $dbValues = $this->app->DB->SelectRow(sprintf('SELECT * FROM `projekt` WHERE `id` = %d', $id));
+      $dbValues = $this->app->DatabaseService->selectRow("SELECT * FROM `projekt` WHERE `id` = :id", ['id' => (int)$id]);
 
       if(strpos($dbValues['abkuerzung'], '.') !== false) {
         $numericind = strlen($dbValues['abkuerzung']);
@@ -2653,18 +2656,16 @@ class Projekt extends GenProjekt {
       $this->app->Tpl->Set('NAME', $dbValues['name']);
       $this->app->Tpl->Set(
         'KUNDE',
-        $this->app->DB->Select(
-          sprintf(
-            "SELECT CONCAT(`id`,' ',`name`) FROM `adresse` WHERE `id` = %d",
-            $dbValues['kunde']
-          )
+        $this->app->DatabaseService->selectValue(
+          "SELECT CONCAT(`id`,' ',`name`) FROM `adresse` WHERE `id` = :id",
+          ['id' => (int)$dbValues['kunde']]
         )
       );
       $this->app->Tpl->Set(
         'VERANTWORTLICHER',
-        $this->app->DB->Select(
-          sprintf("SELECT CONCAT(`id`,' ',`name`) FROM `adresse` WHERE `id` = %d",
-            $dbValues['verantwortlicher'])
+        $this->app->DatabaseService->selectValue(
+          "SELECT CONCAT(`id`,' ',`name`) FROM `adresse` WHERE `id` = :id",
+          ['id' => (int)$dbValues['verantwortlicher']]
         )
       );
       $this->app->Tpl->Set('ABKUERZUNG', $dbValues['abkuerzung']);
@@ -2704,18 +2705,17 @@ class Projekt extends GenProjekt {
           break;
           case 'kundennummer':
             if($kunde) {
-              $customerNumber = $this->app->DB->Select(
-                sprintf('SELECT `kundennummer` FROM `adresse` WHERE `id` = %d LIMIT 1', $kunde)
+              $customerNumber = $this->app->DatabaseService->selectValue(
+                "SELECT `kundennummer` FROM `adresse` WHERE `id` = :id LIMIT 1",
+                ['id' => (int)$kunde]
               );
               if($customerNumber == '') {
                 $error[]="Keine Kundennummer gefunden.";
               }
               else{
-                $shortCodes = $this->app->DB->SelectFirstCols(
-                  sprintf(
-                    "SELECT `abkuerzung` FROM `projekt` WHERE `abkuerzung` LIKE '%s'",
-                    $this->app->DB->real_escape_string($customerNumber).'.%'
-                  )
+                $shortCodes = $this->app->DatabaseService->selectColumn(
+                  "SELECT `abkuerzung` FROM `projekt` WHERE `abkuerzung` LIKE :pattern",
+                  ['pattern' => $customerNumber . '.%']
                 );
                 if(!empty($shortCodes)) {
                   $postFixNumber = 1;
@@ -2913,7 +2913,7 @@ class Projekt extends GenProjekt {
    * @param int $copyProjectId
    * @return bool
    */
-  public function createAdditionalInputForCopyProjects(int $oldProjectId, int $copyProjectId) 
+  public function createAdditionalInputForCopyProjects(int $oldProjectId, int $copyProjectId)
   {
     $hasAdditionalInput = false;
     $this->app->Tpl->Set('TOID',$copyProjectId);
@@ -2927,13 +2927,9 @@ class Projekt extends GenProjekt {
     if(empty($projectId) || $this->app->erp->UserProjektRecht($projectId)) {
       return;
     }
-    $this->app->DB->Insert(
-      sprintf(
-        "INSERT INTO `adresse_rolle` 
-          (`adresse`, `subjekt`, `praedikat`, `objekt`, `parameter`, `von`, `projekt`)
-        VALUES (%d, 'Mitglied', 'von', 'Projekt', '%d', NOW(), '%d')",
-        $this->app->User->GetAdresse(), $projectId, $projectId
-      )
+    $this->app->DatabaseService->insert(
+      "INSERT INTO `adresse_rolle` (`adresse`, `subjekt`, `praedikat`, `objekt`, `parameter`, `von`, `projekt`) VALUES (:adresse, 'Mitglied', 'von', 'Projekt', :parameter, NOW(), :projekt)",
+      ['adresse' => (int)$this->app->User->GetAdresse(), 'parameter' => (int)$projectId, 'projekt' => (int)$projectId]
     );
   }
 
@@ -2955,21 +2951,24 @@ class Projekt extends GenProjekt {
     if($this->app->erp->Firmendaten('projektoeffentlich')) {
       $data['oeffentlich'] = 1;
     }
-    $this->app->DB->Insert(
-      sprintf(
-        "INSERT INTO `projekt` 
-        (`name`, `abkuerzung`, `kunde`, `verantwortlicher`, `beschreibung`, `status`, `waehrung`,
-         `steuersatz_normal`, `steuersatz_ermaessigt`, `oeffentlich`, `farbe`) 
-         VALUES 
-            ('%s', '%s', %d, '%s', '%s', '%s','%s', %f, %f, %d, '%s')",
-        $data['name'], $data['abkuerzung'], $data['kunde'], $data['verantwortlicher'], $data['beschreibung'],
-        (empty($data['status'])?'gestartet':$data['status']), $data['waehrung'],
-        $data['steuersatz_normal'], $data['steuersatz_ermaessigt'], (int)!empty($data['oeffentlich']),
-        $data['farbe']
-      )
+    $insertId = $this->app->DatabaseService->insert(
+      "INSERT INTO `projekt` (`name`, `abkuerzung`, `kunde`, `verantwortlicher`, `beschreibung`, `status`, `waehrung`, `steuersatz_normal`, `steuersatz_ermaessigt`, `oeffentlich`, `farbe`) VALUES (:name, :abkuerzung, :kunde, :verantwortlicher, :beschreibung, :status, :waehrung, :steuersatz_normal, :steuersatz_ermaessigt, :oeffentlich, :farbe)",
+      [
+        'name' => $data['name'],
+        'abkuerzung' => $data['abkuerzung'],
+        'kunde' => (int)$data['kunde'],
+        'verantwortlicher' => $data['verantwortlicher'],
+        'beschreibung' => $data['beschreibung'],
+        'status' => empty($data['status']) ? 'gestartet' : $data['status'],
+        'waehrung' => $data['waehrung'],
+        'steuersatz_normal' => $data['steuersatz_normal'],
+        'steuersatz_ermaessigt' => $data['steuersatz_ermaessigt'],
+        'oeffentlich' => (int)!empty($data['oeffentlich']),
+        'farbe' => $data['farbe'],
+      ]
     );
 
-    return (int)$this->app->DB->GetInsertID();
+    return $insertId;
   }
 
   function ProjektList()
@@ -2989,8 +2988,7 @@ class Projekt extends GenProjekt {
 
     //$nummer = $this->app->Secure->GetPOST("nummer");
 
-    $data = $this->app->DB->SelectArr("SELECT p.abkuerzung as abk,p.name as projekt_name, a.kundennummer, a.name as kunde 
-      FROM projekt p LEFT JOIN adresse a ON a.id=p.kunde WHERE p.id='$id' LIMIT 1");
+    $data = $this->app->DatabaseService->select("SELECT p.abkuerzung as abk, p.name as projekt_name, a.kundennummer, a.name as kunde FROM projekt p LEFT JOIN adresse a ON a.id=p.kunde WHERE p.id = :id LIMIT 1", ['id' => $id]);
 
     $data = reset($data);
     $this->app->Tpl->Add('KURZUEBERSCHRIFT2',$data['abk']." ".$data['projekt_name']." ".$data['kundennummer']." ".$data['kunde']);
@@ -3048,7 +3046,7 @@ class Projekt extends GenProjekt {
     $this->ProjektMenu();
 
     $id = (int)$this->app->Secure->GetGET("id");
-    $pakete = $this->app->DB->SelectArr("SELECT * FROM arbeitspaket WHERE projekt = '$id' ORDER by vorgaenger, sort, id");
+    $pakete = $this->app->DatabaseService->select("SELECT * FROM arbeitspaket WHERE projekt = :id ORDER BY vorgaenger, sort, id", ['id' => $id]);
     if($pakete)
     {
       $oldvorgaenger = -1;
@@ -3056,12 +3054,12 @@ class Projekt extends GenProjekt {
       {
         if($paket['sort'] == 0)
         {
-          $newsort = 1+(int)$this->app->DB->Select("SELECT max(sort) FROM arbeitspaket WHERE projekt = '$id' AND vorgaenger = '".$paket['vorgaenger']."'");
-          $this->app->DB->Update("UPDATE arbeitspaket SET sort = '$newsort' WHERE id = '".$paket['id']."' LIMIT 1");
+          $newsort = 1+(int)$this->app->DatabaseService->selectValue("SELECT max(sort) FROM arbeitspaket WHERE projekt = :id AND vorgaenger = :vorgaenger", ['id' => $id, 'vorgaenger' => $paket['vorgaenger']]);
+          $this->app->DatabaseService->update("UPDATE arbeitspaket SET sort = :sort WHERE id = :id LIMIT 1", ['sort' => $newsort, 'id' => $paket['id']]);
         }
-      }      
+      }
     }
-   
+
     $abgerechnet = $this->app->Secure->GetPOST("abgerechnet");
 
     $this->app->Tpl->Parse('MANUELLCHECKBOX',"checkbox.tpl");
@@ -3082,7 +3080,7 @@ class Projekt extends GenProjekt {
       for($i=0;$i<(!empty($zid)?count($zid):0);$i++)
       {
         $zid_i = (int)$zid[$i];
-        $this->app->DB->Update("UPDATE zeiterfassung SET ist_abgerechnet=1, abgerechnet=1 WHERE id='$zid_i' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE zeiterfassung SET ist_abgerechnet=1, abgerechnet=1 WHERE id = :id LIMIT 1", ['id' => $zid_i]);
       }
     }
 
@@ -3095,10 +3093,10 @@ class Projekt extends GenProjekt {
     $widget->Create();
 
 
-    // easy table mit arbeitspaketen YUI als template 
+    // easy table mit arbeitspaketen YUI als template
     $this->app->YUI->TableSearch('TAB1',"projektzeiterfassung");
 
-    $tmp = $this->app->DB->Select("SELECT SUM(zeit_geplant) FROM arbeitspaket WHERE projekt='$id'");
+    $tmp = $this->app->DatabaseService->selectValue("SELECT SUM(zeit_geplant) FROM arbeitspaket WHERE projekt = :id", ['id' => $id]);
 
     //$this->app->Tpl->Add('TAB1',"<div class=\"info\">Kontigent Projekt (mit abgeschlossenen) geplant: $tmp</div>");
 
@@ -3153,17 +3151,17 @@ class Projekt extends GenProjekt {
     exit;
 
   }
-  
+
   function DeleteArbeitspaket($id)
   {
     $id = (int)$id;
     if(!$this->app->erp->RechteVorhanden('projekt','arbeitspaketdelete'))return false;
-    $id = $this->app->DB->Select("SELECT id FROM arbeitspaket WHERE id = '$id' LIMIT 1");
-    $sid = $this->app->DB->Select("SELECT projekt FROM arbeitspaket WHERE id='$id' LIMIT 1");
+    $id = $this->app->DatabaseService->selectValue("SELECT id FROM arbeitspaket WHERE id = :id LIMIT 1", ['id' => $id]);
+    $sid = $this->app->DatabaseService->selectValue("SELECT projekt FROM arbeitspaket WHERE id = :id LIMIT 1", ['id' => $id]);
     if(!$id || !$sid)return false;
-    $vorgaenger = (int)$this->app->DB->Select("SELECT vorgaenger FROM arbeitspaket WHERE id='$id' LIMIT 1");
-    if($vorgaenger)$this->app->DB->Update("UPDATE arbeitspaket SET vorgaenger = '$vorgaenger' WHERE projekt = '$sid' AND vorgaenger = '$id'");
-    $this->app->DB->Delete("DELETE FROM arbeitspaket WHERE id='$id' LIMIT 1");
+    $vorgaenger = (int)$this->app->DatabaseService->selectValue("SELECT vorgaenger FROM arbeitspaket WHERE id = :id LIMIT 1", ['id' => $id]);
+    if($vorgaenger)$this->app->DatabaseService->update("UPDATE arbeitspaket SET vorgaenger = :vorgaenger WHERE projekt = :sid AND vorgaenger = :id", ['vorgaenger' => $vorgaenger, 'sid' => $sid, 'id' => $id]);
+    $this->app->DatabaseService->delete("DELETE FROM arbeitspaket WHERE id = :id LIMIT 1", ['id' => $id]);
     return true;
   }
 
@@ -3195,7 +3193,7 @@ class Projekt extends GenProjekt {
   function ProjektKalender()
   {
     $this->ProjektMenu();
-    
+
     if($this->app->Secure->GetPOST('submitForm') == 1)
     {
       $id = (int)$this->app->Secure->GetGET("id");
@@ -3281,7 +3279,7 @@ class Projekt extends GenProjekt {
           $this->app->DatabaseService->execute("INSERT INTO kalender_user (event, userid) VALUES (?, ?)", [(int)$event, (int)$personen[$p]]);
       }
     }
-    
+
     $cmd = $this->app->Secure->GetGET('cmd');
     if($cmd == 'getkalender')
     {
@@ -3290,26 +3288,23 @@ class Projekt extends GenProjekt {
       if(strpos($id, 'task'))
       {
         $id = (int)str_replace('task','',$id);
-        $kalenderevent = $this->app->DB->SelectArr("SELECT id, ort, bezeichnung AS titel, beschreibung, von, bis, allDay, color, public,erinnerung,adresse,adresseintern,projekt, typ FROM kalender_event WHERE id='$id' LIMIT 1");
+        $kalenderevent = $this->app->DatabaseService->selectRow("SELECT id, ort, bezeichnung AS titel, beschreibung, von, bis, allDay, color, public, erinnerung, adresse, adresseintern, projekt, typ FROM kalender_event WHERE id = :id LIMIT 1", ['id' => $id]);
         if($kalenderevent)
         {
-          $data = reset($kalenderevent);
+          $data = $kalenderevent;
           $data['write'] = 0;
-          $data['projekt'] = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '".$data['projekt']."' LIMIT 1");
+          $data['projekt'] = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id LIMIT 1", ['id' => $data['projekt']]);
           if($data['typ'] == 'meilenstein')$data['write'] = 1;
-          $personen = $this->app->DB->SelectArr("SELECT DISTINCT ku.userid, a.name FROM kalender_user AS ku
-              LEFT JOIN user AS u ON u.id=ku.userid 
-              LEFT JOIN adresse a ON a.id=u.adresse
-              WHERE ku.event='$id' ORDER BY u.username ");
+          $personen = $this->app->DatabaseService->select("SELECT DISTINCT ku.userid, a.name FROM kalender_user AS ku LEFT JOIN user AS u ON u.id=ku.userid LEFT JOIN adresse a ON a.id=u.adresse WHERE ku.event = :id ORDER BY u.username", ['id' => $id]);
           $data['personen'] = $personen;
         }
       }
       echo json_encode($data);
       exit;
-      
+
     }
     $user = $this->app->User->GetID();
-    $users = $this->app->DB->SelectArr("SELECT u.id, a.name as description FROM user u LEFT JOIN adresse a ON a.id=u.adresse WHERE u.activ='1' AND u.kalender_ausblenden!=1 ORDER BY u.username");
+    $users = $this->app->DatabaseService->select("SELECT u.id, a.name as description FROM user u LEFT JOIN adresse a ON a.id=u.adresse WHERE u.activ='1' AND u.kalender_ausblenden!=1 ORDER BY u.username");
     for($i=0; $i<(!empty($users)?count($users):0);$i++){
       $user_out .= "<option value=\"{$users[$i]['id']}\" $select>{$users[$i]['description']}</option>";
     }
@@ -3318,7 +3313,7 @@ class Projekt extends GenProjekt {
 
     $this->app->Tpl->Set('LINKADRESSE',"<a href=\"#\" onclick=\"splitstring = document.getElementById('adresse').value; felder = splitstring.split(' ', 3); if( felder[0] > 0) window.location.href='index.php?module=adresse&action=brief&id=' + felder[0];\" style=\"font-weight:normal;text-decoration:underline; position:absolute;margin-top:5px;margin-left:5px;\"><img src=\"themes/new/images/forward.svg\"></a>");
     $id = (int)$this->app->Secure->GetGET("id");
-    $this->app->Tpl->Set('PROJEKTNAME', $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$id' LIMIT 1"));
+    $this->app->Tpl->Set('PROJEKTNAME', $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id LIMIT 1", ['id' => $id]));
     //$this->app->Tpl->Set('COLORS', $this->ColorPicker());
     $this->app->YUI->ColorPicker("color");
     $this->app->YUI->AutoComplete("adresse","adresse");
@@ -3326,9 +3321,9 @@ class Projekt extends GenProjekt {
     $this->app->YUI->AutoComplete("projekt","projektname",1);
     $this->app->YUI->DatePicker("datum");
     $this->app->YUI->DatePicker("datum_bis");
-    
+
     $projektabgeschlossen = false;
-    if($this->app->DB->Select("SELECT id FROM projekt WHERE id = '$id' AND status = 'abgeschlossen' LIMIT 1"))$projektabgeschlossen = true;
+    if($this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => $id]))$projektabgeschlossen = true;
     if($projektabgeschlossen)
     {
       $this->app->Tpl->Set('VORSPEICHERN','/*');
@@ -3337,7 +3332,7 @@ class Projekt extends GenProjekt {
     }else{
       $this->app->Tpl->Set('EDITABLE', 'true');
     }
-    
+
     $this->app->Tpl->Parse('TAB1',"projekt_dashboard_zeitplanung.tpl");
     $this->app->Tpl->Parse('PAGE',"tabview.tpl");
   }
@@ -3353,32 +3348,32 @@ class Projekt extends GenProjekt {
     $id = $this->app->Secure->GetGET('id');
 
     $arbeitsschritttabelle = new EasyTable($this->app);
-    $arbeitsschritttabelle->Query("SELECT p.belegnr AS produktion, pa.sort AS nr, pa.name AS arbeitsanweisung, '', 
-                    a.name AS 'geplanter Mitarbeiter', 
+    $arbeitsschritttabelle->Query("SELECT p.belegnr AS produktion, pa.sort AS nr, pa.name AS arbeitsanweisung, '',
+                    a.name AS 'geplanter Mitarbeiter',
                     CONCAT(
                     IF(pa.einzelzeit >= 3600,
                     CONCAT(FLOOR(pa.einzelzeit / 3600),':',
                     IF( MOD( pa.einzelzeit,3600)<360,'0','')),''
-                    ), 
+                    ),
                     FLOOR(MOD(pa.einzelzeit,3600)/60 ),
                     ':',
                     IF(MOD(pa.einzelzeit,60) < 10,'0',''),
                     MOD(pa.einzelzeit,60), ' min'
-                    ) as einzelzeit, pa.status 
+                    ) as einzelzeit, pa.status
                    FROM produktion_arbeitsanweisung pa
                    LEFT JOIN adresse a ON pa.geplanter_mitarbeiter = a.id
-                   JOIN produktion p ON pa.produktion = p.id 
+                   JOIN produktion p ON pa.produktion = p.id
                    WHERE pa.status = 'gestartet' AND p.projekt = '$id' AND p.status = 'gestartet'
                    ORDER BY p.id, pa.sort");
     $arbeitsschritttabelle->DisplayNew("ARBEITSSCHRITTE","Status","noAction");
 
 
     $aufgabentabelle = new EasyTable($this->app);
-    $aufgabentabelle->Query("SELECT a.aufgabe, ap.aufgabe AS teilprojekt, adr.name as mitarbeiter, 
+    $aufgabentabelle->Query("SELECT a.aufgabe, ap.aufgabe AS teilprojekt, adr.name as mitarbeiter,
                       if(a.abgabe_bis,DATE_FORMAT(abgabe_bis,'%d.%m.%Y'),'') as 'Abgabe-Termin', a.status
-                    FROM  aufgabe a 
-                    LEFT JOIN projekt p ON p.id=a.projekt 
-                    LEFT JOIN adresse adr ON a.adresse=adr.id 
+                    FROM  aufgabe a
+                    LEFT JOIN projekt p ON p.id=a.projekt
+                    LEFT JOIN adresse adr ON a.adresse=adr.id
                     LEFT JOIN arbeitspaket ap ON ap.id=a.teilprojekt
                     WHERE a.projekt = '$id' AND a.status = 'offen'");
     $aufgabentabelle->DisplayNew("AUFGABEN", "Status", "noAction");
@@ -3390,7 +3385,7 @@ class Projekt extends GenProjekt {
     }
     $where = rtrim($where, " OR");
 
-    $freifeldbez = $this->app->DB->SelectArr("SELECT wert, name FROM firmendaten_werte WHERE".$where);
+    $freifeldbez = $this->app->DatabaseService->select("SELECT wert, name FROM firmendaten_werte WHERE" . $where);
     $freifelder = array();
 
     foreach ($freifeldbez as $value){
@@ -3406,7 +3401,8 @@ class Projekt extends GenProjekt {
     $freifeldtable = "<table>";
     for($i=1;$i<=10;$i++){
       if(array_key_exists('projektfreifeld'.$i, $freifelder)){
-        $freifeldbla = $this->app->DB->Select("SELECT freifeld$i FROM projekt WHERE id = '$id' LIMIT 1");
+        $freiCol = $this->app->DatabaseService->validateIdentifier("freifeld$i");
+        $freifeldbla = $this->app->DatabaseService->selectValue("SELECT {$freiCol} FROM projekt WHERE id = :id LIMIT 1", ['id' => $id]);
         $freifeldtable .= "<tr>";
         $freifeldtable .= "<td><b>".$freifelder['projektfreifeld'.$i]."</b>:</td><td>".$freifeldbla."</td>";
         $freifeldtable .= "</tr>";
@@ -3440,15 +3436,15 @@ class Projekt extends GenProjekt {
     $this->app->Tpl->Set('TMPSCRIPT',"");
 
 
-    $allowed = "/[^a-zA-Z0-9._-]/";      
-    $this->app->Secure->POST["abkuerzung"] = preg_replace($allowed,"",$this->app->Secure->POST["abkuerzung"]); 
+    $allowed = "/[^a-zA-Z0-9._-]/";
+    $this->app->Secure->POST["abkuerzung"] = preg_replace($allowed,"",$this->app->Secure->POST["abkuerzung"]);
     $this->app->Secure->POST["abkuerzung"]=substr(strtoupper($this->app->Secure->POST["abkuerzung"]),0,20);
 
 
     $abkuerzung = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = ? LIMIT 1", [$id]);
     if($abkuerzung=="")
     {
-      $tmp_abkuerzung = $this->app->DB->Select("SELECT MAX(abkuerzung) FROM projekt");
+      $tmp_abkuerzung = $this->app->DatabaseService->selectValue("SELECT MAX(abkuerzung) FROM projekt");
       $tmp_abkuerzung = $this->app->erp->CalcNextNummer($tmp_abkuerzung);
       $this->app->DatabaseService->execute("UPDATE projekt SET abkuerzung = ? WHERE id = ? LIMIT 1", [$tmp_abkuerzung, $id]);
     }
@@ -3510,14 +3506,14 @@ class Projekt extends GenProjekt {
 
     switch($mode)
     {
-      case 1: 
+      case 1:
         $data['kommissionierverfahren']="lieferscheinlager"; //OK
         $data['autodruckrechnungstufe1mail']=1; //OK
         $data['lieferscheinedrucken']=1; //OK
         $data['paketmarkedrucken']=1; //OK
       break;
-      
-      case 2: 
+
+      case 2:
         $data['kommissionierverfahren']="lieferscheinscan"; //OK
         $data['kommissionierlistestufe1']=1; //OK
         $data['rechnungerzeugen']=1; //OK
@@ -3527,8 +3523,8 @@ class Projekt extends GenProjekt {
         $data['paketmarkeautodrucken']=1; //OK
         $data['druckennachtracking']=1; //OK
       break;
- 
-      case 3: 
+
+      case 3:
         $data['kommissionierverfahren']="lieferscheinscan";
         $data['multiorderpicking']=1; //OK
         $data['rechnungerzeugen']=1; //OK
@@ -3538,15 +3534,16 @@ class Projekt extends GenProjekt {
         $data['paketmarkeautodrucken']=1; //OK
         $data['druckennachtracking']=1; //OK
       break;
- 
-      case 4: 
+
+      case 4:
         //$data['kommissionierverfahren']="";
       break;
     }
 
     foreach($data as $name => $value)
     {
-      $this->app->DB->Update("UPDATE projekt SET $name='$value' WHERE id='$project' LIMIT 1");
+      $colName = $this->app->DatabaseService->validateIdentifier($name);
+      $this->app->DatabaseService->update("UPDATE projekt SET {$colName} = :value WHERE id = :id LIMIT 1", ['value' => $value, 'id' => $project]);
     }
     return;
   }
@@ -3566,9 +3563,9 @@ class Projekt extends GenProjekt {
         case '4':
           if($this->app->erp->RechteVorhanden('adresse', 'brief')){
             if($art == 2){
-              $adressid = $this->app->DB->Select("SELECT adresse FROM dokumente_send WHERE id = '$id' LIMIT 1");
+              $adressid = $this->app->DatabaseService->selectValue("SELECT adresse FROM dokumente_send WHERE id = :id LIMIT 1", ['id' => $id]);
             }else{
-              $adressid = $this->app->DB->Select("SELECT adresse_to FROM dokumente WHERE id = '$id' LIMIT 1"); // evtl. nur bei 1 bei notiz
+              $adressid = $this->app->DatabaseService->selectValue("SELECT adresse_to FROM dokumente WHERE id = :id LIMIT 1", ['id' => $id]); // evtl. nur bei 1 bei notiz
             }
 
             $antwort['data'] = "?module=adresse&action=brief&id=$adressid";
@@ -3576,7 +3573,7 @@ class Projekt extends GenProjekt {
           }
           break;
         case '5':
-          $adressid = $this->app->DB->Select("SELECT adresse FROM wiedervorlage WHERE id = '$id' LIMIT 1");
+          $adressid = $this->app->DatabaseService->selectValue("SELECT adresse FROM wiedervorlage WHERE id = :id LIMIT 1", ['id' => $id]);
           if($adressid > 0){
             if($this->app->erp->RechteVorhanden('adresse', 'brief')){
               $antwort['data'] = "?module=adresse&action=brief&id=$adressid";
@@ -3731,7 +3728,7 @@ class Projekt extends GenProjekt {
           }
       */
     }
-    if(isset($res['datum']) && !$tickets)
+    if(isset($res['datum']))
     {
       $res['content'] = '<b>Angelegt am: '.$res['datum'].(isset($res['zeit_angelegt'])?' '.$res['zeit_angelegt']:'')."</b><br />".$res['content'];
     }
@@ -3741,7 +3738,7 @@ class Projekt extends GenProjekt {
       echo json_encode($res);
     } else {
       //$ausg = "<h2>".$res['datum'].' '.$res['betreff']."</h2>".nl2br($res['content']);
-      if($res['content']=="") $res['content']="Kein Inhalt vorhanden";
+      if(empty($res['content'])) $res['content']="Kein Inhalt vorhanden";
 
       if((int)$this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM datei_stichwoerter ds WHERE ds.subjekt = 'anhang' AND ds.objekt = 'dokument' AND ds.parameter = ?", [$id]) > 0 && $this->app->erp->RechteVorhanden("dateien","send"))
       {

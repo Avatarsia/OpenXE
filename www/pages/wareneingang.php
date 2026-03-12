@@ -796,7 +796,7 @@ class Wareneingang {
 
                 // headings
                 $id = $this->app->Secure->GetGET('id');
-                $adresse = (int) $this->app->DB->Select(sprintf('SELECT adresse FROM paketannahme WHERE id = %d LIMIT 1', $id));
+                $adresse = (int) $this->app->DatabaseService->selectValue('SELECT adresse FROM paketannahme WHERE id = :id LIMIT 1', ['id' => (int)$id]);
                 $heading = array('Nummer', 'Beschreibung', 'SN/Charge/MHD', 'Projekt', 'Menge', 'Retoure', 'Lieferschein', 'Datum', 'Aktion', '');
                 $width = array('5%', '30%', '5%', '5%', '5%', '5%', '5%', '5%', '5%', '1%');
                 $findcols = array('lp.nummer', 'lp.bezeichnung', 'sn.seriennummer', 'p.abkuerzung', 'if(isnull(sn.menge), lp.menge,sn.menge)', 'rma.menge', 'l.belegnr', 'l.datum', 'lp.id', 'lp.id');
@@ -1564,15 +1564,13 @@ class Wareneingang {
             $tmp['standardlager'] = 'Standardlager';
         }
 
-        $result = $this->app->DB->SelectArr(
-                sprintf(
-                        "SELECT lp.id, CONCAT(l.bezeichnung,'->',lp.kurzbezeichnung) as kurzbezeichnung
+        $result = $this->app->DatabaseService->select(
+                "SELECT lp.id, CONCAT(l.bezeichnung,'->',lp.kurzbezeichnung) as kurzbezeichnung
         FROM lager_platz AS lp
         INNER JOIN lager AS l ON lp.lager=l.id
-        WHERE lp.kurzbezeichnung!='' AND lp.geloescht <> 1 AND l.geloescht <> 1 AND lp.id = %d
+        WHERE lp.kurzbezeichnung!='' AND lp.geloescht <> 1 AND l.geloescht <> 1 AND lp.id = :lagerplatz
         ORDER BY l.bezeichnung,lp.kurzbezeichnung",
-                        $lagerplatz
-                )
+                ['lagerplatz' => (int)$lagerplatz]
         );
         if (empty($result)) {
             return $tmp;
@@ -1660,7 +1658,7 @@ class Wareneingang {
      */
     protected function HandleCreateReturnOrderAjaxAction() {
         $id = $this->app->Secure->GetPOST('id');
-        $addressId = (int) $this->app->DB->Select(sprintf('SELECT adresse FROM paketannahme WHERE id = %d LIMIT 1', $id));
+        $addressId = (int) $this->app->DatabaseService->selectValue('SELECT adresse FROM paketannahme WHERE id = :id LIMIT 1', ['id' => (int)$id]);
         $sql = "
       SELECT lp.*, IFNULL(sn.seriennummer, '') AS serialnumber,
              rq.bestbefore,rq.batch,
@@ -1704,12 +1702,12 @@ class Wareneingang {
         INNER JOIN `returnorder_quantity` AS rq
         ON lp.id = rq.delivery_note_id AND IFNULL(sn.seriennummer, '') = rq.serialnumber
                AND IFNULL(rq.quantity,0) > 0 AND IFNULL(batch.charge,'') = rq.batch AND IFNULL(bbf.mhd,'') = rq.bestbefore
-        WHERE (l.adresse='$addressId' AND (l.status='versendet' OR l.status='freigegeben')
+        WHERE (l.adresse= :addressId AND (l.status='versendet' OR l.status='freigegeben')
                    AND a.lagerartikel=1) "
                 . $this->app->erp->ProjektRechte()
                 . "ORDER BY l.datum, l.id, lp.sort,sn.seriennummer";
 
-        $positions = $this->app->DB->SelectArr($sql);
+        $positions = $this->app->DatabaseService->select($sql, ['addressId' => (int)$addressId]);
         if (empty($positions)) {
             return new JsonResponse(['status' => 0, 'error' => 'Position nicht gefunden']);
         }
@@ -1722,7 +1720,7 @@ class Wareneingang {
         $this->app->erp->LoadRetoureStandardwerte($returnOrderId, $addressId);
         $this->app->erp->RetoureProtokoll($returnOrderId, 'Retoure angelegt');
         foreach ($positions as $position) {
-            $this->app->DB->Insert("INSERT INTO retoure_position (id) VALUES (NULL)");
+            $this->app->DatabaseService->insert("INSERT INTO retoure_position (id) VALUES (NULL)", []);
             $newposid = $this->app->DB->GetInsertID();
             $idtoid[$position['id']] = $newposid;
             $artikelarr[$newposid] = $position['artikel'];
@@ -1732,7 +1730,7 @@ class Wareneingang {
             }
             $position['retoure'] = $returnOrderId;
             $position['menge'] = $position['quantity'];
-            $this->app->DB->Delete(sprintf('DELETE FROM `returnorder_quantity` WHERE `id` = %d', $position['rqid']));
+            $this->app->DatabaseService->delete('DELETE FROM `returnorder_quantity` WHERE `id` = :id', ['id' => (int)$position['rqid']]);
             $serialnumber = (string) $position['serialnumber'];
             $bestbefore = (string) $position['bestbefore'];
             $batch = (string) $position['batch'];
@@ -1783,11 +1781,9 @@ class Wareneingang {
      */
     protected function HandleChangeQtyAjaxAction() {
         $dnpid = (int) $this->app->Secure->GetPOST('dnpid');
-        $dnp = $dnpid <= 0 ? null : $this->app->DB->SelectRow(
-                        sprintf(
-                                'SELECT dn.* FROM `lieferschein_position` AS `dn` WHERE dn.id = %d LIMIT 1',
-                                $dnpid
-                        )
+        $dnp = $dnpid <= 0 ? null : $this->app->DatabaseService->selectRow(
+                'SELECT dn.* FROM `lieferschein_position` AS `dn` WHERE dn.id = :dnpid LIMIT 1',
+                ['dnpid' => $dnpid]
         );
         if (empty($dnp)) {
             return new JsonResponse(
@@ -1828,17 +1824,16 @@ class Wareneingang {
      * @return array
      */
     public function getNextReturnOrderPosition($returnOrderId) {
-        return (array) $this->app->DB->SelectRow(
-                        sprintf(
-                                "SELECT `rop`.*, art.seriennummern, art.chargenverwaltung, art.mindesthaltbarkeitsdatum
+        return (array) $this->app->DatabaseService->selectRow(
+                "SELECT `rop`.*, art.seriennummern, art.chargenverwaltung, art.mindesthaltbarkeitsdatum
         FROM `retoure_position` AS `rop`
         INNER JOIN `artikel` AS `art` ON rop.artikel = art.id AND (art.geloescht = 0 OR art.geloescht IS NULL)
         INNER JOIN `retoure` AS `ro` ON rop.retoure = ro.id AND ro.status <> 'storniert' AND ro.belegnr <> ''
-        WHERE `rop`.retoure = %d AND rop.menge_eingang < rop.menge %s
-        ORDER BY rop.sort, rop.id
+        WHERE `rop`.retoure = :returnOrderId AND rop.menge_eingang < rop.menge "
+                . $this->app->erp->ProjektRechte('ro.projekt')
+                . " ORDER BY rop.sort, rop.id
         LIMIT 1",
-                                $returnOrderId, $this->app->erp->ProjektRechte('ro.projekt')
-                        )
+                ['returnOrderId' => (int)$returnOrderId]
         );
     }
 
@@ -1903,22 +1898,18 @@ class Wareneingang {
             }
         } elseif ($isBestBefore) {
             if ($isBatch) {
-                $sns = $this->app->DB->SelectPairs(
-                        sprintf(
-                                "SELECT CONCAT(`wert`, IF(`type2` = 'charge',CONCAT('-', `wert2`),'')), `menge`
+                $sns = $this->app->DatabaseService->selectPairs(
+                        "SELECT CONCAT(`wert`, IF(`type2` = 'charge',CONCAT('-', `wert2`),'')), `menge`
             FROM `beleg_chargesnmhd` AS `bc`
-            WHERE bc.doctype = 'retoure' AND bc.`doctypeid` = %d AND bc.pos = %d AND `type` = 'mhd'",
-                                $returnOrderId, $rop['id']
-                        )
+            WHERE bc.doctype = 'retoure' AND bc.`doctypeid` = :doctypeid AND bc.pos = :pos AND `type` = 'mhd'",
+                        ['doctypeid' => (int)$returnOrderId, 'pos' => (int)$rop['id']]
                 );
             } else {
-                $sns = $this->app->DB->SelectPairs(
-                        sprintf(
-                                "SELECT `wert`, `menge`
+                $sns = $this->app->DatabaseService->selectPairs(
+                        "SELECT `wert`, `menge`
             FROM `beleg_chargesnmhd` AS `bc`
-            WHERE bc.doctype = 'retoure' AND bc.`doctypeid` = %d AND bc.pos = %d AND `type` = 'mhd'",
-                                $returnOrderId, $rop['id']
-                        )
+            WHERE bc.doctype = 'retoure' AND bc.`doctypeid` = :doctypeid AND bc.pos = :pos AND `type` = 'mhd'",
+                        ['doctypeid' => (int)$returnOrderId, 'pos' => (int)$rop['id']]
                 );
             }
             if (!empty($sns)) {
@@ -1952,13 +1943,11 @@ class Wareneingang {
                 }
             }
         } elseif ($isBatch) {
-            $sns = $this->app->DB->SelectPairs(
-                    sprintf(
-                            "SELECT `bc`.wert, `bc`.menge
+            $sns = $this->app->DatabaseService->selectPairs(
+                    "SELECT `bc`.wert, `bc`.menge
           FROM `beleg_chargesnmhd` AS `bc`
-          WHERE bc.doctype = 'retoure' AND bc.`doctypeid` = %d AND bc.pos = %d AND `type` = 'charge'",
-                            $returnOrderId, $rop['id']
-                    )
+          WHERE bc.doctype = 'retoure' AND bc.`doctypeid` = :doctypeid AND bc.pos = :pos AND `type` = 'charge'",
+                    ['doctypeid' => (int)$returnOrderId, 'pos' => (int)$rop['id']]
             );
             if (!empty($sns)) {
                 $movements = $this->app->DB->SelectFirstCols(
@@ -2032,7 +2021,7 @@ class Wareneingang {
     public function WareneingangPaketDistriInhalt() {
 
         $id = $this->app->Secure->GetGET('id');
-        $adresse = $this->app->DB->Select("SELECT adresse FROM paketannahme WHERE id = ".$id);
+        $adresse = $this->app->DatabaseService->selectValue('SELECT adresse FROM paketannahme WHERE id = :id LIMIT 1', ['id' => (int)$id]);
         $this->app->erp->MenuEintrag('index.php?module=wareneingang&action=distriinhalt&id='.$id, 'Details');
         $this->app->Tpl->Add('KURZUEBERSCHRIFT', ' Paketannahme / Leistungserfassung');
         $cmd = $this->app->Secure->GetGET('cmd');
@@ -2044,7 +2033,7 @@ class Wareneingang {
         $projekt = $this->app->erp->ReplaceProjekt(true,$projekt,true);
 
         if (empty($projekt)) {
-            $projekt = $this->app->DB->Select("SELECT projekt FROM paketannahme WHERE id = ".$id);
+            $projekt = $this->app->DatabaseService->selectValue('SELECT projekt FROM paketannahme WHERE id = :id LIMIT 1', ['id' => (int)$id]);
         }
         $etikettendrucker = $this->app->erp->Projektdaten($projekt,'etiketten_kommissionierung_drucker');
         $etikettart = $this->app->erp->Projektdaten($projekt,'etiketten_kommissionierung_art');
@@ -2097,11 +2086,10 @@ class Wareneingang {
         if (!$submit) {
             // Load from DB
             if ($id != '') {
-                $fields = $this->app->DB->SelectArr(
-                        sprintf(
-                                'SELECT `lsnr`, `renr`,`bemerkung` FROM `paketannahme` WHERE `id` = %d LIMIT 1',
-                                $id
-                ));
+                $fields = $this->app->DatabaseService->select(
+                        'SELECT `lsnr`, `renr`,`bemerkung` FROM `paketannahme` WHERE `id` = :id LIMIT 1',
+                        ['id' => (int)$id]
+                );
 
                 $lsnr = $fields[0]['lsnr'];
                 $renr = $fields[0]['renr'];
@@ -2136,36 +2124,21 @@ class Wareneingang {
                         );
 
                         // Write paketdistribution
-                        $sql = "INSERT INTO paketdistribution(
-                                            id,
-                                            bearbeiter,
-                                            zeit,
-                                            paketannahme,
-                                            adresse,
-                                            artikel,
-                                            menge,
-                                            vpe,
-                                            etiketten,
-                                            bemerkung,
-                                            bestellung_position,
-                                            vorlaeufig
-                                        )
-                                        VALUES(
-                                            '',
-                                            '" . $this->app->User->GetName() . "',
-                                            NOW(),
-                                            '$id',
-                                            '',
-                                            '$artikel',
-                                            (SELECT menge-geliefert FROM bestellung_position WHERE id = ".$bestellposition."),
-                                            '$vpe',
-                                            '',
-                                            '$bemerkung',
-                                            '$bestellposition',
-                                            1
-                                        )";
-
-                            $this->app->DB->Insert($sql);
+                        $this->app->DatabaseService->insert(
+                            "INSERT INTO paketdistribution(id,bearbeiter,zeit,paketannahme,adresse,artikel,menge,vpe,etiketten,bemerkung,bestellung_position,vorlaeufig)
+                             VALUES('', :bearbeiter, NOW(), :paketannahme, '', :artikel,
+                                    (SELECT menge-geliefert FROM bestellung_position WHERE id = :bestellposition2),
+                                    :vpe, '', :bemerkung, :bestellposition, 1)",
+                            [
+                                'bearbeiter' => $this->app->User->GetName(),
+                                'paketannahme' => (int)$id,
+                                'artikel' => (int)$artikel,
+                                'bestellposition2' => $bestellposition,
+                                'vpe' => $vpe,
+                                'bemerkung' => $bemerkung,
+                                'bestellposition' => $bestellposition,
+                            ]
+                        );
 
                     }
                 }
@@ -2211,7 +2184,7 @@ class Wareneingang {
                             if ($bparr['lagerartikel']) {
                                 // Get Lager_platz
                                 if (empty($ziellager_from_form)) {
-                                    $lager = $this->app->DB->Select("SELECT lager_platz FROM artikel WHERE id='" . $artikel . "' LIMIT 1");
+                                    $lager = $this->app->DatabaseService->selectValue('SELECT lager_platz FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
                                     if (empty($lager)) {
                                         $msg .= '<div class="error">Kein Ziellagerplatz gefunden für Artikel: '.$artikel_nr.'</div>';
                                         continue;
@@ -2223,7 +2196,7 @@ class Wareneingang {
 
                                 // Put stock
                                 $this->app->erp->LagerEinlagern($artikel, $menge, $lager, '', "Wareneingang Paket $id, Bestellung $bestellung_belegnr", '', $id);
-                                $lagerplatz_name = $this->app->DB->Select("SELECT kurzbezeichnung FROM lager_platz WHERE lager_platz.id = $lager LIMIT 1");
+                                $lagerplatz_name = $this->app->DatabaseService->selectValue('SELECT kurzbezeichnung FROM lager_platz WHERE lager_platz.id = :lager LIMIT 1', ['lager' => (int)$lager]);
                                 $bemerkung = $lagerplatz_name;
                             }
 
@@ -2276,10 +2249,9 @@ class Wareneingang {
                     if ($menge == '') {
                         $gescannterartikel = $artikel_input;
                         if (!empty($gescannterartikel)) {
-                            $bparr = $this->app->DB->SelectRow("SELECT SUM(bp.menge) menge, SUM(bp.geliefert) geliefert FROM bestellung b INNER JOIN bestellung_position bp ON bp.bestellung = b.id INNER JOIN artikel a ON bp.artikel = a.id WHERE a.id='$artikel' LIMIT 1");
+                            $bparr = $this->app->DatabaseService->selectRow('SELECT SUM(bp.menge) menge, SUM(bp.geliefert) geliefert FROM bestellung b INNER JOIN bestellung_position bp ON bp.bestellung = b.id INNER JOIN artikel a ON bp.artikel = a.id WHERE a.id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
 
-                            $sql = "SELECT SUM(menge) FROM paketdistribution WHERE paketannahme = ".$id." AND artikel = ".$artikel." AND vorlaeufig = 1 LIMIT 1";
-                            $vorlauefige_menge = $this->app->DB->Select($sql);
+                            $vorlauefige_menge = $this->app->DatabaseService->selectValue('SELECT SUM(menge) FROM paketdistribution WHERE paketannahme = :paketannahme AND artikel = :artikel AND vorlaeufig = 1 LIMIT 1', ['paketannahme' => (int)$id, 'artikel' => (int)$artikel]);
 
                             $bestellmenge = $bparr['menge'];
                             $geliefert = $bparr['geliefert'];
@@ -2292,12 +2264,12 @@ class Wareneingang {
                                 $gescanntemenge = 1;
                                 $this->app->Tpl->Set('MENGE', $gescanntemenge);
                                 $this->app->Tpl->Set('GESCANNTEMENGE', $gescanntemenge);
-                                $artikelinfo = $this->app->DB->SelectRow("SELECT name_de, standardbild, nummer FROM artikel WHERE id = '".$artikel."'");
+                                $artikelinfo = $this->app->DatabaseService->selectRow('SELECT name_de, standardbild, nummer FROM artikel WHERE id = :artikel', ['artikel' => (int)$artikel]);
                                 $gescannterartikelnummer = $artikelinfo['nummer'];
                                 $gescannterartikelname = $artikelinfo['name_de'];
                                 $standardbild = $artikelinfo['standardbild'];
                                 if ($standardbild == '') {
-                                    $standardbild = $this->app->DB->Select("SELECT datei FROM datei_stichwoerter WHERE subjekt='Shopbild' AND objekt='Artikel' AND parameter='$artikel' LIMIT 1");
+                                    $standardbild = $this->app->DatabaseService->selectValue("SELECT datei FROM datei_stichwoerter WHERE subjekt='Shopbild' AND objekt='Artikel' AND parameter = :artikel LIMIT 1", ['artikel' => (int)$artikel]);
                                     if ($standardbild > 0) {
                                         $this->app->Tpl->Add('ARTIKELBILD', "<tr valign=\"top\"><td>Bild:</td><td align=\"left\"><img src=\"index.php?module=dateien&action=send&id=$standardbild\" width=\"110\"></td></tr>");
                                     }
@@ -2320,8 +2292,8 @@ class Wareneingang {
 
                     if ($menge > 0) {
                         // Bestellpositionen suchen und auffüllen
-                        $sql = "
-                            SELECT
+                        $bparr = $this->app->DatabaseService->select(
+                            "SELECT
                                 bp.id,
                                 bp.menge,
                                 bp.geliefert,
@@ -2336,17 +2308,17 @@ class Wareneingang {
                                     SUM(pd.menge) vorlaeufig
                                 FROM paketdistribution pd
                                 INNER JOIN bestellung_position bp ON bp.id = pd.bestellung_position
-                                WHERE pd.paketannahme = ".$id." AND pd.artikel = ".$artikel." AND pd.vorlaeufig = 1
+                                WHERE pd.paketannahme = :paketannahme AND pd.artikel = :artikel AND pd.vorlaeufig = 1
                                 GROUP BY bp.id
                             ) vorlaeufige_pos
                             ON vorlaeufige_pos.id = bp.id
-                            WHERE a.id='$artikel'
+                            WHERE a.id = :artikel2
                             AND b.belegnr <> ''
                             AND (bp.abgeschlossen IS NULL OR bp.abgeschlossen=0)
                             AND (b.status='versendet' OR b.status='freigegeben')
-                            ORDER BY b.id ASC
-                        ";
-                        $bparr = $this->app->DB->SelectArr($sql);
+                            ORDER BY b.id ASC",
+                            ['paketannahme' => (int)$id, 'artikel' => (int)$artikel, 'artikel2' => (int)$artikel]
+                        );
 
                         foreach ($bparr as $position) {
                             $restmenge = $position['menge'] - $position['geliefert'] - $position['vorlaeufig'];
@@ -2504,7 +2476,7 @@ class Wareneingang {
                             $lagerartikel = $bparr['lagerartikel'];
                             $info_bestellung = ", Bestellung $bestellung_belegnr";
                         } else {
-                            $artikelarr = $this->app->DB->SelectRow("SELECT nummer, lagerartikel FROM artikel WHERE id =".$position['artikel']);
+                            $artikelarr = $this->app->DatabaseService->selectRow('SELECT nummer, lagerartikel FROM artikel WHERE id = :artikel', ['artikel' => (int)$position['artikel']]);
                             $lagerartikel = $artikelarr['lagerartikel'];
                             $artikel_nr = $artikelarr['nummer'];
                         }
@@ -2512,7 +2484,7 @@ class Wareneingang {
                         if ($lagerartikel) {
                             // Get Lager_platz
                             if (empty($ziellager_from_form)) {
-                                $lager = $this->app->DB->Select("SELECT lager_platz FROM artikel WHERE id='" . $artikel . "' LIMIT 1");
+                                $lager = $this->app->DatabaseService->selectValue('SELECT lager_platz FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
                                 if (empty($lager)) {
                                     $msg .= '<div class="error">Kein Ziellagerplatz gefunden für Artikel: '.$artikel_nr.'</div>';
                                     continue;
@@ -2524,7 +2496,7 @@ class Wareneingang {
 
                             // Put stock
                             $this->app->erp->LagerEinlagern($artikel, $menge, $lager, '', "Wareneingang Paket $id".$info_bestellung, '', $id);
-                            $lagerplatz_name = $this->app->DB->Select("SELECT kurzbezeichnung FROM lager_platz WHERE lager_platz.id = $lager LIMIT 1");
+                            $lagerplatz_name = $this->app->DatabaseService->selectValue('SELECT kurzbezeichnung FROM lager_platz WHERE lager_platz.id = :lager LIMIT 1', ['lager' => (int)$lager]);
                             $bemerkung = trim($position['bemerkung']." ".$lagerplatz_name);
                         } else {
                             $bemerkung = $position['bemerkung'];
@@ -2547,27 +2519,16 @@ class Wareneingang {
             break;
             case 'etikettendrucken':
 
-                $sql = "
-                    SELECT
-                    pa.id,
-                    pd.menge,
-                    a.nummer artikelnummer,
-                    a.name_de bezeichnung,
-                    a.beschreibung_de beschreibung,
-                    a.zolltarifnummer,
-                    a.herkunftsland herkunftslandcode,
-                    a.ean,
-                    a.herstellernummer
-                    FROM paketannahme pa
-                    INNER JOIN
-                        paketdistribution pd ON pd.paketannahme = pa.id
-                    INNER JOIN
-                        artikel a ON a.id = pd.artikel
-                    WHERE
-                        pa.id = ".$id."
-                ";
-
-                $positionen = $this->app->DB->SelectArr($sql);
+                $positionen = $this->app->DatabaseService->select(
+                    "SELECT pa.id, pd.menge, a.nummer artikelnummer, a.name_de bezeichnung,
+                     a.beschreibung_de beschreibung, a.zolltarifnummer,
+                     a.herkunftsland herkunftslandcode, a.ean, a.herstellernummer
+                     FROM paketannahme pa
+                     INNER JOIN paketdistribution pd ON pd.paketannahme = pa.id
+                     INNER JOIN artikel a ON a.id = pd.artikel
+                     WHERE pa.id = :id",
+                    ['id' => (int)$id]
+                );
 
                 $gedruckte_etiketten = 0;
 
@@ -2588,9 +2549,7 @@ class Wareneingang {
             break;
             case 'abschliessen':
 
-                $sql = "SELECT id FROM paketdistribution WHERE paketannahme = ".$id." AND vorlaeufig = 1";
-
-                $vorlaeufige = $this->app->DB->SelectArr($sql);
+                $vorlaeufige = $this->app->DatabaseService->select('SELECT id FROM paketdistribution WHERE paketannahme = :id AND vorlaeufig = 1', ['id' => (int)$id]);
                 if (!empty($vorlaeufige)) {
                     break;
                 }
@@ -2669,14 +2628,13 @@ class Wareneingang {
           }
           } */    // Submit
 
-        $sql = sprintf(
-                'SELECT `adresse`,projekt,status,%s,bearbeiter_abgeschlossen,%s FROM `paketannahme` WHERE `id` = %d LIMIT 1',
-                $this->app->erp->FormatDate('datum_abgeschlossen', 'datum_abgeschlossen'),
-                $this->app->erp->FormatDate('datum', 'datum'),
-                $id
-        );
+        $sql = 'SELECT `adresse`,projekt,status,'
+                . $this->app->erp->FormatDate('datum_abgeschlossen', 'datum_abgeschlossen')
+                . ',bearbeiter_abgeschlossen,'
+                . $this->app->erp->FormatDate('datum', 'datum')
+                . ' FROM `paketannahme` WHERE `id` = :id LIMIT 1';
 
-        $paketannahme = $this->app->DB->SelectArr($sql)[0];
+        $paketannahme = $this->app->DatabaseService->selectRow($sql, ['id' => (int)$id]);
 
         $adresse = $paketannahme['adresse'];
         $status = $paketannahme['status'];
@@ -2685,14 +2643,9 @@ class Wareneingang {
         $datum_abgeschlossen = $paketannahme['datum_abgeschlossen'];
         $bearbeiter_abgeschlossen = $paketannahme['bearbeiter_abgeschlossen'];
 
-        $addressRow = empty($adresse) ? null : $this->app->DB->SelectRow(
-                        sprintf(
-                                'SELECT `name`,`kundennummer`,`lieferantennummer`
-        FROM `adresse`
-        WHERE `id` = %d AND `geloescht` = 0
-        LIMIT 1',
-                                $adresse
-                        )
+        $addressRow = empty($adresse) ? null : $this->app->DatabaseService->selectRow(
+                'SELECT `name`,`kundennummer`,`lieferantennummer` FROM `adresse` WHERE `id` = :adresse AND `geloescht` = 0 LIMIT 1',
+                ['adresse' => (int)$adresse]
         );
 
         // pruefe ob
@@ -2787,8 +2740,7 @@ class Wareneingang {
             $this->app->Tpl->Set('ABGESCHLOSSENHIDDEN','hidden');
         }
 
-        $sql = "SELECT id FROM paketdistribution WHERE paketannahme = ".$id." AND vorlaeufig = 1";
-        $vorlaeufige = $this->app->DB->SelectArr($sql);
+        $vorlaeufige = $this->app->DatabaseService->select('SELECT id FROM paketdistribution WHERE paketannahme = :id AND vorlaeufig = 1', ['id' => (int)$id]);
         if (!empty($vorlaeufige)) {
             $this->app->YUI->Message('info','Nicht eingebuchte Positionen vorhanden');
             $this->app->Tpl->Set('ABSCHLIESSENHIDDEN','hidden');
@@ -2848,7 +2800,7 @@ class Wareneingang {
 
         $this->app->Tpl->Set('MD5', md5(microtime(true)));
         $this->app->Tpl->Set('ID', $id);
-        $arr = $this->app->DB->SelectRow("SELECT * FROM paketannahme WHERE id = '$id' LIMIT 1");
+        $arr = $this->app->DatabaseService->selectRow('SELECT * FROM paketannahme WHERE id = :id LIMIT 1', ['id' => (int)$id]);
         if ($arr) {
             if ($arr['beipack_rechnung']) {
                 $this->app->Tpl->Set('BEIPACK_RECHNUNG', ' checked="checked" ');
@@ -2970,7 +2922,7 @@ class Wareneingang {
         } else if ($cmd === 'manuell') {
             $artikel = $pos;
             $mitarbeiter = $this->app->User->GetName();
-            $projekt = $this->app->DB->Select("SELECT projekt FROM artikel WHERE id='$artikel' LIMIT 1");
+            $projekt = $this->app->DatabaseService->selectValue('SELECT projekt FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
         } else {
             $retarr = null;
             $bparr = null;
@@ -2983,9 +2935,9 @@ class Wareneingang {
             $menge_bestellung = 0;
             $menge_retoure = 0;
             if (!empty($retourepos)) {
-                $retarr = $this->app->DB->SelectRow("SELECT * FROM retoure_position WHERE id='$retourepos' LIMIT 1");
+                $retarr = $this->app->DatabaseService->selectRow('SELECT * FROM retoure_position WHERE id = :id LIMIT 1', ['id' => (int)$retourepos]);
             } else {
-                $bparr = $this->app->DB->SelectRow("SELECT * FROM bestellung_position WHERE id='$pos' LIMIT 1");
+                $bparr = $this->app->DatabaseService->selectRow('SELECT * FROM bestellung_position WHERE id = :id LIMIT 1', ['id' => (int)$pos]);
             }
             if (!empty($retarr)) {
                 $artikel = $retarr['artikel'];
@@ -3005,23 +2957,21 @@ class Wareneingang {
             $retoure_belegnr = '';
             $bestellung_belegnr = '';
             if (!empty($retourepos)) {
-                $mitarbeiter = $this->app->DB->Select("SELECT bearbeiter FROM retoure WHERE id='$retoure' LIMIT 1");
-                $retoure_belegnr = $this->app->DB->Select("SELECT belegnr FROM retoure WHERE id='$retoure' LIMIT 1");
+                $mitarbeiter = $this->app->DatabaseService->selectValue('SELECT bearbeiter FROM retoure WHERE id = :id LIMIT 1', ['id' => (int)$retoure]);
+                $retoure_belegnr = $this->app->DatabaseService->selectValue('SELECT belegnr FROM retoure WHERE id = :id LIMIT 1', ['id' => (int)$retoure]);
             } else {
-                $mitarbeiter = $this->app->DB->Select("SELECT bearbeiter FROM bestellung WHERE id='$bestellung' LIMIT 1");
-                $bestellung_belegnr = $this->app->DB->Select("SELECT belegnr FROM bestellung WHERE id='$bestellung' LIMIT 1");
+                $mitarbeiter = $this->app->DatabaseService->selectValue('SELECT bearbeiter FROM bestellung WHERE id = :id LIMIT 1', ['id' => (int)$bestellung]);
+                $bestellung_belegnr = $this->app->DatabaseService->selectValue('SELECT belegnr FROM bestellung WHERE id = :id LIMIT 1', ['id' => (int)$bestellung]);
             }
         }
-        $standardlager = $this->app->DB->Select("SELECT lager_platz FROM artikel WHERE id='" . $artikel . "' LIMIT 1");
+        $standardlager = $this->app->DatabaseService->selectValue('SELECT lager_platz FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
         $withStandardlager = $standardlager > 0;
 
-        $artikelRow = $this->app->DB->SelectRow(
-                sprintf(
-                        'SELECT lagerartikel,mindesthaltbarkeitsdatum, seriennummern,nummer, name_de,
+        $artikelRow = $this->app->DatabaseService->selectRow(
+                'SELECT lagerartikel,mindesthaltbarkeitsdatum, seriennummern,nummer, name_de,
        artikelcheckliste,funktionstest,endmontage,standardbild,shop,chargenverwaltung
-        FROM artikel WHERE id = %d LIMIT 1',
-                        $artikel
-                )
+        FROM artikel WHERE id = :artikel LIMIT 1',
+                ['artikel' => (int)$artikel]
         );
         $lagerartikel = $artikelRow['lagerartikel'];
         $mindesthaltbarkeitsdatum = $artikelRow['mindesthaltbarkeitsdatum'];
@@ -3029,18 +2979,18 @@ class Wareneingang {
         if ($seriennummern != '' && $seriennummern !== 'keine') {
             $menge = (int) $menge;
         }
-        $mitarbeiter_name = $this->app->DB->Select("SELECT name FROM adresse WHERE id='$mitarbeiter' AND geloescht=0 LIMIT 1");
-        $artikelcheckliste = !empty($artikelRow) ? $artikelRow['artikelcheckliste'] : $this->app->DB->Select("SELECT artikelcheckliste FROM artikel WHERE id='$artikel' LIMIT 1");
-        $funktionstest = !empty($artikelRow) ? $artikelRow['funktionstest'] : $this->app->DB->Select("SELECT funktionstest FROM artikel WHERE id='$artikel' LIMIT 1");
-        $endmontage = !empty($artikelRow) ? $artikelRow['endmontage'] : $this->app->DB->Select("SELECT endmontage FROM artikel WHERE id='$artikel' LIMIT 1");
-        $name_de = !empty($artikelRow) ? $artikelRow['name_de'] : $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$artikel' LIMIT 1");
-        $nummer = !empty($artikelRow) ? $artikelRow['nummer'] : $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$artikel' LIMIT 1");
-        $chargenverwaltung = !empty($artikelRow) ? $artikelRow['chargenverwaltung'] : $this->app->DB->Select("SELECT chargenverwaltung FROM artikel WHERE id='$artikel' LIMIT 1");
-        $standardbild = !empty($artikelRow) ? $artikelRow['standardbild'] : $this->app->DB->Select("SELECT standardbild FROM artikel WHERE id='$artikel' LIMIT 1");
-        $shopartikel = !empty($artikelRow) ? $artikelRow['shop'] : $this->app->DB->Select("SELECT shop FROM artikel WHERE id='$artikel' LIMIT 1");
+        $mitarbeiter_name = $this->app->DatabaseService->selectValue('SELECT name FROM adresse WHERE id = :mitarbeiter AND geloescht=0 LIMIT 1', ['mitarbeiter' => (int)$mitarbeiter]);
+        $artikelcheckliste = !empty($artikelRow) ? $artikelRow['artikelcheckliste'] : $this->app->DatabaseService->selectValue('SELECT artikelcheckliste FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
+        $funktionstest = !empty($artikelRow) ? $artikelRow['funktionstest'] : $this->app->DatabaseService->selectValue('SELECT funktionstest FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
+        $endmontage = !empty($artikelRow) ? $artikelRow['endmontage'] : $this->app->DatabaseService->selectValue('SELECT endmontage FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
+        $name_de = !empty($artikelRow) ? $artikelRow['name_de'] : $this->app->DatabaseService->selectValue('SELECT name_de FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
+        $nummer = !empty($artikelRow) ? $artikelRow['nummer'] : $this->app->DatabaseService->selectValue('SELECT nummer FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
+        $chargenverwaltung = !empty($artikelRow) ? $artikelRow['chargenverwaltung'] : $this->app->DatabaseService->selectValue('SELECT chargenverwaltung FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
+        $standardbild = !empty($artikelRow) ? $artikelRow['standardbild'] : $this->app->DatabaseService->selectValue('SELECT standardbild FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
+        $shopartikel = !empty($artikelRow) ? $artikelRow['shop'] : $this->app->DatabaseService->selectValue('SELECT shop FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
 
         if ($standardbild == '') {
-            $standardbild = $this->app->DB->Select("SELECT datei FROM datei_stichwoerter WHERE subjekt='Shopbild' AND objekt='Artikel' AND parameter='$artikel' LIMIT 1");
+            $standardbild = $this->app->DatabaseService->selectValue("SELECT datei FROM datei_stichwoerter WHERE subjekt='Shopbild' AND objekt='Artikel' AND parameter = :artikel LIMIT 1", ['artikel' => (int)$artikel]);
         }
 
         if (empty($retourepos)) {
@@ -3106,11 +3056,9 @@ class Wareneingang {
             $this->app->Tpl->Set('STANDARDLAGER', 'nicht definiert');
         }
         if (!empty($retarr) && !empty($retarr['default_storagelocation'])) {
-            $retarr['default_storagelocation'] = $this->app->DB->Select(
-                    sprintf(
-                            "SELECT kurzbezeichnung FROM lager_platz WHERE geloescht <> 1 AND id = %d and kurzbezeichnung <> ''",
-                            $retarr['default_storagelocation']
-                    )
+            $retarr['default_storagelocation'] = $this->app->DatabaseService->selectValue(
+                    "SELECT kurzbezeichnung FROM lager_platz WHERE geloescht <> 1 AND id = :id AND kurzbezeichnung <> ''",
+                    ['id' => (int)$retarr['default_storagelocation']]
             );
         }
         if (!empty($retarr) && !empty($retarr['default_storagelocation'])) {
@@ -3123,7 +3071,7 @@ class Wareneingang {
             }
             //$this->app->Tpl->Set('LAGER',$this->app->erp->GetSelectAsso($this->app->erp->GetLager(false, $ismobile),$lager));
         } else {
-            $this->app->Tpl->Set('STANDARDLAGER', $this->app->DB->Select("SELECT kurzbezeichnung FROM lager_platz WHERE id='" . $standardlager . "' LIMIT 1"));
+            $this->app->Tpl->Set('STANDARDLAGER', $this->app->DatabaseService->selectValue('SELECT kurzbezeichnung FROM lager_platz WHERE id = :id LIMIT 1', ['id' => (int)$standardlager]));
             if ($ismobile || $this->app->erp->Firmendaten('wareneingang_zwischenlager') == '1') {
                 $this->app->Tpl->Set('LAGERPLACEHOLDER', ' placeholder="zwischenlager" ');
             } else {
@@ -3251,17 +3199,13 @@ class Wareneingang {
                         }
                         break;
                     case 'standardlager':
-                        $lager = $this->app->DB->Select(
-                                sprintf(
-                                        'SELECT lager_platz FROM artikel WHERE id = %d',
-                                        $artikel
-                                )
+                        $lager = $this->app->DatabaseService->selectValue(
+                                'SELECT lager_platz FROM artikel WHERE id = :artikel',
+                                ['artikel' => (int)$artikel]
                         );
-                        $lager = empty($lager) ? null : $this->app->DB->Select(
-                                        sprintf(
-                                                'SELECT id FROM lager_platz WHERE id = %d AND geloescht <> 1',
-                                                $lager
-                                        )
+                        $lager = empty($lager) ? null : $this->app->DatabaseService->selectValue(
+                                'SELECT id FROM lager_platz WHERE id = :lager AND geloescht <> 1',
+                                ['lager' => (int)$lager]
                         );
                         if (empty($lager)) {
                             $error++;
@@ -3270,22 +3214,14 @@ class Wareneingang {
                         break;
                     default:
                         $frmLager = $lager;
-                        $lager = $this->app->DB->Select(
-                                sprintf(
-                                        "SELECT id
-                FROM lager_platz
-                WHERE kurzbezeichnung <> '' AND kurzbezeichnung = '%s' AND geloescht <> 1",
-                                        $frmLager
-                                )
+                        $lager = $this->app->DatabaseService->selectValue(
+                                "SELECT id FROM lager_platz WHERE kurzbezeichnung <> '' AND kurzbezeichnung = :kurzbezeichnung AND geloescht <> 1",
+                                ['kurzbezeichnung' => $frmLager]
                         );
                         if (empty($lager) && is_numeric($frmLager)) {
-                            $lager = $this->app->DB->Select(
-                                    sprintf(
-                                            "SELECT id
-                FROM lager_platz
-                WHERE kurzbezeichnung <> '' AND id = %d AND geloescht <> 1",
-                                            $frmLager
-                                    )
+                            $lager = $this->app->DatabaseService->selectValue(
+                                    "SELECT id FROM lager_platz WHERE kurzbezeichnung <> '' AND id = :id AND geloescht <> 1",
+                                    ['id' => (int)$frmLager]
                             );
                         }
                         if (empty($lager)) {
@@ -3336,7 +3272,7 @@ class Wareneingang {
                     } else {
                         $druckanzahl = $anzahl_dyn;
                     }
-                    $name_de = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$artikel' LIMIT 1");
+                    $name_de = $this->app->DatabaseService->selectValue('SELECT name_de FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
                     $name_de = base64_encode($name_de);
 
                     $this->app->erp->LagerArtikelZusammenfassen($artikel);
@@ -3348,28 +3284,33 @@ class Wareneingang {
 
                             // falls BE für Auftrag
                             if (!empty($retoure)) {
-                                $auftragid = $this->app->DB->Select(
+                                $auftragid = $this->app->DatabaseService->selectValue(
                                         "SELECT a.id FROM retoure_position bp
                  LEFT JOIN auftrag_position ap ON bp.auftrag_position_id=ap.id
-                LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE bp.retoure='$retoure' LIMIT 1");
+                LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE bp.retoure = :retoure LIMIT 1",
+                                        ['retoure' => (int)$retoure]
+                                );
 
-                                $data['retoure'] = $this->app->DB->Select("SELECT belegnr FROM bestellung WHERE id='$retoure' LIMIT 1");
+                                $data['retoure'] = $this->app->DatabaseService->selectValue('SELECT belegnr FROM bestellung WHERE id = :id LIMIT 1', ['id' => (int)$retoure]);
                             } else {
-                                $auftragid = $this->app->DB->Select("SELECT a.id FROM bestellung_position bp LEFT JOIN auftrag_position ap ON bp.auftrag_position_id=ap.id
-                LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE bp.bestellung='$bestellung' LIMIT 1");
+                                $auftragid = $this->app->DatabaseService->selectValue(
+                                        "SELECT a.id FROM bestellung_position bp LEFT JOIN auftrag_position ap ON bp.auftrag_position_id=ap.id
+                LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE bp.bestellung = :bestellung LIMIT 1",
+                                        ['bestellung' => (int)$bestellung]
+                                );
 
-                                $data['bestellung'] = $this->app->DB->Select("SELECT belegnr FROM bestellung WHERE id='$bestellung' LIMIT 1");
+                                $data['bestellung'] = $this->app->DatabaseService->selectValue('SELECT belegnr FROM bestellung WHERE id = :id LIMIT 1', ['id' => (int)$bestellung]);
                             }
 
                             if ($auftragid > 0) {
-                                $belegnummer = $this->app->DB->Select("SELECT belegnr FROM auftrag WHERE id='$auftragid' LIMIT 1");
+                                $belegnummer = $this->app->DatabaseService->selectValue('SELECT belegnr FROM auftrag WHERE id = :id LIMIT 1', ['id' => (int)$auftragid]);
                                 $data['belegnummer'] = $belegnummer;
                                 $data['auftragsnummer'] = $belegnummer;
                                 $data['auftrag'] = $belegnummer;
 
-                                $adresse = $this->app->DB->Select("SELECT adresse FROM auftrag WHERE id='$auftragid' LIMIT 1");
+                                $adresse = $this->app->DatabaseService->selectValue('SELECT adresse FROM auftrag WHERE id = :id LIMIT 1', ['id' => (int)$auftragid]);
                                 if ($adresse > 0) {
-                                    $adressearr = $this->app->DB->SelectRow("SELECT * FROM adresse WHERE id='$adresse' LIMIT 1");
+                                    $adressearr = $this->app->DatabaseService->selectRow('SELECT * FROM adresse WHERE id = :id LIMIT 1', ['id' => (int)$adresse]);
                                     foreach ($adressearr as $key => $value) {
                                         $data['adresse_' . $key] = $value;
                                     }
@@ -3381,7 +3322,7 @@ class Wareneingang {
                             $data['mhd2'] = $this->app->Secure->GetPOST('mhd');
 
                             if ($lager > 0) {
-                                $data['lager_platz_einlagern'] = $this->app->DB->Select("SELECT kurzbezeichnung FROM lager_platz WHERE id='" . $lager . "' LIMIT 1");
+                                $data['lager_platz_einlagern'] = $this->app->DatabaseService->selectValue('SELECT kurzbezeichnung FROM lager_platz WHERE id = :id LIMIT 1', ['id' => (int)$lager]);
                             }
 
                             //$data['seriennummer']="";
@@ -3425,13 +3366,17 @@ class Wareneingang {
                     // entweder ins zwischenlager
                     if (strtolower($lager) === 'zwischenlager') {
                         if (!empty($retoure)) {
-                            $this->app->DB->Insert("INSERT INTO zwischenlager (id,bearbeiter,projekt,artikel,menge,vpe,grund,lager_von,richtung,objekt,parameter,firma,paketannahme)
-                VALUES ('','" . $this->app->User->GetName() . "','$projekt','$artikel','$menge','$vpe','Wareneingang von Retoure $retoure_belegnr','Wareneingang','Eingang',
-                  'Retoure','$retoure','" . $this->app->User->GetFirma() . "','$id')");
+                            $this->app->DatabaseService->insert(
+                                "INSERT INTO zwischenlager (id,bearbeiter,projekt,artikel,menge,vpe,grund,lager_von,richtung,objekt,parameter,firma,paketannahme)
+                VALUES ('', :bearbeiter, :projekt, :artikel, :menge, :vpe, :grund, 'Wareneingang', 'Eingang', 'Retoure', :parameter, :firma, :paketannahme)",
+                                ['bearbeiter' => $this->app->User->GetName(), 'projekt' => $projekt, 'artikel' => (int)$artikel, 'menge' => $menge, 'vpe' => $vpe, 'grund' => 'Wareneingang von Retoure ' . $retoure_belegnr, 'parameter' => (int)$retoure, 'firma' => $this->app->User->GetFirma(), 'paketannahme' => (int)$id]
+                            );
                         } else {
-                            $this->app->DB->Insert("INSERT INTO zwischenlager (id,bearbeiter,projekt,artikel,menge,vpe,grund,lager_von,richtung,objekt,parameter,firma,paketannahme)
-                VALUES ('','" . $this->app->User->GetName() . "','$projekt','$artikel','$menge','$vpe','Wareneingang von Bestellung $bestellung_belegnr','Wareneingang','Eingang',
-                  'Bestellung','$bestellung','" . $this->app->User->GetFirma() . "','$id')");
+                            $this->app->DatabaseService->insert(
+                                "INSERT INTO zwischenlager (id,bearbeiter,projekt,artikel,menge,vpe,grund,lager_von,richtung,objekt,parameter,firma,paketannahme)
+                VALUES ('', :bearbeiter, :projekt, :artikel, :menge, :vpe, :grund, 'Wareneingang', 'Eingang', 'Bestellung', :parameter, :firma, :paketannahme)",
+                                ['bearbeiter' => $this->app->User->GetName(), 'projekt' => $projekt, 'artikel' => (int)$artikel, 'menge' => $menge, 'vpe' => $vpe, 'grund' => 'Wareneingang von Bestellung ' . $bestellung_belegnr, 'parameter' => (int)$bestellung, 'firma' => $this->app->User->GetFirma(), 'paketannahme' => (int)$id]
+                            );
                         }
                         $typ = 'zwischenlager';
                         $zid = $this->app->DB->GetInsertID();
@@ -3441,11 +3386,11 @@ class Wareneingang {
                     // oder direkt ins manuelle (lagerplatz + lager_bewegung)
                     else {
                         if (strtolower($lager) === 'standardlager') {
-                            $lager = $this->app->DB->Select("SELECT lager_platz FROM artikel WHERE id='" . $artikel . "' LIMIT 1");
+                            $lager = $this->app->DatabaseService->selectValue('SELECT lager_platz FROM artikel WHERE id = :artikel LIMIT 1', ['artikel' => (int)$artikel]);
                         }
 
                         if ($lager <= 0) {
-                            $lager = $this->app->DB->Select("SELECT id FROM lager_platz WHERE autolagersperre!=1 AND verbrauchslager!=1 AND geloescht!=1 LIMIT 1");
+                            $lager = $this->app->DatabaseService->selectValue('SELECT id FROM lager_platz WHERE autolagersperre!=1 AND verbrauchslager!=1 AND geloescht!=1 LIMIT 1', []);
                         }
 
                         if ($lager === 'zwischenlager') {
@@ -3485,14 +3430,14 @@ class Wareneingang {
                                 $this->app->erp->RunHook('wareneingang_bestellung', 5, $bparr, $artikel, $menge, $lager, $id);
                             }
 
-                            $lagerplatz_name = $this->app->DB->Select("SELECT kurzbezeichnung FROM lager_platz WHERE lager_platz.id = $lager LIMIT 1");
+                            $lagerplatz_name = $this->app->DatabaseService->selectValue('SELECT kurzbezeichnung FROM lager_platz WHERE lager_platz.id = :lager LIMIT 1', ['lager' => (int)$lager]);
                             $bemerkung = $lagerplatz_name;
                         }
                         $typ2 = 'lager_platz';
                         $tmpid2 = array('artikel' => $artikel, 'lager_platz' => $lager, 'menge' => $menge);
                     }
 
-                    $_adresse = $this->app->DB->Select("SELECT adresse FROM paketannahme WHERE id = '$id' LIMIT 1");
+                    $_adresse = $this->app->DatabaseService->selectValue('SELECT adresse FROM paketannahme WHERE id = :id LIMIT 1', ['id' => (int)$id]);
                     $this->app->erp->RunHook('wareneingang_lager_submit', 8, $_adresse, $artikel, $menge, $lagerplatz, $mhd, $chargemindest, $tmpcheck, $weiterleitung);
 
                     $this->app->erp->RunHook('wareneingang_after', 3, $id, $typ2, $tmpid2);
@@ -3500,8 +3445,10 @@ class Wareneingang {
                 case 'mitarbeiter':
                     // buchen als mitarbeiter inventar auf das projekt was angegeben ist
                     // wenn mitarbeiterartikel muss artikel als inventar dem mitarbeiter gebucht werden fuer projekt bla bla
-                    $this->app->DB->Insert("INSERT INTO projekt_inventar (id,artikel,menge,projekt,mitarbeiter,bestellung,zeit,vpe)
-              VALUES('','$artikel','$menge','$projekt','$mitarbeiter','$bestellung',NOW(),'$vpe')");
+                    $this->app->DatabaseService->insert(
+                        "INSERT INTO projekt_inventar (id,artikel,menge,projekt,mitarbeiter,bestellung,zeit,vpe) VALUES('', :artikel, :menge, :projekt, :mitarbeiter, :bestellung, NOW(), :vpe)",
+                        ['artikel' => (int)$artikel, 'menge' => $menge, 'projekt' => (int)$projekt, 'mitarbeiter' => $mitarbeiter, 'bestellung' => (int)$bestellung, 'vpe' => $vpe]
+                    );
                     $projekt_inventar_id = $this->app->DB->GetInsertID();
                     $this->app->erp->RunHook('wareneingang_after', 3, $id, $typ, $projekt_inventar_id);
                     break;
@@ -3514,32 +3461,27 @@ class Wareneingang {
             if ($typ !== 'rma' && $cmd !== 'manuell') {
 
                 // Distribution speichern!
-                $this->app->DB->Insert("INSERT INTO paketdistribution
-    (id,bearbeiter,zeit,paketannahme,adresse,artikel,menge,vpe,etiketten,bemerkung,bestellung_position)
-            VALUES ('','" . $this->app->User->GetName() . "',NOW(),'$id','$adresse','$artikel','$menge','$vpe','$etiketten','$bemerkung','$pos')");
+                $this->app->DatabaseService->insert(
+                    "INSERT INTO paketdistribution (id,bearbeiter,zeit,paketannahme,adresse,artikel,menge,vpe,etiketten,bemerkung,bestellung_position) VALUES ('', :bearbeiter, NOW(), :paketannahme, :adresse, :artikel, :menge, :vpe, :etiketten, :bemerkung, :pos)",
+                    ['bearbeiter' => $this->app->User->GetName(), 'paketannahme' => (int)$id, 'adresse' => (int)$adresse, 'artikel' => (int)$artikel, 'menge' => $menge, 'vpe' => $vpe, 'etiketten' => $etiketten, 'bemerkung' => $bemerkung, 'pos' => (int)$pos]
+                );
                 $pdId = $this->app->DB->GetInsertID();
                 if (!empty($retourepos)) {
-                    $this->app->DB->Update(
-                            sprintf(
-                                    'UPDATE paketdistribution SET bestellung_position = 0, retoure_position = %d WHERE id = %d',
-                                    $retourepos, $pdId
-                            )
+                    $this->app->DatabaseService->update(
+                        'UPDATE paketdistribution SET bestellung_position = 0, retoure_position = :retourepos WHERE id = :id',
+                        ['retourepos' => (int)$retourepos, 'id' => (int)$pdId]
                     );
                 }
 
                 // anzahl gelieferte erhoehen bestellung_position !!!
                 if (!empty($retourepos)) {
-                    $geliefert = $this->app->DB->Select("SELECT ifnull(menge_eingang,0) FROM retoure_position WHERE id='$retourepos' LIMIT 1");
+                    $geliefert = $this->app->DatabaseService->selectValue('SELECT ifnull(menge_eingang,0) FROM retoure_position WHERE id = :id LIMIT 1', ['id' => (int)$retourepos]);
                     //$gesamt_erwartet = $this->app->DB->Select("SELECT menge FROM bestellung_position WHERE id='$pos' LIMIT 1");
                     $geliefert += $menge;
-                    $this->app->DB->Update("UPDATE retoure_position SET menge_eingang='$geliefert' WHERE id='$retourepos' LIMIT 1");
-                    $this->app->DB->Update(
-                            sprintf(
-                                    "UPDATE retoure
-              SET fortschritt = 'eingegangen'
-              WHERE id = %d AND IFNULL(fortschritt,'') IN ('angekuenigt','angekuendigt','') ",
-                                    $retoure
-                            )
+                    $this->app->DatabaseService->update('UPDATE retoure_position SET menge_eingang = :geliefert WHERE id = :id LIMIT 1', ['geliefert' => $geliefert, 'id' => (int)$retourepos]);
+                    $this->app->DatabaseService->update(
+                        "UPDATE retoure SET fortschritt = 'eingegangen' WHERE id = :retoure AND IFNULL(fortschritt,'') IN ('angekuenigt','angekuendigt','') ",
+                        ['retoure' => (int)$retoure]
                     );
                 } else {
                     $geliefert = (float) $this->app->DatabaseService->selectValue('SELECT ifnull(geliefert,0) FROM bestellung_position WHERE id = :pos LIMIT 1', ['pos' => (int)$pos]);
@@ -3549,9 +3491,10 @@ class Wareneingang {
                 }
             } else if ($cmd == 'manuell') {
                 // Save the manually added entries to paketdistribution
-                $this->app->DB->Insert("INSERT INTO paketdistribution
-                (id,bearbeiter,zeit,paketannahme,adresse,artikel,menge,vpe,etiketten,bemerkung)
-                VALUES ('','" . $this->app->User->GetName() . "',NOW(),'$id','$adresse','$artikel','$menge','$vpe','$etiketten','$bemerkung')");
+                $this->app->DatabaseService->insert(
+                    "INSERT INTO paketdistribution (id,bearbeiter,zeit,paketannahme,adresse,artikel,menge,vpe,etiketten,bemerkung) VALUES ('', :bearbeiter, NOW(), :paketannahme, :adresse, :artikel, :menge, :vpe, :etiketten, :bemerkung)",
+                    ['bearbeiter' => $this->app->User->GetName(), 'paketannahme' => (int)$id, 'adresse' => (int)$adresse, 'artikel' => (int)$artikel, 'menge' => $menge, 'vpe' => $vpe, 'etiketten' => $etiketten, 'bemerkung' => $bemerkung]
+                );
             }
 
 
@@ -3564,11 +3507,9 @@ class Wareneingang {
                 }
                 if (!empty($retoure) && !empty($retourepos)) {
                     $all = $this->app->YUI->TableSearch('', 'paketannahme_retoure', 'ALL', '', '', basename(__FILE__), __CLASS__);
-                    $sorts = $this->app->DB->SelectPairs(
-                            sprintf(
-                                    "SELECT id,sort FROM retoure_position WHERE retoure = %d",
-                                    $retoure
-                            )
+                    $sorts = $this->app->DatabaseService->selectPairs(
+                            "SELECT id,sort FROM retoure_position WHERE retoure = :retoure",
+                            ['retoure' => (int)$retoure]
                     );
                     $actSort = !empty($sorts[$retourepos]) ? $sorts[$retourepos] : 0;
                     $positions = $this->app->DB->SelectArr(
@@ -3576,16 +3517,13 @@ class Wareneingang {
                             . sprintf(' ORDER BY bp.menge -  bp.menge_eingang <= 0,
             bp.menge_eingang <> 0,
             bp.id = %d,
-            bp.sort <= %d ', $retourepos, $actSort)
+            bp.sort <= %d ', (int)$retourepos, (int)$actSort)
                     );
 
-                    if (!$this->app->DB->Select(
-                                    sprintf(
-                                            "SELECT `id` FROM `retoure_position` WHERE `retoure` = %d AND `menge` > `menge_eingang`",
-                                            $retoure
-                                    )
-                            )
-                    ) {
+                    if (!$this->app->DatabaseService->selectValue(
+                            "SELECT `id` FROM `retoure_position` WHERE `retoure` = :retoure AND `menge` > `menge_eingang`",
+                            ['retoure' => (int)$retoure]
+                    )) {
                         $positions = null;
                     }
 
@@ -3594,11 +3532,9 @@ class Wareneingang {
                             $position['eingang'] = str_replace(',', '.', $position['eingang']);
                             $position['offen'] = str_replace(',', '.', $position['offen']);
                             if ($position['offen'] > 0) {
-                                $returnOrderId = (int) $this->app->DB->Select(
-                                                sprintf(
-                                                        'SELECT `retoure` FROM `retoure_position` WHERE `id` = %d',
-                                                        $position['id']
-                                                )
+                                $returnOrderId = (int) $this->app->DatabaseService->selectValue(
+                                        'SELECT `retoure` FROM `retoure_position` WHERE `id` = :id',
+                                        ['id' => (int)$position['id']]
                                 );
                                 if (!empty($doctypeId) && (int) $doctypeId !== $returnOrderId) {
                                     continue;
@@ -3631,10 +3567,9 @@ class Wareneingang {
                     }
                     $pos = $retourepos;
                 }
-                $receiptDocument = $this->app->DB->SelectRow(
-                        sprintf(
-                                'SELECT `id`, `status` FROM `receiptdocument` WHERE `return_order_id` = %d LIMIT 1', empty($returnOrderId) ? $retoure : $returnOrderId
-                        )
+                $receiptDocument = $this->app->DatabaseService->selectRow(
+                        'SELECT `id`, `status` FROM `receiptdocument` WHERE `return_order_id` = :return_order_id LIMIT 1',
+                        ['return_order_id' => (int)(empty($returnOrderId) ? $retoure : $returnOrderId)]
                 );
                 $receiptDocumentId = empty($receiptDocument) ? 0 : (int) $receiptDocument['id'];
                 $returnOrderComplete = !empty($retoure) && !empty($retourepos) && $positions === null;
@@ -3678,7 +3613,7 @@ class Wareneingang {
                 );
                 if (!$this->app->DB->Select($all['sql'] . ' WHERE ' . $all['where'] . ' LIMIT 1')) {
                     $this->app->User->SetParameter('wareneingang_from', '');
-                    $retoure = $this->app->DB->Select(sprintf('SELECT `retoure` FROM `retoure_position` WHERE `id` = %d', $pos));
+                    $retoure = $this->app->DatabaseService->selectValue('SELECT `retoure` FROM `retoure_position` WHERE `id` = :pos', ['pos' => (int)$pos]);
                     $userReturnOrder = $this->app->User->GetParameter('wareneingang_from_returnorder');
                     $module = $this->app->User->GetParameter('wareneingang_from_module');
                     $action = $this->app->User->GetParameter('wareneingang_from_action');
@@ -3707,11 +3642,9 @@ class Wareneingang {
             }
         }
         if (empty($pos) && empty($doctype) && $this->app->erp->Firmendaten('wareneingang_gross') == '1') {
-            $this->app->DB->Update(
-                    sprintf(
-                            "UPDATE `paketannahme` SET `status` = 'abgeschlossen' WHERE `id` = %d LIMIT 1",
-                            $id
-                    )
+            $this->app->DatabaseService->update(
+                    "UPDATE `paketannahme` SET `status` = 'abgeschlossen' WHERE `id` = :id LIMIT 1",
+                    ['id' => (int)$id]
             );
             $this->app->Location->execute('index.php?module=wareneingang&action=distribution');
         }
@@ -3847,14 +3780,12 @@ class Wareneingang {
      */
     public function createParcelReceiptFromAdress($addressId) {
         $bearbeiter = empty($this->app->User) || !method_exists($this->app->User, 'GetName') ? 'Cronjob' :
-                $this->app->DB->real_escape_string($this->app->User->GetName());
-        $projectId = (int) $this->app->DB->Select("SELECT projekt FROM adresse WHERE id='$addressId' AND geloescht=0 LIMIT 1");
-        $sql = sprintf(
-                "INSERT INTO paketannahme (datum,adresse,vorlage,vorlageid,projekt,bearbeiter,status) VALUES
-        (NOW(),%d,'adresse',%d,%d,'%s','angenommen')",
-                $addressId, $addressId, $projectId, $bearbeiter
+                $this->app->User->GetName();
+        $projectId = (int) $this->app->DatabaseService->selectValue('SELECT projekt FROM adresse WHERE id = :addressId AND geloescht=0 LIMIT 1', ['addressId' => (int)$addressId]);
+        $this->app->DatabaseService->insert(
+                "INSERT INTO paketannahme (datum,adresse,vorlage,vorlageid,projekt,bearbeiter,status) VALUES (NOW(), :adresse, 'adresse', :vorlageid, :projekt, :bearbeiter, 'angenommen')",
+                ['adresse' => (int)$addressId, 'vorlageid' => (int)$addressId, 'projekt' => $projectId, 'bearbeiter' => $bearbeiter]
         );
-        $this->app->DB->Insert($sql);
 
         return (int) $this->app->DB->GetInsertID();
     }
@@ -3867,71 +3798,61 @@ class Wareneingang {
 
         $articlescan = $this->app->Secure->GetPOST('articlescan');
         if ($articlescan) {
-            $best = $this->app->DB->SelectArr(
-                    sprintf(
-                            'SELECT bp.bestellung,MIN(bp.id) as pos, b.adresse, bp.artikel, b.projekt, art.lager_platz
+            $best = $this->app->DatabaseService->select(
+                    "SELECT bp.bestellung,MIN(bp.id) as pos, b.adresse, bp.artikel, b.projekt, art.lager_platz
           FROM bestellung AS b
-          INNER JOIN bestellung_position AS bp ON b.id = bp.bestellung AND bp.geliefert < bp.menge AND b.belegnr <> \'\' AND
-           (bp.abgeschlossen IS NULL OR bp.abgeschlossen=0)  AND (b.status=\'versendet\' OR b.status=\'freigegeben\')
+          INNER JOIN bestellung_position AS bp ON b.id = bp.bestellung AND bp.geliefert < bp.menge AND b.belegnr <> '' AND
+           (bp.abgeschlossen IS NULL OR bp.abgeschlossen=0)  AND (b.status='versendet' OR b.status='freigegeben')
           INNER JOIN artikel AS art ON bp.artikel = art.id
           LEFT JOIN `artikelnummer_fremdnummern` AS af ON art.id = af.artikel AND af.aktiv = 1 AND af.scannable = 1
-          WHERE art.nummer = \'%s\' OR art.ean = \'%s\' OR art.herstellernummer = \'%s\' OR af.nummer = \'%s\'
-          GROUP BY b.id, art.id ',
-                            $articlescan, $articlescan, $articlescan, $articlescan
-                    )
+          WHERE art.nummer = :scan1 OR art.ean = :scan2 OR art.herstellernummer = :scan3 OR af.nummer = :scan4
+          GROUP BY b.id, art.id",
+                    ['scan1' => $articlescan, 'scan2' => $articlescan, 'scan3' => $articlescan, 'scan4' => $articlescan]
             );
             $vorlage = '';
             if (empty($best)) {
                 if ($this->app->erp->ModulVorhanden('retoure')) {
-                    $retoure = $this->app->DB->SelectRow(
-                            sprintf(
-                                    "SELECT ro.id, ro.adresse
+                    $retoure = $this->app->DatabaseService->selectRow(
+                            "SELECT ro.id, ro.adresse
             FROM retoure AS ro
             INNER JOIN retoure_position AS rp on ro.id = rp.retoure AND rp.menge_eingang < rp.menge
                    AND ro.status <> 'storniert' AND ro.belegnr <> ''  AND ro.adresse > 0
-            WHERE ro.belegnr = '%s'
+            WHERE ro.belegnr = :scan
             LIMIT 1",
-                                    $articlescan
-                            )
+                            ['scan' => $articlescan]
                     );
                     if (empty($retoure)) {
-                        $retoure = $this->app->DB->SelectRow(
-                                sprintf(
-                                        "SELECT ro.id , ro.adresse
+                        $retoure = $this->app->DatabaseService->selectRow(
+                                "SELECT ro.id , ro.adresse
               FROM retoure AS ro
               INNER JOIN retoure_position AS rp on ro.id = rp.retoure AND rp.menge_eingang < rp.menge
                    AND ro.status <> 'storniert' AND ro.belegnr <> '' AND ro.adresse > 0
               INNER JOIN lieferschein AS dn ON ro.lieferscheinid = dn.id
-              WHERE dn.belegnr = '%s' AND dn.belegnr <> '' LIMIT 1",
-                                        $articlescan
-                                )
+              WHERE dn.belegnr = :scan AND dn.belegnr <> '' LIMIT 1",
+                                ['scan' => $articlescan]
                         );
                     }
                     if (empty($retoure)) {
-                        $retoure = $this->app->DB->SelectRow(
-                                sprintf(
-                                        "SELECT ro.id, ro.adresse
+                        $retoure = $this->app->DatabaseService->selectRow(
+                                "SELECT ro.id, ro.adresse
               FROM retoure AS ro
               INNER JOIN retoure_position AS rp on ro.id = rp.retoure AND rp.menge_eingang < rp.menge
                    AND ro.status <> 'storniert' AND ro.belegnr <> '' AND ro.adresse > 0
               INNER JOIN auftrag AS o ON ro.auftragid = o.id
-              WHERE o.belegnr = '%s' AND o.belegnr <> '' LIMIT 1",
-                                        $articlescan
-                                )
+              WHERE o.belegnr = :scan AND o.belegnr <> '' LIMIT 1",
+                                ['scan' => $articlescan]
                         );
                     }
                     if (empty($retoure)) {
-                        $retoure = $this->app->DB->SelectRow(
-                                sprintf(
-                                        "SELECT ro.id, ro.adresse
+                        $retoure = $this->app->DatabaseService->selectRow(
+                                "SELECT ro.id, ro.adresse
               FROM retoure AS ro
               INNER JOIN retoure_position AS rp on ro.id = rp.retoure AND rp.menge_eingang < rp.menge
                    AND ro.status <> 'storniert' AND ro.belegnr <> '' AND ro.adresse > 0
               INNER JOIN lieferschein AS dn ON ro.lieferscheinid = dn.id
               INNER JOIN versand AS v ON dn.id = v.lieferschein
-              WHERE v.tracking = '%s' AND v.tracking <> '' LIMIT 1",
-                                        $articlescan
-                                )
+              WHERE v.tracking = :scan AND v.tracking <> '' LIMIT 1",
+                                ['scan' => $articlescan]
                         );
                     }
                     if (!empty($retoure)) {
@@ -3957,21 +3878,18 @@ class Wareneingang {
                 $lagerplatz = (int) $best[0]['lager_platz'];
                 $ismobile = $this->app->Secure->GetPOST('ismobile');
                 $menge = round(
-                        $this->app->DB->Select(
-                                sprintf(
-                                        'SELECT menge - geliefert FROM bestellung_position WHERE id = %d LIMIT 1',
-                                        $pos
-                                )
+                        $this->app->DatabaseService->selectValue(
+                                'SELECT menge - geliefert FROM bestellung_position WHERE id = :pos LIMIT 1',
+                                ['pos' => (int)$pos]
                         ),
                         7
                 );
                 $this->app->User->SetParameter('wareneingang_from', 'wareneingang');
                 if ($this->app->erp->Firmendaten('wareneingang_gross') != '1') {
-                    $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-
-                    $sql = "INSERT INTO paketannahme (datum,adresse,vorlage,vorlageid,projekt,bearbeiter,status) VALUES
-      (NOW(),$adresse,'$vorlage',$id,$projekt,'$bearbeiter','angenommen')";
-                    $this->app->DB->Insert($sql);
+                    $this->app->DatabaseService->insert(
+                        "INSERT INTO paketannahme (datum,adresse,vorlage,vorlageid,projekt,bearbeiter,status) VALUES (NOW(), :adresse, :vorlage, :vorlageid, :projekt, :bearbeiter, 'angenommen')",
+                        ['adresse' => (int)$adresse, 'vorlage' => $vorlage, 'vorlageid' => (int)$id, 'projekt' => (int)$projekt, 'bearbeiter' => $this->app->User->GetName()]
+                    );
                     $id = $this->app->DB->GetInsertID();
 
                     $this->app->Location->execute('index.php?module=wareneingang&action=distrietiketten&backaction=paketannahme&id=' . $id . '&pos=' . $pos . '&menge=' . $menge . ($lagerplatz > 0 ? '&lager_platz=' . $lagerplatz : '') . (!empty($ismobile) ? '&ismobile=1' : ''));
@@ -3991,16 +3909,15 @@ class Wareneingang {
                 $this->app->ExitXentral();
             }
 
-            $bearbeiter = $this->app->DB->real_escape_string($this->app->User->GetName());
-
-            $sql = "INSERT INTO paketannahme (datum,adresse,vorlage,vorlageid,projekt,bearbeiter,status) VALUES
-      (NOW(),'$adresse','$vorlage','$vorlageid','$projekt','$bearbeiter','angenommen')";
-            $this->app->DB->Insert($sql);
+            $this->app->DatabaseService->insert(
+                "INSERT INTO paketannahme (datum,adresse,vorlage,vorlageid,projekt,bearbeiter,status) VALUES (NOW(), :adresse, :vorlage, :vorlageid, :projekt, :bearbeiter, 'angenommen')",
+                ['adresse' => (int)$adresse, 'vorlage' => $vorlage, 'vorlageid' => (int)$vorlageid, 'projekt' => (int)$projekt, 'bearbeiter' => $this->app->User->GetName()]
+            );
             $id = $this->app->DB->GetInsertID();
 
             if ($this->app->erp->ModulVorhanden('schneller_wareneingang') &&
                     $this->app->erp->RechteVorhanden('schneller_wareneingang', 'distriinhaltschnell')) {
-                $lieferantennummer = $this->app->DB->Select("SELECT lieferantennummer FROM adresse WHERE id = '$adresse' LIMIT 1");
+                $lieferantennummer = $this->app->DatabaseService->selectValue('SELECT lieferantennummer FROM adresse WHERE id = :adresse LIMIT 1', ['adresse' => (int)$adresse]);
                 if ($lieferantennummer != '' && $lieferantennummer != '0') {
                     $this->app->Location->execute('index.php?module=schneller_wareneingang&action=distriinhaltschnell&id=' . $id);
                 }
@@ -4038,8 +3955,7 @@ class Wareneingang {
     function WareneingangPositionLoeschen() {
         $id = $this->app->Secure->GetGET('id');
         $posid = $this->app->Secure->GetGET('posid');
-        $sql = "DELETE FROM paketdistribution WHERE id = ".$posid." AND vorlaeufig = 1";
-        $this->app->DB->Delete($sql);
+        $this->app->DatabaseService->delete('DELETE FROM paketdistribution WHERE id = :id AND vorlaeufig = 1', ['id' => (int)$posid]);
         header('Location: index.php?module=wareneingang&wareneingang&action=distriinhalt&id='.$id);
     }
 
@@ -4047,7 +3963,7 @@ class Wareneingang {
         $posid = $this->app->Secure->GetGET('posid');
         $menge = $this->app->Secure->GetGET('menge');
 
-        $painfo = $this->app->DB->SelectRow("SELECT pa.id, pa.projekt, pd.artikel FROM paketannahme pa INNER JOIN paketdistribution pd ON pd.paketannahme = pa.id WHERE pd.id = ".$posid." LIMIT 1");
+        $painfo = $this->app->DatabaseService->selectRow('SELECT pa.id, pa.projekt, pd.artikel FROM paketannahme pa INNER JOIN paketdistribution pd ON pd.paketannahme = pa.id WHERE pd.id = :posid LIMIT 1', ['posid' => (int)$posid]);
         $paketannahme = $painfo['id'];
         $projekt = $painfo['projekt'];
         $artikel = $painfo['artikel'];

@@ -309,7 +309,7 @@ if (!function_exists('getallheaders')) {
         $availablePermissions = array_merge($availablePermissions, $permissions);
       }
 
-      $isInserted = (bool)$this->app->DatabaseService->insert(
+      $apiId = $this->app->DatabaseService->insert(
         "INSERT INTO `api_account` (
         `bezeichnung`,
         `initkey`,
@@ -353,8 +353,7 @@ if (!function_exists('getallheaders')) {
         ]
       );
 
-      if($isInserted){
-        $apiId = $this->app->DB->GetInsertID();
+      if($apiId){
 
         /** @var SystemConfigModule $systemConfig */
         $systemConfig = $this->app->Container->get('SystemConfigModule');
@@ -1217,9 +1216,8 @@ XML;
             $status = 'kommen';
           }
 
-          $this->app->DatabaseService->insert("INSERT INTO stechuhr (adresse,user,datum,kommen, status)
+          $insid = $this->app->DatabaseService->insert("INSERT INTO stechuhr (adresse,user,datum,kommen, status)
             VALUES (:adresse,:user,NOW(),:kommen,:status)", ['adresse' => $adresse, 'user' => $user, 'kommen' => $kommen, 'status' => $status]);
-          $insid = $this->app->DB->GetInsertID();
         }
       }
     }
@@ -1242,9 +1240,7 @@ XML;
       $this->XMLResponse(5, "<error>Abkürzung schon vorhanden. Bitte eine andere wählen.</error>");
       $this->app->ExitXentral();
     }
-    $this->app->DatabaseService->insert("INSERT INTO projekt (id,name,abkuerzung) VALUES ('', :name, :abkuerzung)", ['name' => $name, 'abkuerzung' => $abkuerzung]);
-
-    $xmldata['id'] = $this->app->DB->GetInsertID();
+    $xmldata['id'] = $this->app->DatabaseService->insert("INSERT INTO projekt (id,name,abkuerzung) VALUES ('', :name, :abkuerzung)", ['name' => $name, 'abkuerzung' => $abkuerzung]);
 
     $this->ApiProjektEdit(true,$xmldata);
     $this->XMLResponse(1, "<id>".$xmldata['id']."</id>");
@@ -1417,9 +1413,7 @@ XML;
     $xmldata = $this->XMLPost();
 
 
-    $this->app->DatabaseService->insert("INSERT INTO abrechnungsartikel (id,bezeichnung) VALUES ('','NEUANLAGE')");
-
-    $xmldata['id'] = $this->app->DB->GetInsertID();
+    $xmldata['id'] = $this->app->DatabaseService->insert("INSERT INTO abrechnungsartikel (id,bezeichnung) VALUES ('','NEUANLAGE')");
     $xmldata['neu'] = "true";
     $this->ApiAdresseAboArtikelEdit($xmldata);
     $this->app->ExitXentral();
@@ -1841,8 +1835,7 @@ XML;
                 // update, id ist in $stuecklisteitem
               } else {
                 // insert danach update
-                $this->app->DatabaseService->insert("INSERT INTO stueckliste (id,artikel,stuecklistevonartikel) VALUES('', :artikel, :von)", ['artikel' => $stuecklistenartikel, 'von' => $stuecklistevonartikel]);
-                $stuecklisteitem = $this->app->DB->GetInsertID();
+                $stuecklisteitem = $this->app->DatabaseService->insert("INSERT INTO stueckliste (id,artikel,stuecklistevonartikel) VALUES('', :artikel, :von)", ['artikel' => $stuecklistenartikel, 'von' => $stuecklistevonartikel]);
               }
 
               if($itemwerte['alternative'] != ''){
@@ -3168,8 +3161,8 @@ XML;
           $ergebnis = $this->app->DatabaseService->select("SELECT * FROM api_mapping WHERE tabelle = :table AND id_int = :id_int AND api = :api LIMIT 1", ['table' => $table, 'id_int' => $id_int, 'api' => $api_id]);
           if(empty($ergebnis))
           {
-            $this->app->DatabaseService->insert("INSERT INTO api_mapping (tabelle, id_int, id_ext, api) VALUES (:table, :id_int, :id_ext, :api)", ['table' => $table, 'id_int' => $id_int, 'id_ext' => $id_ext, 'api' => $api_id]);
-            if($insertid = $this->app->DB->GetInsertID())
+            $insertid = $this->app->DatabaseService->insert("INSERT INTO api_mapping (tabelle, id_int, id_ext, api) VALUES (:table, :id_int, :id_ext, :api)", ['table' => $table, 'id_int' => $id_int, 'id_ext' => $id_ext, 'api' => $api_id]);
+            if($insertid)
             {
               $this->XMLResponse(1,'<id_int>'.$id_int.'</id_int><id_ext>'.$id_ext.'</id_ext><table>'.$table.'</table><id>'.$insertid.'</id>');
               $this->app->ExitXentral();
@@ -7541,7 +7534,7 @@ XML;
         }
       }
 
-      $this->app->DatabaseService->insert(
+      $versandid = $this->app->DatabaseService->insert(
         "INSERT INTO versand (versandunternehmen,versandart, tracking, tracking_link,
                     versendet_am,abgeschlossen,lieferschein, freigegeben,firma,
                    adresse,projekt,gewicht,paketmarkegedruckt,anzahlpakete,keinetrackingmail,
@@ -7553,7 +7546,6 @@ XML;
          'lieferschein' => (int)$deliveryNoteId,
          'adresse' => (int)$addressId, 'projekt' => (int)$projectId, 'gewicht' => (float)$kg, 'keinetrackingmail' => $keinetrackingmail]
       );
-      $versandid = $this->app->DB->GetInsertID();
     }
 
     return $versandid;
@@ -7877,8 +7869,7 @@ XML;
     $xml = $this->XMLPost();
     if((!empty($xml['mitarbeiternummer']) || !empty($xml['adresse'])) && !empty($xml['aufgabe']) && !empty($xml['von']) && !empty($xml['bis']))
     {
-      $this->app->DatabaseService->insert("INSERT INTO zeiterfassung (id) values ('')", []);
-      $id = $this->app->DB->GetInsertID();
+      $id = $this->app->DatabaseService->insert("INSERT INTO zeiterfassung (id) values ('')", []);
       if($id)
       {
         $this->ApiZeiterfassungEdit($id);
@@ -9977,8 +9968,7 @@ XML;
         }
       }
 
-      $this->app->DatabaseService->insert("INSERT INTO `$safeDoctypePos` (id,`$safeDoctype`,sort,artikel) VALUES ('', :docid, :sort, :artikel)", ['docid' => (int)$id, 'sort' => ($i+1), 'artikel' => (int)$positionid]);
-      $positionid = $this->app->DB->GetInsertID();
+      $positionid = $this->app->DatabaseService->insert("INSERT INTO `$safeDoctypePos` (id,`$safeDoctype`,sort,artikel) VALUES ('', :docid, :sort, :artikel)", ['docid' => (int)$id, 'sort' => ($i+1), 'artikel' => (int)$positionid]);
       $this->app->erp->RunHook('beleg_afterinsertposition', 5, $doctype,$id,$tmpartikelid,$xmldata['artikelliste']['position'][$i]['menge'],$positionid);
 
       // anpassen der felder
@@ -10292,8 +10282,7 @@ XML;
       $lagerid = (int)$this->app->DatabaseService->selectValue("SELECT MIN(id) FROM lager WHERE geloescht != '1'");
       if($lagerid<=0)
       {
-        $this->app->DatabaseService->insert("INSERT INTO lager (id,bezeichnung,firma) VALUES ('','Hauptlager',1)", []);
-        $lagerid = $this->app->DB->GetInsertID();
+        $lagerid = $this->app->DatabaseService->insert("INSERT INTO lager (id,bezeichnung,firma) VALUES ('','Hauptlager',1)", []);
       }
       $xmldata['lager_platz'] = $this->app->erp->CreateLagerplatz($lagerid,$xmldata['lager_platz'],$firma="1");
 
@@ -10581,8 +10570,7 @@ XML;
       $lagerid = (int)$this->app->DatabaseService->selectValue("SELECT MIN(id) FROM lager WHERE geloescht != '1'");
       if($lagerid<=0)
       {
-        $this->app->DatabaseService->insert("INSERT INTO lager (id,bezeichnung,firma) VALUES ('','Hauptlager',1)", []);
-        $lagerid = $this->app->DB->GetInsertID();
+        $lagerid = $this->app->DatabaseService->insert("INSERT INTO lager (id,bezeichnung,firma) VALUES ('','Hauptlager',1)", []);
       }
 
       $xmldata['lager_platz'] = $this->app->erp->CreateLagerplatz($lagerid,$xmldata['lager_platz'],$firma="1");
@@ -11060,9 +11048,7 @@ XML;
 
     $bezeichnung = $xmldata["bezeichnung"];
     $kontakt = $xmldata["kontakt"];
-    $this->app->DatabaseService->insert("INSERT INTO adresse_kontakte (id,adresse,bezeichnung,kontakt) VALUES ('', :adresse, :bezeichnung, :kontakt)", ['adresse' => (int)$id, 'bezeichnung' => (string)$bezeichnung, 'kontakt' => (string)$kontakt]);
-
-    $id = $this->app->DB->GetInsertID();
+    $id = $this->app->DatabaseService->insert("INSERT INTO adresse_kontakte (id,adresse,bezeichnung,kontakt) VALUES ('', :adresse, :bezeichnung, :kontakt)", ['adresse' => (int)$id, 'bezeichnung' => (string)$bezeichnung, 'kontakt' => (string)$kontakt]);
 
     $this->XMLResponse(1,"<id>$id</id>");
     $this->app->ExitXentral();
@@ -11804,9 +11790,7 @@ XML;
 
     $xmldata = $this->XMLPost();
 
-    $this->app->DB->Insert("INSERT INTO gruppen (id) VALUES ('')");
-
-    $id = $this->app->DB->GetInsertID();
+    $id = $this->app->DatabaseService->insert("INSERT INTO gruppen (id) VALUES ('')", []);
 
     $this->ApiGruppeEdit($id,true);
 
@@ -11822,7 +11806,7 @@ XML;
     if($id <=0)
       $id = $this->app->Secure->GetGET("id");
 
-    $id = $this->app->DB->Select("SELECT id FROM gruppen WHERE id='$id' LIMIT 1");
+    $id = $this->app->DatabaseService->selectValue("SELECT id FROM gruppen WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     // Key gibt es nicht
     if($id <= 0)
       $this->XMLResponse(5);
@@ -11843,7 +11827,8 @@ XML;
         $value = html_entity_decode($value);
       }
       if($key!=='id'){
-        $this->app->DB->Update("UPDATE gruppen SET $key='$value' WHERE id='$id' LIMIT 1");
+        $safeKey = $this->app->DatabaseService->validateIdentifier($key);
+        $this->app->DatabaseService->update("UPDATE gruppen SET `$safeKey` = :value WHERE id = :id LIMIT 1", ['value' => $value, 'id' => (int)$id]);
       }
     }
 
@@ -11882,7 +11867,7 @@ XML;
   {
     $artikel = $this->app->Secure->GetGET("artikel");
     $number = $this->app->Secure->GetGET("number");
-    $datei = $this->app->DB->SelectArr("SELECT datei FROM  datei_stichwoerter WHERE subjekt='Shopbild' AND objekt='Artikel' AND parameter='$artikel'");
+    $datei = $this->app->DatabaseService->select("SELECT datei FROM datei_stichwoerter WHERE subjekt='Shopbild' AND objekt='Artikel' AND parameter = :artikel", ['artikel' => (string)$artikel]);
     if($number <= 0) $number = 1;
 
     $datei = $datei[$number-1]['datei'];
@@ -11932,7 +11917,7 @@ XML;
     $xmldata = $this->XMLPost();
     if($id=="") $id = $xmldata['id'];
 
-    $id = $this->app->DB->Select("SELECT id FROM berichte WHERE id='$id' LIMIT 1");
+    $id = $this->app->DatabaseService->selectValue("SELECT id FROM berichte WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if($id > 0){
       $this->XMLResponse(1, $this->app->erp->XMLBerichte($id, $this->usecdata));
@@ -12026,12 +12011,12 @@ XML;
         if ($xmldata['limit'] > 0) {
           if (array_key_exists('offset', $xmldata)) {
             if ($xmldata['offset'] != "") {
-              $sql .= " LIMIT " . $xmldata['offset'] . ", " . $xmldata['limit'];
+              $sql .= " LIMIT " . (int)$xmldata['offset'] . ", " . (int)$xmldata['limit'];
             } else {
-              $sql .= " LIMIT " . $xmldata['limit'];
+              $sql .= " LIMIT " . (int)$xmldata['limit'];
             }
           } else {
-            $sql .= " LIMIT " . $xmldata['limit'];
+            $sql .= " LIMIT " . (int)$xmldata['limit'];
           }
         }
       }
@@ -12290,7 +12275,7 @@ XML;
       $xmldata = $this->XMLPost();
       $id = $xmldata['id'];
     }
-    $id = $this->app->DB->Select("SELECT id FROM adresse_accounts WHERE id='$id' LIMIT 1");
+    $id = $this->app->DatabaseService->selectValue("SELECT id FROM adresse_accounts WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     // Key gibt es nicht
     if($id <= 0){
@@ -12313,7 +12298,8 @@ XML;
             $value = date('Y-m-d',strtotime($value));
           }
         }
-        $this->app->DB->Update("UPDATE adresse_accounts SET $key='$value' WHERE id='$id' LIMIT 1");
+        $safeKey = $this->app->DatabaseService->validateIdentifier($key);
+        $this->app->DatabaseService->update("UPDATE adresse_accounts SET `$safeKey` = :value WHERE id = :id LIMIT 1", ['value' => $value, 'id' => (int)$id]);
       }
     }
 
@@ -12372,8 +12358,7 @@ XML;
           {
             $aacount = $uebertragung['id'];
             if($aacount){
-              $this->app->DatabaseService->insert("INSERT INTO event_api (id, cachetime, eventname, parameter, retries, module, action, kommentar, api) VALUES ('', NOW(), :eventname, :parameter, '0', :module, :action, :kommentar, :api)", ['eventname' => (string)$eventname, 'parameter' => (string)$parameter, 'module' => (string)$module, 'action' => (string)$action, 'kommentar' => (string)$kommentar, 'api' => (int)$aacount]);
-              $tmpid =  $this->app->DB->GetInsertID();
+              $tmpid = $this->app->DatabaseService->insert("INSERT INTO event_api (id, cachetime, eventname, parameter, retries, module, action, kommentar, api) VALUES ('', NOW(), :eventname, :parameter, '0', :module, :action, :kommentar, :api)", ['eventname' => (string)$eventname, 'parameter' => (string)$parameter, 'module' => (string)$module, 'action' => (string)$action, 'kommentar' => (string)$kommentar, 'api' => (int)$aacount]);
               $this->EventCall($tmpid);
             }
           }
@@ -12382,8 +12367,7 @@ XML;
 
       if($apiaktiv === true && $module_call_from !== 'api')
       {
-        $this->app->DatabaseService->insert("INSERT INTO event_api (cachetime, eventname, parameter, retries, module, action, kommentar, api) VALUES (NOW(), :eventname, :parameter, '0', :module, :action, :kommentar, :api)", ['eventname' => (string)$eventname, 'parameter' => (string)$parameter, 'module' => (string)$module, 'action' => (string)$action, 'kommentar' => (string)$kommentar, 'api' => (int)$api]);
-        $tmpid =  $this->app->DB->GetInsertID();
+        $tmpid = $this->app->DatabaseService->insert("INSERT INTO event_api (cachetime, eventname, parameter, retries, module, action, kommentar, api) VALUES (NOW(), :eventname, :parameter, '0', :module, :action, :kommentar, :api)", ['eventname' => (string)$eventname, 'parameter' => (string)$parameter, 'module' => (string)$module, 'action' => (string)$action, 'kommentar' => (string)$kommentar, 'api' => (int)$api]);
         $this->EventCall($tmpid);
       } else {
         return false;
@@ -13074,7 +13058,7 @@ XML;
           }
           if($einkaufValue['projekt'] > 0)
           {
-            $einkaufValue['projekt'] = $this->app->DB->SelectRow(sprintf('SELECT projekt FROM adresse WHERE id= %d LIMIT 1', $einkaufValue['projekt']));
+            $einkaufValue['projekt'] = $this->app->DatabaseService->selectValue("SELECT projekt FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$einkaufValue['projekt']]);
           }else{
             $einkaufValue['projekt'] = '';
           }
@@ -13098,10 +13082,8 @@ XML;
       {
         $result .='<verkaufspreise>';
         foreach($arr_verkauf as $verkaufValue) {
-          if($einkaufValue['adresse'] > 0){
-            $adresseArr = $this->app->DB->SelectRow(sprintf(
-              'SELECT projekt, lieferantennummer FROM adresse WHERE id = %d ', $verkaufValue['adresse']
-            ));
+          if($verkaufValue['adresse'] > 0){
+            $adresseArr = $this->app->DatabaseService->selectRow("SELECT projekt, lieferantennummer FROM adresse WHERE id = :id", ['id' => (int)$verkaufValue['adresse']]);
           }else{
             $adresseArr = null;
           }
@@ -13115,7 +13097,7 @@ XML;
           }
           if($verkaufValue['projekt'] > 0)
           {
-            $verkaufValue['projekt'] = $this->app->DB->SelectRow(sprintf('SELECT projekt FROM adresse WHERE id= %d LIMIT 1', $einkaufValue['projekt']));
+            $verkaufValue['projekt'] = $this->app->DatabaseService->selectValue("SELECT projekt FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$verkaufValue['projekt']]);
           }else{
             $verkaufValue['projekt'] = '';
           }
@@ -13360,7 +13342,7 @@ XML;
                       $adressArr = $this->app->DB->SelectRow(
                         sprintf(
                           'SELECT * FROM adresse WHERE id = %d LIMIT 1',
-                          $beleg['adrese']
+                          $beleg['adresse']
                         )
                       );
 
@@ -13573,13 +13555,13 @@ XML;
                   if($sprache !== 'deutsch' && $sprache != '' && strtolower($sprache) !== 'de') {
                     if(!empty($article['name_en'])) {
                       $beleg['artikel_bezeichnung'] = $article['name_en'];
-                      if(!empty($aricle['anabregs_text_en'])) {
-                        $beleg['artikel_beschreibung'] = $aricle['anabregs_text_en'];
+                      if(!empty($article['anabregs_text_en'])) {
+                        $beleg['artikel_beschreibung'] = $article['anabregs_text_en'];
                       }
                     }
                   }
                   if(empty($beleg['artikel_bezeichnung'])){
-                    $beleg['artikel_bezeichnung'] = $aricle['name_de'];
+                    $beleg['artikel_bezeichnung'] = $article['name_de'];
                   }
                 }
                 elseif($uebertragungen > 0) {
@@ -13631,8 +13613,7 @@ XML;
                               }
                             }
                           }
-                          $checkmengen = $this->app->DB->Select("SELECT ap.id FROM auftrag_position ap.left
-                                join artikel a on ap.artikel = a.id WHERE ap.auftrag = '$teillieferungvon' AND a.porto <> 1 LIMIT 1");
+                          $checkmengen = $this->app->DatabaseService->selectValue("SELECT ap.id FROM auftrag_position ap LEFT JOIN artikel a ON ap.artikel = a.id WHERE ap.auftrag = :auftrag AND a.porto <> 1 LIMIT 1", ['auftrag' => (int)$teillieferungvon]);
                           if(!$checkmengen) {
                             $this->app->DatabaseService->update("UPDATE auftrag SET status = 'abgeschlossen' WHERE id = :id LIMIT 1", ['id' => (int)$teillieferungvon]);
                           }
@@ -13662,9 +13643,7 @@ XML;
                   case 'gutschrift':
                     $sort = 1+(int)$this->app->DatabaseService->selectValue("SELECT max(sort) FROM gutschrift_position WHERE gutschrift = :gutschrift", ['gutschrift' => (int)$aktbelegid]);
 
-                    $this->app->DatabaseService->insert("INSERT INTO gutschrift_position (gutschrift, artikel, sort, preis, menge, waehrung, rabatt, bezeichnung, beschreibung) VALUES (:gutschrift, :artikel, :sort, :preis, :menge, :waehrung, :rabatt, :bezeichnung, :beschreibung)", ['gutschrift' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'sort' => (int)$sort, 'preis' => (float)($beleg['artikel_preis']/$beleg['artikel_preisfuermenge']), 'menge' => (float)$beleg['artikel_menge'], 'waehrung' => (string)$beleg['artikel_waehrung'], 'rabatt' => (string)$beleg['artikel_rabatt'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'beschreibung' => (string)$beleg['artikel_beschreibung']]);
-
-                    $belegpos = $this->app->DB->GetInsertID();
+                    $belegpos = $this->app->DatabaseService->insert("INSERT INTO gutschrift_position (gutschrift, artikel, sort, preis, menge, waehrung, rabatt, bezeichnung, beschreibung) VALUES (:gutschrift, :artikel, :sort, :preis, :menge, :waehrung, :rabatt, :bezeichnung, :beschreibung)", ['gutschrift' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'sort' => (int)$sort, 'preis' => (float)($beleg['artikel_preis']/$beleg['artikel_preisfuermenge']), 'menge' => (float)$beleg['artikel_menge'], 'waehrung' => (string)$beleg['artikel_waehrung'], 'rabatt' => (string)$beleg['artikel_rabatt'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'beschreibung' => (string)$beleg['artikel_beschreibung']]);
                     break;
                   case 'bestellung':
                     $sort = 1+(int)$this->app->DatabaseService->selectValue("SELECT max(sort) FROM bestellung_position WHERE bestellung = :bestellung", ['bestellung' => (int)$aktbelegid]);
@@ -13682,9 +13661,7 @@ XML;
                       $bestellnummer = $beleg['artikel_nummer'];
                     }
 
-                    $this->app->DatabaseService->insert("INSERT INTO bestellung_position (bestellung, artikel, bezeichnunglieferant, bestellnummer, menge, preis, waehrung, sort, lieferdatum, umsatzsteuer, status, projekt, beschreibung) VALUES (:bestellung, :artikel, :bezeichnunglieferant, :bestellnummer, :menge, :preis, :waehrung, :sort, :lieferdatum, :umsatzsteuer, 'angelegt', :projekt, :beschreibung)", ['bestellung' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'bezeichnunglieferant' => (string)$beleg['artikel_bezeichnung'], 'bestellnummer' => (string)$bestellnummer, 'menge' => (float)$beleg['artikel_menge'], 'preis' => (float)($beleg['artikel_preis']/$beleg['artikel_preisfuermenge']), 'waehrung' => (string)$beleg['artikel_waehrung'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'umsatzsteuer' => (string)$umsatzsteuer, 'projekt' => (string)$beleg['artikel_bezeichnung'], 'beschreibung' => (string)$beleg['artikel_beschreibung']]);
-
-                    $belegpos = $this->app->DB->GetInsertID();
+                    $belegpos = $this->app->DatabaseService->insert("INSERT INTO bestellung_position (bestellung, artikel, bezeichnunglieferant, bestellnummer, menge, preis, waehrung, sort, lieferdatum, umsatzsteuer, status, projekt, beschreibung) VALUES (:bestellung, :artikel, :bezeichnunglieferant, :bestellnummer, :menge, :preis, :waehrung, :sort, :lieferdatum, :umsatzsteuer, 'angelegt', :projekt, :beschreibung)", ['bestellung' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'bezeichnunglieferant' => (string)$beleg['artikel_bezeichnung'], 'bestellnummer' => (string)$bestellnummer, 'menge' => (float)$beleg['artikel_menge'], 'preis' => (float)($beleg['artikel_preis']/$beleg['artikel_preisfuermenge']), 'waehrung' => (string)$beleg['artikel_waehrung'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'umsatzsteuer' => (string)$umsatzsteuer, 'projekt' => (string)$projekt, 'beschreibung' => (string)$beleg['artikel_beschreibung']]);
                     break;
                   case 'angebot':
                     $sort = 1+(int)$this->app->DatabaseService->selectValue("SELECT max(sort) FROM angebot_position WHERE angebot = :angebot", ['angebot' => (int)$aktbelegid]);
@@ -13692,48 +13669,36 @@ XML;
                     $umsatzsteuer = $beleg['artikel_umsatzsteuer'] === 'ermaessigt'?'ermaessigt':'';
                     $datum = $this->app->DatabaseService->selectValue("SELECT datum FROM angebot WHERE id = :id LIMIT 1", ['id' => (int)$aktbelegid]);
 
-                    $this->app->DatabaseService->insert("INSERT INTO angebot_position (angebot, artikel, beschreibung, bezeichnung, nummer, menge, preis, waehrung, sort, lieferdatum, umsatzsteuer, status, projekt, vpe) VALUES (:angebot, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :preis, :waehrung, :sort, :lieferdatum, :umsatzsteuer, 'angelegt', :projekt, '')", ['angebot' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'preis' => (float)($beleg['artikel_preis']/$beleg['artikel_preisfuermenge']), 'waehrung' => (string)$beleg['artikel_waehrung'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'umsatzsteuer' => (string)$umsatzsteuer, 'projekt' => (string)$projekt]);
-
-                    $belegpos = $this->app->DB->GetInsertID();
+                    $belegpos = $this->app->DatabaseService->insert("INSERT INTO angebot_position (angebot, artikel, beschreibung, bezeichnung, nummer, menge, preis, waehrung, sort, lieferdatum, umsatzsteuer, status, projekt, vpe) VALUES (:angebot, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :preis, :waehrung, :sort, :lieferdatum, :umsatzsteuer, 'angelegt', :projekt, '')", ['angebot' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'preis' => (float)($beleg['artikel_preis']/$beleg['artikel_preisfuermenge']), 'waehrung' => (string)$beleg['artikel_waehrung'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'umsatzsteuer' => (string)$umsatzsteuer, 'projekt' => (string)$projekt]);
                     break;
                   case 'lieferschein':
                     $datum = '0000-00-00';
                     $sort = 1+(int)$this->app->DatabaseService->selectValue("SELECT max(sort) FROM lieferschein_position WHERE lieferschein = :lieferschein", ['lieferschein' => (int)$aktbelegid]);
 
-                    $this->app->DatabaseService->insert("INSERT INTO lieferschein_position (lieferschein, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, status, projekt) VALUES (:lieferschein, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, 'angelegt', :projekt)", ['lieferschein' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt]);
-
-                    $belegpos = $this->app->DB->GetInsertID();
+                    $belegpos = $this->app->DatabaseService->insert("INSERT INTO lieferschein_position (lieferschein, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, status, projekt) VALUES (:lieferschein, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, 'angelegt', :projekt)", ['lieferschein' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt]);
                     break;
                   case 'retoure':
                     $datum = '0000-00-00';
                     $sort = 1+(int)$this->app->DatabaseService->selectValue("SELECT max(sort) FROM retoure_position WHERE retoure = :retoure", ['retoure' => (int)$aktbelegid]);
 
-                    $this->app->DatabaseService->insert("INSERT INTO retoure_position (retoure, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, projekt) VALUES (:retoure, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, :projekt)", ['retoure' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt]);
-
-                    $belegpos = $this->app->DB->GetInsertID();
+                    $belegpos = $this->app->DatabaseService->insert("INSERT INTO retoure_position (retoure, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, projekt) VALUES (:retoure, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, :projekt)", ['retoure' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt]);
                     break;
                   case 'preisanfrage':
                     $sort = 1+(int)$this->app->DatabaseService->selectValue("SELECT max(sort) FROM preisanfrage_position WHERE preisanfrage = :preisanfrage", ['preisanfrage' => (int)$aktbelegid]);
                     $datum = $this->app->DatabaseService->selectValue("SELECT datum FROM preisanfrage WHERE id = :id LIMIT 1", ['id' => (int)$aktbelegid]);
-                    $this->app->DatabaseService->insert("INSERT INTO preisanfrage_position (preisanfrage, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, status, projekt) VALUES (:preisanfrage, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, 'angelegt', :projekt)", ['preisanfrage' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt]);
-
-                    $belegpos = $this->app->DB->GetInsertID();
+                    $belegpos = $this->app->DatabaseService->insert("INSERT INTO preisanfrage_position (preisanfrage, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, status, projekt) VALUES (:preisanfrage, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, 'angelegt', :projekt)", ['preisanfrage' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt]);
 
                     break;
                   case 'proformarechnung':
                     $sort = 1+(int)$this->app->DatabaseService->selectValue("SELECT max(sort) FROM proformarechnung_position WHERE proformarechnung = :proformarechnung", ['proformarechnung' => (int)$aktbelegid]);
                     $datum = $this->app->DatabaseService->selectValue("SELECT datum FROM proformarechnung WHERE id = :id LIMIT 1", ['id' => (int)$aktbelegid]);
                     $umsatzsteuer = $beleg['artikel_umsatzsteuer'] === 'ermaessigt'?'ermaessigt':'';
-                    $this->app->DatabaseService->insert("INSERT INTO proformarechnung_position (proformarechnung, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, status, projekt, umsatzsteuer) VALUES (:proformarechnung, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, 'angelegt', :projekt, :umsatzsteuer)", ['proformarechnung' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt, 'umsatzsteuer' => (string)$umsatzsteuer]);
-
-                    $belegpos = $this->app->DB->GetInsertID();
+                    $belegpos = $this->app->DatabaseService->insert("INSERT INTO proformarechnung_position (proformarechnung, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, status, projekt, umsatzsteuer) VALUES (:proformarechnung, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, 'angelegt', :projekt, :umsatzsteuer)", ['proformarechnung' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt, 'umsatzsteuer' => (string)$umsatzsteuer]);
                     break;
                   case 'produktion':
                     $sort = 1+(int)$this->app->DatabaseService->selectValue("SELECT max(sort) FROM produktion_position WHERE produktion = :produktion", ['produktion' => (int)$aktbelegid]);
                     $datum = $this->app->DatabaseService->selectValue("SELECT datum FROM produktion WHERE id = :id LIMIT 1", ['id' => (int)$aktbelegid]);
-                    $this->app->DatabaseService->insert("INSERT INTO produktion_position (produktion, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, status, projekt) VALUES (:produktion, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, 'angelegt', :projekt)", ['produktion' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt]);
-
-                    $belegpos = $this->app->DB->GetInsertID();
+                    $belegpos = $this->app->DatabaseService->insert("INSERT INTO produktion_position (produktion, artikel, beschreibung, bezeichnung, nummer, menge, sort, lieferdatum, status, projekt) VALUES (:produktion, :artikel, :beschreibung, :bezeichnung, :nummer, :menge, :sort, :lieferdatum, 'angelegt', :projekt)", ['produktion' => (int)$aktbelegid, 'artikel' => (int)$beleg['artikel'], 'beschreibung' => (string)$beleg['artikel_beschreibung'], 'bezeichnung' => (string)$beleg['artikel_bezeichnung'], 'nummer' => (string)$beleg['artikel_nummer'], 'menge' => (float)$beleg['artikel_menge'], 'sort' => (int)$sort, 'lieferdatum' => (string)$datum, 'projekt' => (string)$projekt]);
                     $already_new_item_is_bom = $this->app->DatabaseService->selectValue("SELECT stueckliste FROM artikel WHERE id = :id AND produktion = 1", ['id' => (int)$beleg['artikel']]);
                     $already = $this->app->DatabaseService->selectValue("SELECT id FROM produktion_position WHERE produktion = :produktion AND explodiert = 1 LIMIT 1", ['produktion' => (int)$aktbelegid]);
 
@@ -13891,8 +13856,7 @@ XML;
                   $art = trim(strtolower($data[$c]));
                 }
               }
-              $this->app->DatabaseService->insert("INSERT INTO belegeimport (userid, status, art) VALUES (:userid, :status, :art)", ['userid' => (int)($_datei === null?$this->app->User->GetID():0), 'status' => (string)$status, 'art' => (string)$art]);
-              $rowid = $this->app->DB->GetInsertID();
+              $rowid = $this->app->DatabaseService->insert("INSERT INTO belegeimport (userid, status, art) VALUES (:userid, :status, :art)", ['userid' => (int)($_datei === null?$this->app->User->GetID():0), 'status' => (string)$status, 'art' => (string)$art]);
               if($uebertragungen) {
                 $this->app->DatabaseService->update("UPDATE belegeimport SET beleg_projekt = :beleg_projekt WHERE id = :id LIMIT 1", ['beleg_projekt' => (int)$_projekt, 'id' => (int)$rowid]);
               }

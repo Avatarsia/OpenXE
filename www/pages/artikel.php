@@ -9,13 +9,13 @@
 
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -38,7 +38,7 @@ class Artikel extends GenArtikel {
   {
     switch($name) {
       case 'eigenschaften':
-        $id = $this->app->Secure->GetGET('id');
+        $id = (int)$this->app->Secure->GetGET('id');
         $allowed['artikel'] = array('eigenschaften');
         $defaultorder = 1; //Optional wenn andere Reihenfolge gewuenscht
 
@@ -52,12 +52,12 @@ class Artikel extends GenArtikel {
 
         // SQL statement
         $sql = "SELECT SQL_CALC_FOUND_ROWS e.id, e.hauptkategorie, e.unterkategorie, CONCAT(e.wert,'&nbsp;&nbsp;'),
-                                     e.einheit, e.id 
+                                     e.einheit, e.id
                                      FROM eigenschaften e ";
         $where = "e.artikel='$id' ";
         break;
       case 'artikel_eigenschaften':
-        $id = $this->app->Secure->GetGET('id');
+        $id = (int)$this->app->Secure->GetGET('id');
         $allowed['artikel'] = array('eigenschaften');
         $defaultorder = 1; //Optional wenn andere Reihenfolge gewuenscht
 
@@ -80,7 +80,7 @@ class Artikel extends GenArtikel {
         break;
 
       case 'artikel_eigenschaften_neu':
-        $id = $this->app->Secure->GetGET('id');
+        $id = (int)$this->app->Secure->GetGET('id');
         $allowed['artikel'] = array('eigenschaften');
 
         $heading = array('Eigenschaft DE', 'Wert DE', 'Einheit (Optional)', 'Eigenschaft', 'Wert', 'Sprache', 'Shop', 'Artikelspezifisch', 'Men&uuml;', '');
@@ -91,20 +91,21 @@ class Artikel extends GenArtikel {
 
         $menu = "";
 
-        $sqla[] = "(SELECT ew.id, e.name, ew.wert, ew.einheit, '' as eigenschafts, '' as werts, 'DE' as spraches, '' as shops, '' as artikelspezifisch, CONCAT('<table cellpadding=0 cellspacing=0><tr><td nowrap><a href=\"#\" onclick=\"editeigenschaft(',ew.id,')\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" title=\"Bearbeiten\" border=\"0\"></a>&nbsp;<a href=\"#\" onclick=\"deleteeigenschaft(',ew.id,')\";><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/delete.svg\" title=\"L&ouml;schen\" border=\"0\"></a>&nbsp;',IF(e.typ='select' AND ew.vorlage>0,'',CONCAT('<a href=\"#\" onclick=\"copyeigenschaft(',ew.id,')\";><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/copy.svg\" title=\"Kopieren\" border=\"0\"></a></td></tr></table>'))) as menux, '' as menu 
-                    FROM artikeleigenschaften e 
-                    INNER JOIN artikeleigenschaftenwerte ew ON e.id = ew.artikeleigenschaften 
+        $sqla = [];
+        $sqla[] = "(SELECT ew.id, e.name, ew.wert, ew.einheit, '' as eigenschafts, '' as werts, 'DE' as spraches, '' as shops, '' as artikelspezifisch, CONCAT('<table cellpadding=0 cellspacing=0><tr><td nowrap><a href=\"#\" onclick=\"editeigenschaft(',ew.id,')\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" title=\"Bearbeiten\" border=\"0\"></a>&nbsp;<a href=\"#\" onclick=\"deleteeigenschaft(',ew.id,')\";><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/delete.svg\" title=\"L&ouml;schen\" border=\"0\"></a>&nbsp;',IF(e.typ='select' AND ew.vorlage>0,'',CONCAT('<a href=\"#\" onclick=\"copyeigenschaft(',ew.id,')\";><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/copy.svg\" title=\"Kopieren\" border=\"0\"></a></td></tr></table>'))) as menux, '' as menu
+                    FROM artikeleigenschaften e
+                    INNER JOIN artikeleigenschaftenwerte ew ON e.id = ew.artikeleigenschaften
                     WHERE ew.artikel = '$id')";
 
         $sqla[] = "(SELECT ap.id, ae.name, aw.wert, aw.einheit, ap.property_to as eigenschafts, ap.property_value_to as werts, ap.language_to as spraches, s.bezeichnung as shops, IF(ap.article_id > 0, 'ja', '') as artikelspezifisch, IF(ap.article_id = 0, CONCAT('<table cellpadding=0 cellspacing=0><tr><td nowrap><a href=\"index.php?module=propertytranslation&action=list\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/forward.svg\" title=\"Eigenschaften &Uuml;bersetzung\" border=\"0\"></a>'), IF(ap.article_id != 0, CONCAT('<table cellpadding=0 cellspacing=0><tr><td nowrap><a href=\"#\" onclick=\"editUebersetzung(',ap.id,');\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" title=\"Bearbeiten\" border=\"0\"></a>&nbsp;<a href=\"#\" onclick=\"deleteUebersetzung(',ap.id,');\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/delete.svg\" title=\"L&ouml;schen\" border=\"0\"></a>'), '')) as menux, '' as menu
-                    FROM article_property_translation ap 
-                    LEFT JOIN shopexport s ON ap.shop_id = s.id 
-                    LEFT JOIN artikeleigenschaften ae ON ap.property_from = ae.name 
+                    FROM article_property_translation ap
+                    LEFT JOIN shopexport s ON ap.shop_id = s.id
+                    LEFT JOIN artikeleigenschaften ae ON ap.property_from = ae.name
                     JOIN artikeleigenschaftenwerte aw ON ae.id = aw.artikeleigenschaften AND ap.property_value_from = aw.wert
                     WHERE ap.language_from = 'DE' AND aw.artikel = '$id' AND (ap.article_id  = '$id' OR ap.article_id = 0))";
 
         $sql = "SELECT SQL_CALC_FOUND_ROWS b.id, b.name, b.wert, b.einheit, b.eigenschafts, b.werts, b.spraches, b.shops, b.artikelspezifisch, b.menux, b.menu
-            FROM (            
+            FROM (
               ".implode(" UNION ALL ", $sqla)."
             )b
         ";
@@ -126,9 +127,9 @@ class Artikel extends GenArtikel {
           else
           oMoreData' . $r . $name . ' = 1;
 
-          $(\'#' . $name . '\').dataTable().fnFilter( 
+          $(\'#' . $name . '\').dataTable().fnFilter(
           \'\',
-          i, 
+          i,
           0,0
           );
           }
@@ -178,18 +179,18 @@ class Artikel extends GenArtikel {
 
                                     CONCAT('<img src=./themes/new/images/shop_stock',a.lieferzeit,'.png>') as ampel,
         */
-        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id, 
-              CONCAT('<input type=\"checkbox\" class=\"chcktbl\" name=\"artikelmarkiert[]\" value=\"',a.id,'\">') as wahl, 
-              CONCAT('<img src=./themes/new/images/shop_stock',a.lieferzeit,'.png>') as ampel, 
+        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id,
+              CONCAT('<input type=\"checkbox\" class=\"chcktbl\" name=\"artikelmarkiert[]\" value=\"',a.id,'\">') as wahl,
+              CONCAT('<img src=./themes/new/images/shop_stock',a.lieferzeit,'.png>') as ampel,
 
-              If(a.inaktiv,CONCAT('<strike>',a.nummer,'</strike>'),a.nummer) as nummer, 
-              If(a.inaktiv,CONCAT('<strike>',a.name_de,'</strike>'),a.name_de) as name_de, 
-              If(a.inaktiv,CONCAT('<strike>',adr.name,'</strike>'),adr.name) as lieferant, 
+              If(a.inaktiv,CONCAT('<strike>',a.nummer,'</strike>'),a.nummer) as nummer,
+              If(a.inaktiv,CONCAT('<strike>',a.name_de,'</strike>'),a.name_de) as name_de,
+              If(a.inaktiv,CONCAT('<strike>',adr.name,'</strike>'),adr.name) as lieferant,
 
-              (SELECT SUM(l.menge) FROM lager_platz_inhalt l WHERE l.artikel=a.id) as lager, 
+              (SELECT SUM(l.menge) FROM lager_platz_inhalt l WHERE l.artikel=a.id) as lager,
 
-              If(a.inaktiv,CONCAT('<strike>',p.abkuerzung,'</strike>'),p.abkuerzung) as projekt, 
-              a.id as menu                                                                          
+              If(a.inaktiv,CONCAT('<strike>',p.abkuerzung,'</strike>'),p.abkuerzung) as projekt,
+              a.id as menu
                 FROM  artikel a LEFT JOIN projekt p ON p.id=a.projekt LEFT JOIN  adresse adr ON a.adresse=adr.id ";
         for ($r = 1;$r < 9;$r++) {
           $this->app->Tpl->Add('JAVASCRIPT', '
@@ -200,9 +201,9 @@ class Artikel extends GenArtikel {
                       else
                       oMoreData' . $r . $name . ' = 1;
 
-                      $(\'#' . $name . '\').dataTable().fnFilter( 
+                      $(\'#' . $name . '\').dataTable().fnFilter(
                         \'\',
-                        i, 
+                        i,
                         0,0
                         );
                       }
@@ -256,21 +257,21 @@ class Artikel extends GenArtikel {
         $menu = "<a href=\"index.php?module=artikel&action=edit&id=%value%\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" border=\"0\"></a>" . "<!--&nbsp;<a href=\"#\" onclick=DeleteDialog(\"index.php?module=artikel&action=delete&id=%value%\");><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/delete.svg\" border=\"0\"></a>" . "&nbsp;<a href=\"#\" onclick=CopyDialog(\"index.php?module=artikel&action=copy&id=%value%\");><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/copy.svg\" border=\"0\"></a>-->";
 
         // SQL statement
-        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id, 
+        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id,
 
               if(a.autolagerlampe,CONCAT('<input type=\"checkbox\" class=\"chcktbl2\" name=\"artikelmarkiert[',a.id,']\" checked value=\"1\"><input type=\"hidden\" name=\"artikelmarkierthidden[',a.id,']\" value=\"1\">'),
-                  CONCAT('<input type=\"checkbox\" class=\"chcktbl2\" name=\"artikelmarkiert[',a.id,']\" value=\"1\"><input type=\"hidden\" name=\"artikelmarkierthidden[',a.id,']\" value=\"0\">')) as wahl, 
-                CONCAT('<img src=./themes/new/images/shop_stock',a.lieferzeit,'.png>') as ampel, 
+                  CONCAT('<input type=\"checkbox\" class=\"chcktbl2\" name=\"artikelmarkiert[',a.id,']\" value=\"1\"><input type=\"hidden\" name=\"artikelmarkierthidden[',a.id,']\" value=\"0\">')) as wahl,
+                CONCAT('<img src=./themes/new/images/shop_stock',a.lieferzeit,'.png>') as ampel,
 
                   if(a.autolagerlampe,'auto','manuell') as art,
 
-                    If(a.inaktiv,CONCAT('<strike>',a.nummer,'</strike>'),a.nummer) as nummer, 
-                      If(a.inaktiv,CONCAT('<strike>',a.name_de,'</strike>'),a.name_de) as name_de, 
-                      If(a.inaktiv,CONCAT('<strike>',adr.name,'</strike>'),adr.name) as lieferant, 
-                      (SELECT SUM(l.menge) FROM lager_platz_inhalt l WHERE l.artikel=a.id) as lager, 
-                      If(a.inaktiv,CONCAT('<strike>',p.abkuerzung,'</strike>'),p.abkuerzung) as projekt, 
+                    If(a.inaktiv,CONCAT('<strike>',a.nummer,'</strike>'),a.nummer) as nummer,
+                      If(a.inaktiv,CONCAT('<strike>',a.name_de,'</strike>'),a.name_de) as name_de,
+                      If(a.inaktiv,CONCAT('<strike>',adr.name,'</strike>'),adr.name) as lieferant,
+                      (SELECT SUM(l.menge) FROM lager_platz_inhalt l WHERE l.artikel=a.id) as lager,
+                      If(a.inaktiv,CONCAT('<strike>',p.abkuerzung,'</strike>'),p.abkuerzung) as projekt,
 
-                      a.id as menu                                                                          
+                      a.id as menu
                         FROM  artikel a LEFT JOIN projekt p ON p.id=a.projekt LEFT JOIN  adresse adr ON a.adresse=adr.id ";
         $where = 'a.geloescht=0 AND a.shop > 0 AND a.lagerartikel=1 ';
         $count = 'SELECT COUNT(id) FROM artikel WHERE geloescht=0 AND shop > 0  AND lagerartikel=1';
@@ -287,8 +288,8 @@ class Artikel extends GenArtikel {
 
         // SQL statement
 
-        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id, CONCAT('<input type=\"checkbox\" name=\"artikelmarkiert[]\" value=\"',a.id,'\">') as wahl, a.nummer as nummer, 
-                a.name_de as name_de, (SELECT SUM(l.menge) FROM lager_platz_inhalt l WHERE l.artikel=a.id) as lager, p.abkuerzung as projekt, a.id as menu                                                                          
+        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id, CONCAT('<input type=\"checkbox\" name=\"artikelmarkiert[]\" value=\"',a.id,'\">') as wahl, a.nummer as nummer,
+                a.name_de as name_de, (SELECT SUM(l.menge) FROM lager_platz_inhalt l WHERE l.artikel=a.id) as lager, p.abkuerzung as projekt, a.id as menu
                 FROM  artikel a LEFT JOIN projekt p ON p.id=a.projekt ";
 
         // fester filter
@@ -298,8 +299,8 @@ class Artikel extends GenArtikel {
       case 'lieferantartikelpreise':
         $id = (int)$this->app->Secure->GetGET('id');
         $allowed['artikel'] = array('profisuche');
-    
-        $cmd = $this->app->Secure->GetGET('cmd');            
+
+        $cmd = $this->app->Secure->GetGET('cmd');
         $module = $this->app->Secure->GetGET('module');
         if ($module == 'artikel') {
             $table = $cmd;
@@ -307,7 +308,7 @@ class Artikel extends GenArtikel {
             $table = $this->app->Secure->GetGET('smodule');
         }
         $this->app->DatabaseService->validateIdentifier($table);
-        $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$table}` WHERE id = :id LIMIT 1", ['id' => $id]);
+        $adresse = (int)$this->app->DatabaseService->selectValue("SELECT adresse FROM `{$table}` WHERE id = :id LIMIT 1", ['id' => $id]);
 
         // headings
         $heading = array('', 'Nummer', 'Artikel', 'Ab', 'Preis', 'Lager', 'Res.', 'Menge', 'Projekt', 'Men&uuml;');
@@ -325,7 +326,7 @@ class Artikel extends GenArtikel {
               CONCAT('<input type=\"checkbox\" name=\"auswahl[', v.id, ']\" class=\"articlematrix-checkbox\" id=\"articlematrix-checkbox-', v.id, '\" data-id=\"', v.id, '\">') AS auswahlbox,
               a.nummer as nummer, a.name_de as name_de, ".$this->app->erp->FormatMenge('v.ab_menge').' as abmenge,'.$this->app->erp->FormatPreis('v.preis',2).' as preis,
               '.$this->app->erp->FormatMenge('(SELECT SUM(l.menge) FROM lager_platz_inhalt l WHERE l.artikel=a.id)').' as lager,
-              '.$this->app->erp->FormatMenge('(SELECT SUM(l.menge) FROM lager_reserviert l WHERE l.artikel=a.id)')." as reserviert, 
+              '.$this->app->erp->FormatMenge('(SELECT SUM(l.menge) FROM lager_reserviert l WHERE l.artikel=a.id)')." as reserviert,
               CONCAT('<input type=\"text\" size=\"5\" name=\"menge[', v.id, ']\" class=\"articlematrix-quantity\" id=\"articlematrix-quantity-', v.id, '\" data-id=\"', v.id, '\" data-default-quantity=\"', ".$this->app->erp->FormatMenge("v.ab_menge").", '\" autocomplete=\"off\">') AS auswahlmenge,
               p.abkuerzung as projekt, v.id as menu
               FROM  einkaufspreise v, artikel a LEFT JOIN projekt p ON p.id=a.projekt  ";
@@ -357,7 +358,7 @@ class Artikel extends GenArtikel {
         }
 
         // alle artikel die ein Kunde kaufen kann mit preisen netto brutto
-        $cmd = $this->app->Secure->GetGET('cmd');            
+        $cmd = $this->app->Secure->GetGET('cmd');
         $module = $this->app->Secure->GetGET('module');
         if ($module == 'artikel') {
             $table = $cmd;
@@ -366,7 +367,7 @@ class Artikel extends GenArtikel {
             $table = substr($table , 0, strpos($table, "."));
         }
         $this->app->DatabaseService->validateIdentifier($table);
-        $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$table}` WHERE id = :id LIMIT 1", ['id' => $id]);
+        $adresse = (int)$this->app->DatabaseService->selectValue("SELECT adresse FROM `{$table}` WHERE id = :id LIMIT 1", ['id' => $id]);
 
         $sEcho = (int)$this->app->Secure->GetGET('sEcho');
         if ($sEcho === 1) {
@@ -467,7 +468,7 @@ class Artikel extends GenArtikel {
                   $zusatzcols[] = 'eig.value';
                   $joineig = "
                   LEFT JOIN (
-                  SELECT aew.artikel, 
+                  SELECT aew.artikel,
                    GROUP_CONCAT(DISTINCT concat(ae.name,': ',aew.wert)
                       ORDER BY ae.name  SEPARATOR ', ') as value
                    FROM artikeleigenschaftenwerte aew
@@ -493,13 +494,13 @@ class Artikel extends GenArtikel {
 
 //        $menu = "<a href=\"#\" class=\"articlematrix-quickadd\" data-id=\"%value%\" data-insert-url=\"index.php?module=artikel&action=profisuche&id=%value%&cmd=$cmd&sid=$id&insert=true&fmodul=$fmodul\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/add.png\" border=\"0\"></a>";
 
-        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id, 
+        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id,
             CONCAT('<input type=\"checkbox\" name=\"auswahl[', v.id, ']\" class=\"articlematrix-checkbox\" id=\"articlematrix-checkbox-', v.id, '\" data-id=\"', v.id, '\">') AS auswahlbox,
-            a.nummer as nummer, 
-            CONCAT(a.name_de,' (',v.art,')') 
+            a.nummer as nummer,
+            CONCAT(a.name_de,' (',v.art,')')
             as name_de, trim(v.ab_menge)+0 as abmenge,".$this->app->erp->FormatPreis('v.preis')." as preis,v.waehrung,
-            trim(l.menge)+0 as lager, 
-            trim(r.menge)+0 as reserviert, 
+            trim(l.menge)+0 as lager,
+            trim(r.menge)+0 as reserviert,
             CONCAT('<input type=\"text\" size=\"5\" name=\"menge[', v.id, ']\" class=\"articlematrix-quantity\" id=\"articlematrix-quantity-', v.id, '\" data-id=\"', v.id, '\" data-default-quantity=\"', ".$this->app->erp->FormatMenge('v.ab_menge').", '\" autocomplete=\"off\">') AS auswahlmenge,
             p.abkuerzung as projekt, ";
 
@@ -563,21 +564,21 @@ class Artikel extends GenArtikel {
         $menu = "<a href=\"index.php?module=auftrag&action=edit&id=%value%\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" border=\"0\"></a>";
         $alignright = array(7,8,9);
         // SQL statement
-        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id, CONCAT('<a href=\"index.php?module=auftrag&action=edit&id=',a.id,'\">',a.belegnr,'</a>') as belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') as datum, a.status, a.zahlungsweise, adr.kundenfreigabe as freigabe, CONCAT(a.name,'<br>', a.email) as Kunde, 
-              trim(ap.menge)+0, trim(ap.geliefert_menge)+0 as gelieferte, FORMAT(ap.preis*(100-ap.rabatt)/100,2) as preis, a.id 
+        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id, CONCAT('<a href=\"index.php?module=auftrag&action=edit&id=',a.id,'\">',a.belegnr,'</a>') as belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') as datum, a.status, a.zahlungsweise, adr.kundenfreigabe as freigabe, CONCAT(a.name,'<br>', a.email) as Kunde,
+              trim(ap.menge)+0, trim(ap.geliefert_menge)+0 as gelieferte, FORMAT(ap.preis*(100-ap.rabatt)/100,2) as preis, a.id
               FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag, adresse adr";
 
         if ($name == 'artikel_auftraege_offen') {
 
           // fester filter
           $where = " adr.id=a.adresse AND ap.artikel='$id' AND ap.geliefert_menge < ap.menge AND a.status='freigegeben'";
-          $count = "SELECT COUNT(a.id) FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag, adresse adr 
+          $count = "SELECT COUNT(a.id) FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag, adresse adr
                 WHERE adr.id=a.adresse AND ap.artikel='$id' AND ap.geliefert_menge < ap.menge AND a.status='freigegeben'";
         } else {
 
           // fester filter
           $where = " adr.id=a.adresse AND ap.artikel='$id' AND a.status='abgeschlossen'";
-          $count = "SELECT COUNT(a.id) FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag, adresse adr 
+          $count = "SELECT COUNT(a.id) FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag, adresse adr
                 WHERE adr.id=a.adresse AND ap.artikel='$id' AND a.status='abgeschlossen'";
         }
         break;
@@ -593,13 +594,13 @@ class Artikel extends GenArtikel {
         $menu = "<a href=\"index.php?module=auftrag&action=edit&id=%value%\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" border=\"0\"></a>";
 
         // SQL statement
-        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id, CONCAT('<a href=\"index.php?module=auftrag&action=edit&id=',a.id,'\">',a.belegnr,'</a>') as belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') as datum, a.status, a.zahlungsweise, adr.kundenfreigabe as freigabe, CONCAT(a.name,'<br>', a.email) as Kunde, 
-              trim(ap.menge)+0, trim(ap.geliefert_menge)+0 as gelieferte, FORMAT(ap.preis*(100-ap.rabatt)/100,2) as preis, a.id 
+        $sql = "SELECT SQL_CALC_FOUND_ROWS a.id, CONCAT('<a href=\"index.php?module=auftrag&action=edit&id=',a.id,'\">',a.belegnr,'</a>') as belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') as datum, a.status, a.zahlungsweise, adr.kundenfreigabe as freigabe, CONCAT(a.name,'<br>', a.email) as Kunde,
+              trim(ap.menge)+0, trim(ap.geliefert_menge)+0 as gelieferte, FORMAT(ap.preis*(100-ap.rabatt)/100,2) as preis, a.id
               FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag, adresse adr";
 
         // fester filter
         $where = " adr.id=a.adresse AND ap.artikel='$id' AND a.status='abgeschlossen'";
-        $count = "SELECT COUNT(a.id) FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag, adresse adr 
+        $count = "SELECT COUNT(a.id) FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag, adresse adr
               WHERE adr.id=a.adresse AND ap.artikel='$id' AND a.status='abgeschlossen'";
         break;
       case 'verkaufspreise':
@@ -623,9 +624,9 @@ class Artikel extends GenArtikel {
                                          else
                                          oMoreData' . $r . $name . ' = 1;
 
-                                         $(\'#' . $name . '\').dataTable().fnFilter( 
+                                         $(\'#' . $name . '\').dataTable().fnFilter(
                                            \'\',
-                                           i, 
+                                           i,
                                            0,0
                                            );
                                          }
@@ -658,8 +659,8 @@ class Artikel extends GenArtikel {
         $numbercols = array(3);
 
         // SQL statement
-        $sql = "SELECT SQL_CALC_FOUND_ROWS v.id, 
-                            if(v.art='Kunde',if(v.adresse='' or v.adresse=0,'Standardpreis',CONCAT(adr.kundennummer,' ',adr.name)),CONCAT(g.name,' ',g.kennziffer)) as kunde,  
+        $sql = "SELECT SQL_CALC_FOUND_ROWS v.id,
+                            if(v.art='Kunde',if(v.adresse='' or v.adresse=0,'Standardpreis',CONCAT(adr.kundennummer,' ',adr.name)),CONCAT(g.name,' ',g.kennziffer)) as kunde,
                              if(v.adresse > 0 OR v.gruppe >0,'','') as hinweis,
                                 ".$this->app->erp->FormatMenge('v.ab_menge').' as ab_menge, '.$this->app->YUI->FormatPreis('v.preis')." as preis, v.waehrung, DATE_FORMAT(v.gueltig_ab, '%d.%m.%Y') as gueltig_ab, DATE_FORMAT(v.gueltig_bis, '%d.%m.%Y') as gueltig_bis, v.id as menu
                                  FROM  verkaufspreise v LEFT JOIN adresse adr ON v.adresse=adr.id  LEFT JOIN gruppen g ON g.id=v.gruppe ";
@@ -717,9 +718,9 @@ class Artikel extends GenArtikel {
                                          else
                                          oMoreData' . $r . $name . ' = 1;
 
-                                         $(\'#' . $name . '\').dataTable().fnFilter( 
+                                         $(\'#' . $name . '\').dataTable().fnFilter(
                                            \'\',
-                                           i, 
+                                           i,
                                            0,0
                                            );
                                          }
@@ -753,8 +754,8 @@ class Artikel extends GenArtikel {
 
         $alignright=array(4,5,6,7,8,9);
 
-        $sql = "SELECT SQL_CALC_FOUND_ROWS e.id, CONCAT('<a href=\"index.php?module=adresse&action=edit&id=',adr.id,'\" target=\"_blank\">',adr.name,'</a>') as lieferant, e.bezeichnunglieferant, e.bestellnummer, 
-                                       ".$this->app->erp->FormatMenge('e.ab_menge')." as ab_menge ,e.vpe as vpe, ".$this->app->YUI->FormatPreis('e.preis')." as preis,e.waehrung as waehrung, if(e.gueltig_bis='0000-00-00','-',DATE_FORMAT(e.gueltig_bis, '%d.%m.%Y')) as gueltig_bis, 
+        $sql = "SELECT SQL_CALC_FOUND_ROWS e.id, CONCAT('<a href=\"index.php?module=adresse&action=edit&id=',adr.id,'\" target=\"_blank\">',adr.name,'</a>') as lieferant, e.bezeichnunglieferant, e.bestellnummer,
+                                       ".$this->app->erp->FormatMenge('e.ab_menge')." as ab_menge ,e.vpe as vpe, ".$this->app->YUI->FormatPreis('e.preis')." as preis,e.waehrung as waehrung, if(e.gueltig_bis='0000-00-00','-',DATE_FORMAT(e.gueltig_bis, '%d.%m.%Y')) as gueltig_bis,
                                         if(e.rahmenvertrag='1',CONCAT(e.rahmenvertrag_menge,' / ',IFNULL((SELECT trim(SUM(bp.menge)) FROM bestellung b LEFT JOIN bestellung_position bp ON bp.bestellung=b.id WHERE b.datum >=e.rahmenvertrag_von AND b.datum <= e.rahmenvertrag_bis AND b.status!='storniert' AND e.adresse=b.adresse AND bp.artikel=e.artikel),0)),'-') as rahmenvertrag, e.id as menu
                                        FROM  einkaufspreise e LEFT JOIN projekt p ON p.id=e.projekt LEFT JOIN adresse adr ON e.adresse=adr.id  ";
 
@@ -811,27 +812,27 @@ class Artikel extends GenArtikel {
         {
           $sql = "SELECT SQL_CALC_FOUND_ROWS lpi.id,
                  DATE_FORMAT(lpi.zeit,'%d.%m.%Y') as datum, lp.kurzbezeichnung as lager,
-                   ".$this->app->erp->FormatMenge('lpi.menge')." as menge, 
-                   lpi.vpe as VPE, if(lpi.eingang,'Eingang','Ausgang') as Richtung, 
+                   ".$this->app->erp->FormatMenge('lpi.menge')." as menge,
+                   lpi.vpe as VPE, if(lpi.eingang,'Eingang','Ausgang') as Richtung,
                    CONCAT(
                      lpi.referenz,
                      if(
                        lpi.bestand >= 0 AND DATE_FORMAT(lpi.zeit,'%Y-%m-%d') >='2015-06-07' ,
                        CONCAT(
-                         ' (Neuer Bestand: ', 
+                         ' (Neuer Bestand: ',
                          ".$this->app->erp->FormatMenge('lpi.bestand').",
                          ')'
                        ),
                        ''
                      ),
                      IF(art.mindesthaltbarkeitsdatum = 1,
-                      CONCAT(' <br /><i style=\"color:#aaa;\">', 
+                      CONCAT(' <br /><i style=\"color:#aaa;\">',
                         IFNULL(
                           (
-                            SELECT CONCAT(IFNULL(mhddatum,''),' ',IFNULL(charge,'') ) 
-                            FROM mhd_log 
-                            WHERE artikel = art.id AND zeit >= lpi.zeit 
-                            ORDER BY id 
+                            SELECT CONCAT(IFNULL(mhddatum,''),' ',IFNULL(charge,'') )
+                            FROM mhd_log
+                            WHERE artikel = art.id AND zeit >= lpi.zeit
+                            ORDER BY id
                             LIMIT 1
                           ),''
                         ),'</i>'
@@ -841,10 +842,10 @@ class Artikel extends GenArtikel {
                         CONCAT(' <br /><i style=\"color:#aaa;\">',
                           IFNULL(
                             (
-                              SELECT IFNULL(bezeichnung,'') 
-                              FROM chargen_log 
-                              WHERE artikel = art.id AND zeit >= lpi.zeit 
-                              ORDER BY id 
+                              SELECT IFNULL(bezeichnung,'')
+                              FROM chargen_log
+                              WHERE artikel = art.id AND zeit >= lpi.zeit
+                              ORDER BY id
                               LIMIT 1
                             ),
                           ''
@@ -853,30 +854,30 @@ class Artikel extends GenArtikel {
                         ''
                       )
                      )
-                   ) as referenz, 
-                   lpi.bearbeiter as bearbeiter, p.abkuerzung as projekt, 
+                   ) as referenz,
+                   lpi.bearbeiter as bearbeiter, p.abkuerzung as projekt,
                    DATE_FORMAT(api.zeitstempel,'%d.%m.%Y'),
-                 lpi.id 
+                 lpi.id
                  FROM lager_bewegung AS lpi
-                 INNER JOIN `artikel` AS `art` ON lpi.artikel = art.id 
-                 LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id 
-                 LEFT JOIN projekt p ON lpi.projekt=p.id 
+                 INNER JOIN `artikel` AS `art` ON lpi.artikel = art.id
+                 LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id
+                 LEFT JOIN projekt p ON lpi.projekt=p.id
                  LEFT JOIN artikel_permanenteinventur api ON api.id=lpi.permanenteinventur";
         } else {
           $sql = "SELECT SQL_CALC_FOUND_ROWS lpi.id,
                   DATE_FORMAT(lpi.zeit,'%d.%m.%Y') as datum, lp.kurzbezeichnung as lager,
                     ".$this->app->erp->FormatMenge("lpi.menge")." as menge,
-                     lpi.vpe as VPE, if(lpi.eingang,'Eingang','Ausgang') as Richtung, 
+                     lpi.vpe as VPE, if(lpi.eingang,'Eingang','Ausgang') as Richtung,
                      CONCAT(
                         lpi.referenz,
                                              IF(art.mindesthaltbarkeitsdatum = 1,
-                      CONCAT(' <br /><i style=\"color:#aaa;\">', 
+                      CONCAT(' <br /><i style=\"color:#aaa;\">',
                         IFNULL(
                           (
-                            SELECT CONCAT(IFNULL(mhddatum,''),' ',IFNULL(charge,'') ) 
-                            FROM mhd_log 
-                            WHERE artikel = art.id AND zeit >= lpi.zeit 
-                            ORDER BY id 
+                            SELECT CONCAT(IFNULL(mhddatum,''),' ',IFNULL(charge,'') )
+                            FROM mhd_log
+                            WHERE artikel = art.id AND zeit >= lpi.zeit
+                            ORDER BY id
                             LIMIT 1
                           ),''
                         ),'</i>'
@@ -886,10 +887,10 @@ class Artikel extends GenArtikel {
                         CONCAT(' <br /><i style=\"color:#aaa;\">',
                           IFNULL(
                             (
-                              SELECT IFNULL(bezeichnung,'') 
-                              FROM chargen_log 
-                              WHERE artikel = art.id AND zeit >= lpi.zeit 
-                              ORDER BY id 
+                              SELECT IFNULL(bezeichnung,'')
+                              FROM chargen_log
+                              WHERE artikel = art.id AND zeit >= lpi.zeit
+                              ORDER BY id
                               LIMIT 1
                             ),
                           ''
@@ -897,13 +898,13 @@ class Artikel extends GenArtikel {
                         ),
                         '')
                       )
-                     ) as referenz, lpi.bearbeiter as bearbeiter, 
+                     ) as referenz, lpi.bearbeiter as bearbeiter,
                      p.abkuerzung as projekt, DATE_FORMAT(api.zeitstempel,'%d.%m.%Y'),
-                  lpi.id 
+                  lpi.id
                   FROM lager_bewegung lpi
-                  INNER JOIN `artikel` AS `art` ON lpi.artikel = art.id 
-                  LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id 
-                  LEFT JOIN projekt p ON lpi.projekt=p.id  
+                  INNER JOIN `artikel` AS `art` ON lpi.artikel = art.id
+                  LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id
+                  LEFT JOIN projekt p ON lpi.projekt=p.id
                   LEFT JOIN artikel_permanenteinventur api ON api.id=lpi.permanenteinventur";
 
         }
@@ -944,30 +945,30 @@ class Artikel extends GenArtikel {
 
         $alignright = array(3,5,6);
         // SQL statement
-        $sql = "SELECT SQL_CALC_FOUND_ROWS 
-                    s.id,  
+        $sql = "SELECT SQL_CALC_FOUND_ROWS
+                    s.id,
                     CONCAT('<a href=\"index.php?module=artikel&action=edit&id=',a.id,'\" target=\"_blank\">',a.name_de,'</a>&nbsp;',
                     IF(s.art='it','<br><i style=color:#999>- Informationsteil/Dienstleistung</i>',''),IF(s.art='bt','<br><i style=color:#999>- Beistellung</i>',''), COALESCE((SELECT GROUP_CONCAT('<br><i style=color:#999>- ', art.nummer, ' ', art.name_de, ' (', alt.reason, ')', '</i>' SEPARATOR '') FROM parts_list_alternative AS alt INNER JOIN artikel AS art ON art.id = alt.alternative_article_id WHERE alt.parts_list_id = s.id), '')) as artikel,
                     CONCAT('<a href=\"index.php?module=artikel&action=edit&id=',a.id,'\" target=\"_blank\">',a.nummer,'</a>') as nummer,
                     s.referenz,
                     trim(s.menge)+0 as menge, a.einheit,
-                    ".$this->app->erp->FormatMenge('ifnull(lag.menge,0)').'  as lager, 
-                    CASE WHEN (SELECT SUM(lr.menge) FROM lager_reserviert lr WHERE lr.artikel=a.id)  > 0 
-                        THEN (SELECT '.$this->app->erp->FormatMenge('SUM(lr.menge)')." FROM lager_reserviert lr WHERE lr.artikel=a.id)  
+                    ".$this->app->erp->FormatMenge('ifnull(lag.menge,0)').'  as lager,
+                    CASE WHEN (SELECT SUM(lr.menge) FROM lager_reserviert lr WHERE lr.artikel=a.id)  > 0
+                        THEN (SELECT '.$this->app->erp->FormatMenge('SUM(lr.menge)')." FROM lager_reserviert lr WHERE lr.artikel=a.id)
                         ELSE 0
-        	        END as reserviert, 
+                    END as reserviert,
                     s.id as menu
-                FROM stueckliste s 
-                INNER JOIN artikel a ON s.artikel=a.id 
+                FROM stueckliste s
+                INNER JOIN artikel a ON s.artikel=a.id
                 LEFT JOIN (SELECT sum(lpi.menge) as menge ,lpi.artikel
-                  FROM lager_platz_inhalt AS lpi 
+                  FROM lager_platz_inhalt AS lpi
                   INNER JOIN (
-                    SELECT artikel 
-                    FROM stueckliste 
+                    SELECT artikel
+                    FROM stueckliste
                     WHERE stuecklistevonartikel='$id' GROUP BY artikel
                   ) AS s2 ON lpi.artikel = s2.artikel
                   INNER JOIN lager_platz AS lp ON lpi.lager_platz = lp.id AND ifnull(lp.sperrlager,0) = 0
-                  GROUP BY lpi.artikel) AS lag ON a.id = lag.artikel  
+                  GROUP BY lpi.artikel) AS lag ON a.id = lag.artikel
                 ";
 
         // Fester filter
@@ -986,7 +987,7 @@ class Artikel extends GenArtikel {
         $findcols = array('a.nummer', 'a.name_de', 'p.id');
         $searchsql = array('a.nummer', 'a.name_de');
 
-        $id = $app->Secure->GetGET('more_data1');
+        $id = (int)$app->Secure->GetGET('more_data1');
 
         $menu = "<table cellpadding=0 cellspacing=0>";
           $menu .= "<tr>";
@@ -1000,7 +1001,7 @@ class Artikel extends GenArtikel {
             $menu .= "</td>";
           $menu .= "</tr>";
         $menu .= "</table>";
-        
+
         $sql = "SELECT SQL_CALC_FOUND_ROWS p.id, a.nummer, CONCAT(a.name_de, IF(p.reason != '', CONCAT('<br><i style=color:#999>- Grund: ',p.reason,'</i>'),'')), p.id
                 FROM parts_list_alternative p
                 LEFT JOIN stueckliste s ON p.parts_list_id = s.id
@@ -1011,14 +1012,14 @@ class Artikel extends GenArtikel {
         break;
 
       case 'artikel_onlineshops':
-        $id = $this->app->Secure->GetGET('id');
+        $id = (int)$this->app->Secure->GetGET('id');
         $disablebuttons=true;
         $allowed['artikel'] = array('edit');
         $heading = array('Shop','aktiv','Men&uuml;');
         $width = array('50%','10%','1%');
         $findcols = array('ao.id','s.bezeichnung',"if(ao.aktiv = 1, 'ja','-')",'ao.id');
         $searchsql = array('s.bezeichnung',"if(ao.aktiv = 1, 'ja','-')");
-        $sql = "SELECT SQL_CALC_FOUND_ROWS ao.id, concat(s.bezeichnung,'<span style=\"display:none;\" class=\"shopid\">',ao.shop,'</span>'), if(ao.aktiv = 1, 'ja','-'), ao.id 
+        $sql = "SELECT SQL_CALC_FOUND_ROWS ao.id, concat(s.bezeichnung,'<span style=\"display:none;\" class=\"shopid\">',ao.shop,'</span>'), if(ao.aktiv = 1, 'ja','-'), ao.id
         FROM artikel_onlineshops ao
         INNER JOIN shopexport s ON ao.shop = s.id AND ao.artikel = '$id'
         ";
@@ -1050,12 +1051,12 @@ class Artikel extends GenArtikel {
         $menu = "<table cellpadding=0 cellspacing=0><tr><td nowrap><a href=\"index.php?module=zertifikatgenerator&action=edit&id=%value%\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" border=\"0\"></a></td></tr></table>";
         $defaultorder = 0;
         $defaultorderdesc = 1;
-        $sql = "SELECT SQL_CALC_FOUND_ROWS z.id, 
+        $sql = "SELECT SQL_CALC_FOUND_ROWS z.id,
         date_format(z.erstellt_datum,'%d.%m.%Y'),
-        
+
         a.kundennummer,
         a.name,
-        ar.nummer, 
+        ar.nummer,
         ar.name_de,
         z.id
           from zertifikatgenerator z
@@ -1181,7 +1182,7 @@ class Artikel extends GenArtikel {
                   $zusatzcols[] = 'eig.value';
                   $joineig = "
                   LEFT JOIN (
-                  SELECT aew.artikel, 
+                  SELECT aew.artikel,
                    GROUP_CONCAT(DISTINCT concat(ae.name,': ',aew.wert)
                       ORDER BY ae.name  SEPARATOR ', ') as value
                    FROM artikeleigenschaftenwerte aew
@@ -1192,11 +1193,11 @@ class Artikel extends GenArtikel {
                   break;
                 case 'inproduktion':
 
-                  "(SELECT SUM(pos.menge) 
-                    FROM produktion_position pos 
-                    WHERE pos.status = 'gestartet' AND (pos.explodiert=1 or pos.id>0) 
+                  "(SELECT SUM(pos.menge)
+                    FROM produktion_position pos
+                    WHERE pos.status = 'gestartet' AND (pos.explodiert=1 or pos.id>0)
                     GROUP BY pos.artikel
-                    ORDER BY pos.sort, pos.id 
+                    ORDER BY pos.sort, pos.id
                     LIMIT 1)";
 
                   break;
@@ -1258,9 +1259,9 @@ class Artikel extends GenArtikel {
                       else
                       oMoreData' . $r . $name . ' = 1;
 
-                      $(\'#' . $name . '\').dataTable().fnFilter( 
+                      $(\'#' . $name . '\').dataTable().fnFilter(
                         \'\',
-                        i, 
+                        i,
                         0,0
                         );
                       }
@@ -1334,11 +1335,11 @@ class Artikel extends GenArtikel {
           $searchsql = ['a.nummer','a.name_de','a.ean'];
         }
         // SQL statement
-        $sql = "SELECT 
-               a.id, 
-              '<img src=./themes/{$this->app->Conf->WFconf['defaulttheme']}/images/details_open.png class=details>' as open, 
+        $sql = "SELECT
+               a.id,
+              '<img src=./themes/{$this->app->Conf->WFconf['defaulttheme']}/images/details_open.png class=details>' as open,
               ";
-    
+
         if($bilder) {
           if(!function_exists('imagejpeg')) {
             $sql .= "'<img src=./themes/{$this->app->Conf->WFconf['defaulttheme']}/images/icon_img_error.png title=\"Keine GD-Erweiterung installiert\" />' as bild,";
@@ -1368,7 +1369,7 @@ class Artikel extends GenArtikel {
           if((isset($parameter['eigenschaftname'.$i]) && $parameter['eigenschaftname'.$i] !== '')
             || (isset($parameter['eigenschaftwert'.$i]) && $parameter['eigenschaftwert'.$i] !== '')
           ) {
-            $joins .= ' INNER JOIN artikeleigenschaftenwerte aw'.$i.' ON a.id = aw'.$i.'.artikel 
+            $joins .= ' INNER JOIN artikeleigenschaftenwerte aw'.$i.' ON a.id = aw'.$i.'.artikel
                 INNER JOIN artikeleigenschaften ae'.$i.' ON ae'.$i.'.id = aw'.$i.'.artikeleigenschaften AND (ae1.geloescht = 0 OR isnull(ae'.$i.".geloescht))
                 ";
             if(isset($parameter['eigenschaftname'.$i]) && $parameter['eigenschaftname'.$i] !== ''){
@@ -1388,15 +1389,15 @@ class Artikel extends GenArtikel {
         }
 
         $sql .= "
-              a.nummer as nummer, 
+              a.nummer as nummer,
               CONCAT(
                 IF(a.intern_gesperrt,'<strike>',''),
                 name_de,
                 IF(a.variante AND a.variante_von > 0,CONCAT(' <a href=\"index.php?module=artikel&action=edit&id=',a.variante_von,'\"><font color=#848484>(Variante von ',IFNULL((SELECT tmp.nummer FROM artikel tmp WHERE a.variante_von=tmp.id LIMIT 1),''),')</font></a>'),''),
-                IF(a.intern_gesperrt,'</strike>','') 
-              ) AS name_de,        
+                IF(a.intern_gesperrt,'</strike>','')
+              ) AS name_de,
               ".(!empty($mlm)?" a.mlmpunkte, ":'')."
-              if(a.lagerartikel=1,$lpicol2,'') as lagerbestand,  
+              if(a.lagerartikel=1,$lpicol2,'') as lagerbestand,
               p.abkuerzung as projekt, ";
         if($zusatzcols) {
           $sql .= implode(', ', $zusatzcols).', ';
@@ -1407,7 +1408,7 @@ class Artikel extends GenArtikel {
           }
         }
 
-        $sql .= '  a.id as menu 
+        $sql .= '  a.id as menu
                 FROM  artikel a
                 ';
         if($baumids) {
@@ -1478,14 +1479,10 @@ class Artikel extends GenArtikel {
 
         if(isset($parameter['standardlieferant']) && !empty($parameter['standardlieferant'])) {
           if(isset($parameter['standardlieferant']) && !empty($parameter['standardlieferant'])) {
-            $lieferant = $this->app->DB->Select('
-              SELECT
-                id
-              FROM
-                adresse
-              WHERE
-                lieferantennummer = "' . reset(explode(' ',trim($parameter['standardlieferant']))) . '" AND geloescht = 0 LIMIT 1
-            ');
+            $lieferant = $this->app->DatabaseService->selectValue(
+            'SELECT id FROM adresse WHERE lieferantennummer = :liefnr AND geloescht = 0 LIMIT 1',
+            ['liefnr' => reset(explode(' ', trim($parameter['standardlieferant'])))]
+          );
 
             $paramsArray[] = "a.adresse = '" . $lieferant . "'";
           }
@@ -1521,14 +1518,10 @@ class Artikel extends GenArtikel {
 
         if(isset($parameter['projekt']) && !empty($parameter['projekt'])) {
 
-          $projektData = $this->app->DB->SelectRow('
-            SELECT
-              *
-            FROM
-              projekt
-            WHERE
-              abkuerzung LIKE "' . $parameter['projekt'] . '"
-          ');
+          $projektData = $this->app->DatabaseService->selectRow(
+            'SELECT * FROM projekt WHERE abkuerzung LIKE :abkuerzung',
+            ['abkuerzung' => $parameter['projekt']]
+          );
           $paramsArray[] = "a.projekt = '".$projektData['id']."' ";
         }
 
@@ -1558,7 +1551,7 @@ class Artikel extends GenArtikel {
 
           $artikelkategorie = explode(" ", $parameter['typ']);
           $artikelkategorieid = $artikelkategorie[0];
-          $artikelkategorieid = $app->DB->Select("SELECT id FROM artikelkategorien WHERE id = '$artikelkategorieid' LIMIT 1");
+          $artikelkategorieid = $this->app->DatabaseService->selectValue("SELECT id FROM artikelkategorien WHERE id = :id LIMIT 1", ['id' => (int)$artikelkategorieid]);
           if($artikelkategorieid != ''){
             $artikelkategorie = $artikelkategorieid;
           }else{
@@ -1604,7 +1597,7 @@ class Artikel extends GenArtikel {
         /*$maxEinkauf = $this->app->DB->Select(
           "SELECT MAX(ct) as mx FROM(
                 SELECT artikel, COUNT(bestellnummer) as ct FROM einkaufspreise
-                WHERE bestellnummer IS NOT NULL 
+                WHERE bestellnummer IS NOT NULL
                 AND bestellnummer !=''
                 GROUP BY artikel
             ) as data");
@@ -1612,7 +1605,7 @@ class Artikel extends GenArtikel {
         $maxVerkauf = $this->app->DB->Select(
           "SELECT MAX(ct) as mx FROM(
                 SELECT artikel, COUNT(kundenartikelnummer) as ct FROM verkaufspreise
-                WHERE kundenartikelnummer IS NOT NULL 
+                WHERE kundenartikelnummer IS NOT NULL
                 AND kundenartikelnummer !=''
                 GROUP BY artikel
             ) as data");
@@ -1630,18 +1623,18 @@ class Artikel extends GenArtikel {
           $searchsql[] = 'cache.vk_customnumber';
         }
         else{
-          $sql .= " LEFT JOIN einkaufspreise AS ekpr ON a.id = ekpr.artikel AND IFNULL(ekpr.bestellnummer,'') <> '' 
+          $sql .= " LEFT JOIN einkaufspreise AS ekpr ON a.id = ekpr.artikel AND IFNULL(ekpr.bestellnummer,'') <> ''
         AND (IFNULL(ekpr.gueltig_bis,'0000-00-00')='0000-00-00' OR ekpr.gueltig_bis >= CURDATE()) ";
           $sql .= " LEFT JOIN verkaufspreise AS vkpr ON a.id = vkpr.artikel AND IFNULL(vkpr.kundenartikelnummer,'') <> ''
          AND (IFNULL(vkpr.gueltig_bis,'0000-00-00')='0000-00-00' OR vkpr.gueltig_bis >= CURDATE())";
 
-          $count .= " LEFT JOIN einkaufspreise AS ekpr ON a.id = ekpr.artikel AND IFNULL(ekpr.bestellnummer,'') <> '' 
+          $count .= " LEFT JOIN einkaufspreise AS ekpr ON a.id = ekpr.artikel AND IFNULL(ekpr.bestellnummer,'') <> ''
         AND (IFNULL(ekpr.gueltig_bis,'0000-00-00')='0000-00-00' OR ekpr.gueltig_bis >= CURDATE()) ";
 
           $count .= " LEFT JOIN verkaufspreise AS vkpr ON a.id = vkpr.artikel AND IFNULL(vkpr.kundenartikelnummer,'') <> ''
          AND (IFNULL(vkpr.gueltig_bis,'0000-00-00')='0000-00-00' OR vkpr.gueltig_bis >= CURDATE())";
 
-          $fastcount .=" LEFT JOIN einkaufspreise AS ekpr ON a.id = ekpr.artikel AND IFNULL(ekpr.bestellnummer,'') <> '' 
+          $fastcount .=" LEFT JOIN einkaufspreise AS ekpr ON a.id = ekpr.artikel AND IFNULL(ekpr.bestellnummer,'') <> ''
         AND (IFNULL(ekpr.gueltig_bis,'0000-00-00')='0000-00-00' OR ekpr.gueltig_bis >= CURDATE()) ";
 
           $fastcount .= " LEFT JOIN verkaufspreise AS vkpr ON a.id = vkpr.artikel AND IFNULL(vkpr.kundenartikelnummer,'') <> ''
@@ -1722,51 +1715,52 @@ class Artikel extends GenArtikel {
 
         $numbercols = array(8,9,10);
 
+        $sqla = [];
         if($fauftrag && $this->app->erp->RechteVorhanden('auftrag','list'))
         {
-          $sqla[] = "(SELECT a.id, 'auftrag' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name, ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert_menge),0) as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis 
+          $sqla[] = "(SELECT a.id, 'auftrag' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name, ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert_menge),0) as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis
                  FROM auftrag a INNER JOIN auftrag_position ap ON a.id = ap.auftrag AND ap.artikel = '$id'
                WHERE a.id > 0 ".(($fstatusabgeschlossen && !$fstatusoffen)?" AND a.status = 'abgeschlossen' ":(($fstatusoffen && !$fstatusabgeschlossen)?" AND a.status != 'abgeschlossen' AND a.status != 'storniert' ":""))."
           ".$this->app->erp->ProjektRechte('a.projekt').'  GROUP BY a.id)';
         }
         if($frechnung && $this->app->erp->RechteVorhanden('rechnung','list'))
         {
-          $sqla[] = "(SELECT a.id, 'rechnung' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name,ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,0 as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis 
+          $sqla[] = "(SELECT a.id, 'rechnung' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name,ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,0 as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis
                  FROM rechnung a INNER JOIN rechnung_position ap ON a.id = ap.rechnung AND ap.artikel = '$id'
                WHERE a.id > 0 ".(($fstatusabgeschlossen && !$fstatusoffen)?" AND a.status = 'abgeschlossen' ":(($fstatusoffen && !$fstatusabgeschlossen)?" AND a.status != 'abgeschlossen'  ":""))."
           ".$this->app->erp->ProjektRechte('a.projekt').'    GROUP BY a.id )';
         }
         if($fgutschrift && $this->app->erp->RechteVorhanden('gutschrift','list'))
         {
-          $sqla[] = "(SELECT a.id, 'gutschrift' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name,ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,0 as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis 
+          $sqla[] = "(SELECT a.id, 'gutschrift' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name,ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,0 as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis
                  FROM gutschrift a INNER JOIN gutschrift_position ap ON a.id = ap.gutschrift AND ap.artikel = '$id'
                WHERE a.id > 0 ".(($fstatusabgeschlossen && !$fstatusoffen)?" AND a.status = 'abgeschlossen' ":(($fstatusoffen && !$fstatusabgeschlossen)?" AND a.status != 'abgeschlossen' AND a.status != 'storniert' ":""))."
           ".$this->app->erp->ProjektRechte('a.projekt').'   GROUP BY a.id  )';
         }
         if($flieferschein && $this->app->erp->RechteVorhanden('lieferschein','list'))
         {
-          $sqla[] = "(SELECT a.id, 'lieferschein' as typ ,a.belegnr, a.datum, a.status, '' as zahlungsweise, a.kundennummer, a.name,ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert),0) as geliefert,0 as preis 
+          $sqla[] = "(SELECT a.id, 'lieferschein' as typ ,a.belegnr, a.datum, a.status, '' as zahlungsweise, a.kundennummer, a.name,ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert),0) as geliefert,0 as preis
                  FROM lieferschein a INNER JOIN lieferschein_position ap ON a.id = ap.lieferschein AND ap.artikel = '$id'
                WHERE a.id > 0 ".(($fstatusabgeschlossen && !$fstatusoffen)?" AND a.status = 'versendet' ":(($fstatusoffen && !$fstatusabgeschlossen)?" AND a.status != 'versendet' AND a.status != 'storniert' ":""))."
           ".$this->app->erp->ProjektRechte('a.projekt').'    GROUP BY a.id )';
         }
         if($fangebot && $this->app->erp->RechteVorhanden('angebot','list'))
         {
-          $sqla[] = "(SELECT a.id, 'angebot' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name,ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert),0) as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis  
+          $sqla[] = "(SELECT a.id, 'angebot' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name,ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert),0) as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis
                  FROM angebot a INNER JOIN angebot_position ap ON a.id = ap.angebot AND ap.artikel = '$id'
                WHERE a.id > 0 ".(($fstatusabgeschlossen && !$fstatusoffen)?" AND a.status = 'abgeschlossen' ":(($fstatusoffen && !$fstatusabgeschlossen)?" AND a.status != 'abgeschlossen' AND a.status != 'storniert' ":""))."
           ".$this->app->erp->ProjektRechte('a.projekt').'   GROUP BY a.id  )';
         }
         if($fbestellung && $this->app->erp->RechteVorhanden('bestellung','list'))
         {
-          $sqla[] = "(SELECT a.id, 'bestellung' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.lieferantennummer as kundennummer, a.name, ap.bezeichnunglieferant as bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert),0) as geliefert,ifnull(ap.preis,0) as preis  
+          $sqla[] = "(SELECT a.id, 'bestellung' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.lieferantennummer as kundennummer, a.name, ap.bezeichnunglieferant as bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert),0) as geliefert,ifnull(ap.preis,0) as preis
                  FROM bestellung a INNER JOIN bestellung_position ap ON a.id = ap.bestellung AND ap.artikel = '$id'
                WHERE a.id > 0 ".(($fstatusabgeschlossen && !$fstatusoffen)?" AND a.status = 'abgeschlossen' ":(($fstatusoffen && !$fstatusabgeschlossen)?" AND a.status != 'abgeschlossen' AND a.status != 'storniert' ":""))."
           ".$this->app->erp->ProjektRechte('a.projekt').'    GROUP BY a.id )';
         }
         if($fproduktion && $this->app->erp->ModulVorhanden('produktion') && $this->app->erp->RechteVorhanden('produktion','list'))
         {
-          $sqla[] = "(SELECT a.id, 'produktion' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name, ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert),0) as geliefert,ifnull(ap.preis,0) as preis  
+          $sqla[] = "(SELECT a.id, 'produktion' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name, ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert),0) as geliefert,ifnull(ap.preis,0) as preis
                  FROM produktion a INNER JOIN produktion_position ap ON a.id = ap.produktion AND ap.artikel = '$id'
                WHERE a.id > 0 ".(($fstatusabgeschlossen && !$fstatusoffen)?" AND a.status = 'abgeschlossen' ":(($fstatusoffen && !$fstatusabgeschlossen)?" AND a.status != 'abgeschlossen' AND a.status != 'storniert' ":""))."
           ".$this->app->erp->ProjektRechte('a.projekt').'   GROUP BY a.id  )';
@@ -1775,7 +1769,7 @@ class Artikel extends GenArtikel {
         $where = 'b.id > 0';
         if(!isset($sqla))
         {
-          $sqla[] = "(SELECT 0, '' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name, ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert_menge),0) as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis 
+          $sqla[] = "(SELECT 0, '' as typ ,a.belegnr, a.datum, a.status, a.zahlungsweise, a.kundennummer, a.name, ap.bezeichnung, ifnull(sum(ap.menge),0) as menge,ifnull(sum(ap.geliefert_menge),0) as geliefert,ifnull(ap.preis*(100-ap.rabatt)/100,0) as preis
                  FROM auftrag a INNER JOIN auftrag_position ap ON a.id = ap.auftrag AND ap.artikel = '$id'
                WHERE a.id < 0
               )";
@@ -1788,10 +1782,10 @@ class Artikel extends GenArtikel {
         $alignright = array(9,10,11);
         $sql = "SELECT SQL_CALC_FOUND_ROWS b.id, b.typ,b.belegnr, DATE_FORMAT(b.datum, '%d.%m.%Y'), b.status, b.zahlungsweise, b.kundennummer, b.name, b.bezeichnung, ".$this->app->erp->FormatMenge("b.menge").", ".$this->app->erp->FormatMenge("b.geliefert").", ".$this->app->erp->FormatPreis("b.preis",2).",
         concat('<table cellpadding=0 cellspacing=0><tr><td nowrap><a href=\"index.php?module=',b.typ,'&action=edit&id=',b.id,'\" target\"_blank\" ><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" border=\"0\"></a>&nbsp;<a href=\"index.php?module=',b.typ,'&action=pdf&id=',b.id,'\" target\"_blank\" ><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/pdf.svg\" border=\"0\"></a></td></tr></table>'),''
-            FROM (            
+            FROM (
               ".implode(' UNION ALL ', $sqla).'
             )b
-        
+
         ';
         break;
       case 'instueckliste':
@@ -1810,12 +1804,12 @@ class Artikel extends GenArtikel {
         // SQL statement
 
         if (!empty($this->app->Conf->WFdbType) && $this->app->Conf->WFdbType == 'postgre') {
-          $sql = 'SELECT 
+          $sql = 'SELECT
                     s.id,
                     a.name_de as artikel,
-                    a.nummer as nummer, 
-                    trim(SUM(s.menge))+0 as menge, 
-                    CASE 
+                    a.nummer as nummer,
+                    trim(SUM(s.menge))+0 as menge,
+                    CASE
                         WHEN (SELECT SUM(l.menge) FROM lager_platz_inhalt l WHERE l.artikel=a.id) > 0
                         THEN (SELECT SUM(l.menge) FROM lager_platz_inhalt l WHERE l.artikel=a.id)
                         ELSE 0
@@ -1829,8 +1823,8 @@ class Artikel extends GenArtikel {
                         a.nummer as nummer,
                         trim(SUM(s.menge))+0 as menge,
                         s.stuecklistevonartikel AS menu
-                    FROM 
-                        stueckliste s 
+                    FROM
+                        stueckliste s
                     LEFT JOIN artikel a ON s.stuecklistevonartikel=a.id ';
         }
 
@@ -1840,7 +1834,7 @@ class Artikel extends GenArtikel {
         $groupby = " GROUP BY a.id";
 
         // gesamt anzahl
-        $count = "SELECT COUNT(s.id) FROM stueckliste s WHERE s.stuecklistevonartikel='$id' ";
+        $count = "SELECT COUNT(s.id) FROM stueckliste s WHERE s.artikel='$id' ";
         break;
       case 'artikel_etiketten':
         $allowed['artikel'] = array('etiketten');
@@ -1989,13 +1983,13 @@ class Artikel extends GenArtikel {
 
     if(is_numeric($id) && $id > 0)
     {
-      $arr = $this->app->DB->SelectRow("SELECT CONCAT(name_de,' (',nummer,')') as name2, name_de,nummer FROM artikel WHERE id='$id' LIMIT 1");
+      $arr = $this->app->DatabaseService->selectRow("SELECT CONCAT(name_de,' (',nummer,')') as name2, name_de,nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       if(!empty($arr)){
         $artikel = $arr['name2'];
         $nummer = $arr['nummer'];
         $namede = $arr['name_de'];
       }
-    } 
+    }
     else{
       $artikel = $nummer;
     }
@@ -2067,7 +2061,7 @@ class Artikel extends GenArtikel {
     $Brief->Output('test.pdf','D');
     $this->app->ExitXentral();
   }
-  
+
   public function ArtikelEinkaufAdd()
   {
     $bezeichnunglieferant = '';
@@ -2082,18 +2076,18 @@ class Artikel extends GenArtikel {
       $this->app->ExitXentral();
     }
     $lieferantennummera = explode(' ',$lieferant);
-    $adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer <> '' AND lieferantennummer = '".$this->app->DB->real_escape_string($lieferantennummera[0])."' LIMIT 1");
+    $adresse = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE lieferantennummer <> '' AND lieferantennummer = :liefnr LIMIT 1", ['liefnr' => $lieferantennummera[0]]);
     if(!$adresse) {
       echo json_encode(array('status'=>0,'error'=>'Lieferant nicht gefunden'));
       $this->app->ExitXentral();
     }
-    $artikelprojekt = $this->app->DB->Select("SELECT projekt FROM artikel WHERE id = '$artikel' LIMIT 1");
+    $artikelprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM artikel WHERE id = :id LIMIT 1", ['id' => $artikel]);
     if($artikelprojekt && !$this->app->erp->UserProjektRecht($artikelprojekt))
     {
       echo json_encode(array('status'=>0,'error'=>'Fehlende Projektrechte'));
       $this->app->ExitXentral();
     }
-    $adressprojekt = $this->app->DB->Select("SELECT projekt FROM adresse WHERE id = '$adresse' LIMIT 1");
+    $adressprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM adresse WHERE id = :id LIMIT 1", ['id' => $adresse]);
     if($adressprojekt && !$this->app->erp->UserProjektRecht($adressprojekt)) {
       echo json_encode(array('status'=>0,'error'=>'Fehlende Projektrechte'));
       $this->app->ExitXentral();
@@ -2106,7 +2100,7 @@ class Artikel extends GenArtikel {
     echo json_encode(array('status'=>1,'html'=>$this->app->erp->EinkaufspreiseTabelle($artikel)));
     $this->app->ExitXentral();
   }
-  
+
   public function ArtikelEigenschaften()
   {
     if(!$this->app->DB->Select('SELECT id FROM eigenschaften LIMIT 1'))// $this->app->erp->ModulVorhanden('artikeleigenschaften'))
@@ -2129,21 +2123,21 @@ class Artikel extends GenArtikel {
           $checkwert = $this->app->DatabaseService->selectValue("SELECT id FROM artikeleigenschaftenwerte WHERE artikeleigenschaften = :eigenschaft AND artikel = :artikelId AND wert = :wert LIMIT 1", ['eigenschaft' => $checkkategorie, 'artikelId' => (int)$id, 'wert' => $wert]);
           if(!$checkwert) $this->app->DatabaseService->insert("INSERT INTO artikeleigenschaftenwerte (wert, artikeleigenschaften, artikel, einheit) VALUES (:wert, :eigenschaft, :artikelId, :einheit)", ['wert' => $wert, 'eigenschaft' => $checkkategorie, 'artikelId' => (int)$id, 'einheit' => $einheit]);
         }
-        
+
         echo json_encode(array('status'=>$status));
         $this->app->ExitXentral();
       }
       if($cmd === 'get') {
         $eigenschaftid = (int)$this->app->Secure->GetPOST('eigenschaftid');
-        $erg = $this->app->DB->SelectRow("SELECT ew.id, ew.wert, ew.einheit, e.name, ew.artikeleigenschaften, e.typ, ew.vorlage FROM artikeleigenschaften e INNER JOIN artikeleigenschaftenwerte ew ON e.id = ew.artikeleigenschaften
-        WHERE ew.id = '$eigenschaftid' AND ew.artikel = '$id' AND e.geloescht <> 1 LIMIT 1");
+        $erg = $this->app->DatabaseService->selectRow("SELECT ew.id, ew.wert, ew.einheit, e.name, ew.artikeleigenschaften, e.typ, ew.vorlage FROM artikeleigenschaften e INNER JOIN artikeleigenschaftenwerte ew ON e.id = ew.artikeleigenschaften
+        WHERE ew.id = :eigenschaftId AND ew.artikel = :artikelId AND e.geloescht <> 1 LIMIT 1", ['eigenschaftId' => $eigenschaftid, 'artikelId' => (int)$id]);
 
         if(!$erg['vorlage']){
           $erg['typ'] = 'einzeilig';
         }
 
         if($erg['typ'] === 'select'){
-          $tmp = $this->app->DB->SelectArr("SELECT wert FROM eigenschaften_vorlagen_werte WHERE name = '".$erg['name']."' AND vorlage='".$erg['vorlage']."'");
+          $tmp = $this->app->DatabaseService->select("SELECT wert FROM eigenschaften_vorlagen_werte WHERE name = :name AND vorlage = :vorlage", ['name' => $erg['name'], 'vorlage' => $erg['vorlage']]);
           $erlaubteWerte = array();
           foreach ($tmp as $wert){
             $erlaubteWerte[] = $wert['wert'];
@@ -2205,7 +2199,7 @@ class Artikel extends GenArtikel {
       }
 
       if($cmd === 'copy'){
-        
+
         $name = trim($this->app->Secure->GetPOST('e_name'));
         $wert = trim($this->app->Secure->GetPOST('e_wert'));
         $einheit = trim($this->app->Secure->GetPOST('e_einheit'));
@@ -2262,32 +2256,32 @@ class Artikel extends GenArtikel {
       if($cmd === 'getuebersetzung'){
 
         $uebersetzungid = (int)$this->app->Secure->GetPOST('id');
-          
-        $data = $this->app->DB->SelectRow("SELECT ap.id, ap.article_id, ap.language_to, ap.property_to, ap.property_value_to, 
-            ap.language_from, ap.property_from, ap.property_value_from, ap.shop_id 
-            FROM article_property_translation ap 
-            WHERE ap.id = '$uebersetzungid' AND ap.article_id = '$id' LIMIT 1");
-          
+
+        $data = $this->app->DatabaseService->selectRow("SELECT ap.id, ap.article_id, ap.language_to, ap.property_to, ap.property_value_to,
+            ap.language_from, ap.property_from, ap.property_value_from, ap.shop_id
+            FROM article_property_translation ap
+            WHERE ap.id = :uebersetzungId AND ap.article_id = :artikelId LIMIT 1", ['uebersetzungId' => $uebersetzungid, 'artikelId' => (int)$id]);
+
         if($data){
           if($data['article_id'] > 0){
-            $articleNumber = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id = '".$data['article_id']."' LIMIT 1");
-            $articleName = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id = '".$data['article_id']."' LIMIT 1");
+            $articleNumber = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$data['article_id']]);
+            $articleName = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$data['article_id']]);
             if($articleNumber != "" && $articleName != ""){
               $data['article'] = $articleNumber." ".$articleName;
             }
           }
 
           if($data['shop_id'] > 0){
-            $shopName = $this->app->DB->Select("SELECT bezeichnung FROM shopexport WHERE id = '".$data['shop_id']."' LIMIT 1");
+            $shopName = $this->app->DatabaseService->selectValue("SELECT bezeichnung FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$data['shop_id']]);
             $data['shop'] = $data['shop_id']." ".$shopName;
           }else{
             $data['shop'] = '';
-          }        
+          }
 
         }else{
           $data['id'] = 0;
-          $articleNumber = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id = '$id' LIMIT 1");
-          $articleName = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id = '$id' LIMIT 1");
+          $articleNumber = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+          $articleName = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
           if($articleNumber != "" && $articleName != ""){
             $data['article'] = $articleNumber." ".$articleName;
           }else{
@@ -2317,9 +2311,9 @@ class Artikel extends GenArtikel {
         $shop = trim($this->app->Secure->GetPOST('shop'));
 
         $error = "";
-        
+
         if($id != ""){
-          $id = (int)$this->app->DB->Select("SELECT id FROM artikel WHERE id = '$id' LIMIT 1");
+          $id = (int)$this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
           if($id === 0){
             $error .= "Bitte gültigen Artikel auswählen"."\n";
           }
@@ -2329,7 +2323,7 @@ class Artikel extends GenArtikel {
           $shop = explode(' ', $shop);
           $shopId = $shop[0];
           if($shopId != ""){
-            $shopId = (int)$this->app->DB->Select("SELECT id FROM shopexport WHERE id = '$shopId' LIMIT 1");
+            $shopId = (int)$this->app->DatabaseService->selectValue("SELECT id FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$shopId]);
             if($shopId === 0){
               $error .= "Bitte gültigen Shop auswählen"."\n";
             }
@@ -2341,7 +2335,7 @@ class Artikel extends GenArtikel {
         if($propertyTo == "" && $propertyValueTo == ""){
           $error .= "Bitte Eigenschaft oder Wert der Zielsprache ausfüllen"."\n";
         }
-        
+
         //shop bedenken
         $uebersetzungschonvorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM article_property_translation WHERE article_id = :articleId AND language_from = :languageFrom AND language_to = :languageTo AND property_from = :propertyFrom AND property_to = :propertyTo AND property_value_from = :propertyValueFrom AND property_value_to = :propertyValueTo AND id != :entryId LIMIT 1", ['articleId' => (int)$id, 'languageFrom' => $languageFrom, 'languageTo' => $languageTo, 'propertyFrom' => $propertyFrom, 'propertyTo' => $propertyTo, 'propertyValueFrom' => $propertyValueFrom, 'propertyValueTo' => $propertyValueTo, 'entryId' => $eintragid]);
         if($uebersetzungschonvorhanden != "" && $uebersetzungschonvorhanden > 0){
@@ -2383,9 +2377,9 @@ class Artikel extends GenArtikel {
       if($cmd === 'deleteuebersetzung'){
         $eintragid = (int)$this->app->Secure->GetPOST('id');
         if($eintragid){
-          $this->app->DB->Update("DELETE FROM article_property_translation WHERE id = '$eintragid'");
+          $this->app->DatabaseService->delete("DELETE FROM article_property_translation WHERE id = :id", ['id' => $eintragid]);
         }
-            
+
         echo json_encode(array('status'=>1));
         $this->app->ExitXentral();
       }
@@ -2420,10 +2414,10 @@ class Artikel extends GenArtikel {
         }
       }
 
-      $sprachen = $this->app->DB->SelectArr("SELECT iso, bezeichnung_de FROM sprachen");
+      $sprachen = $this->app->DatabaseService->select("SELECT iso, bezeichnung_de FROM sprachen");
       $select = '';
       foreach($sprachen as $key=>$value){
-        $select .= "<option value='".$value['iso']."'>".$value['bezeichnung_de']."</option>";           
+        $select .= "<option value='".$value['iso']."'>".$value['bezeichnung_de']."</option>";
       }
       $this->app->Tpl->Add("SPRACHEN", $select);
 
@@ -2435,7 +2429,7 @@ class Artikel extends GenArtikel {
       $this->app->YUI->AutoComplete('e_name','artikeleigenschaften');
       $this->app->YUI->AutoComplete('e_textwert', 'artikeleigenschaftenwerte');
       $this->app->YUI->AutoComplete('vorlage','eigenschaften_vorlagen');
-      
+
       $this->ArtikelMenu();
       $this->app->YUI->TableSearch('TAB1','artikel_eigenschaften_neu', 'show','','',basename(__FILE__), __CLASS__);
       $this->app->Tpl->Parse('PAGE','artikel_artikeleigenschaften.tpl');
@@ -2474,13 +2468,13 @@ class Artikel extends GenArtikel {
     $action = $this->app->Secure->GetGET('action');
     if($id && ($action == 'verkaufdisable' || $action == 'verkaufcopy' || $action == 'verkaufdelete' || $action == 'verkaufeditpopup'))
     {
-      $projekt = $this->app->DB->Select("SELECT a.projekt FROM artikel a INNER JOIN verkaufspreise v on v.artikel = a.id WHERE v.id = '$id' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT a.projekt FROM artikel a INNER JOIN verkaufspreise v on v.artikel = a.id WHERE v.id = :id LIMIT 1", ['id' => $id]);
       if($projekt){
         return $this->app->erp->UserProjektRecht($projekt);
       }
     }elseif($id && ($action == 'einkaufdisable' || $action == 'einkaufcopy' || $action == 'einkaufdelete' || $action == 'einkaufeditpopup'))
     {
-      $projekt = $this->app->DB->Select("SELECT a.projekt FROM artikel a INNER JOIN einkaufspreise e on e.artikel = a.id WHERE e.id = '$id' LIMIT 1");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT a.projekt FROM artikel a INNER JOIN einkaufspreise e on e.artikel = a.id WHERE e.id = :id LIMIT 1", ['id' => $id]);
       if($projekt){
         return $this->app->erp->UserProjektRecht($projekt);
       }
@@ -2498,7 +2492,7 @@ class Artikel extends GenArtikel {
     $this->app->YUI->AutoComplete('einheit2','artikeleinheit');
     $this->app->YUI->AutoComplete('einheit3','artikeleinheit');
 
-    $sid = $this->app->DB->Select("SELECT artikel FROM eigenschaften WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM eigenschaften WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->ArtikelMenu($sid);
 
     $this->app->Tpl->Set('ABBRECHEN',"<input type=\"button\" value=\"Abbrechen\" onclick=\"window.location.href='index.php?module=artikel&action=eigenschaften&id=$sid';\">");
@@ -2515,9 +2509,9 @@ class Artikel extends GenArtikel {
   public function ArtikelEigenschaftenDelete()
   {
     $id = $this->app->Secure->GetGET('id');
-    $sid = $this->app->DB->Select("SELECT artikel FROM eigenschaften WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM eigenschaften WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($id > 0){
-      $this->app->DB->Delete("DELETE FROM eigenschaften WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM eigenschaften WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     $this->app->Location->execute('index.php?module=artikel&action=eigenschaften&id='.$sid);
   }
@@ -2526,7 +2520,7 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
-      $this->app->DB->Update("UPDATE artikel SET cache_lagerplatzinhaltmenge='-100' WHERE id='$id'");
+      $this->app->DatabaseService->update("UPDATE artikel SET cache_lagerplatzinhaltmenge='-100' WHERE id = :id", ['id' => (int)$id]);
     }
     $sync =  $this->app->erp->LagerSync($id,true);
     if($sync==1) {
@@ -2559,7 +2553,7 @@ class Artikel extends GenArtikel {
 
     $this->app->Tpl->Set('ID',$id);
 
-    $artikelarr = $this->app->DB->SelectRow("SELECT * FROM artikel WHERE id='$id' LIMIT 1");
+    $artikelarr = $this->app->DatabaseService->selectRow("SELECT * FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $kurztext_de = '';
     $name_de = '';
     $nummer = '';
@@ -2596,20 +2590,20 @@ class Artikel extends GenArtikel {
 
     $this->app->Tpl->Set('KURZTEXT',$kurztext_de);
 
-    // easy table mit arbeitspaketen YUI als template 
+    // easy table mit arbeitspaketen YUI als template
     $table = new EasyTable($this->app);
     $table->Query("SELECT CONCAT(l.bezeichnung,' / ',lp.kurzbezeichnung, if(lp.sperrlager,' (Kein Auto-Versand Lager)',''),
       if(lp.poslager,' (POS Lager)',''),if(lp.verbrauchslager,' (Verbrauchslager)',''),if(lp.autolagersperre,' (Nachschublager)','')) as lager, trim(lpi.menge)+0 as menge
-        FROM lager_platz_inhalt lpi LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id LEFT JOIN projekt p ON lpi.projekt=p.id  
+        FROM lager_platz_inhalt lpi LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id LEFT JOIN projekt p ON lpi.projekt=p.id
         LEFT JOIN lager l ON l.id=lp.lager WHERE lpi.artikel='$id' ");
 
     $table->DisplayNew('ARTIKEL','Menge','noAction');
 
     if($lager_platz > 0)
     {
-      $lagerarr = $this->app->DB->SelectRow("SELECT lp.lager,lp.kurzbezeichnung,lag.bezeichnung 
-        FROM lager_platz AS lp LEFT JOIN lager AS lag ON lp.lager = lag.id 
-        WHERE lp.id = '$lager_platz' LIMIT 1");
+      $lagerarr = $this->app->DatabaseService->selectRow("SELECT lp.lager,lp.kurzbezeichnung,lag.bezeichnung
+        FROM lager_platz AS lp LEFT JOIN lager AS lag ON lp.lager = lag.id
+        WHERE lp.id = :id LIMIT 1", ['id' => (int)$lager_platz]);
       if(!empty($lagerarr))
       {
         $lager = $lagerarr['lager'];
@@ -2629,7 +2623,7 @@ class Artikel extends GenArtikel {
     $this->app->Tpl->Add('ARTIKEL',$this->ArtikelLagerInfo($id));
 
     $table = new EasyTable($this->app);
-    $table->Query("SELECT adr.name as kunde, adr.kundennummer as kdnr, trim(r.menge)+0 as menge ,p.abkuerzung as projekt,r.grund  FROM lager_reserviert r LEFT JOIN artikel a ON a.id=r.artikel LEFT JOIN projekt p ON 
+    $table->Query("SELECT adr.name as kunde, adr.kundennummer as kdnr, trim(r.menge)+0 as menge ,p.abkuerzung as projekt,r.grund  FROM lager_reserviert r LEFT JOIN artikel a ON a.id=r.artikel LEFT JOIN projekt p ON
         p.id=r.projekt LEFT JOIN adresse adr ON r.adresse=adr.id WHERE r.firma='{$this->app->User->GetFirma()}' AND a.id='$id'");
 
     $table->DisplayNew('RESERVIERT','Grund','noAction');
@@ -2659,9 +2653,9 @@ class Artikel extends GenArtikel {
 
     $table->DisplayNew('EINKAUFSPREISE','Waehrung','noAction');
 
-    $verwendeberechneterek = $this->app->DB->Select("SELECT verwendeberechneterek FROM artikel WHERE id='$id' LIMIT 1");
-    $berechneterek = $this->app->DB->Select('SELECT '.$this->app->erp->FormatPreis("berechneterek")." FROM artikel WHERE id='$id' LIMIT 1");
-    $berechneterekwaehrung = $this->app->DB->Select("SELECT berechneterekwaehrung FROM artikel WHERE id='$id' LIMIT 1");
+    $verwendeberechneterek = $this->app->DatabaseService->selectValue("SELECT verwendeberechneterek FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $berechneterek = $this->app->DatabaseService->selectValue('SELECT '.$this->app->erp->FormatPreis("berechneterek")." FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $berechneterekwaehrung = $this->app->DatabaseService->selectValue("SELECT berechneterekwaehrung FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
 
     if($verwendeberechneterek > 0){
@@ -2677,29 +2671,29 @@ class Artikel extends GenArtikel {
 
     $table = new EasyTable($this->app);
     $table->Query("
-    
+
     SELECT e.name, CONCAT(ew.wert,'&nbsp;&nbsp;') as wert, ew.einheit FROM artikeleigenschaften e INNER JOIN artikeleigenschaftenwerte ew ON e.id = ew.artikeleigenschaften WHERE ew.artikel='$id'
 
 
    /* SELECT t.hauptkategorie, t.unterkategorie,format(sum(t.wert),2) as wert,t.einheit
     FROM (
-    
-    
+
+
       (SELECT e.hauptkategorie, e.unterkategorie, e.wert, e.einheit
-        FROM eigenschaften e LEFT JOIN artikel a ON a.id=e.artikel 
-        WHERE a.id='$id')UNION ALL 
+        FROM eigenschaften e LEFT JOIN artikel a ON a.id=e.artikel
+        WHERE a.id='$id')UNION ALL
         (SELECT e.hauptkategorie, e.unterkategorie, (s.menge* e.wert) as wert, e.einheit
-        FROM eigenschaften e LEFT JOIN stueckliste s ON s.artikel=e.artikel 
+        FROM eigenschaften e LEFT JOIN stueckliste s ON s.artikel=e.artikel
         WHERE s.stuecklistevonartikel='$id')
         )t GROUP BY t.hauptkategorie, t.unterkategorie,t.einheit*/
-        
-        
+
+
         ");// ORDER by e.bezeichnung
     $table->DisplayNew('EIGENSCHAFTEN','Einheit','noAction');
 
     $table = new EasyTable($this->app);
-    $table->Query('SELECT a.nummer, a.name_de as artikel, '.$this->app->erp->FormatMenge('s.menge')." as menge FROM stueckliste s 
-        LEFT JOIN artikel a ON s.artikel=a.id 
+    $table->Query('SELECT a.nummer, a.name_de as artikel, '.$this->app->erp->FormatMenge('s.menge')." as menge FROM stueckliste s
+        LEFT JOIN artikel a ON s.artikel=a.id
         WHERE s.stuecklistevonartikel='$id' ORDER by a.nummer");
     $table->DisplayNew('STUECKLISTE','Menge','noAction');
 
@@ -2715,28 +2709,28 @@ class Artikel extends GenArtikel {
 
   public function ArtikelShopimport()
   {
-    $id = $this->app->Secure->GetGET('id'); 
-    $shop = $this->app->Secure->GetGET('shop'); 
+    $id = $this->app->Secure->GetGET('id');
+    $shop = $this->app->Secure->GetGET('shop');
     $artikel = array($id);
     $artikelshopid = (int)$this->app->Secure->GetGET('artikelshopid');
 
     if($artikelshopid > 0)
     {
-      $shop = $this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE id = '$artikelshopid' AND artikel = '$id' AND aktiv = 1 LIMIT 1");
+      $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM artikel_onlineshops WHERE id = :shopid AND artikel = :artikel AND aktiv = 1 LIMIT 1", ['shopid' => $artikelshopid, 'artikel' => (int)$id]);
     }else{
       if($shop=='1'){
-        $shop = $this->app->DB->Select("SELECT shop FROM artikel WHERE id='$id' LIMIT 1");
+        $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       }
       elseif($shop=='2'){
-        $shop = $this->app->DB->Select("SELECT shop2 FROM artikel WHERE id='$id' LIMIT 1");
+        $shop = $this->app->DatabaseService->selectValue("SELECT shop2 FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       }
       elseif($shop=='3'){
-        $shop = $this->app->DB->Select("SELECT shop3 FROM artikel WHERE id='$id' LIMIT 1");
+        $shop = $this->app->DatabaseService->selectValue("SELECT shop3 FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       }
     }
 
-    $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$id' LIMIT 1");
-    $extnummer = $this->app->DB->Select("SELECT nummer FROM artikelnummer_fremdnummern WHERE artikel = '$id' AND shopid='$shop' AND aktiv = 1 AND nummer <> '' LIMIT 1");
+    $nummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $extnummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikelnummer_fremdnummern WHERE artikel = :artikel AND shopid = :shop AND aktiv = 1 AND nummer <> '' LIMIT 1", ['artikel' => (int)$id, 'shop' => (int)$shop]);
     if($extnummer){
       $nummer = $extnummer;
     }
@@ -2798,11 +2792,11 @@ class Artikel extends GenArtikel {
           if(
             ($result[$nameofcolumn]!='' && !is_array($result[$nameofcolumn]))
          //   || $nameofcolumn==='lieferzeitmanuell' || $nameofcolumn==='pseudopreis'
-          ){           
-            $this->app->DB->Update(
-              "UPDATE artikel 
-              SET " . $nameofcolumn . "='" . $this->app->DB->real_escape_string($result[$nameofcolumn]) . "' 
-              WHERE id='$id' LIMIT 1"
+          ){
+            $this->app->DatabaseService->validateIdentifier($nameofcolumn);
+            $this->app->DatabaseService->update(
+              "UPDATE artikel SET `{$nameofcolumn}` = :wert WHERE id = :id LIMIT 1",
+              ['wert' => $result[$nameofcolumn], 'id' => (int)$id]
             );
           }
         }
@@ -2839,29 +2833,29 @@ class Artikel extends GenArtikel {
         $artikelshopid = (int) $this->app->Secure->GetGET('artikelshopid');
 
         if ($artikelshopid > 0) {
-            $shop = $this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE id = '$artikelshopid' AND artikel = '$id' AND aktiv = 1 LIMIT 1");
+            $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM artikel_onlineshops WHERE id = :shopid AND artikel = :artikel AND aktiv = 1 LIMIT 1", ['shopid' => $artikelshopid, 'artikel' => (int)$id]);
             $this->app->User->SetParameter('artikel_shopexport_shop', '');
         } else {
             if ($shop == '1') {
-                $shop = $this->app->DB->Select("SELECT shop FROM artikel WHERE id='$id' LIMIT 1");
+                $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
             } elseif ($shop == '2') {
-                $shop = $this->app->DB->Select("SELECT shop2 FROM artikel WHERE id='$id' LIMIT 1");
+                $shop = $this->app->DatabaseService->selectValue("SELECT shop2 FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
             } elseif ($shop == '3') {
-                $shop = $this->app->DB->Select("SELECT shop3 FROM artikel WHERE id='$id' LIMIT 1");
+                $shop = $this->app->DatabaseService->selectValue("SELECT shop3 FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
             }
         }
 
-        $artikelexport = $this->app->DB->Select("SELECT artikelexport FROM shopexport WHERE id='$shop' LIMIT 1");
-        $lagerexport = $this->app->DB->Select("SELECT lagerexport FROM shopexport WHERE id='$shop' LIMIT 1");
+        $artikelexport = $this->app->DatabaseService->selectValue("SELECT artikelexport FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$shop]);
+        $lagerexport = $this->app->DatabaseService->selectValue("SELECT lagerexport FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int)$shop]);
 
-        $externenummer = $this->app->DB->Select("SELECT nummer FROM artikelnummer_fremdnummern WHERE artikel = '$id' AND aktiv = 1 AND shopid = '$shop' AND nummer <> '' ORDER BY bezeichnung = 'SHOPID' DESC LIMIT 1");
+        $externenummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikelnummer_fremdnummern WHERE artikel = :artikel AND aktiv = 1 AND shopid = :shop AND nummer <> '' ORDER BY bezeichnung = 'SHOPID' DESC LIMIT 1", ['artikel' => (int)$id, 'shop' => (int)$shop]);
 
         if ($externenummer) {
             $extartikelnummer = array($externenummer);
         } else {
             $extartikelnummer = '';
         }
-             
+
         $remote_result = $this->app->remote->RemoteSendArticleList($shop, $artikel, $extartikelnummer);
 
         if (is_array($remote_result) && $remote_result[0] instanceof ArticleExportResult) {
@@ -2892,7 +2886,7 @@ class Artikel extends GenArtikel {
             $msg = $this->app->erp->base64_url_encode('<div class="error">' . $remote_message . '</div>');
         }
 
-        $this->app->erp->LogFile($this->app->DB->real_escape_string('manueller Shopexport Artikel: '.$this->app->DB->Select("SELECT nummer FROM artikel WHERE id = '$id' LIMIT 1").' Shop: '.$shop.' Status: '.((int) $remote_status)), $remote_message);
+        $this->app->erp->LogFile('manueller Shopexport Artikel: '.$this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]).' Shop: '.$shop.' Status: '.((int) $remote_status), $remote_message);
 
         // keine fehlermeldung vom shop
         if ($remote_status) {
@@ -2911,17 +2905,17 @@ class Artikel extends GenArtikel {
 
   public function ArtikelShopexportFiles()
   {
-    $id = $this->app->Secure->GetGET('id'); 
-    $shop = $this->app->Secure->GetGET('shop'); 
+    $id = $this->app->Secure->GetGET('id');
+    $shop = $this->app->Secure->GetGET('shop');
 
     if($shop=='1'){
-      $shop = $this->app->DB->Select("SELECT shop FROM artikel WHERE id='$id' LIMIT 1");
+      $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     elseif($shop=='2'){
-      $shop = $this->app->DB->Select("SELECT shop2 FROM artikel WHERE id='$id' LIMIT 1");
+      $shop = $this->app->DatabaseService->selectValue("SELECT shop2 FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     elseif($shop=='3'){
-      $shop = $this->app->DB->Select("SELECT shop3 FROM artikel WHERE id='$id' LIMIT 1");
+      $shop = $this->app->DatabaseService->selectValue("SELECT shop3 FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
 
     if($this->app->remote->RemoteUpdateFilesArtikel($id,$shop)){
@@ -2937,16 +2931,16 @@ class Artikel extends GenArtikel {
 
   public function ArtikelStuecklisteEtiketten()
   {
-    $id = $this->app->Secure->GetGET('id'); 
+    $id = $this->app->Secure->GetGET('id');
     $this->app->erp->ArtikelStuecklisteDrucken($id);
     $this->app->Location->execute("index.php?module=artikel&action=stueckliste&id=$id");
   }
 
-  public function ArtikelSchliessen()                                                                       
+  public function ArtikelSchliessen()
   {
-    $id = $this->app->Secure->GetGET('id');                                                              
+    $id = $this->app->Secure->GetGET('id');
     if($id > 0 && is_numeric($id)){
-      $this->app->DB->Update("UPDATE bestellung_position SET abgeschlossen='1' WHERE artikel='$id'");
+      $this->app->DatabaseService->update("UPDATE bestellung_position SET abgeschlossen='1' WHERE artikel = :id", ['id' => (int)$id]);
     }
     $referer = $_SERVER['HTTP_REFERER'];
     if(empty($referer)) {
@@ -2971,37 +2965,37 @@ class Artikel extends GenArtikel {
     $artikelmarkierthidden = $this->app->Secure->GetPOST('artikelmarkierthidden');
 
     $cartikelmarkiert = (!empty($artikelmarkiert)?count($artikelmarkiert):0);
-    if($jetztgruen!='') 
+    if($jetztgruen!='')
     {
       for($i=0;$i < $cartikelmarkiert; $i++) {
-        $this->app->DB->Update("UPDATE artikel SET lieferzeit='green',ausverkauft='0' WHERE id='" . $artikelmarkiert[$i] . "'  LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE artikel SET lieferzeit='green',ausverkauft='0' WHERE id = :id LIMIT 1", ['id' => (int)$artikelmarkiert[$i]]);
       }
     }
 
-    else if($jetztgelb!='') 
+    else if($jetztgelb!='')
     {
       for($i=0;$i < $cartikelmarkiert; $i++) {
-        $this->app->DB->Update("UPDATE artikel SET lieferzeit='yellow',ausverkauft='0' WHERE id='" . $artikelmarkiert[$i] . "'  LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE artikel SET lieferzeit='yellow',ausverkauft='0' WHERE id = :id LIMIT 1", ['id' => (int)$artikelmarkiert[$i]]);
       }
     }
 
-    else if($jetztrot!='') 
+    else if($jetztrot!='')
     {
       for($i=0;$i < $cartikelmarkiert; $i++) {
-        $this->app->DB->Update("UPDATE artikel SET lieferzeit='red' WHERE id='" . $artikelmarkiert[$i] . "'  LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE artikel SET lieferzeit='red' WHERE id = :id LIMIT 1", ['id' => (int)$artikelmarkiert[$i]]);
       }
     }
 
-    else if($aktivieren!='') 
+    else if($aktivieren!='')
     {
       foreach($artikelmarkierthidden as $key=>$value)
       {
         if($artikelmarkiert[$key]=='1')
         {
-          $this->app->DB->Update("UPDATE artikel SET autolagerlampe='1' WHERE id='".$key."'  LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE artikel SET autolagerlampe='1' WHERE id = :id LIMIT 1", ['id' => (int)$key]);
         }
         else {
-          $this->app->DB->Update("UPDATE artikel SET autolagerlampe='0' WHERE id='".$key."'  LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE artikel SET autolagerlampe='0' WHERE id = :id LIMIT 1", ['id' => (int)$key]);
         }
       }
     }
@@ -3009,22 +3003,22 @@ class Artikel extends GenArtikel {
     else if($neuweg!='')
     {
       for($i=0;$i < $cartikelmarkiert; $i++) {
-        $this->app->DB->Update("UPDATE artikel SET neu='0' WHERE id='" . $artikelmarkiert[$i] . "' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE artikel SET neu='0' WHERE id = :id LIMIT 1", ['id' => (int)$artikelmarkiert[$i]]);
       }
-    } 
+    }
 
     else if($jetztnichtlagernd!='')
     {
       for($i=0;$i < $cartikelmarkiert; $i++) {
-        $this->app->DB->Update("UPDATE artikel SET lieferzeit='bestellt' WHERE id='" . $artikelmarkiert[$i] . "' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE artikel SET lieferzeit='bestellt' WHERE id = :id LIMIT 1", ['id' => (int)$artikelmarkiert[$i]]);
       }
-    } 
+    }
     else if($jetztnichtlagerndrot!='')
     {
       for($i=0;$i < $cartikelmarkiert; $i++) {
-        $this->app->DB->Update("UPDATE artikel SET lieferzeit='nichtlieferbar' WHERE id='" . $artikelmarkiert[$i] . "' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE artikel SET lieferzeit='nichtlieferbar' WHERE id = :id LIMIT 1", ['id' => (int)$artikelmarkiert[$i]]);
       }
-    } 
+    }
 
     //    $this->app->erp->MenuEintrag("index.php?module=artikel&action=create","Neuen Artikel anlegen");
     $this->app->erp->MenuEintrag('index.php?module=lager&action=list','zur&uuml;ck zur &Uuml;bersicht');
@@ -3035,8 +3029,8 @@ class Artikel extends GenArtikel {
 
     $this->app->YUI->TableSearch('TAB1','manuellagerlampe', 'show','','',basename(__FILE__), __CLASS__);
     $this->app->YUI->TableSearch('TAB2','autolagerlampe', 'show','','',basename(__FILE__), __CLASS__);
-    //    $this->app->YUI->TableSearch('TAB2','artikeltabellelagerndabernichtlagernd');                                                  
-    //   $this->app->YUI->TableSearch('TAB3','artikeltabellehinweisausverkauft');                                                  
+    //    $this->app->YUI->TableSearch('TAB2','artikeltabellelagerndabernichtlagernd');
+    //   $this->app->YUI->TableSearch('TAB3','artikeltabellehinweisausverkauft');
     $this->app->YUI->TableSearch('TAB3','artikeltabelleneu', 'show','','',basename(__FILE__), __CLASS__);
 
     $this->app->erp->Headlines('Lagerlampen berechnen');
@@ -3082,16 +3076,16 @@ class Artikel extends GenArtikel {
     if($insert=='true'){
       if(empty($umsatzsteuer)){
         if($cmd != 'bestellung' && $cmd != 'anfrage' && $cmd != 'preisanfrage'){
-          $umsatzsteuer = $this->app->DB->Select("SELECT a.umsatzsteuer FROM verkaufspreise AS v INNER JOIN artikel AS a ON v.artikel = a.id WHERE v.id='$id' LIMIT 1");
+          $umsatzsteuer = $this->app->DatabaseService->selectValue("SELECT a.umsatzsteuer FROM verkaufspreise AS v INNER JOIN artikel AS a ON v.artikel = a.id WHERE v.id = :id LIMIT 1", ['id' => (int)$id]);
         }else{
-          $umsatzsteuer = $this->app->DB->Select("SELECT a.umsatzsteuer FROM einkaufspreise AS e INNER JOIN artikel AS a ON e.artikel = a.id WHERE e.id='$id' LIMIT 1");
+          $umsatzsteuer = $this->app->DatabaseService->selectValue("SELECT a.umsatzsteuer FROM einkaufspreise AS e INNER JOIN artikel AS a ON e.artikel = a.id WHERE e.id = :id LIMIT 1", ['id' => (int)$id]);
         }
       }
       if(empty($steuersatz)){
         if($cmd != 'bestellung' && $cmd != 'anfrage' && $cmd != 'preisanfrage'){
-          $steuersatz = $this->app->DB->Select("SELECT a.steuersatz FROM verkaufspreise AS v INNER JOIN artikel AS a ON v.artikel = a.id WHERE v.id='$id' LIMIT 1");
+          $steuersatz = $this->app->DatabaseService->selectValue("SELECT a.steuersatz FROM verkaufspreise AS v INNER JOIN artikel AS a ON v.artikel = a.id WHERE v.id = :id LIMIT 1", ['id' => (int)$id]);
         }else{
-          $steuersatz = $this->app->DB->Select("SELECT a.steuersatz FROM einkaufspreise AS e INNER JOIN artikel AS a ON e.artikel = a.id WHERE e.id='$id' LIMIT 1");
+          $steuersatz = $this->app->DatabaseService->selectValue("SELECT a.steuersatz FROM einkaufspreise AS e INNER JOIN artikel AS a ON e.artikel = a.id WHERE e.id = :id LIMIT 1", ['id' => (int)$id]);
         }
         if ((float)$steuersatz <= 0) {
           $steuersatz = null;
@@ -3130,20 +3124,20 @@ class Artikel extends GenArtikel {
 
       if($cmd!=='bestellung' && $cmd!=='anfrage' && $cmd!=='preisanfrage')
       {
-        $artikel_id = $this->app->DB->Select("SELECT artikel FROM verkaufspreise WHERE id='$vid' LIMIT 1");
-        $preis = $this->app->DB->Select("SELECT preis FROM verkaufspreise WHERE id='$vid' LIMIT 1");
-        $projekt = $this->app->DB->Select("SELECT projekt FROM verkaufspreise WHERE id='$vid' LIMIT 1");
-        $waehrung = $this->app->DB->Select("SELECT waehrung FROM verkaufspreise WHERE id='$vid' LIMIT 1");
+        $artikel_id = $this->app->DatabaseService->selectValue("SELECT artikel FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
+        $preis = $this->app->DatabaseService->selectValue("SELECT preis FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
+        $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
+        $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
         if (empty($menge)){
-          $menge = $this->app->DB->Select("SELECT ab_menge FROM verkaufspreise WHERE id='$vid' LIMIT 1");
+          $menge = $this->app->DatabaseService->selectValue("SELECT ab_menge FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
         }
       } else {
-        $artikel_id = $this->app->DB->Select("SELECT artikel FROM einkaufspreise WHERE id='$vid' LIMIT 1");
-        $preis = $this->app->DB->Select("SELECT preis FROM einkaufspreise WHERE id='$vid' LIMIT 1");
-        $projekt = $this->app->DB->Select("SELECT projekt FROM einkaufspreise WHERE id='$vid' LIMIT 1");
-        $waehrung = $this->app->DB->Select("SELECT waehrung FROM einkaufspreise WHERE id='$vid' LIMIT 1");
+        $artikel_id = $this->app->DatabaseService->selectValue("SELECT artikel FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
+        $preis = $this->app->DatabaseService->selectValue("SELECT preis FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
+        $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
+        $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
         if (empty($menge)){
-          $menge = $this->app->DB->Select("SELECT ab_menge FROM einkaufspreise WHERE id='$vid' LIMIT 1");
+          $menge = $this->app->DatabaseService->selectValue("SELECT ab_menge FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
         }
       }
       $lieferdatum = '0000-00-00';
@@ -3151,99 +3145,105 @@ class Artikel extends GenArtikel {
       $vpe = '';
 
       if($projekt <=0 ){
-        $projekt = $this->app->DB->Select("SELECT projekt FROM artikel WHERE id='$artikel_id' LIMIT 1");
+        $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
       }
 
+      $this->app->DatabaseService->validateIdentifier($cmd);
       if($projekt <=0){
-        $projekt = $this->app->DB->Select("SELECT projekt FROM {$cmd} WHERE id='$id' LIMIT 1");
-      }         
+        $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM `{$cmd}` WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      }
 
       if($waehrung==''){
-        $waehrung = $this->app->DB->Select("SELECT waehrung FROM {$cmd} WHERE id='$id' LIMIT 1");
+        $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM `{$cmd}` WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       }
-      
+
       if($waehrung==''){
         $waehrung = $this->app->erp->GetStandardWaehrung($projekt);
       }
 
-      $sprache = $this->app->DB->Select("SELECT sprache FROM {$cmd} WHERE id='$id' LIMIT 1");
+      $sprache = $this->app->DatabaseService->selectValue("SELECT sprache FROM `{$cmd}` WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
       if($sprache==='englisch')
       {
         if($kurztext_de==''){
-          $kurztext_de = $this->app->DB->Select("SELECT anabregs_text_en FROM artikel WHERE id='$artikel_id' LIMIT 1");
+          $kurztext_de = $this->app->DatabaseService->selectValue("SELECT anabregs_text_en FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
         }
         if($bezeichnung==''){
-          $bezeichnung = $this->app->DB->Select("SELECT name_en FROM artikel WHERE id='$artikel_id' LIMIT 1");
+          $bezeichnung = $this->app->DatabaseService->selectValue("SELECT name_en FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
         }
-      } 
-      
+      }
+
       if($kurztext_de==''){
-        $kurztext_de = $this->app->DB->Select("SELECT anabregs_text FROM artikel WHERE id='$artikel_id' LIMIT 1");
+        $kurztext_de = $this->app->DatabaseService->selectValue("SELECT anabregs_text FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
       }
 
       if($bezeichnung==""){
-        $bezeichnung = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$artikel_id' LIMIT 1");
+        $bezeichnung = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
       }
 
-      $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$artikel_id' LIMIT 1");
-      $allelieferanten = $this->app->DB->Select("SELECT allelieferanten FROM artikel WHERE id='$artikel_id' LIMIT 1");
+      $nummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
+      $allelieferanten = $this->app->DatabaseService->selectValue("SELECT allelieferanten FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
 
-      $sort = (int)$this->app->DB->Select("SELECT IFNULL(MAX(sort),0) FROM {$cmd}_position WHERE {$cmd}='$id' LIMIT 1");
+      $sort = (int)$this->app->DatabaseService->selectValue("SELECT IFNULL(MAX(sort),0) FROM `{$cmd}_position` WHERE `{$cmd}` = :id LIMIT 1", ['id' => (int)$id]);
       $sort++;
 
-      $mlmpunkte = $this->app->DB->Select("SELECT mlmpunkte FROM artikel WHERE id='$artikel_id' LIMIT 1");
-      $mlmbonuspunkte = $this->app->DB->Select("SELECT mlmbonuspunkte FROM artikel WHERE id='$artikel_id' LIMIT 1");
-      $mlmdirektpraemie = $this->app->DB->Select("SELECT mlmdirektpraemie FROM artikel WHERE id='$artikel_id' LIMIT 1");
+      $mlmpunkte = $this->app->DatabaseService->selectValue("SELECT mlmpunkte FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
+      $mlmbonuspunkte = $this->app->DatabaseService->selectValue("SELECT mlmbonuspunkte FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
+      $mlmdirektpraemie = $this->app->DatabaseService->selectValue("SELECT mlmdirektpraemie FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel_id]);
 
       if($cmd==='lieferschein')
       {
-        $this->app->DB->Insert("INSERT INTO lieferschein_position (id,{$cmd},artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum, status,projekt,vpe)
-            VALUES ('','$id','$artikel_id','".$this->app->DB->real_escape_string($bezeichnung)."','$kurztext_de','$nummer','$menge','$sort','$lieferdatum','angelegt','$projekt','$vpe')");
-
-        $posid = $this->app->DB->GetInsertID();
-      } 
+        $posid = $this->app->DatabaseService->insert(
+          "INSERT INTO lieferschein_position (lieferschein,artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum,status,projekt,vpe)
+            VALUES (:doc,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:sort,:lieferdatum,'angelegt',:projekt,:vpe)",
+          ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'bezeichnung' => $bezeichnung, 'beschreibung' => $kurztext_de, 'nummer' => $nummer, 'menge' => $menge, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'projekt' => $projekt, 'vpe' => $vpe]
+        );
+      }
       else if($cmd==='anfrage')
       {
-        $this->app->DB->Insert("INSERT INTO anfrage_position (id,{$cmd},artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum, status,projekt,vpe)
-            VALUES ('','$id','$artikel_id','".$this->app->DB->real_escape_string($bezeichnung)."','$kurztext_de','$nummer','$menge','$sort','$lieferdatum','angelegt','$projekt','$vpe')");
-        $posid = $this->app->DB->GetInsertID();
-      } 
+        $posid = $this->app->DatabaseService->insert(
+          "INSERT INTO anfrage_position (anfrage,artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum,status,projekt,vpe)
+            VALUES (:doc,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:sort,:lieferdatum,'angelegt',:projekt,:vpe)",
+          ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'bezeichnung' => $bezeichnung, 'beschreibung' => $kurztext_de, 'nummer' => $nummer, 'menge' => $menge, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'projekt' => $projekt, 'vpe' => $vpe]
+        );
+      }
       else if($cmd==='preisanfrage')
       {
-        $this->app->DB->Insert("INSERT INTO preisanfrage_position (id,{$cmd},artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum, projekt,vpe)
-            VALUES ('','$id','$artikel_id','".$this->app->DB->real_escape_string($bezeichnung)."','$kurztext_de','$nummer','$menge','$sort','$lieferdatum','$projekt','$vpe')");
-
-        $posid = $this->app->DB->GetInsertID();
-      } 
+        $posid = $this->app->DatabaseService->insert(
+          "INSERT INTO preisanfrage_position (preisanfrage,artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum,projekt,vpe)
+            VALUES (:doc,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:sort,:lieferdatum,:projekt,:vpe)",
+          ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'bezeichnung' => $bezeichnung, 'beschreibung' => $kurztext_de, 'nummer' => $nummer, 'menge' => $menge, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'projekt' => $projekt, 'vpe' => $vpe]
+        );
+      }
       else if($cmd==='bestellung')
       {
-        $bestellnummer = $this->app->DB->Select("SELECT bestellnummer FROM einkaufspreise WHERE id='$vid' LIMIT 1");
-        $bezeichnunglieferant = $this->app->DB->Select("SELECT bezeichnunglieferant FROM einkaufspreise WHERE id='$vid' LIMIT 1");
+        $bestellnummer = $this->app->DatabaseService->selectValue("SELECT bestellnummer FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
+        $bezeichnunglieferant = $this->app->DatabaseService->selectValue("SELECT bezeichnunglieferant FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$vid]);
         if (empty($bezeichnunglieferant)) { $bezeichnunglieferant = $bezeichnung; }
 
-        $this->app->DB->Insert("INSERT INTO bestellung_position (id,{$cmd},artikel,beschreibung,menge,sort,lieferdatum, status,projekt,vpe,bestellnummer,bezeichnunglieferant,preis,waehrung,umsatzsteuer,steuersatz)
-            VALUES ('','$id','$artikel_id','$kurztext_de','$menge','$sort','$lieferdatum','angelegt','$projekt','$vpe','$bestellnummer','".$this->app->DB->real_escape_string($bezeichnunglieferant)."','$preis','$waehrung','$umsatzsteuer',$steuersatzSqlValue)");
-
-        $posid = $this->app->DB->GetInsertID();
+        $posid = $this->app->DatabaseService->insert(
+          "INSERT INTO bestellung_position (bestellung,artikel,beschreibung,menge,sort,lieferdatum,status,projekt,vpe,bestellnummer,bezeichnunglieferant,preis,waehrung,umsatzsteuer,steuersatz)
+            VALUES (:doc,:artikel,:beschreibung,:menge,:sort,:lieferdatum,'angelegt',:projekt,:vpe,:bestellnummer,:bezeichnunglieferant,:preis,:waehrung,:umsatzsteuer,:steuersatz)",
+          ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'beschreibung' => $kurztext_de, 'menge' => $menge, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'projekt' => $projekt, 'vpe' => $vpe, 'bestellnummer' => $bestellnummer, 'bezeichnunglieferant' => $bezeichnunglieferant, 'preis' => $preis, 'waehrung' => $waehrung, 'umsatzsteuer' => $umsatzsteuer, 'steuersatz' => $steuersatz]
+        );
       }
       else if ($cmd==='auftrag' || $cmd==='angebot' || $cmd==='rechnung')
       {
-        $this->app->DB->Insert("INSERT INTO {$cmd}_position (id,{$cmd},artikel,bezeichnung,beschreibung,
-          nummer,menge,preis, waehrung, sort,lieferdatum, umsatzsteuer, steuersatz, status,projekt,vpe,punkte,bonuspunkte,mlmdirektpraemie)
-            VALUES ('','$id','$artikel_id','".$this->app->DB->real_escape_string($bezeichnung)."','$kurztext_de','$nummer','$menge','$preis','$waehrung','$sort',
-              '$lieferdatum','$umsatzsteuer',$steuersatzSqlValue,'angelegt','$projekt','$vpe','$mlmpunkte','$mlmbonuspunkte','$mlmdirektpraemie')");
-
-        $posid = $this->app->DB->GetInsertID();
-      } 
+        $posid = $this->app->DatabaseService->insert(
+          "INSERT INTO `{$cmd}_position` (`{$cmd}`,artikel,bezeichnung,beschreibung,nummer,menge,preis,waehrung,sort,lieferdatum,umsatzsteuer,steuersatz,status,projekt,vpe,punkte,bonuspunkte,mlmdirektpraemie)
+            VALUES (:doc,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:preis,:waehrung,:sort,:lieferdatum,:umsatzsteuer,:steuersatz,'angelegt',:projekt,:vpe,:punkte,:bonuspunkte,:mlmdirektpraemie)",
+          ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'bezeichnung' => $bezeichnung, 'beschreibung' => $kurztext_de, 'nummer' => $nummer, 'menge' => $menge, 'preis' => $preis, 'waehrung' => $waehrung, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'umsatzsteuer' => $umsatzsteuer, 'steuersatz' => $steuersatz, 'projekt' => $projekt, 'vpe' => $vpe, 'punkte' => $mlmpunkte, 'bonuspunkte' => $mlmbonuspunkte, 'mlmdirektpraemie' => $mlmdirektpraemie]
+        );
+      }
       else {
         $posid = null;
         $this->app->erp->RunHook('artikel_profisuche', 4, $cmd, $id, $artikel_id, $posid);
         if($posid === null){
-          $this->app->DB->Insert("INSERT INTO {$cmd}_position (id,{$cmd},artikel,bezeichnung,beschreibung,nummer,menge,preis, waehrung, sort,lieferdatum, umsatzsteuer, steuersatz, status,projekt,vpe)
-            VALUES ('','$id','$artikel_id','".$this->app->DB->real_escape_string($bezeichnung)."','$kurztext_de','$nummer','$menge','$preis','$waehrung','$sort','$lieferdatum','$umsatzsteuer',$steuersatzSqlValue,'angelegt','$projekt','$vpe')");
-
-          $posid = $this->app->DB->GetInsertID();
+          $posid = $this->app->DatabaseService->insert(
+            "INSERT INTO `{$cmd}_position` (`{$cmd}`,artikel,bezeichnung,beschreibung,nummer,menge,preis,waehrung,sort,lieferdatum,umsatzsteuer,steuersatz,status,projekt,vpe)
+              VALUES (:doc,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:preis,:waehrung,:sort,:lieferdatum,:umsatzsteuer,:steuersatz,'angelegt',:projekt,:vpe)",
+            ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'bezeichnung' => $bezeichnung, 'beschreibung' => $kurztext_de, 'nummer' => $nummer, 'menge' => $menge, 'preis' => $preis, 'waehrung' => $waehrung, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'umsatzsteuer' => $umsatzsteuer, 'steuersatz' => $steuersatz, 'projekt' => $projekt, 'vpe' => $vpe]
+          );
         }
       }
 
@@ -3289,14 +3289,15 @@ class Artikel extends GenArtikel {
       }
       if($error!=1)
       {
-        $sort = (int)$this->app->DB->Select("SELECT IFNULL(MAX(sort),0) FROM {$cmd}_position WHERE {$cmd}='$id' LIMIT 1");
+        $this->app->DatabaseService->validateIdentifier($cmd);
+        $sort = (int)$this->app->DatabaseService->selectValue("SELECT IFNULL(MAX(sort),0) FROM `{$cmd}_position` WHERE `{$cmd}` = :id LIMIT 1", ['id' => (int)$id]);
         $sort++;
 
         $tmp = trim($adresse);
         $rest = $this->app->erp->FirstTillSpace($tmp);
 
         if($rest > 0){
-          $adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='$rest' AND geloescht=0 AND firma='" . $this->app->User->GetFirma() . "' AND lieferantennummer!='' LIMIT 1");
+          $adresse = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE lieferantennummer = :liefnr AND geloescht = 0 AND firma = :firma AND lieferantennummer != '' LIMIT 1", ['liefnr' => $rest, 'firma' => $this->app->User->GetFirma()]);
         }
         else {
           $adresse='';
@@ -3304,7 +3305,7 @@ class Artikel extends GenArtikel {
 
         if($adresse <= 0 && $cmd==='bestellung')
         {
-          $adresse = $this->app->DB->Select("SELECT adresse FROM bestellung WHERE id='$id' LIMIT 1");
+          $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM bestellung WHERE id = :id LIMIT 1", ['id' => (int)$id]);
         }
 
         $artikelart = $typ;
@@ -3316,12 +3317,12 @@ class Artikel extends GenArtikel {
         $preis = str_replace(',','.',$preis);
 
         if($projekt!=''){
-          $projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung='$projekt' AND firma='" . $this->app->User->GetFirma() . "' LIMIT 1");
+          $projekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :abkuerzung AND firma = :firma LIMIT 1", ['abkuerzung' => $projekt, 'firma' => $this->app->User->GetFirma()]);
         }
         else {
-          $projekt_bevorzugt = (int)$this->app->DB->Select("SELECT u.projekt_bevorzugen FROM `user` AS u WHERE u.id = '".$this->app->User->GetID()."' LIMIT 1");
+          $projekt_bevorzugt = (int)$this->app->DatabaseService->selectValue("SELECT u.projekt_bevorzugen FROM `user` AS u WHERE u.id = :id LIMIT 1", ['id' => $this->app->User->GetID()]);
           if($projekt_bevorzugt === 1){
-            $projekt = $this->app->DB->Select("SELECT u.projekt FROM `user` AS u WHERE u.id = '".$this->app->User->GetID()."' LIMIT 1");
+            $projekt = $this->app->DatabaseService->selectValue("SELECT u.projekt FROM `user` AS u WHERE u.id = :id LIMIT 1", ['id' => $this->app->User->GetID()]);
           }else{
             $projekt = $this->app->User->DefaultProjekt();
           }
@@ -3331,30 +3332,40 @@ class Artikel extends GenArtikel {
 
         // anlegen als artikel
         $umsatzsteuerArtikel = (empty($umsatzsteuer)) ? 'normal' : $umsatzsteuer;
-        $this->app->DB->Insert("INSERT INTO artikel (typ,nummer,projekt,name_de,anabregs_text,umsatzsteuer,adresse,firma,internerkommentar,lagerartikel,allelieferanten)
-            VALUES ('$artikelart','$neue_nummer','$projekt','$bezeichnung','$kurztext_de','$umsatzsteuerArtikel','$lieferant','".$this->app->User->GetFirma()."','$internerkommentar','$lagerartikel','$allelieferanten')");
-
-        $artikel_id = $this->app->DB->GetInsertID();
+        $artikel_id = $this->app->DatabaseService->insert(
+          "INSERT INTO artikel (typ,nummer,projekt,name_de,anabregs_text,umsatzsteuer,adresse,firma,internerkommentar,lagerartikel,allelieferanten)
+            VALUES (:typ,:nummer,:projekt,:name_de,:anabregs_text,:umsatzsteuer,:adresse,:firma,:internerkommentar,:lagerartikel,:allelieferanten)",
+          ['typ' => $artikelart, 'nummer' => $neue_nummer, 'projekt' => $projekt, 'name_de' => $bezeichnung, 'anabregs_text' => $kurztext_de, 'umsatzsteuer' => $umsatzsteuerArtikel, 'adresse' => $lieferant, 'firma' => $this->app->User->GetFirma(), 'internerkommentar' => $internerkommentar, 'lagerartikel' => $lagerartikel, 'allelieferanten' => $allelieferanten]
+        );
         // einkaufspreis anlegen
 
         $lieferdatum = $this->app->String->Convert($lieferdatum,"%1.%2.%3","%3-%2-%1");
 
         if($cmd==="lieferschein")
         {
-          $this->app->DB->Insert("INSERT INTO lieferschein_position (id,{$cmd},artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum, status,projekt,vpe)
-              VALUES ('','$id','$artikel_id','$bezeichnung','$kurztext_de','$neue_nummer','$menge','$sort','$lieferdatum','angelegt','$projekt','$vpe')");
+          $this->app->DatabaseService->insert(
+            "INSERT INTO lieferschein_position (lieferschein,artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum,status,projekt,vpe)
+              VALUES (:doc,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:sort,:lieferdatum,'angelegt',:projekt,:vpe)",
+            ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'bezeichnung' => $bezeichnung, 'beschreibung' => $kurztext_de, 'nummer' => $neue_nummer, 'menge' => $menge, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'projekt' => $projekt, 'vpe' => $vpe]
+          );
         }
         else if($cmd==="anfrage")
         {
-          $this->app->DB->Insert("INSERT INTO anfrage_position (id,{$cmd},artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum, projekt,vpe)
-              VALUES ('','$id','$artikel_id','$bezeichnung','$kurztext_de','$neue_nummer','$menge','$sort','$lieferdatum','$projekt','$vpe')");
+          $this->app->DatabaseService->insert(
+            "INSERT INTO anfrage_position (anfrage,artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum,projekt,vpe)
+              VALUES (:doc,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:sort,:lieferdatum,:projekt,:vpe)",
+            ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'bezeichnung' => $bezeichnung, 'beschreibung' => $kurztext_de, 'nummer' => $neue_nummer, 'menge' => $menge, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'projekt' => $projekt, 'vpe' => $vpe]
+          );
 
           $this->app->erp->AddEinkaufspreis($artikel_id,$menge,$lieferant,$bestellnummer,$bezeichnunglieferant,$preis,$waehrung);
         }
         else if($cmd=="preisanfrage")
         {
-          $this->app->DB->Insert("INSERT INTO preisanfrage_position (id,{$cmd},artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum, projekt,vpe)
-              VALUES ('','$id','$artikel_id','$bezeichnung','$kurztext_de','$neue_nummer','$menge','$sort','$lieferdatum','$projekt','$vpe')");
+          $this->app->DatabaseService->insert(
+            "INSERT INTO preisanfrage_position (preisanfrage,artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum,projekt,vpe)
+              VALUES (:doc,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:sort,:lieferdatum,:projekt,:vpe)",
+            ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'bezeichnung' => $bezeichnung, 'beschreibung' => $kurztext_de, 'nummer' => $neue_nummer, 'menge' => $menge, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'projekt' => $projekt, 'vpe' => $vpe]
+          );
 
           $this->app->erp->AddEinkaufspreis($artikel_id,$menge,$lieferant,$bestellnummer,$bezeichnunglieferant,$preis,$waehrung);
         }
@@ -3363,8 +3374,11 @@ class Artikel extends GenArtikel {
         else if($cmd==="bestellung")
         {
           if($bezeichnunglieferant=="") $bezeichnunglieferant=$bezeichnung;
-          $this->app->DB->Insert("INSERT INTO bestellung_position ({$cmd},artikel,beschreibung,menge,sort,lieferdatum, status,projekt,vpe,bestellnummer,bezeichnunglieferant,preis,waehrung,umsatzsteuer,steuersatz)
-              VALUES ('$id','$artikel_id','$kurztext_de','$menge','$sort','$lieferdatum','angelegt','$projekt','$vpe','$bestellnummer','$bezeichnunglieferant','$preis','$waehrung','$umsatzsteuer',$steuersatzSqlValue)");
+          $this->app->DatabaseService->insert(
+            "INSERT INTO bestellung_position (bestellung,artikel,beschreibung,menge,sort,lieferdatum,status,projekt,vpe,bestellnummer,bezeichnunglieferant,preis,waehrung,umsatzsteuer,steuersatz)
+              VALUES (:doc,:artikel,:beschreibung,:menge,:sort,:lieferdatum,'angelegt',:projekt,:vpe,:bestellnummer,:bezeichnunglieferant,:preis,:waehrung,:umsatzsteuer,:steuersatz)",
+            ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'beschreibung' => $kurztext_de, 'menge' => $menge, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'projekt' => $projekt, 'vpe' => $vpe, 'bestellnummer' => $bestellnummer, 'bezeichnunglieferant' => $bezeichnunglieferant, 'preis' => $preis, 'waehrung' => $waehrung, 'umsatzsteuer' => $umsatzsteuer, 'steuersatz' => $steuersatz]
+          );
 
           //      $this->app->DB->Insert("INSERT INTO einkaufspreise (id,artikel,adresse,objekt,projekt,preis,ab_menge,angelegt_am,bearbeiter,bestellnummer,bezeichnunglieferant)
           //          VALUES ('','$artikel_id','$lieferant','Standard','$projekt','$preis','$menge',NOW(),'".$this->app->User->GetName()."','$bestellnummer','$bezeichnunglieferant')");
@@ -3372,15 +3386,21 @@ class Artikel extends GenArtikel {
           $this->app->erp->AddEinkaufspreis($artikel_id,$menge,$lieferant,$bestellnummer,$bezeichnunglieferant,$preis,$waehrung);
 
         } else { // angebot auftrag rechnung gutschrift
-          $this->app->DB->Insert("INSERT INTO verkaufspreise (artikel,adresse,objekt,projekt,preis,ab_menge,angelegt_am,bearbeiter)
-              VALUES ('$artikel_id','0','Standard','$projekt','$preis','$menge',NOW(),'".$this->app->User->GetName()."')");
+          $this->app->DatabaseService->insert(
+            "INSERT INTO verkaufspreise (artikel,adresse,objekt,projekt,preis,ab_menge,angelegt_am,bearbeiter)
+              VALUES (:artikel,'0','Standard',:projekt,:preis,:menge,NOW(),:bearbeiter)",
+            ['artikel' => (int)$artikel_id, 'projekt' => $projekt, 'preis' => $preis, 'menge' => $menge, 'bearbeiter' => $this->app->User->GetName()]
+          );
 
-          $this->app->DB->Insert("INSERT INTO {$cmd}_position ({$cmd},artikel,bezeichnung,beschreibung,nummer,menge,preis, waehrung, sort,lieferdatum, umsatzsteuer, steuersatz, status,projekt,vpe)
-              VALUES ('$id','$artikel_id','$bezeichnung','$kurztext_de','$neue_nummer','$menge','$preis','$waehrung','$sort','$lieferdatum','$umsatzsteuer',$steuersatzSqlValue,'angelegt','$projekt','$vpe')");
+          $this->app->DatabaseService->insert(
+            "INSERT INTO `{$cmd}_position` (`{$cmd}`,artikel,bezeichnung,beschreibung,nummer,menge,preis,waehrung,sort,lieferdatum,umsatzsteuer,steuersatz,status,projekt,vpe)
+              VALUES (:doc,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:preis,:waehrung,:sort,:lieferdatum,:umsatzsteuer,:steuersatz,'angelegt',:projekt,:vpe)",
+            ['doc' => (int)$id, 'artikel' => (int)$artikel_id, 'bezeichnung' => $bezeichnung, 'beschreibung' => $kurztext_de, 'nummer' => $neue_nummer, 'menge' => $menge, 'preis' => $preis, 'waehrung' => $waehrung, 'sort' => $sort, 'lieferdatum' => $lieferdatum, 'umsatzsteuer' => $umsatzsteuer, 'steuersatz' => $steuersatz, 'projekt' => $projekt, 'vpe' => $vpe]
+          );
         }
 
         $this->app->Location->execute("index.php?module={$cmd}&action=positionen&id=$id");
-      } 
+      }
     }
 
     $umsatzsteuerauswahl = '<option value="normal"'.(($umsatzsteuer === 'normal') ? ' selected="selected"' : '').'>Standard</option>';
@@ -3412,11 +3432,13 @@ class Artikel extends GenArtikel {
 
     if($cmd==='auftrag' || $cmd==='rechnung' || $cmd==='lieferschein' || $cmd==='angebot' || $cmd==='gutschrift' || $cmd==='anfrage')
     {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM {$cmd} WHERE id='$id' LIMIT 1");
-      $kunde = $this->app->DB->Select("SELECT CONCAT(name,' ',kundennummer,'') FROM adresse WHERE id='$adresse' LIMIT 1");
+      $this->app->DatabaseService->validateIdentifier($cmd);
+      $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$cmd}` WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $kunde = $this->app->DatabaseService->selectValue("SELECT CONCAT(name,' ',kundennummer,'') FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$adresse]);
     } else if ($cmd==='bestellung' || $cmd==='preisanfrage') {
-      $adresse = $this->app->DB->Select("SELECT adresse FROM {$cmd} WHERE id='$id' LIMIT 1");
-      $kunde = $this->app->DB->Select("SELECT CONCAT(name,' ',lieferantennummer,'') FROM adresse WHERE id='$adresse' LIMIT 1");
+      $this->app->DatabaseService->validateIdentifier($cmd);
+      $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$cmd}` WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $kunde = $this->app->DatabaseService->selectValue("SELECT CONCAT(name,' ',lieferantennummer,'') FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$adresse]);
     }
 
 
@@ -3448,7 +3470,7 @@ class Artikel extends GenArtikel {
     $this->app->Tpl->Set('ARTIKELGRUPPE',$this->app->erp->GetSelectAsso($artikelart, $typ));
 
     if($this->app->erp->Firmendaten('briefhtml')=='1')
-    { 
+    {
       $this->app->YUI->CkEditor("kurztext_de","belege",array('height'=>'100px'));
       $this->app->YUI->CkEditor("internerkommentar","basic",array('height'=>'100px'));
     }
@@ -3489,9 +3511,9 @@ class Artikel extends GenArtikel {
     if($smodule==='bestellung')
     {
       if($name!=''){
-        $id = $this->app->DB->Select("SELECT id FROM artikel WHERE name_de='$name' AND geloescht!=1 AND intern_gesperrt!=1 LIMIT 1");
+        $id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE name_de = :name AND geloescht != 1 AND intern_gesperrt != 1 LIMIT 1", ['name' => $name]);
         if($id<=0){
-          $id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$name' AND geloescht!=1 AND intern_gesperrt!=1 LIMIT 1");
+          $id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :name AND geloescht != 1 AND intern_gesperrt != 1 LIMIT 1", ['name' => $name]);
         }
       } else {
         $commandline = $id;
@@ -3507,7 +3529,7 @@ class Artikel extends GenArtikel {
           $n = strpos($tmp_id, $id.' ');
           if ( false!==$n ) {
             $tmp_id = substr($tmp_id, 0, $n);
-          } 
+          }
           $start_pos = strpos ($commandline, 'ab Menge ');
           $commandline = substr($commandline,$start_pos + strlen('ab Menge '));
           $end_pos = strpos ($commandline, ' ');
@@ -3518,7 +3540,8 @@ class Artikel extends GenArtikel {
           $this->app->ExitXentral();
         }
 
-        $id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$id' AND geloescht!=1 AND intern_gesperrt!=1 LIMIT 1");
+        $this->app->DatabaseService->validateIdentifier($smodule);
+        $id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer AND geloescht != 1 AND intern_gesperrt != 1 LIMIT 1", ['nummer' => $id]);
       }
 
       if(!is_numeric($id))
@@ -3527,97 +3550,92 @@ class Artikel extends GenArtikel {
         $this->app->ExitXentral();
       }
 
-      $waehrung = $this->app->DB->Select("SELECT waehrung FROM $smodule WHERE id='$sid' LIMIT 1");
+      $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM `{$smodule}` WHERE id = :id LIMIT 1", ['id' => (int)$sid]);
       if(strtoupper($waehrung)==='EURO') {
         $waehrung='EUR';
       } // nur fuer den uebergang damit nicht alte Kunden dauern mit Tickets kommen 2.2.2019 BS
 
-      $adresse = $this->app->DB->Select("SELECT adresse FROM $smodule WHERE id='$sid' LIMIT 1");
+      $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$smodule}` WHERE id = :id LIMIT 1", ['id' => (int)$sid]);
       //      $id = substr($id,0,6);
 
-      $name = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$id' LIMIT 1");
+      $name = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
-      $sprache = $this->app->DB->Select("SELECT sprache FROM adresse WHERE id='$adresse' LIMIT 1");
+      $sprache = $this->app->DatabaseService->selectValue("SELECT sprache FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$adresse]);
 
-      $name_en = $this->app->DB->Select("SELECT name_en FROM artikel WHERE id='$id' LIMIT 1");
+      $name_en = $this->app->DatabaseService->selectValue("SELECT name_en FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
       if($sprache==='englisch' && $name_en!=''){
         $name = $name_en;
       }
 
-      $bestellnummer = $this->app->DB->Select("SELECT bestellnummer FROM einkaufspreise
-        WHERE artikel='$id' AND adresse='$adresse' AND ab_menge<='$menge'  AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER by ab_menge DESC LIMIT 1");
-      $bezeichnunglieferant = $this->app->DB->Select("SELECT bezeichnunglieferant FROM einkaufspreise
-        WHERE artikel='$id' AND adresse='$adresse' AND ab_menge<='$menge' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER by ab_menge DESC LIMIT 1");
+      $bestellnummer = $this->app->DatabaseService->selectValue(
+        "SELECT bestellnummer FROM einkaufspreise
+        WHERE artikel = :artikel AND adresse = :adresse AND ab_menge <= :menge AND (gueltig_bis >= NOW() OR gueltig_bis = '0000-00-00') AND geloescht = 0 ORDER BY ab_menge DESC LIMIT 1",
+        ['artikel' => (int)$id, 'adresse' => (int)$adresse, 'menge' => (float)$menge]);
+      $bezeichnunglieferant = $this->app->DatabaseService->selectValue(
+        "SELECT bezeichnunglieferant FROM einkaufspreise
+        WHERE artikel = :artikel AND adresse = :adresse AND ab_menge <= :menge AND (gueltig_bis >= NOW() OR gueltig_bis = '0000-00-00') AND geloescht = 0 ORDER BY ab_menge DESC LIMIT 1",
+        ['artikel' => (int)$id, 'adresse' => (int)$adresse, 'menge' => (float)$menge]);
       if(empty($vpe)){
-        $vpe = $this->app->DB->Select("SELECT vpe FROM einkaufspreise
-        WHERE artikel='$id' AND adresse='$adresse' AND ab_menge<='$menge'  AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 ORDER by ab_menge DESC LIMIT 1");
+        $vpe = $this->app->DatabaseService->selectValue(
+          "SELECT vpe FROM einkaufspreise
+          WHERE artikel = :artikel AND adresse = :adresse AND ab_menge <= :menge AND (gueltig_bis >= NOW() OR gueltig_bis = '0000-00-00') AND geloescht = 0 ORDER BY ab_menge DESC LIMIT 1",
+          ['artikel' => (int)$id, 'adresse' => (int)$adresse, 'menge' => (float)$menge]);
       }
       if($bestellnummer=="") {
-        $bestellnummer = $this->app->DB->Select("SELECT bestellnummer FROM einkaufspreise 
-          WHERE artikel='$id' AND adresse='$adresse' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 LIMIT 1");
+        $bestellnummer = $this->app->DatabaseService->selectValue(
+          "SELECT bestellnummer FROM einkaufspreise
+          WHERE artikel = :artikel AND adresse = :adresse AND (gueltig_bis >= NOW() OR gueltig_bis = '0000-00-00') AND geloescht = 0 LIMIT 1",
+          ['artikel' => (int)$id, 'adresse' => (int)$adresse]);
       }
 
       if($bezeichnunglieferant=="") {
-        $bezeichnunglieferant = $this->app->DB->Select("SELECT bezeichnunglieferant FROM einkaufspreise 
-          WHERE artikel='$id' AND adresse='$adresse' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 LIMIT 1");
+        $bezeichnunglieferant = $this->app->DatabaseService->selectValue(
+          "SELECT bezeichnunglieferant FROM einkaufspreise
+          WHERE artikel = :artikel AND adresse = :adresse AND (gueltig_bis >= NOW() OR gueltig_bis = '0000-00-00') AND geloescht = 0 LIMIT 1",
+          ['artikel' => (int)$id, 'adresse' => (int)$adresse]);
       }
 
-      $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$id' LIMIT 1");
-      $projekt = $this->app->DB->Select("SELECT p.abkuerzung FROM artikel a LEFT JOIN projekt p ON p.id=a.projekt WHERE a.id='$id' LIMIT 1");
+      $nummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $projekt = $this->app->DatabaseService->selectValue("SELECT p.abkuerzung FROM artikel a LEFT JOIN projekt p ON p.id=a.projekt WHERE a.id = :id LIMIT 1", ['id' => (int)$id]);
       //$projekt_id = $this->app->DB->Select("SELECT projekt FROM artikel WHERE id='$id' LIMIT 1");
       //$ab_menge = $this->app->DB->Select("SELECT ab_menge FROM einkaufspreise WHERE artikel='$id' AND adresse='$adresse' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 LIMIT 1");
       //$vpe = $this->app->DB->Select("SELECT vpe FROM einkaufspreise WHERE artikel='$id' AND adresse='$adresse' AND (gueltig_bis>=NOW() OR gueltig_bis='0000-00-00') AND geloescht=0 LIMIT 1");
       $vpe = str_replace(',','.',$vpe);
 
+      $vpeParams = [];
       if($vpe == 1){
         $andVpe = '';
       }
       else{
-        $andVpe = 'AND e.vpe = \''.$vpe.'\'';
+        $andVpe = 'AND e.vpe = :vpe';
+        $vpeParams = ['vpe' => (float)$vpe];
       }
 
       if($waehrung=="" || $waehrung=="EUR")
       {
-
-        $ek = $this->app->DB->Select(
-          "SELECT e.preis 
-          FROM `einkaufspreise` AS `e`
-          WHERE e.artikel='$id' 
-          AND e.adresse='$adresse' 
-          AND e.ab_menge<='$menge' 
-          AND (e.gueltig_bis>=NOW() OR e.gueltig_bis='0000-00-00') 
-          AND e.geloescht=0
-          $andVpe
-          ORDER BY e.ab_menge DESC 
-          LIMIT 1"
+        $ek = $this->app->DatabaseService->selectValue(
+          "SELECT e.preis FROM `einkaufspreise` AS `e`
+          WHERE e.artikel = :artikel AND e.adresse = :adresse AND e.ab_menge <= :menge
+          AND (e.gueltig_bis >= NOW() OR e.gueltig_bis = '0000-00-00')
+          AND e.geloescht = 0 $andVpe ORDER BY e.ab_menge DESC LIMIT 1",
+          array_merge(['artikel' => (int)$id, 'adresse' => (int)$adresse, 'menge' => (float)$menge], $vpeParams)
         );
 
-        $waehrung = $this->app->DB->Select(
-          "SELECT e.waehrung 
-          FROM `einkaufspreise` AS `e`
-          WHERE e.artikel='$id' 
-          AND e.adresse='$adresse' 
-          AND e.ab_menge<='$menge' 
-          AND (e.gueltig_bis>=NOW() OR e.gueltig_bis='0000-00-00') 
-          AND e.geloescht=0 
-          $andVpe
-          ORDER BY e.ab_menge DESC 
-          LIMIT 1"
+        $waehrung = $this->app->DatabaseService->selectValue(
+          "SELECT e.waehrung FROM `einkaufspreise` AS `e`
+          WHERE e.artikel = :artikel AND e.adresse = :adresse AND e.ab_menge <= :menge
+          AND (e.gueltig_bis >= NOW() OR e.gueltig_bis = '0000-00-00')
+          AND e.geloescht = 0 $andVpe ORDER BY e.ab_menge DESC LIMIT 1",
+          array_merge(['artikel' => (int)$id, 'adresse' => (int)$adresse, 'menge' => (float)$menge], $vpeParams)
         );
       } else{
-        $ek = $this->app->DB->Select(
-          "SELECT e.preis 
-          FROM `einkaufspreise` AS `e`
-          WHERE e.artikel='$id' 
-          AND e.adresse='$adresse' 
-          AND e.ab_menge<='$menge' 
-          AND (e.gueltig_bis>=NOW() OR e.gueltig_bis='0000-00-00') 
-          AND e.waehrung='$waehrung' 
-          AND e.geloescht=0
-          $andVpe
-          ORDER BY e.ab_menge DESC 
-          LIMIT 1"
+        $ek = $this->app->DatabaseService->selectValue(
+          "SELECT e.preis FROM `einkaufspreise` AS `e`
+          WHERE e.artikel = :artikel AND e.adresse = :adresse AND e.ab_menge <= :menge
+          AND (e.gueltig_bis >= NOW() OR e.gueltig_bis = '0000-00-00')
+          AND e.waehrung = :waehrung AND e.geloescht = 0 $andVpe ORDER BY e.ab_menge DESC LIMIT 1",
+          array_merge(['artikel' => (int)$id, 'adresse' => (int)$adresse, 'menge' => (float)$menge, 'waehrung' => $waehrung], $vpeParams)
         );
 
       }
@@ -3631,10 +3649,10 @@ class Artikel extends GenArtikel {
       {
         if($menge < $vpe) {
           $menge = $vpe;
-        }        
+        }
         else {
           $menge_vpe = $menge / $vpe;
-          $menge = ceil($menge_vpe)*$vpe;       
+          $menge = ceil($menge_vpe)*$vpe;
         }
         //$ek = $menge*$ek;
       }
@@ -3648,25 +3666,26 @@ class Artikel extends GenArtikel {
         $name = $this->app->Secure->GetGET('name');
         if(trim($name)!='')
         {
-          $id = $this->app->DB->Select("SELECT nummer FROM artikel WHERE nummer LIKE '$name' AND intern_gesperrt!=1 LIMIT 1");
+          $id = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE nummer LIKE :name AND intern_gesperrt != 1 LIMIT 1", ['name' => $name]);
           if($id =='')
           {
-            $id = $this->app->DB->Select("SELECT nummer FROM artikel WHERE name_de LIKE '$name' AND intern_gesperrt!=1 LIMIT 1");
+            $id = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE name_de LIKE :name AND intern_gesperrt != 1 LIMIT 1", ['name' => $name]);
 
             if($id=='')
             {
               $name = str_replace(' ','&nbsp;',$name);
-              $id = $this->app->DB->Select("SELECT nummer FROM artikel WHERE name_de LIKE '$name' AND intern_gesperrt!=1 LIMIT 1");
+              $id = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE name_de LIKE :name AND intern_gesperrt != 1 LIMIT 1", ['name' => $name]);
               //naechster fall
-            }   
+            }
           }
         } else {
           if(trim($name)!='')
           {
             // wenn name leer ist hole max position id
-            $id = $this->app->DB->Select("SELECT MAX(id) FROM ".$smodule."_position WHERE $smodule='$sid'");
-            $id = $this->app->DB->Select("SELECT artikel FROM ".$smodule."_position WHERE id='$id' LIMIT 1");
-            $id = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$id' AND intern_gesperrt!=1 LIMIT 1");
+            $this->app->DatabaseService->validateIdentifier($smodule);
+            $maxId = $this->app->DatabaseService->selectValue("SELECT MAX(id) FROM `{$smodule}_position` WHERE `{$smodule}` = :sid", ['sid' => (int)$sid]);
+            $artikelId = $this->app->DatabaseService->selectValue("SELECT artikel FROM `{$smodule}_position` WHERE id = :id LIMIT 1", ['id' => (int)$maxId]);
+            $id = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id AND intern_gesperrt != 1 LIMIT 1", ['id' => (int)$artikelId]);
           }
 
         }
@@ -3683,38 +3702,39 @@ class Artikel extends GenArtikel {
       $tmp_id = explode(',',$id);
       $id = $tmp_id[0];
 
-      $id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='$id' AND intern_gesperrt!=1 LIMIT 1");
-      $warnung = 1-(int)$this->app->DB->Select("SELECT if(rabatt=1,1,vkmeldungunterdruecken) FROM artikel WHERE id = '$id' LIMIT 1");
+      $this->app->DatabaseService->validateIdentifier($smodule);
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer AND intern_gesperrt != 1 LIMIT 1", ['nummer' => $id]);
+      $warnung = 1-(int)$this->app->DatabaseService->selectValue("SELECT if(rabatt=1,1,vkmeldungunterdruecken) FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
 	if (!is_null($id)) {
-	      $adresse = $this->app->DB->Select("SELECT adresse FROM $smodule WHERE id='$sid' LIMIT 1");
+	      $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$smodule}` WHERE id = :id LIMIT 1", ['id' => (int)$sid]);
 	}
 
 	if (!is_null($smodule)) {
-		if ($this->app->DB->Select("SHOW COLUMNS FROM `$smodule` LIKE 'waehrung'")) {
-		      $waehrung = $this->app->DB->Select("SELECT waehrung FROM $smodule WHERE id='$sid' LIMIT 1");
+		if ($this->app->DatabaseService->selectValue("SHOW COLUMNS FROM `{$smodule}` LIKE 'waehrung'")) {
+		      $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM `{$smodule}` WHERE id = :id LIMIT 1", ['id' => (int)$sid]);
 		}
 	}
 
 	if (!is_null($id)) {
-	      $posanz = (int)$this->app->DB->Select("SELECT count(id) FROM $smodule"."_position WHERE $smodule = '$sid'");
+	      $posanz = (int)$this->app->DatabaseService->selectValue("SELECT count(id) FROM `{$smodule}_position` WHERE `{$smodule}` = :sid", ['sid' => (int)$sid]);
 	}
       //if($posanz == 0){
       //  $waehrung = '';
       //}
 
-      $sprache = $this->app->DB->Select("SELECT sprache FROM adresse WHERE id='$adresse' LIMIT 1");
+      $sprache = $this->app->DatabaseService->selectValue("SELECT sprache FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$adresse]);
 
-      $name = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$id' LIMIT 1");
+      $name = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
-      $name_en = $this->app->DB->Select("SELECT name_en FROM artikel WHERE id='$id' LIMIT 1");
+      $name_en = $this->app->DatabaseService->selectValue("SELECT name_en FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
       if($sprache==='englisch' && $name_en!=''){
         $name = $name_en;
       }
 
-      $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$id' LIMIT 1");
-      $projekt = $this->app->DB->Select("SELECT p.abkuerzung FROM artikel a LEFT JOIN projekt p ON p.id=a.projekt WHERE a.id='$id' LIMIT 1");
+      $nummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $projekt = $this->app->DatabaseService->selectValue("SELECT p.abkuerzung FROM artikel a LEFT JOIN projekt p ON p.id=a.projekt WHERE a.id = :id LIMIT 1", ['id' => (int)$id]);
 
       //$projekt_id = $this->app->DB->Select("SELECT projekt FROM artikel WHERE id='$id' LIMIT 1");
 
@@ -3731,22 +3751,22 @@ class Artikel extends GenArtikel {
           $preis = $this->app->erp->GetVerkaufspreis($id,$menge,$adresse, $waehrung);
         }
       }
-      
+
       if($smodule === 'auftrag' || $smodule === 'rechnung' || $smodule === 'gutschrift' || $smodule === 'angebot' || $smodule === 'proformarechnung')
       {
-        $_anrede = $this->app->DB->Select("SELECT typ FROM $smodule WHERE id = '$sid' LIMIT 1");
-        $_projekt = $this->app->DB->Select("SELECT projekt FROM $smodule WHERE id = '$sid' LIMIT 1");
-        $_adresse = $this->app->DB->Select("SELECT adresse FROM $smodule WHERE id = '$sid' LIMIT 1");
+        $_anrede = $this->app->DatabaseService->selectValue("SELECT typ FROM `{$smodule}` WHERE id = :id LIMIT 1", ['id' => (int)$sid]);
+        $_projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM `{$smodule}` WHERE id = :id LIMIT 1", ['id' => (int)$sid]);
+        $_adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM `{$smodule}` WHERE id = :id LIMIT 1", ['id' => (int)$sid]);
         $funktion = ucfirst($smodule).'MitUmsatzeuer';
         if($this->app->erp->AnzeigePositionenBrutto($_anrede, $smodule, $_projekt, $_adresse) && $this->app->erp->$funktion($sid))
         {
-          $umsatzsteuer = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id = '$id' LIMIT 1");
+          $umsatzsteuer = $this->app->DatabaseService->selectValue("SELECT umsatzsteuer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
           if($umsatzsteuer === 'ermaessigt')
           {
-            $preis = round($preis* (1+ (float)$this->app->DB->Select("SELECT steuersatz_ermaessigt FROM $smodule WHERE id = '$sid' LIMIT 1")/100),7);
+            $preis = round($preis* (1+ (float)$this->app->DatabaseService->selectValue("SELECT steuersatz_ermaessigt FROM `{$smodule}` WHERE id = :id LIMIT 1", ['id' => (int)$sid])/100),7);
           }elseif($umsatzsteuer !== 'befreit')
           {
-            $preis = round($preis * (1+ (float)$this->app->DB->Select("SELECT steuersatz_normal FROM $smodule WHERE id = '$sid' LIMIT 1")/100),7);
+            $preis = round($preis * (1+ (float)$this->app->DatabaseService->selectValue("SELECT steuersatz_normal FROM `{$smodule}` WHERE id = :id LIMIT 1", ['id' => (int)$sid])/100),7);
           }
         }
       }
@@ -3799,12 +3819,12 @@ class Artikel extends GenArtikel {
     $this->app->Tpl->Add('TABTEXT','Auftr&auml;ge');
     $this->ArtikelMenu();
 
-    // easy table mit arbeitspaketen YUI als template 
+    // easy table mit arbeitspaketen YUI als template
 
     $this->app->YUI->TableSearch('TAB1','artikel_auftraege_offen', 'show','','',basename(__FILE__), __CLASS__);
 
-    $summe = $this->app->DB->Select("SELECT TRIM(SUM(ap.menge)-SUM(ap.geliefert_menge))+0 FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE ap.artikel='$id' AND ap.geliefert_menge < ap.menge AND a.status='freigegeben'");
-    $euro= $this->app->DB->Select("SELECT FORMAT(SUM(ap.preis*(100-ap.rabatt)/100*ap.menge),2,'de_DE') FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE ap.artikel='$id' AND ap.geliefert_menge < ap.menge AND a.status='freigegeben'");
+    $summe = $this->app->DatabaseService->selectValue("SELECT TRIM(SUM(ap.menge)-SUM(ap.geliefert_menge))+0 FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE ap.artikel = :id AND ap.geliefert_menge < ap.menge AND a.status='freigegeben'", ['id' => (int)$id]);
+    $euro = $this->app->DatabaseService->selectValue("SELECT FORMAT(SUM(ap.preis*(100-ap.rabatt)/100*ap.menge),2,'de_DE') FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag WHERE ap.artikel = :id AND ap.geliefert_menge < ap.menge AND a.status='freigegeben'", ['id' => (int)$id]);
 
     $this->app->Tpl->Add('TAB1',"<table width=\"100%\"><tr><td align=\"right\">Summe offen: $summe St&uuml;ck (Summe EUR: $euro EUR)</td></tr></table>");
 
@@ -3820,16 +3840,11 @@ class Artikel extends GenArtikel {
     $this->app->Tpl->Add('UEBERSCHRIFT',' (Dateien)');
     $cmd = $this->app->Secure->GetGET('cmd');
     if($cmd === 'down' || $cmd === 'up') {
-      $this->app->DB->Update(
-        sprintf(
-          'UPDATE artikel SET bildvorschau = \'\' WHERE id = %d LIMIT 1',
-          (int)$id
-        )
-      );
+      $this->app->DatabaseService->update("UPDATE artikel SET bildvorschau = '' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     $this->app->YUI->DateiUpload('PAGE','Artikel',$id);
   }
-  
+
   public function ArtikelCopyWaehrungen($id, $typ = 'verkauf')
   {
     $res = array('status' => 0);
@@ -3838,7 +3853,7 @@ class Artikel extends GenArtikel {
     $art = $this->app->Secure->GetPOST('art');
     $bezeichnunglieferant = $this->app->Secure->GetPOST('bezeichnunglieferant');
     $bestellnummer = $this->app->Secure->GetPOST('bestellnummer');
-    
+
     $gruppe = $this->app->erp->ReplaceGruppe(true, $this->app->Secure->GetPOST('gruppe'),true);
     $kundenartikelnummer = $this->app->Secure->GetPOST('kundenartikelnummer');
     $gueltig_bis = $this->app->Secure->GetPOST('gueltig_bis');
@@ -3879,13 +3894,13 @@ class Artikel extends GenArtikel {
       echo json_encode($res);
       $this->app->ExitXentral();
     }
-    
+
     switch($typ)
     {
       case 'einkauf':
         $adresse =  $this->app->erp->ReplaceLieferant(true,$this->app->Secure->GetPOST('adresse'),true);
-        $artikel = $this->app->DB->Select("SELECT id FROM artikel WHERE id = '$id' LIMIT 1");
-        
+        $artikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+
         if(!$artikel)
         {
           echo json_encode($res);
@@ -3900,16 +3915,16 @@ class Artikel extends GenArtikel {
         $this->app->ExitXentral();
       break;
       case 'einkaufeditpopup':
-        $artikel = $this->app->DB->Select("SELECT artikel FROM einkaufspreise WHERE id = '$id' LIMIT 1");
+        $artikel = $this->app->DatabaseService->selectValue("SELECT artikel FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
         if(!$artikel)
         {
           echo json_encode($res);
           $this->app->ExitXentral();
         }
         foreach($waehrungen as $waehrung => $preis)
-        {        
+        {
           $newid = $this->app->DB->MysqlCopyRow("einkaufspreise","id",$id);
-          $this->app->DB->Update("UPDATE einkaufspreise SET geloescht='0', gueltig_bis='0000-00-00', nichtberechnet = 0,preis = '$preis', waehrung = '".$waehrung."' WHERE id='$newid' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE einkaufspreise SET geloescht='0', gueltig_bis='0000-00-00', nichtberechnet = 0, preis = :preis, waehrung = :waehrung WHERE id = :id LIMIT 1", ['preis' => $preis, 'waehrung' => $waehrung, 'id' => (int)$newid]);
         }
         $res['status'] = 1;
         echo json_encode($res);
@@ -3917,14 +3932,14 @@ class Artikel extends GenArtikel {
       break;
       case 'verkauf':
         $adresse =  $this->app->erp->ReplaceKunde(true,$this->app->Secure->GetPOST('adresse'),true);
-        $artikel = $this->app->DB->Select("SELECT id FROM artikel WHERE id = '$id' LIMIT 1");
+        $artikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
         if(!$artikel)
         {
           echo json_encode($res);
           $this->app->ExitXentral();
         }
         foreach($waehrungen as $waehrung => $preis)
-        { 
+        {
           $this->app->erp->AddVerkaufspreis($artikel,$menge_ab,$adresse,$preis,$waehrung,$kundenartikelnummer, $gruppe);
         }
         $res['status'] = 1;
@@ -3932,23 +3947,23 @@ class Artikel extends GenArtikel {
         $this->app->ExitXentral();
       break;
       case 'verkaufeditpopup':
-        $artikel = $this->app->DB->Select("SELECT artikel FROM verkaufspreise WHERE id = '$id' LIMIT 1");
+        $artikel = $this->app->DatabaseService->selectValue("SELECT artikel FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
         if(!$artikel)
         {
           echo json_encode($res);
           $this->app->ExitXentral();
         }
         foreach($waehrungen as $waehrung => $preis)
-        {        
+        {
           $newid = $this->app->DB->MysqlCopyRow('verkaufspreise','id',$id);
-          $this->app->DB->Update("UPDATE verkaufspreise SET geloescht='0', gueltig_bis='0000-00-00', nichtberechnet = 0,preis = '$preis', waehrung = '".$waehrung."' WHERE id='$newid' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE verkaufspreise SET geloescht='0', gueltig_bis='0000-00-00', nichtberechnet = 0, preis = :preis, waehrung = :waehrung WHERE id = :id LIMIT 1", ['preis' => $preis, 'waehrung' => $waehrung, 'id' => (int)$newid]);
         }
         $res['status'] = 1;
         echo json_encode($res);
         $this->app->ExitXentral();
       break;
     }
-    
+
     echo json_encode($res);
     $this->app->ExitXentral();
   }
@@ -3982,8 +3997,8 @@ class Artikel extends GenArtikel {
       }
       $this->app->Tpl->Set('STANDARDWAEHRUNGV', $standardwaehrung);
       if($standardwvorhanden == false){
-        $waehrungenstringvk .= "<option value=\"".$standardwaehrung.'>'.$standardwaehrung.'</option>';
-      }      
+        $waehrungenstringvk .= "<option value=\"".$standardwaehrung.'">'.$standardwaehrung.'</option>';
+      }
     }else{
       if($standardwaehrung != ''){
         if($standardwaehrung !== 'EUR' && $standardwaehrung !== 'USD' && $standardwaehrung !== 'CAD' && $standardwaehrung !== 'CHF' && $standardwaehrung !== 'GBP'){
@@ -4001,7 +4016,7 @@ class Artikel extends GenArtikel {
                               <option value='GBP'>GBP</option>";
     }
 
-    
+
     $this->app->Tpl->Set('WAEHRUNGVERKAUF', $waehrungenstringvk);
 
 
@@ -4023,22 +4038,19 @@ class Artikel extends GenArtikel {
 
 
     $this->app->YUI->TableSearch('TAB1','verkaufspreise', 'show','','',basename(__FILE__), __CLASS__);
-    $stueckliste = $this->app->DB->Select("SELECT stueckliste FROM artikel WHERE id='$id' LIMIT 1");
-    $porto = $this->app->DB->Select("SELECT porto FROM artikel WHERE id='$id' LIMIT 1");
+    $stueckliste = $this->app->DatabaseService->selectValue("SELECT stueckliste FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $porto = $this->app->DatabaseService->selectValue("SELECT porto FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if($stueckliste!='1') {
-      $max_preis = $this->app->DB->Select("SELECT MAX(preis) FROM einkaufspreise WHERE artikel='$id' AND (gueltig_bis='0000-00-00' 
-        OR gueltig_bis >= curdate()) AND geloescht!=1 LIMIT 1");
+      $max_preis = $this->app->DatabaseService->selectValue("SELECT MAX(preis) FROM einkaufspreise WHERE artikel = :id AND (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate()) AND geloescht!=1", ['id' => (int)$id]);
 
-      $min_preis = $this->app->DB->Select("SELECT MIN(preis) FROM einkaufspreise WHERE artikel='$id' AND (gueltig_bis='0000-00-00' 
-        OR gueltig_bis >= curdate()) AND geloescht!=1 LIMIT 1");
+      $min_preis = $this->app->DatabaseService->selectValue("SELECT MIN(preis) FROM einkaufspreise WHERE artikel = :id AND (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate()) AND geloescht!=1", ['id' => (int)$id]);
 
-      $waehrung = $this->app->DB->Select("SELECT waehrung FROM einkaufspreise WHERE artikel='$id' AND (gueltig_bis='0000-00-00'
-        OR gueltig_bis >= curdate()) AND geloescht!=1 ORDER by preis LIMIT 1");
+      $waehrung = $this->app->DatabaseService->selectValue("SELECT waehrung FROM einkaufspreise WHERE artikel = :id AND (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate()) AND geloescht!=1 ORDER by preis LIMIT 1", ['id' => (int)$id]);
 
       $max_preis2 = $max_preis;
       $min_preis2 = $min_preis;
-      
+
       $min_preis = $this->app->erp->EUR($min_preis*(($this->app->erp->GetStandardMarge()/100.0)+1.0)*1.0);
       $max_preis = $this->app->erp->EUR($max_preis*(($this->app->erp->GetStandardMarge()/100.0)+1.0)*1.0);
 
@@ -4049,7 +4061,7 @@ class Artikel extends GenArtikel {
 
     if($porto=='1') {
       $this->app->Tpl->Add('TAB1',"<div class=\"warning\">Kundenspezifische Preise werden immer priorisiert!</div>");
-    } 
+    }
     else {
 
       if($this->app->erp->GetStandardMarge() > 0)// && $stueckliste!="1")
@@ -4061,8 +4073,8 @@ class Artikel extends GenArtikel {
         if($min_preis <>0){
           $this->app->Tpl->Add('TAB1', "<div class=\"warning\">Empfohlener Verkaufspreis netto (f&uuml;r billigsten EK Preis): <b>$min_preis $waehrung</b> bzw. als Aufschlagsrechnung $min_preis2 $waehrung</div>");
         }
-        
-        
+
+
         if($max_preis <>0){
           $this->app->Tpl->Add('TAB2', "<div class=\"warning\">Empfohlener Verkaufspreis netto (f&uuml;r teuersten EK Preis): <b>$max_preis $waehrung</b> bzw. als Aufschlagsrechnung $max_preis2 $waehrung</div>");
         }
@@ -4074,34 +4086,34 @@ class Artikel extends GenArtikel {
 
     if($this->app->Secure->GetGET('cmd')==='popupedit'){
       $eid = (int)$this->app->Secure->GetPOST('id');
-      
-      $data = $this->app->DB->SelectRow("SELECT id, artikel, adresse, preis, waehrung, ab_menge, vpe, vpe_menge, gueltig_bis, bemerkung, kundenartikelnummer, art, gruppe, nichtberechnet, gueltig_ab,if(kurs<0,'',".$this->app->erp->FormatMenge('kurs').") as kurs,IF(ISNULL(kursdatum),'',DATE_FORMAT(kursdatum,'%d.%m.%Y')) as kursdatum, inbelegausblenden FROM verkaufspreise WHERE id = '$eid' LIMIT 1");
-      
+
+      $data = $this->app->DatabaseService->selectRow("SELECT id, artikel, adresse, preis, waehrung, ab_menge, vpe, vpe_menge, gueltig_bis, bemerkung, kundenartikelnummer, art, gruppe, nichtberechnet, gueltig_ab,if(kurs<0,'',".$this->app->erp->FormatMenge('kurs').") as kurs,IF(ISNULL(kursdatum),'',DATE_FORMAT(kursdatum,'%d.%m.%Y')) as kursdatum, inbelegausblenden FROM verkaufspreise WHERE id = :eid LIMIT 1", ['eid' => (int)$eid]);
+
       if($data){
         if($data['adresse'] > 0 && $data['art'] === 'Kunde'){
-          $ekundennummer = $this->app->DB->Select("SELECT kundennummer FROM adresse WHERE id = '".$data['adresse']."' LIMIT 1");
-          $ekundenname = $this->app->DB->Select("SELECT name FROM adresse WHERE id = '".$data['adresse']."' LIMIT 1");
+          $ekundennummer = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id = :adresseId LIMIT 1", ['adresseId' => (int)$data['adresse']]);
+          $ekundenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = :adresseId LIMIT 1", ['adresseId' => (int)$data['adresse']]);
           $data['adresse'] = $ekundennummer." ".$ekundenname;
           $data['gruppe'] = '';
         }elseif($data['adresse'] == 0 && $data['art'] === 'Kunde'){
           $data['adresse'] = '';
           $data['gruppe'] = '';
         }
-        
+
         if($data['gruppe'] > 0 && $data['art'] === 'Gruppe'){
-          $egruppenname = $this->app->DB->Select("SELECT name FROM gruppen WHERE id = '".$data['gruppe']."' LIMIT 1");
-          $egruppenkennziffer = $this->app->DB->Select("SELECT kennziffer FROM gruppen WHERE id = '".$data['gruppe']."' LIMIT 1");
+          $egruppenname = $this->app->DatabaseService->selectValue("SELECT name FROM gruppen WHERE id = :gruppeId LIMIT 1", ['gruppeId' => (int)$data['gruppe']]);
+          $egruppenkennziffer = $this->app->DatabaseService->selectValue("SELECT kennziffer FROM gruppen WHERE id = :gruppeId LIMIT 1", ['gruppeId' => (int)$data['gruppe']]);
           $data['gruppe'] = $egruppenkennziffer." ".$egruppenname;
           $data['adresse'] = '';
         }
 
         $data['ab_menge'] = str_replace('.',',',$data['ab_menge']);
         $data['preis'] = str_replace('.',',',$data['preis']);
-        
+
         if($data['gueltig_ab'] == '0000-00-00' || $data['gueltig_ab'] == '' || is_null($data['gueltig_ab'])){
           $data['gueltig_ab'] = "00.00.0000";
         }else{
-          $data['gueltig_ab'] = date('d.m.Y',strtotime($data['gueltig_ab'])); 
+          $data['gueltig_ab'] = date('d.m.Y',strtotime($data['gueltig_ab']));
         }
 
         if($data['gueltig_bis'] == '0000-00-00' || $data['gueltig_bis'] == '' || is_null($data['gueltig_bis'])){
@@ -4109,7 +4121,7 @@ class Artikel extends GenArtikel {
         }else{
           $data['gueltig_bis'] = date('d.m.Y',strtotime($data['gueltig_bis']));
         }
-       
+
       }else{
         //$data['artikel'] = 0;
         $data['adresse'] = '';
@@ -4125,7 +4137,7 @@ class Artikel extends GenArtikel {
         $data['bemerkung'] = '';
         $data['kurs'] = '';
         $data['kurdatum'] = '';
-        $data['nichtberechnet'] = 0; 
+        $data['nichtberechnet'] = 0;
         $data['inbelegausblenden'] = 0;
       }
 
@@ -4162,8 +4174,8 @@ class Artikel extends GenArtikel {
       if($eadresse != '' && $eart === 'Kunde'){
         $eadresse = explode(' ', $eadresse, 2);
         $eadresse = $eadresse[0];
-        
-        $eadresse = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer = '$eadresse' AND kundennummer != '' AND geloescht = 0 LIMIT 1");
+
+        $eadresse = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = :kundennummer AND kundennummer != '' AND geloescht = 0 LIMIT 1", ['kundennummer' => $eadresse]);
         if($eadresse != ''){
         }else{
           $error .= 'Adressef'."\n";
@@ -4175,7 +4187,7 @@ class Artikel extends GenArtikel {
       if($egruppe != '' && $eart === 'Gruppe'){
         $egruppe = explode(' ', $egruppe, 2);
         $egruppe = $egruppe[0];
-        $egruppe = $this->app->DB->Select("SELECT id FROM gruppen WHERE kennziffer = '$egruppe' AND name != '' LIMIT 1");
+        $egruppe = $this->app->DatabaseService->selectValue("SELECT id FROM gruppen WHERE kennziffer = :kennziffer AND name != '' LIMIT 1", ['kennziffer' => $egruppe]);
       }else{
         if($egruppe == '' && $eart === 'Gruppe'){
           $error .= 'Gruppe ausfüllen';
@@ -4189,7 +4201,7 @@ class Artikel extends GenArtikel {
       }
 
       if($eartikelid > 0 && $eartikelid != ''){
-        $eartikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE id = '$eartikelid' LIMIT 1");
+        $eartikelid = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$eartikelid]);
         if($eartikelid != ''){
         }else{
           $error .= 'Bitte gültigen Artikel wählen'."\n";
@@ -4198,9 +4210,9 @@ class Artikel extends GenArtikel {
         $error .= 'Bitte gültigen Artikel wählen'."\n";
       }
 
-      
+
       if($egueltig_ab != '' && $egueltig_ab != '0000-00-00' && $egueltig_ab != '00.00.0000'){
-        $egueltig_ab = date('Y-m-d',strtotime($egueltig_ab)); 
+        $egueltig_ab = date('Y-m-d',strtotime($egueltig_ab));
       }else{
         $egueltig_ab = '0000-00-00';
       }
@@ -4218,11 +4230,13 @@ class Artikel extends GenArtikel {
       if($error == ''){
         if($eid > 0){
           if($eart === 'Kunde'){
-            $standardvorhanden = $this->app->DB->Select("SELECT id FROM verkaufspreise WHERE artikel = '$eartikelid' AND ab_menge = '$eab_menge' AND preis = '$epreis' AND art = 'Kunde' AND adresse = '$eadresse' AND gueltig_ab = '$egueltig_ab' AND gueltig_bis = '$egueltig_bis' AND geloescht != 1 AND id != '$eid' LIMIT 1");
+            $standardvorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM verkaufspreise WHERE artikel = :eartikelid AND ab_menge = :eab_menge AND preis = :epreis AND art = 'Kunde' AND adresse = :eadresse AND gueltig_ab = :egueltig_ab AND gueltig_bis = :egueltig_bis AND geloescht != 1 AND id != :eid LIMIT 1",
+            ['eartikelid' => (int)$eartikelid, 'eab_menge' => $eab_menge, 'epreis' => $epreis, 'eadresse' => (int)$eadresse, 'egueltig_ab' => $egueltig_ab, 'egueltig_bis' => $egueltig_bis, 'eid' => (int)$eid]);
           }
 
           if($eart === 'Gruppe' && $egruppe > 0){
-            $gruppenpreisvorhanden = $this->app->DB->Select("SELECT id FROM verkaufspreise WHERE artikel = '$eartikelid' AND ab_menge = '$eab_menge' AND preis = '$epreis' AND art = 'Gruppe' AND gruppe = '$egruppe' AND gueltig_ab = '$egueltig_ab' AND gueltig_bis = '$egueltig_bis' AND geloescht != 1 AND id != '$eid' LIMIT 1");
+            $gruppenpreisvorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM verkaufspreise WHERE artikel = :eartikelid AND ab_menge = :eab_menge AND preis = :epreis AND art = 'Gruppe' AND gruppe = :egruppe AND gueltig_ab = :egueltig_ab AND gueltig_bis = :egueltig_bis AND geloescht != 1 AND id != :eid LIMIT 1",
+              ['eartikelid' => (int)$eartikelid, 'eab_menge' => $eab_menge, 'epreis' => $epreis, 'egruppe' => (int)$egruppe, 'egueltig_ab' => $egueltig_ab, 'egueltig_bis' => $egueltig_bis, 'eid' => (int)$eid]);
           }
 
           if($standardvorhanden != ''){
@@ -4235,30 +4249,31 @@ class Artikel extends GenArtikel {
             echo json_encode(array('status'=>0,'statusText'=>$error));
             $this->app->ExitXentral();
           }
-          $this->app->DB->Update("UPDATE verkaufspreise SET adresse = '$eadresse', preis = '$epreis', waehrung = '$ewaehrung', ab_menge = '$eab_menge', vpe = '$evpe', gueltig_bis = '$egueltig_bis', bemerkung = '$ebemerkung', firma = 1, geloescht = 0, kundenartikelnummer = '$ekundenartikelnummer', art = '$eart', gruppe = '$egruppe', nichtberechnet = '$enichtberechnet', gueltig_ab = '$egueltig_ab', inbelegausblenden = '$inbelegausblenden' WHERE id = '$eid'");
+          $this->app->DatabaseService->update("UPDATE verkaufspreise SET adresse = :eadresse, preis = :epreis, waehrung = :ewaehrung, ab_menge = :eab_menge, vpe = :evpe, gueltig_bis = :egueltig_bis, bemerkung = :ebemerkung, firma = 1, geloescht = 0, kundenartikelnummer = :ekundenartikelnummer, art = :eart, gruppe = :egruppe, nichtberechnet = :enichtberechnet, gueltig_ab = :egueltig_ab, inbelegausblenden = :inbelegausblenden WHERE id = :eid",
+            ['eadresse' => (int)$eadresse, 'epreis' => $epreis, 'ewaehrung' => $ewaehrung, 'eab_menge' => $eab_menge, 'evpe' => $evpe, 'egueltig_bis' => $egueltig_bis, 'ebemerkung' => $ebemerkung, 'ekundenartikelnummer' => $ekundenartikelnummer, 'eart' => $eart, 'egruppe' => (int)$egruppe, 'enichtberechnet' => $enichtberechnet, 'egueltig_ab' => $egueltig_ab, 'inbelegausblenden' => $inbelegausblenden, 'eid' => (int)$eid]);
           if($ewaehrung === 'EUR' || $ewaehrung === '')
           {
             $kurs = -1;
-            $kursdatum = 'NULL';
+            $kursdatum = null;
           }else{
             $kurs = $this->app->erp->GetWaehrungUmrechnungskurs('EUR', $ewaehrung, true);
           }
           if($kurs !== false){
-            if($kurs !== -1){
-              $kursdatum = "'" . date('Y-m-d') . "'";
-            }
-            $this->app->DB->Update("UPDATE verkaufspreise SET kurs = $kurs, kursdatum = $kursdatum WHERE id = $eid LIMIT 1");
+            $kursdatumVal = ($kurs !== -1) ? date('Y-m-d') : null;
+            $this->app->DatabaseService->update("UPDATE verkaufspreise SET kurs = :kurs, kursdatum = :kursdatum WHERE id = :eid LIMIT 1", ['kurs' => $kurs, 'kursdatum' => $kursdatumVal, 'eid' => (int)$eid]);
           }
           echo json_encode(array('status'=>1));
           $this->app->ExitXentral();
         }
 
         if($eart === 'Kunde'){
-          $standardvorhanden = $this->app->DB->Select("SELECT id FROM verkaufspreise WHERE artikel = '$eartikelid' AND ab_menge = '$eab_menge' AND preis = '$epreis' AND art = 'Kunde' AND adresse = '$eadresse' AND gueltig_ab = '$egueltig_ab' AND gueltig_bis = '$egueltig_bis' AND geloescht != 1 LIMIT 1");
+          $standardvorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM verkaufspreise WHERE artikel = :eartikelid AND ab_menge = :eab_menge AND preis = :epreis AND art = 'Kunde' AND adresse = :eadresse AND gueltig_ab = :egueltig_ab AND gueltig_bis = :egueltig_bis AND geloescht != 1 LIMIT 1",
+            ['eartikelid' => (int)$eartikelid, 'eab_menge' => $eab_menge, 'epreis' => $epreis, 'eadresse' => (int)$eadresse, 'egueltig_ab' => $egueltig_ab, 'egueltig_bis' => $egueltig_bis]);
         }
 
         if($eart === 'Gruppe' && $egruppe > 0){
-          $gruppenpreisvorhanden = $this->app->DB->Select("SELECT id FROM verkaufspreise WHERE artikel = '$eartikelid' AND ab_menge = '$eab_menge' AND preis = '$epreis' AND art = 'Gruppe' AND gruppe = '$egruppe' AND gueltig_ab = '$egueltig_ab' AND gueltig_bis = '$egueltig_bis' AND geloescht != 1 LIMIT 1");
+          $gruppenpreisvorhanden = $this->app->DatabaseService->selectValue("SELECT id FROM verkaufspreise WHERE artikel = :eartikelid AND ab_menge = :eab_menge AND preis = :epreis AND art = 'Gruppe' AND gruppe = :egruppe AND gueltig_ab = :egueltig_ab AND gueltig_bis = :egueltig_bis AND geloescht != 1 LIMIT 1",
+            ['eartikelid' => (int)$eartikelid, 'eab_menge' => $eab_menge, 'epreis' => $epreis, 'egruppe' => (int)$egruppe, 'egueltig_ab' => $egueltig_ab, 'egueltig_bis' => $egueltig_bis]);
         }
 
         if($standardvorhanden != ''){
@@ -4271,8 +4286,8 @@ class Artikel extends GenArtikel {
           echo json_encode(array('status'=>0,'statusText'=>$error));
           $this->app->ExitXentral();
         }
-        $this->app->DB->Insert("INSERT INTO verkaufspreise (artikel, adresse, preis, waehrung, ab_menge, vpe, gueltig_bis, bemerkung, firma, geloescht, kundenartikelnummer, art, gruppe, apichange, nichtberechnet, gueltig_ab, inbelegausblenden) VALUES ('$eartikelid', '$eadresse', '$epreis', '$ewaehrung', '$eab_menge', '$evpe', '$egueltig_bis', '$ebemerkung', 1, 0, '$ekundenartikelnummer', '$eart', '$egruppe', '', '$enichtberechnet', '$egueltig_ab', '$inbelegausblenden')");
-        $insid = $this->app->DB->GetInsertID();
+        $insid = $this->app->DatabaseService->insert("INSERT INTO verkaufspreise (artikel, adresse, preis, waehrung, ab_menge, vpe, gueltig_bis, bemerkung, firma, geloescht, kundenartikelnummer, art, gruppe, apichange, nichtberechnet, gueltig_ab, inbelegausblenden) VALUES (:eartikelid, :eadresse, :epreis, :ewaehrung, :eab_menge, :evpe, :egueltig_bis, :ebemerkung, 1, 0, :ekundenartikelnummer, :eart, :egruppe, '', :enichtberechnet, :egueltig_ab, :inbelegausblenden)",
+          ['eartikelid' => (int)$eartikelid, 'eadresse' => (int)$eadresse, 'epreis' => $epreis, 'ewaehrung' => $ewaehrung, 'eab_menge' => $eab_menge, 'evpe' => $evpe, 'egueltig_bis' => $egueltig_bis, 'ebemerkung' => $ebemerkung, 'ekundenartikelnummer' => $ekundenartikelnummer, 'eart' => $eart, 'egruppe' => (int)$egruppe, 'enichtberechnet' => $enichtberechnet, 'egueltig_ab' => $egueltig_ab, 'inbelegausblenden' => $inbelegausblenden]);
         if($ewaehrung === 'EUR' || $ewaehrung === '')
         {
           $kurs = false;
@@ -4280,10 +4295,8 @@ class Artikel extends GenArtikel {
           $kurs = $this->app->erp->GetWaehrungUmrechnungskurs('EUR', $ewaehrung, true);
         }
         if($kurs !== false){
-          if($kurs !== -1){
-            $kursdatum = "'" . date('Y-m-d') . "'";
-          }
-          $this->app->DB->Update("UPDATE verkaufspreise SET kurs = $kurs, kursdatum = $kursdatum WHERE id = $insid LIMIT 1");
+          $kursdatumVal = ($kurs !== -1) ? date('Y-m-d') : null;
+          $this->app->DatabaseService->update("UPDATE verkaufspreise SET kurs = :kurs, kursdatum = :kursdatum WHERE id = :insid LIMIT 1", ['kurs' => $kurs, 'kursdatum' => $kursdatumVal, 'insid' => (int)$insid]);
         }
         echo json_encode(array('status'=>1));
         $this->app->ExitXentral();
@@ -4304,10 +4317,10 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
-      $this->app->DB->Update("UPDATE verkaufspreise SET gueltig_bis=DATE_SUB(NOW(),INTERVAL 1 DAY) WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE verkaufspreise SET gueltig_bis=DATE_SUB(NOW(),INTERVAL 1 DAY) WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       $this->app->erp->ObjektProtokoll('verkaufspreise', $id, 'verkaufspreise_edit', 'Verkaufspreis deaktiviert');
     }
-    $sid = $this->app->DB->Select("SELECT artikel FROM verkaufspreise WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->Location->execute('index.php?module=artikel&action=verkauf&id='.$sid);
   }
 
@@ -4315,9 +4328,9 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
-      $this->app->DB->Update("UPDATE verkaufspreise SET geloescht='1', gueltig_bis=DATE_SUB(NOW(),INTERVAL 1 DAY), logdatei = now() WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE verkaufspreise SET geloescht='1', gueltig_bis=DATE_SUB(NOW(),INTERVAL 1 DAY), logdatei = now() WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
-    $sid = $this->app->DB->Select("SELECT artikel FROM verkaufspreise WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->erp->ObjektProtokoll('verkaufspreise', $id, 'verkaufspreise_edit', 'Verkaufspreis gel&ouml;scht');
     $this->app->Location->execute('index.php?module=artikel&action=verkauf&id='.$sid);
   }
@@ -4327,29 +4340,29 @@ class Artikel extends GenArtikel {
     $id = $this->app->Secure->GetGET('id');
 
     $id = $this->app->DB->MysqlCopyRow('verkaufspreise','id',$id);
-    $this->app->DB->Update("UPDATE verkaufspreise SET geloescht='0', gueltig_bis='0000-00-00', logdatei = now(), angelegt_am = now() WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->update("UPDATE verkaufspreise SET geloescht='0', gueltig_bis='0000-00-00', logdatei = now(), angelegt_am = now() WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->erp->ObjektProtokoll('verkaufspreise', $id, 'verkaufspreise_create', 'Verkaufspreis kopiert');
-    $sid = $this->app->DB->Select("SELECT artikel FROM verkaufspreise WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->Location->execute('index.php?module=artikel&action=verkauf&id='.$sid);
   }
 
   public function ArtikelVerkaufEditPopup()
   {
     $id = $this->app->Secure->GetGET('id');
-    
+
     if($this->app->Secure->GetPOST('newpreis'))
     {
       $id = $this->app->Secure->GetGET('id');
       $this->ArtikelCopyWaehrungen($id, 'verkaufeditpopup');
     }
-    
+
     $this->app->Tpl->Set('OPENDISABLE','<!--');
     $this->app->Tpl->Set('CLOSEDISABLE','-->');
 
     $this->Preisrechner();
-    $sid = $this->app->DB->Select("SELECT artikel FROM verkaufspreise WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->ArtikelMenu($sid);
-    $artikel = $this->app->DB->Select("SELECT CONCAT(name_de,' (',nummer,')') FROM artikel WHERE id='$sid' LIMIT 1");
+    $artikel = $this->app->DatabaseService->selectValue("SELECT CONCAT(name_de,' (',nummer,')') FROM artikel WHERE id = :sid LIMIT 1", ['sid' => (int)$sid]);
     $this->app->Tpl->Set('UEBERSCHRIFT','Artikel: '.$artikel);
     $this->app->Tpl->Add('UEBERSCHRIFT',' (Verkauf)');
 
@@ -4398,8 +4411,8 @@ class Artikel extends GenArtikel {
       }
       $this->app->Tpl->Set('STANDARDWAEHRUNG', $standardwaehrung);
       if($standardwvorhanden == false){
-        $waehrungenstringek .= "<option value=\"".$standardwaehrung.">".$standardwaehrung.'</option>';
-      }      
+        $waehrungenstringek .= "<option value=\"".$standardwaehrung.'">'.$standardwaehrung.'</option>';
+      }
     }else{
       if($standardwaehrung != ""){
         if($standardwaehrung !== 'EUR' && $standardwaehrung !== 'USD' && $standardwaehrung !== 'CAD' && $standardwaehrung !== 'CHF' && $standardwaehrung !== 'GBP'){
@@ -4419,15 +4432,14 @@ class Artikel extends GenArtikel {
 
     $this->app->Tpl->Set('WAEHRUNGEINKAUF', $waehrungenstringek);
 
-    $standardlieferant = $this->app->DB->Select("SELECT CONCAT(adr.lieferantennummer,' ',adr.name) FROM artikel a LEFT
-        JOIN adresse adr ON adr.id=a.adresse WHERE a.id='$id'");
+    $standardlieferant = $this->app->DatabaseService->selectValue("SELECT CONCAT(adr.lieferantennummer,' ',adr.name) FROM artikel a LEFT JOIN adresse adr ON adr.id=a.adresse WHERE a.id = :id LIMIT 1", ['id' => (int)$id]);
 
-    $herstellernummer = $this->app->DB->Select("SELECT herstellernummer FROM artikel WHERE id='$id' LIMIT 1");
-    $name_de = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$id' LIMIT 1");
+    $herstellernummer = $this->app->DatabaseService->selectValue("SELECT herstellernummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $name_de = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     $bereinigtername = str_replace('&apos;', "\'", $name_de);
 
-    $this->app->Tpl->Set('BUTTONLADEN',"<input type=\"button\" class=\"button button-secondary\" value=\"Standard laden\" 
+    $this->app->Tpl->Set('BUTTONLADEN',"<input type=\"button\" class=\"button button-secondary\" value=\"Standard laden\"
         onclick=\"
         $('#editEinkaufspreis').find('#adresse').val('$standardlieferant');
         $('#editEinkaufspreis').find('#standard').prop('checked', 1);
@@ -4446,25 +4458,25 @@ class Artikel extends GenArtikel {
 
     if($this->app->Secure->GetGET('cmd')==='popupedit'){
       $eid = (int)$this->app->Secure->GetPOST('id');
-      
-      $data = $this->app->DB->SelectRow("SELECT id, artikel, adresse, preis, waehrung, ab_menge, vpe, preis_anfrage_vom, 
-              gueltig_bis, lieferzeit_standard, lieferzeit_standard_einheit, lieferzeit_aktuell, lieferzeit_aktuell_einheit, lager_lieferant, datum_lagerlieferant, bestellnummer, 
-              bezeichnunglieferant, sicherheitslager, bemerkung, standard, rahmenvertrag, rahmenvertrag_von, rahmenvertrag_bis, 
-              rahmenvertrag_menge, nichtberechnet 
-              FROM einkaufspreise WHERE id = '$eid' LIMIT 1");
-      
+
+      $data = $this->app->DatabaseService->selectRow("SELECT id, artikel, adresse, preis, waehrung, ab_menge, vpe, preis_anfrage_vom,
+              gueltig_bis, lieferzeit_standard, lieferzeit_standard_einheit, lieferzeit_aktuell, lieferzeit_aktuell_einheit, lager_lieferant, datum_lagerlieferant, bestellnummer,
+              bezeichnunglieferant, sicherheitslager, bemerkung, standard, rahmenvertrag, rahmenvertrag_von, rahmenvertrag_bis,
+              rahmenvertrag_menge, nichtberechnet
+              FROM einkaufspreise WHERE id = :eid LIMIT 1", ['eid' => (int)$eid]);
+
       if($data){
-        $elieferantennummer = $this->app->DB->Select("SELECT lieferantennummer FROM adresse WHERE id = '".$data['adresse']."' LIMIT 1");
-        $elieferantenname = $this->app->DB->Select("SELECT name FROM adresse WHERE id = '".$data['adresse']."' LIMIT 1");
+        $elieferantennummer = $this->app->DatabaseService->selectValue("SELECT lieferantennummer FROM adresse WHERE id = :adresseId LIMIT 1", ['adresseId' => (int)$data['adresse']]);
+        $elieferantenname = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = :adresseId LIMIT 1", ['adresseId' => (int)$data['adresse']]);
         $data['adresse'] = $elieferantennummer." ".$elieferantenname;
 
         $data['ab_menge'] = str_replace('.',',',$data['ab_menge']);
         $data['preis'] = str_replace('.',',',$data['preis']);
-        
+
         if($data['preis_anfrage_vom'] == '0000-00-00' || $data['preis_anfrage_vom'] == "" || is_null($data['preis_anfrage_vom'])){
           $data['preis_anfrage_vom'] = "00.00.0000";
         }else{
-          $data['preis_anfrage_vom'] = date('d.m.Y',strtotime($data['preis_anfrage_vom'])); 
+          $data['preis_anfrage_vom'] = date('d.m.Y',strtotime($data['preis_anfrage_vom']));
         }
 
         if($data['gueltig_bis'] == '0000-00-00' || $data['gueltig_bis'] == "" || is_null($data['gueltig_bis'])){
@@ -4522,7 +4534,7 @@ class Artikel extends GenArtikel {
         $data['rahmenvertrag_von'] = '';
         $data['rahmenvertrag_bis'] = '';
         $data['rahmenvertrag_menge'] = '';
-        $data['nichtberechnet'] = 0; 
+        $data['nichtberechnet'] = 0;
       }
       echo json_encode($data);
       $this->app->ExitXentral();
@@ -4569,7 +4581,7 @@ class Artikel extends GenArtikel {
         $eadresse = explode(' ', $eadresse, 2);
         $eadresse = $eadresse[0];
 
-        $eadresse = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer = '$eadresse' AND lieferantennummer != '' AND geloescht = 0 LIMIT 1");
+        $eadresse = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE lieferantennummer = :liefnr AND lieferantennummer != '' AND geloescht = 0 LIMIT 1", ['liefnr' => $eadresse]);
         if($eadresse != ''){
         }else{
           $error .= 'Adressef'."\n";
@@ -4589,7 +4601,7 @@ class Artikel extends GenArtikel {
       }
 
       if($eartikelid > 0 && $eartikelid != ''){
-        $eartikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE id = '$eartikelid' LIMIT 1");
+        $eartikelid = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$eartikelid]);
         if($eartikelid != ''){
         }else{
           $error .= 'Bitte gültigen Artikel wählen'."\n";
@@ -4600,7 +4612,7 @@ class Artikel extends GenArtikel {
 
 
       if($epreis_anfrage_vom != '' && $epreis_anfrage_vom != '0000-00-00' && $epreis_anfrage_vom != '00.00.0000'){
-        $epreis_anfrage_vom = date('Y-m-d',strtotime($epreis_anfrage_vom)); 
+        $epreis_anfrage_vom = date('Y-m-d',strtotime($epreis_anfrage_vom));
       }else{
         $epreis_anfrage_vom = '0000-00-00';
       }
@@ -4638,31 +4650,15 @@ class Artikel extends GenArtikel {
 
 
       if($error == ''){
+        $ekParams = ['eadresse' => (int)$eadresse, 'epreis' => $epreis, 'ewaehrung' => $ewaehrung, 'eab_menge' => $eab_menge, 'evpe' => $evpe, 'epreis_anfrage_vom' => $epreis_anfrage_vom, 'egueltig_bis' => $egueltig_bis, 'elieferzeit_standard' => $elieferzeit_standard, 'elieferzeit_standard_einheit' => $elieferzeit_standard_einheit, 'elieferzeit_aktuell' => $elieferzeit_aktuell, 'elieferzeit_aktuell_einheit' => $elieferzeit_aktuell_einheit, 'elager_lieferant' => $elager_lieferant, 'edatum_lagerlieferant' => $edatum_lagerlieferant, 'ebestellnummer' => $ebestellnummer, 'ebezeichnunglieferant' => $ebezeichnunglieferant, 'esicherheitslager' => $esicherheitslager, 'ebemerkung' => $ebemerkung, 'estandard' => $estandard, 'erahmenvertrag' => $erahmenvertrag, 'erahmenvertrag_von' => $erahmenvertrag_von, 'erahmenvertrag_bis' => $erahmenvertrag_bis, 'erahmenvertrag_menge' => $erahmenvertrag_menge, 'enichtberechnet' => $enichtberechnet];
         if($eid > 0){
-          $this->app->DB->Update("UPDATE einkaufspreise SET adresse = '$eadresse', preis = '$epreis', waehrung = '$ewaehrung', 
-                          ab_menge = '$eab_menge', vpe = '$evpe', preis_anfrage_vom = '$epreis_anfrage_vom', gueltig_bis = '$egueltig_bis', 
-                          lieferzeit_standard = '$elieferzeit_standard', lieferzeit_standard_einheit = '$elieferzeit_standard_einheit',
-                          lieferzeit_aktuell = '$elieferzeit_aktuell', lieferzeit_aktuell_einheit = '$elieferzeit_aktuell_einheit', 
-                          lager_lieferant = '$elager_lieferant', datum_lagerlieferant = '$edatum_lagerlieferant', 
-                          bestellnummer = '$ebestellnummer', bezeichnunglieferant = '$ebezeichnunglieferant', 
-                          sicherheitslager = '$esicherheitslager', bemerkung = '$ebemerkung', logdatei = NOW(), standard = '$estandard', 
-                          geloescht = 0, firma = 1, apichange = 0, rahmenvertrag = '$erahmenvertrag', rahmenvertrag_von = '$erahmenvertrag_von', 
-                          rahmenvertrag_bis = '$erahmenvertrag_bis', rahmenvertrag_menge = '$erahmenvertrag_menge', 
-                          nichtberechnet = '$enichtberechnet' 
-                          WHERE id = '$eid'");
+          $this->app->DatabaseService->update("UPDATE einkaufspreise SET adresse = :eadresse, preis = :epreis, waehrung = :ewaehrung, ab_menge = :eab_menge, vpe = :evpe, preis_anfrage_vom = :epreis_anfrage_vom, gueltig_bis = :egueltig_bis, lieferzeit_standard = :elieferzeit_standard, lieferzeit_standard_einheit = :elieferzeit_standard_einheit, lieferzeit_aktuell = :elieferzeit_aktuell, lieferzeit_aktuell_einheit = :elieferzeit_aktuell_einheit, lager_lieferant = :elager_lieferant, datum_lagerlieferant = :edatum_lagerlieferant, bestellnummer = :ebestellnummer, bezeichnunglieferant = :ebezeichnunglieferant, sicherheitslager = :esicherheitslager, bemerkung = :ebemerkung, logdatei = NOW(), standard = :estandard, geloescht = 0, firma = 1, apichange = 0, rahmenvertrag = :erahmenvertrag, rahmenvertrag_von = :erahmenvertrag_von, rahmenvertrag_bis = :erahmenvertrag_bis, rahmenvertrag_menge = :erahmenvertrag_menge, nichtberechnet = :enichtberechnet WHERE id = :eid",
+            array_merge($ekParams, ['eid' => (int)$eid]));
           echo json_encode(array('status'=>1));
           $this->app->ExitXentral();
         }
-        $this->app->DB->Insert("INSERT INTO einkaufspreise (artikel, adresse, preis, waehrung, ab_menge, vpe, preis_anfrage_vom, 
-                            gueltig_bis, lieferzeit_standard, lieferzeit_standard_einheit, lieferzeit_aktuell, lieferzeit_aktuell_einheit, 
-                            lager_lieferant, datum_lagerlieferant, bestellnummer, bezeichnunglieferant, sicherheitslager, 
-                            bemerkung, logdatei, standard, geloescht, firma, apichange, rahmenvertrag, rahmenvertrag_von, 
-                            rahmenvertrag_bis, rahmenvertrag_menge, nichtberechnet) 
-                            VALUES ('$eartikelid', '$eadresse', '$epreis', '$ewaehrung', '$eab_menge', '$evpe', '$epreis_anfrage_vom', 
-                            '$egueltig_bis', '$elieferzeit_standard', '$elieferzeit_standard_einheit', '$elieferzeit_aktuell', 
-                            '$elieferzeit_aktuell_einheit', '$elager_lieferant', '$edatum_lagerlieferant', '$ebestellnummer', 
-                            '$ebezeichnunglieferant', '$esicherheitslager', '$ebemerkung', NOW(), '$estandard', 0, 1, 0, 
-                            '$erahmenvertrag', '$erahmenvertrag_von', '$erahmenvertrag_bis', '$erahmenvertrag_menge', '$enichtberechnet')");
+        $this->app->DatabaseService->insert("INSERT INTO einkaufspreise (artikel, adresse, preis, waehrung, ab_menge, vpe, preis_anfrage_vom, gueltig_bis, lieferzeit_standard, lieferzeit_standard_einheit, lieferzeit_aktuell, lieferzeit_aktuell_einheit, lager_lieferant, datum_lagerlieferant, bestellnummer, bezeichnunglieferant, sicherheitslager, bemerkung, logdatei, standard, geloescht, firma, apichange, rahmenvertrag, rahmenvertrag_von, rahmenvertrag_bis, rahmenvertrag_menge, nichtberechnet) VALUES (:eartikelid, :eadresse, :epreis, :ewaehrung, :eab_menge, :evpe, :epreis_anfrage_vom, :egueltig_bis, :elieferzeit_standard, :elieferzeit_standard_einheit, :elieferzeit_aktuell, :elieferzeit_aktuell_einheit, :elager_lieferant, :edatum_lagerlieferant, :ebestellnummer, :ebezeichnunglieferant, :esicherheitslager, :ebemerkung, NOW(), :estandard, 0, 1, 0, :erahmenvertrag, :erahmenvertrag_von, :erahmenvertrag_bis, :erahmenvertrag_menge, :enichtberechnet)",
+          array_merge($ekParams, ['eartikelid' => (int)$eartikelid]));
         echo json_encode(array('status'=>1));
         $this->app->ExitXentral();
       }
@@ -4670,7 +4666,7 @@ class Artikel extends GenArtikel {
       $this->app->ExitXentral();
     }
 
-    $stueckliste = $this->app->DB->Select("SELECT stueckliste FROM artikel WHERE id='$id' LIMIT 1");
+    $stueckliste = $this->app->DatabaseService->selectValue("SELECT stueckliste FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if($stueckliste < 1)
     {
@@ -4680,7 +4676,7 @@ class Artikel extends GenArtikel {
       $this->app->Tpl->Set('TABELLE',$nicht_vorhanden);
     }
 
-    $check = $this->app->DB->Select("SELECT id FROM stueckliste WHERE stuecklistevonartikel='$id' AND art='bt' LIMIT 1");
+    $check = $this->app->DatabaseService->selectValue("SELECT id FROM stueckliste WHERE stuecklistevonartikel = :id AND art='bt' LIMIT 1", ['id' => (int)$id]);
 
     // neues arbeitspaket
     $widget = new WidgetEinkaufspreise($this->app,'TAB2');
@@ -4708,11 +4704,11 @@ class Artikel extends GenArtikel {
 
 	if (empty($kursusd)) {
 		$kursusd = 0;
-	}	
+	}
 	if (empty($kurschf)) {
 		$kurschf = 0;
-	}	
-          
+	}
+
       $this->app->Tpl->Set('TAB5KALKULATION','<div class="info">Dies ist nur ein grober Richtpreis aus dem kleinsten und größten Einkaufspreis.</div>');
 
       $kalkulationstabelle = "<table class='mkTable'>";
@@ -4727,14 +4723,14 @@ class Artikel extends GenArtikel {
       $kalkulationstabelle .= "<td><b>Kalkulierter EK</b></td>";
       $kalkulationstabelle .= "</tr>";
 
-	$sql_query = "SELECT a.id as artikelid, a.name_de as artikelname, a.nummer, trim(s.menge)+0 as menge, 
+	$sql_query = "SELECT a.id as artikelid, a.name_de as artikelname, a.nummer, trim(s.menge)+0 as menge,
           (SELECT l2.name FROM einkaufspreise e LEFT JOIN adresse l2 ON l2.id=e.adresse WHERE e.artikel=a.id AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1 ORDER by e.preis ASC LIMIT 1) as lieferant,
       (SELECT e.bestellnummer FROM einkaufspreise e WHERE e.artikel=a.id AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1 ORDER by e.preis ASC LIMIT 1) as bestellnummer,
 
       ".$this->app->erp->FormatPreis("if(a.stueckliste,
-      
+
       (SELECT SUM(
-                    (SELECT MIN(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e 
+                    (SELECT MIN(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e
                                                    LEFT JOIN (
               SELECT max(kurs) as kurs, waehrung_von, waehrung_nach FROM waehrung_umrechnung WHERE  (isnull(gueltig_bis) OR gueltig_bis >= now() OR gueltig_bis = '0000-00-00') AND (waehrung_von LIKE 'EUR' OR waehrung_nach LIKE 'EUR') GROUP BY waehrung_von,waehrung_nach
               ) wt ON (wt.waehrung_nach <> 'EUR' AND wt.waehrung_nach = e.waehrung) OR (wt.waehrung_von <> 'EUR' AND wt.waehrung_von = e.waehrung)
@@ -4743,40 +4739,40 @@ class Artikel extends GenArtikel {
                       FROM stueckliste s2
                       WHERE s2.stuecklistevonartikel=s.artikel),
 
-      (SELECT MIN(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e 
+      (SELECT MIN(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e
                                                      LEFT JOIN (
               SELECT max(kurs) as kurs, waehrung_von, waehrung_nach FROM waehrung_umrechnung WHERE  (isnull(gueltig_bis) OR gueltig_bis >= now() OR gueltig_bis = '0000-00-00') AND (waehrung_von LIKE 'EUR' OR waehrung_nach LIKE 'EUR') GROUP BY waehrung_von,waehrung_nach
               ) wt ON (wt.waehrung_nach <> 'EUR' AND wt.waehrung_nach = e.waehrung) OR (wt.waehrung_von <> 'EUR' AND wt.waehrung_von = e.waehrung)
                       WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1 ))*s.menge",4)."
-      
+
        as 'ekmin',
-      
-      
+
+
       ".$this->app->erp->FormatPreis("if(a.stueckliste,
-      
+
       (SELECT SUM(
-            (SELECT MAX(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e 
-            
+            (SELECT MAX(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e
+
                                            LEFT JOIN (
               SELECT max(kurs) as kurs, waehrung_von, waehrung_nach FROM waehrung_umrechnung WHERE  (isnull(gueltig_bis) OR gueltig_bis >= now() OR gueltig_bis = '0000-00-00') AND (waehrung_von LIKE 'EUR' OR waehrung_nach LIKE 'EUR') GROUP BY waehrung_von,waehrung_nach
               ) wt ON (wt.waehrung_nach <> 'EUR' AND wt.waehrung_nach = e.waehrung) OR (wt.waehrung_von <> 'EUR' AND wt.waehrung_von = e.waehrung)
             WHERE e.artikel=s2.artikel AND (e.objekt='Standard' OR e.objekt='')
               AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1) * s2.menge)
               FROM stueckliste s2
-              WHERE s2.stuecklistevonartikel=s.artikel),(SELECT MAX(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e 
+              WHERE s2.stuecklistevonartikel=s.artikel),(SELECT MAX(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e
                                              LEFT JOIN (
               SELECT max(kurs) as kurs, waehrung_von, waehrung_nach FROM waehrung_umrechnung WHERE  (isnull(gueltig_bis) OR gueltig_bis >= now() OR gueltig_bis = '0000-00-00') AND (waehrung_von LIKE 'EUR' OR waehrung_nach LIKE 'EUR') GROUP BY waehrung_von,waehrung_nach
               ) wt ON (wt.waehrung_nach <> 'EUR' AND wt.waehrung_nach = e.waehrung) OR (wt.waehrung_von <> 'EUR' AND wt.waehrung_von = e.waehrung)
-              
+
               WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1 ))*s.menge",4)."
 
         as 'ekmax'
 
 
           FROM stueckliste s
-          LEFT JOIN artikel a ON a.id=s.artikel 
+          LEFT JOIN artikel a ON a.id=s.artikel
           LEFT JOIN adresse l ON l.id=a.adresse
-          WHERE s.stuecklistevonartikel='$id' ORDER by s.sort";
+          WHERE s.stuecklistevonartikel='".(int)$id."' ORDER by s.sort";
 
       $artikelkalkulation = $this->app->DB->SelectArr($sql_query);
 
@@ -4828,8 +4824,7 @@ class Artikel extends GenArtikel {
 //        $this->app->Tpl->Add('TAB5KALKULATION',"<div class=\"info\">St&uuml;cklisten Grundpreis bei Menge 1: <b>$preis EUR - $preis_max EUR (Anzahl Positionen $pos / Teile $teile)</b></div>");
       $this->app->Tpl->Parse('TAB1','rahmen70.tpl');
 
-      $sql = "SELECT s.artikel, SUM(s.menge) FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel='$id' GROUP by a.id";
-      $array_artikel = $this->app->DB->SelectArr($sql);
+      $array_artikel = $this->app->DatabaseService->select("SELECT s.artikel, SUM(s.menge) FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel=:id GROUP by a.id", ['id' => (int)$id]);
 
       $array_mindestmengen = array();
       $runden = true;
@@ -4839,12 +4834,12 @@ class Artikel extends GenArtikel {
         $menge = $array_artikel[$i_stk]['menge'];
 
         // gehe einkaufspreis fuer einkaufspreis durch
-        $einkaufspreise = $this->app->DB->SelectArr("SELECT ab_menge FROM einkaufspreise WHERE artikel='$artikel' AND 
-            (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate()) AND geloescht!=1 AND ab_menge >='$menge' ORDER by ab_menge");
+        $einkaufspreise = $this->app->DatabaseService->select("SELECT ab_menge FROM einkaufspreise WHERE artikel = :artikel AND (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate()) AND geloescht!=1 AND ab_menge >= :menge ORDER by ab_menge",
+          ['artikel' => (int)$artikel, 'menge' => (float)$menge]);
 
           // liste mit artikel wo e keinen 1er Preis gibt
-          $check_ek_eins = $this->app->DB->Select("SELECT id FROM einkaufspreise WHERE artikel='$artikel' AND           
-              (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate()) AND geloescht!=1 AND ab_menge =1 LIMIT 1");
+          $check_ek_eins = $this->app->DatabaseService->selectValue("SELECT id FROM einkaufspreise WHERE artikel = :artikel AND (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate()) AND geloescht!=1 AND ab_menge = 1 LIMIT 1",
+            ['artikel' => (int)$artikel]);
 
         if($check_ek_eins <=0) {
           $artikel_ohne_ek_eins[]=$artikel;
@@ -4874,22 +4869,12 @@ class Artikel extends GenArtikel {
       $teile_tpl ='';
       $carray_mindestmengen = isset($array_mindestmengen)?count($array_mindestmengen):0;
       for($j_am=0;$j_am<$carray_mindestmengen;$j_am++) {
-        $sql = "SELECT SUM( 
-          (SELECT e.preis FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') 
-           AND e.ab_menge <= ".$array_mindestmengen[$j_am]." AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1 ORDER by preis ASC LIMIT 1)*s.menge)
-           FROM stueckliste s
-           LEFT JOIN artikel a ON a.id=s.artikel 
-           WHERE s.stuecklistevonartikel='$id'";
+        $abMenge = (float)$array_mindestmengen[$j_am];
+        $preis = $this->app->DatabaseService->selectValue("SELECT SUM((SELECT e.preis FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND e.ab_menge <= :abMenge AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1 ORDER by preis ASC LIMIT 1)*s.menge) FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id",
+          ['abMenge' => $abMenge, 'id' => (int)$id]);
 
-        $preis = $this->app->DB->Select($sql);
-
-        $sql = "SELECT s.artikel
-          FROM stueckliste s
-          LEFT JOIN artikel a ON a.id=s.artikel 
-          WHERE s.stuecklistevonartikel='$id' AND (SELECT e.preis FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') 
-              AND e.ab_menge <= ".$array_mindestmengen[$j_am]." AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1 ORDER by preis ASC LIMIT 1) IS NULL GROUP by s.artikel ORDER by s.artikel";
-
-        $fehlende_preise = $this->app->DB->SelectArr($sql);
+        $fehlende_preise = $this->app->DatabaseService->select("SELECT s.artikel FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id AND (SELECT e.preis FROM einkaufspreise e WHERE e.artikel=s.artikel AND (e.objekt='Standard' OR e.objekt='') AND e.ab_menge <= :abMenge AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1 ORDER by preis ASC LIMIT 1) IS NULL GROUP by s.artikel ORDER by s.artikel",
+          ['id' => (int)$id, 'abMenge' => $abMenge]);
 
         $tpl .= "<td class=\"gentable\">".$array_mindestmengen[$j_am].'</td>';
 
@@ -4908,20 +4893,21 @@ class Artikel extends GenArtikel {
 
         $cfehlende_preise = $fehlende_preise?count($fehlende_preise):0;
         for($jj=0;$jj<$cfehlende_preise;$jj++) {
-          $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='".$fehlende_preise[$jj]['artikel']."' LIMIT 1");
+          $fpArtikel = (int)$fehlende_preise[$jj]['artikel'];
+          $nummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :fpArtikel LIMIT 1", ['fpArtikel' => $fpArtikel]);
 
-          $menge = $this->app->DB->Select("SELECT SUM(s.menge) FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel                 
-            WHERE s.stuecklistevonartikel='$id' AND s.artikel='".$fehlende_preise[$jj]['artikel']."'");
-
-          //TODO VK
-          $preis_min = $this->app->DB->Select("SELECT MIN(preis) FROM einkaufspreise WHERE artikel='".$fehlende_preise[$jj]['artikel']."' AND geloescht!=1 
-              AND (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate()) ")*$menge;
+          $menge = $this->app->DatabaseService->selectValue("SELECT SUM(s.menge) FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel WHERE s.stuecklistevonartikel = :id AND s.artikel = :fpArtikel",
+            ['id' => (int)$id, 'fpArtikel' => $fpArtikel]);
 
           //TODO VK
-          $preis_max = $this->app->DB->Select("SELECT MAX(preis) FROM einkaufspreise WHERE artikel='".$fehlende_preise[$jj]['artikel']."' AND geloescht!=1 
-              AND (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate()) ")*$menge;
+          $preis_min = $this->app->DatabaseService->selectValue("SELECT MIN(preis) FROM einkaufspreise WHERE artikel = :fpArtikel AND geloescht!=1 AND (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate())",
+            ['fpArtikel' => $fpArtikel])*$menge;
 
-          $fehlende_artikel_links .="<a style=\"font-weight:normal;font-size:6pt;\" href=\"index.php?module=artikel&action=einkauf&id=".$fehlende_preise[$jj]['artikel']."\" 
+          //TODO VK
+          $preis_max = $this->app->DatabaseService->selectValue("SELECT MAX(preis) FROM einkaufspreise WHERE artikel = :fpArtikel AND geloescht!=1 AND (gueltig_bis='0000-00-00' OR gueltig_bis >= curdate())",
+            ['fpArtikel' => $fpArtikel])*$menge;
+
+          $fehlende_artikel_links .="<a style=\"font-weight:normal;font-size:6pt;\" href=\"index.php?module=artikel&action=einkauf&id=".$fehlende_preise[$jj]['artikel']."\"
             target=\"_blink\">$nummer</a><br>";
             //target=\"_blink\">$nummer/$preis_min/$preis_max</a><br>";
 
@@ -4959,7 +4945,7 @@ class Artikel extends GenArtikel {
           } else {
             $color='#fff';
           }
-          $artikel_arr = $this->app->DB->SelectArr("SELECT id,name_de, nummer FROM artikel WHERE id='".$artikel_ohne_ek_eins[$j_am]."' LIMIT 1");
+          $artikel_arr = $this->app->DatabaseService->select("SELECT id,name_de, nummer FROM artikel WHERE id = :aid LIMIT 1", ['aid' => (int)$artikel_ohne_ek_eins[$j_am]]);
           $this->app->Tpl->Add('TAB5',"<tr style=\"background-color:$color;\"><td>".$artikel_arr[0]['nummer']."</td><td>".$artikel_arr[0]['name_de']."</td><td><a href=\"index.php?module=artikel&action=einkauf&id=".$artikel_arr[0]['id']."\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\"></a></td></tr>");
         }
         $this->app->Tpl->Add('TAB5','</table>');
@@ -4976,11 +4962,11 @@ class Artikel extends GenArtikel {
     // easy table mit arbeitspaketen YUI als template
     $this->app->YUI->TableSearch('TAB7','einkaufspreise', 'show','','',basename(__FILE__), __CLASS__);
 
-    $adresse = $this->app->DB->Select("SELECT adresse FROM artikel WHERE id='$id' LIMIT 1");
-    $hauptlieferant = $this->app->DB->Select("SELECT name FROM adresse WHERE id='$adresse' LIMIT 1");
+    $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $hauptlieferant = $this->app->DatabaseService->selectValue("SELECT name FROM adresse WHERE id = :adresseId LIMIT 1", ['adresseId' => (int)$adresse]);
     /*$min_preis = $this->app->DB->Select("SELECT FORMAT(MIN(preis),2) FROM verkaufspreise WHERE artikel='$id' AND (gueltig_bis='0000-00-00'
           OR gueltig_bis >= curdate()) AND (gueltig_ab='0000-00-00' OR gueltig_ab <= curdate()) AND geloescht!=1 LIMIT 1");
-    $max_preis = $this->app->DB->Select("SELECT FORMAT(MAX(preis),2) FROM verkaufspreise WHERE artikel='$id' AND (gueltig_bis='0000-00-00' 
+    $max_preis = $this->app->DB->Select("SELECT FORMAT(MAX(preis),2) FROM verkaufspreise WHERE artikel='$id' AND (gueltig_bis='0000-00-00'
           OR gueltig_bis >= curdate()) AND (gueltig_ab='0000-00-00' OR gueltig_ab <= curdate()) AND geloescht!=1 LIMIT 1");*/
 
     $this->app->Tpl->Add('TAB1',"<div class=\"info\">Der Hauptlieferant ist <b>$hauptlieferant</b></div>");
@@ -5002,17 +4988,17 @@ class Artikel extends GenArtikel {
     $kursusd = (float)$this->app->erp->GetWaehrungUmrechnungskurs('EUR','USD');
     $kurschf = (float)$this->app->erp->GetWaehrungUmrechnungskurs('EUR','CHF');
     $sql = "
-        SELECT 
+        SELECT
           SUM(if(a.stueckliste,
-            (SELECT SUM(  
-            (SELECT MIN(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e 
+            (SELECT SUM(
+            (SELECT MIN(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e
               LEFT JOIN (
               SELECT max(kurs) as kurs, waehrung_von, waehrung_nach FROM waehrung_umrechnung WHERE  (isnull(gueltig_bis) OR gueltig_bis >= now() OR gueltig_bis = '0000-00-00') AND (waehrung_von LIKE 'EUR' OR waehrung_nach LIKE 'EUR') GROUP BY waehrung_von,waehrung_nach
               ) wt ON (wt.waehrung_nach <> 'EUR' AND wt.waehrung_nach = e.waehrung) OR (wt.waehrung_von <> 'EUR' AND wt.waehrung_von = e.waehrung)
             WHERE e.artikel=s2.artikel AND (e.objekt='Standard' OR e.objekt='')
               AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1) * s2.menge)
               FROM stueckliste s2
-              WHERE s2.stuecklistevonartikel=s.artikel),(SELECT MIN(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e 
+              WHERE s2.stuecklistevonartikel=s.artikel),(SELECT MIN(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e
                                                            LEFT JOIN (
               SELECT max(kurs) as kurs, waehrung_von, waehrung_nach FROM waehrung_umrechnung WHERE  (isnull(gueltig_bis) OR gueltig_bis >= now() OR gueltig_bis = '0000-00-00') AND (waehrung_von LIKE 'EUR' OR waehrung_nach LIKE 'EUR') GROUP BY waehrung_von,waehrung_nach
               ) wt ON (wt.waehrung_nach <> 'EUR' AND wt.waehrung_nach = e.waehrung) OR (wt.waehrung_von <> 'EUR' AND wt.waehrung_von = e.waehrung)
@@ -5020,9 +5006,9 @@ class Artikel extends GenArtikel {
           FROM stueckliste s
           LEFT JOIN artikel a ON a.id=s.artikel
           LEFT JOIN adresse l ON l.id=a.adresse
-          WHERE s.stuecklistevonartikel=$articleId";
+          WHERE s.stuecklistevonartikel=:articleId";
 
-    return (float)$this->app->DB->Select($sql);
+    return (float)$this->app->DatabaseService->selectValue($sql, ['articleId' => (int)$articleId]);
   }
 
   /**
@@ -5035,17 +5021,17 @@ class Artikel extends GenArtikel {
     $kursusd = (float)$this->app->erp->GetWaehrungUmrechnungskurs('EUR','USD');
     $kurschf = (float)$this->app->erp->GetWaehrungUmrechnungskurs('EUR','CHF');
     $sql = "
-        SELECT 
+        SELECT
           SUM(if(a.stueckliste,
-            (SELECT SUM(  
-            (SELECT MAX(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e 
+            (SELECT SUM(
+            (SELECT MAX(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e
                                                          LEFT JOIN (
               SELECT max(kurs) as kurs, waehrung_von, waehrung_nach FROM waehrung_umrechnung WHERE  (isnull(gueltig_bis) OR gueltig_bis >= now() OR gueltig_bis = '0000-00-00') AND (waehrung_von LIKE 'EUR' OR waehrung_nach LIKE 'EUR') GROUP BY waehrung_von,waehrung_nach
               ) wt ON (wt.waehrung_nach <> 'EUR' AND wt.waehrung_nach = e.waehrung) OR (wt.waehrung_von <> 'EUR' AND wt.waehrung_von = e.waehrung)
             WHERE e.artikel=s2.artikel AND (e.objekt='Standard' OR e.objekt='')
               AND (e.gueltig_bis='0000-00-00' OR e.gueltig_bis >= curdate()) AND e.geloescht!=1) * s2.menge)
               FROM stueckliste s2
-              WHERE s2.stuecklistevonartikel=s.artikel),(SELECT MAX(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e 
+              WHERE s2.stuecklistevonartikel=s.artikel),(SELECT MAX(e.preis/ifnull(wt.kurs,if(e.waehrung = 'CHR',$kurschf,if(e.waehrung = 'USD',$kursusd,1)))) FROM einkaufspreise e
                                                            LEFT JOIN (
               SELECT max(kurs) as kurs, waehrung_von, waehrung_nach FROM waehrung_umrechnung WHERE  (isnull(gueltig_bis) OR gueltig_bis >= now() OR gueltig_bis = '0000-00-00') AND (waehrung_von LIKE 'EUR' OR waehrung_nach LIKE 'EUR') GROUP BY waehrung_von,waehrung_nach
               ) wt ON (wt.waehrung_nach <> 'EUR' AND wt.waehrung_nach = e.waehrung) OR (wt.waehrung_von <> 'EUR' AND wt.waehrung_von = e.waehrung)
@@ -5053,9 +5039,9 @@ class Artikel extends GenArtikel {
           FROM stueckliste s
           LEFT JOIN artikel a ON a.id=s.artikel
           LEFT JOIN adresse l ON l.id=a.adresse
-          WHERE s.stuecklistevonartikel=$articleId";
+          WHERE s.stuecklistevonartikel=:articleId";
 
-    return (float)$this->app->DB->Select($sql);
+    return (float)$this->app->DatabaseService->selectValue($sql, ['articleId' => (int)$articleId]);
   }
 
   public function ArtikelEinkaufEditPopup()
@@ -5072,9 +5058,9 @@ class Artikel extends GenArtikel {
     $this->Preisrechner();
 
 
-    $sid = $this->app->DB->Select("SELECT artikel FROM einkaufspreise WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->ArtikelMenu($sid);
-    $artikel = $this->app->DB->Select("SELECT CONCAT(name_de,' (',nummer,')') FROM artikel WHERE id='$sid' LIMIT 1");
+    $artikel = $this->app->DatabaseService->selectValue("SELECT CONCAT(name_de,' (',nummer,')') FROM artikel WHERE id = :sid LIMIT 1", ['sid' => (int)$sid]);
     $this->app->Tpl->Set('UEBERSCHRIFT','Artikel: '.$artikel);
     $this->app->Tpl->Add('UEBERSCHRIFT',' (Einkauf)');
 
@@ -5095,10 +5081,10 @@ class Artikel extends GenArtikel {
   {
     //   $this->ArtikelMenu();
     $id = $this->app->Secure->GetGET('id');
-    $sid = $this->app->DB->Select("SELECT artikel FROM einkaufspreise WHERE id='$id' LIMIT 1");
-    $tagespreise = $this->app->DB->Select("SELECT tagespreise FROM artikel WHERE id = '$sid' LIMIT 1");
-    if(!$tagespreise || $this->app->DB->Select("SELECT id FROM einkaufspreise WHERE id='$id' AND (gueltig_bis = '0000-00-00' || isnull(gueltig_bis) || gueltig_bis >= date(now()) LIMIT 1")){
-      $this->app->DB->Update("UPDATE einkaufspreise SET gueltig_bis=DATE_SUB(NOW(),INTERVAL 1 DAY), logdatei = now() WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $tagespreise = $this->app->DatabaseService->selectValue("SELECT tagespreise FROM artikel WHERE id = :sid LIMIT 1", ['sid' => (int)$sid]);
+    if(!$tagespreise || $this->app->DatabaseService->selectValue("SELECT id FROM einkaufspreise WHERE id = :id AND (gueltig_bis = '0000-00-00' OR isnull(gueltig_bis) OR gueltig_bis >= date(now())) LIMIT 1", ['id' => (int)$id])){
+      $this->app->DatabaseService->update("UPDATE einkaufspreise SET gueltig_bis=DATE_SUB(NOW(),INTERVAL 1 DAY), logdatei = now() WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     $this->app->erp->ObjektProtokoll('einkaufspreise', $id, 'einkaufspreise_edit', 'Einkaufspreis deaktiviert');
     $this->app->Location->execute('index.php?module=artikel&action=einkauf&id='.$sid);
@@ -5108,10 +5094,10 @@ class Artikel extends GenArtikel {
   {
     //    $this->ArtikelMenu();
     $id = $this->app->Secure->GetGET('id');
-    $sid = $this->app->DB->Select("SELECT artikel FROM einkaufspreise WHERE id='$id' LIMIT 1");
-    $tagespreise = $this->app->DB->Select("SELECT tagespreise FROM artikel WHERE id = '$sid' LIMIT 1");
-    if(!$tagespreise || $this->app->DB->Select("SELECT id FROM einkaufspreise WHERE id='$id' AND (gueltig_bis = '0000-00-00' || isnull(gueltig_bis) || gueltig_bis >= date(now()) LIMIT 1")){
-      $this->app->DB->Update("UPDATE einkaufspreise SET geloescht='1',gueltig_bis=DATE_SUB(NOW(),INTERVAL 1 DAY), logdatei = now() WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $tagespreise = $this->app->DatabaseService->selectValue("SELECT tagespreise FROM artikel WHERE id = :sid LIMIT 1", ['sid' => (int)$sid]);
+    if(!$tagespreise || $this->app->DatabaseService->selectValue("SELECT id FROM einkaufspreise WHERE id = :id AND (gueltig_bis = '0000-00-00' OR isnull(gueltig_bis) OR gueltig_bis >= date(now())) LIMIT 1", ['id' => (int)$id])){
+      $this->app->DatabaseService->update("UPDATE einkaufspreise SET geloescht='1',gueltig_bis=DATE_SUB(NOW(),INTERVAL 1 DAY), logdatei = now() WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     $this->app->erp->ObjektProtokoll('einkaufspreise', $id, 'einkaufspreise_edit', 'Einkaufspreis gel&ouml;scht');
     $this->app->Location->execute('index.php?module=artikel&action=einkauf&id='.$sid);
@@ -5133,10 +5119,10 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     $id = $this->app->DB->MysqlCopyRow('einkaufspreise','id',$id);
-    $this->app->DB->Update("UPDATE einkaufspreise SET geloescht='0', gueltig_bis='0000-00-00', logdatei = now() WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->update("UPDATE einkaufspreise SET geloescht='0', gueltig_bis='0000-00-00', logdatei = now() WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->erp->ObjektProtokoll('einkaufspreise', $id, 'einkaufspreise_create', 'Einkaufspreis kopiert');
     //$this->app->DB->Update("UPDATE einkaufspreise SET geloescht='1' WHERE id='$id' LIMIT 1");
-    $sid = $this->app->DB->Select("SELECT artikel FROM einkaufspreise WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT artikel FROM einkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->Location->execute("index.php?module=artikel&action=einkauf&id=".$sid);
   }
 
@@ -5146,7 +5132,7 @@ class Artikel extends GenArtikel {
     //$id = (int)$this->app->Secure->GetGET('id');
     if($this->app->Secure->GetGET('cmd')==='get'){
       $id = (int)$this->app->Secure->GetPOST('id');
-      $data = $this->app->DB->SelectRow("SELECT id FROM artikel WHERE id = \"$id\" LIMIT 1 ");
+      $data = $this->app->DatabaseService->selectRow("SELECT id FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       echo json_encode($data);
       $this->app->ExitXentral();
     }
@@ -5207,23 +5193,23 @@ class Artikel extends GenArtikel {
     if($cmd === 'getvpe')
     {
       $lpiid = (int)$this->app->Secure->GetPOST('lpiid');
-      $erg = $this->app->DB->SelectRow("SELECT lpv.* FROM lager_platz_inhalt lpi LEFT JOIN lager_platz_vpe lpv ON lpi.lager_platz_vpe = lpv.id WHERE lpi.id = '".$lpiid."' LIMIT 1");
+      $erg = $this->app->DatabaseService->selectRow("SELECT lpv.* FROM lager_platz_inhalt lpi LEFT JOIN lager_platz_vpe lpv ON lpi.lager_platz_vpe = lpv.id WHERE lpi.id = :lpiid LIMIT 1", ['lpiid' => $lpiid]);
       echo json_encode($erg);
       $this->app->ExitXentral();
     }
-    
+
     if($cmd === 'getvpevorlage')
     {
       $vpeid = (int)$this->app->Secure->GetPOST('vpeid');
-      $erg = $this->app->DB->SelectRow("SELECT lpv.* FROM lager_platz_vpe lpv WHERE lpv.id = '".$vpeid."' LIMIT 1");
+      $erg = $this->app->DatabaseService->selectRow("SELECT lpv.* FROM lager_platz_vpe lpv WHERE lpv.id = :vpeid LIMIT 1", ['vpeid' => $vpeid]);
       echo json_encode($erg);
       $this->app->ExitXentral();
     }
-    
+
     if($cmd === 'savevpe')
     {
       $lpiid = (int)$this->app->Secure->GetPOST('lpiid');
-      $artikel = $this->app->DB->Select("SELECT artikel FROM lager_platz_inhalt WHERE id = '".$lpiid."' LIMIT 1");
+      $artikel = $this->app->DatabaseService->selectValue("SELECT artikel FROM lager_platz_inhalt WHERE id = :lpiid LIMIT 1", ['lpiid' => $lpiid]);
       $status = 0;
       if($artikel)
       {
@@ -5238,46 +5224,39 @@ class Artikel extends GenArtikel {
         $breite2 = str_replace(',','.',$this->app->Secure->GetPOST('breite2'));
         $laenge2 = str_replace(',','.',$this->app->Secure->GetPOST('laenge2'));
         $hoehe2 = str_replace(',','.',$this->app->Secure->GetPOST('hoehe2'));
-        $check = str_replace(',','.',$this->app->DB->Select("SELECT id FROM lager_platz_vpe WHERE artikel = '$artikel' AND
-        menge = '$menge' AND menge2 = '$menge2' 
-        AND gewicht = '$gewicht' AND gewicht2 = '$gewicht2'
-        AND breite = '$breite' AND breite2 = '$breite2'
-        AND laenge = '$laenge' AND laenge2 = '$laenge2'
-        AND hoehe = '$hoehe' AND hoehe2 = '$hoehe2'
-        LIMIT 1
-        "));
+        $check = $this->app->DatabaseService->selectValue("SELECT id FROM lager_platz_vpe WHERE artikel = :artikel AND menge = :menge AND menge2 = :menge2 AND gewicht = :gewicht AND gewicht2 = :gewicht2 AND breite = :breite AND breite2 = :breite2 AND laenge = :laenge AND laenge2 = :laenge2 AND hoehe = :hoehe AND hoehe2 = :hoehe2 LIMIT 1",
+          ['artikel' => (int)$artikel, 'menge' => $menge, 'menge2' => $menge2, 'gewicht' => $gewicht, 'gewicht2' => $gewicht2, 'breite' => $breite, 'breite2' => $breite2, 'laenge' => $laenge, 'laenge2' => $laenge2, 'hoehe' => $hoehe, 'hoehe2' => $hoehe2]);
         if(!$check && ($menge > 0 || $gewicht > 0 || $breite > 0 || $laenge > 0 || $hoehe > 0))
         {
-          $this->app->DB->Insert("INSERT INTO lager_platz_vpe (artikel, menge, menge2, gewicht, gewicht2, breite, breite2, laenge, laenge2, hoehe, hoehe2)
-          VALUES ('$artikel','$menge','$menge2','$gewicht','$gewicht2','$breite','$breite2','$laenge','$laenge2','$hoehe','$hoehe2')
-          ");
-          $check = $this->app->DB->GetInsertID();
+          $check = $this->app->DatabaseService->insert("INSERT INTO lager_platz_vpe (artikel, menge, menge2, gewicht, gewicht2, breite, breite2, laenge, laenge2, hoehe, hoehe2) VALUES (:artikel,:menge,:menge2,:gewicht,:gewicht2,:breite,:breite2,:laenge,:laenge2,:hoehe,:hoehe2)",
+            ['artikel' => (int)$artikel, 'menge' => $menge, 'menge2' => $menge2, 'gewicht' => $gewicht, 'gewicht2' => $gewicht2, 'breite' => $breite, 'breite2' => $breite2, 'laenge' => $laenge, 'laenge2' => $laenge2, 'hoehe' => $hoehe, 'hoehe2' => $hoehe2]);
         }
-        $menge = $this->app->DB->Select("SELECT menge FROM lager_platz_inhalt WHERE id = '$lpiid' LIMIT 1");
-        $lager_platz = $this->app->DB->Select("SELECT lager_platz FROM lager_platz_inhalt WHERE id = '$lpiid' LIMIT 1");
-        $lager_platz_vpe = $this->app->DB->Select("SELECT lager_platz_vpe FROM lager_platz_inhalt WHERE id = '".$lpiid."' LIMIT 1");
+        $menge = $this->app->DatabaseService->selectValue("SELECT menge FROM lager_platz_inhalt WHERE id = :lpiid LIMIT 1", ['lpiid' => (int)$lpiid]);
+        $lager_platz = $this->app->DatabaseService->selectValue("SELECT lager_platz FROM lager_platz_inhalt WHERE id = :lpiid LIMIT 1", ['lpiid' => (int)$lpiid]);
+        $lager_platz_vpe = $this->app->DatabaseService->selectValue("SELECT lager_platz_vpe FROM lager_platz_inhalt WHERE id = :lpiid LIMIT 1", ['lpiid' => (int)$lpiid]);
         if(!$lager_platz_vpe)
         {
-          $lagerbewegung = $this->app->DB->SelectArr("SELECT * FROM lager_bewegung WHERE lager_platz = '$lager_platz' AND artikel = '$artikel' AND menge = '$menge' AND eingang = 1 ORDER BY zeit DESC, id DESC LIMIT 1");
+          $lagerbewegung = $this->app->DatabaseService->select("SELECT * FROM lager_bewegung WHERE lager_platz = :lager_platz AND artikel = :artikel AND menge = :menge AND eingang = 1 ORDER BY zeit DESC, id DESC LIMIT 1",
+            ['lager_platz' => (int)$lager_platz, 'artikel' => (int)$artikel, 'menge' => $menge]);
           if($lagerbewegung)
           {
             if(!$lagerbewegung[0]['vpeid'])
             {
-              $this->app->DB->Update("UPDATE lager_bewegung SET vpeid = '$check' WHERE id = '".$lagerbewegung[0]['id']."' LIMIT 1");
+              $this->app->DatabaseService->update("UPDATE lager_bewegung SET vpeid = :check WHERE id = :bid LIMIT 1", ['check' => (int)$check, 'bid' => (int)$lagerbewegung[0]['id']]);
             }
             if(stripos($lagerbewegung[0]['referenz'],'(VPE') === false)
             {
-              $referenz = $this->app->DB->real_escape_string($lagerbewegung[0]['referenz'].$this->app->erp->GetVPEBezeichnung($check));
-              $this->app->DB->Update("UPDATE lager_bewegung SET referenz = '$referenz' WHERE id = '".$lagerbewegung[0]['id']."' LIMIT 1");
+              $referenz = $lagerbewegung[0]['referenz'].$this->app->erp->GetVPEBezeichnung($check);
+              $this->app->DatabaseService->update("UPDATE lager_bewegung SET referenz = :referenz WHERE id = :bid LIMIT 1", ['referenz' => $referenz, 'bid' => (int)$lagerbewegung[0]['id']]);
             }
           }
         }
-        $this->app->DB->Update("UPDATE lager_platz_inhalt SET lager_platz_vpe = '$check' WHERE id = '$lpiid' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE lager_platz_inhalt SET lager_platz_vpe = :check WHERE id = :lpiid LIMIT 1", ['check' => (int)$check, 'lpiid' => (int)$lpiid]);
       }
       echo json_encode(array('status'=>$status));
       $this->app->ExitXentral();
     }
-    
+
     $msg = $this->app->Secure->GetGET('msg');
 
     if(!is_numeric($id))
@@ -5299,29 +5278,27 @@ class Artikel extends GenArtikel {
       $msg = $this->app->erp->base64_url_decode($msg);
       $this->app->Tpl->Set('MESSAGE',$msg);
     }
-    if($this->app->DB->Select("SELECT id FROM lager_platz_inhalt WHERE artikel = '$id' AND lager_platz <> 0 AND NOT isnull(inventur)  LIMIT 1"))
+    if($this->app->DatabaseService->selectValue("SELECT id FROM lager_platz_inhalt WHERE artikel = :id AND lager_platz <> 0 AND NOT isnull(inventur) LIMIT 1", ['id' => (int)$id]))
     {
       $this->app->Tpl->Add('MESSAGE','<div class="warning">F&uuml;r diesen Artikel l&auml;uft aktuell eine Inventur</div>');
     }
-    $check = $this->app->DB->Select("SELECT trim(SUM(menge))+0 FROM zwischenlager WHERE artikel='$id'");
+    $check = $this->app->DatabaseService->selectValue("SELECT trim(SUM(menge))+0 FROM zwischenlager WHERE artikel = :id", ['id' => (int)$id]);
     if($check > 0)
-    { 
+    {
       $this->app->Tpl->Add('MESSAGE','<div class="warning">Hinweis: Es befinden sich noch '.$check.' St&uuml;ck des Artikels im Zwischenlager!</div>');
     }
 
     $this->ArtikelMenu();
     $this->app->Tpl->Add('TAB1','<h2>Lagerbestand</h2>');
 
-    // easy table mit arbeitspaketen YUI als template 
+    // easy table mit arbeitspaketen YUI als template
     $table = new EasyTable($this->app);
-    $bestbeforeBatchSn = $this->app->DB->SelectRow(
-      sprintf(
-      'SELECT mindesthaltbarkeitsdatum, seriennummern, chargenverwaltung 
-        FROM artikel 
-        WHERE id=%d 
+    $bestbeforeBatchSn = $this->app->DatabaseService->selectRow(
+      'SELECT mindesthaltbarkeitsdatum, seriennummern, chargenverwaltung
+        FROM artikel
+        WHERE id=:id
         LIMIT 1',
-        $id
-      )
+      ['id' => (int)$id]
     );
     $mindesthaltbarkeitsdatum = $bestbeforeBatchSn['mindesthaltbarkeitsdatum'];
     $seriennummern = $bestbeforeBatchSn['seriennummern'];
@@ -5329,18 +5306,18 @@ class Artikel extends GenArtikel {
 
     $artikelvpe = 'lpi.vpe';
     $artikeljoin = '';
-    
+
 
     if($seriennummern!=='vomprodukteinlagern' && $chargenverwaltung <1 && $mindesthaltbarkeitsdatum!='1')
     {
       $table->Query("SELECT CONCAT(l.bezeichnung,' / ',lp.kurzbezeichnung, if(lp.sperrlager,' (Kein Auto-Versand Lager)',''),
-        if(lp.poslager,' (POS Lager)',''),if(lp.verbrauchslager,' (Verbrauchslager)',''),if(lp.autolagersperre,' (Nachschublager)',''),if(isnull(lpi.inventur),'',concat(' <i style=\"color:red;\">(Inventurwert: ',(trim(lpi.inventur)+0),')</i>'))) as lager , trim(lpi.menge)+0 as menge, 
+        if(lp.poslager,' (POS Lager)',''),if(lp.verbrauchslager,' (Verbrauchslager)',''),if(lp.autolagersperre,' (Nachschublager)',''),if(isnull(lpi.inventur),'',concat(' <i style=\"color:red;\">(Inventurwert: ',(trim(lpi.inventur)+0),')</i>'))) as lager , trim(lpi.menge)+0 as menge,
         $artikelvpe as VPE,
-        p.abkuerzung as projekt, 
-          lpi.id FROM lager_platz_inhalt lpi 
-          LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id 
-          LEFT JOIN projekt p ON lpi.projekt=p.id  
-          LEFT JOIN lager l ON l.id=lp.lager 
+        p.abkuerzung as projekt,
+          lpi.id FROM lager_platz_inhalt lpi
+          LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id
+          LEFT JOIN projekt p ON lpi.projekt=p.id
+          LEFT JOIN lager l ON l.id=lp.lager
           $artikeljoin
           WHERE lpi.artikel='$id' ");
 
@@ -5358,7 +5335,7 @@ class Artikel extends GenArtikel {
         $submenu .="<a onclick=\"var menge =  prompt('St&uuml;ckzahl der Artikel in dieses Regal umlagern:',%field1%); var grund =  prompt('Grund:','Anpassung im Artikel'); if(parseFloat(menge.replace(',','.')) > 0 && (grund!=null && grund!='')) { window.location.href='index.php?module=artikel&action=umlagern&id=$id&lid=%value%&menge='+menge+'&grund='+grund;}\" href=\"#\"><img src=\"./themes/[THEME]/images/forward.svg\" border=\"0\"></a>";
       }
 
-      if($this->app->erp->RechteVorhanden('artikel','auslagern') || $this->app->erp->RechteVorhanden('artikel','einlagern') 
+      if($this->app->erp->RechteVorhanden('artikel','auslagern') || $this->app->erp->RechteVorhanden('artikel','einlagern')
           || $this->app->erp->RechteVorhanden('artikel','umlagern'))
       {
         $table->DisplayNew('INHALT',$submenu);
@@ -5368,15 +5345,15 @@ class Artikel extends GenArtikel {
       }
     } else {
       $table->Query("SELECT CONCAT(l.bezeichnung,' / ',lp.kurzbezeichnung, if(lp.sperrlager,' (Kein Auto-Versand Lager)',''),
-        if(lp.poslager,' (POS Lager)',''),if(lp.verbrauchslager,' (Verbrauchslager)',''),if(lp.autolagersperre,' (Nachschublager)','')) as lager , trim(lpi.menge)+0 as menge, 
+        if(lp.poslager,' (POS Lager)',''),if(lp.verbrauchslager,' (Verbrauchslager)',''),if(lp.autolagersperre,' (Nachschublager)','')) as lager , trim(lpi.menge)+0 as menge,
         $artikelvpe as VPE,
         p.abkuerzung as projekt
-          FROM lager_platz_inhalt lpi LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id LEFT JOIN projekt p ON lpi.projekt=p.id  
-          LEFT JOIN lager l ON l.id=lp.lager 
+          FROM lager_platz_inhalt lpi LEFT JOIN lager_platz as lp ON lpi.lager_platz=lp.id LEFT JOIN projekt p ON lpi.projekt=p.id
+          LEFT JOIN lager l ON l.id=lp.lager
           $artikeljoin
           WHERE lpi.artikel='$id'");
 
-      if($this->app->erp->RechteVorhanden('artikel','auslagern') || $this->app->erp->RechteVorhanden('artikel','einlagern') 
+      if($this->app->erp->RechteVorhanden('artikel','auslagern') || $this->app->erp->RechteVorhanden('artikel','einlagern')
           || $this->app->erp->RechteVorhanden('artikel','umlagern')){
         $table->DisplayNew('INHALT', 'Projekt', 'noAction');
       }
@@ -5389,9 +5366,9 @@ class Artikel extends GenArtikel {
 
     $this->app->Tpl->Set('INHALT','');
 
-    $mindesthaltbarkeitsdatum = $this->app->DB->Select("SELECT mindesthaltbarkeitsdatum FROM artikel WHERE id='$id' LIMIT 1");  
-    $chargenverwaltung = $this->app->DB->Select("SELECT chargenverwaltung FROM artikel WHERE id='$id' LIMIT 1");        
-    $seriennummern = $this->app->DB->Select("SELECT seriennummern FROM artikel WHERE id='$id' LIMIT 1");        
+    $mindesthaltbarkeitsdatum = $this->app->DatabaseService->selectValue("SELECT mindesthaltbarkeitsdatum FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $chargenverwaltung = $this->app->DatabaseService->selectValue("SELECT chargenverwaltung FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $seriennummern = $this->app->DatabaseService->selectValue("SELECT seriennummern FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if($seriennummern==='vomprodukteinlagern' || $mindesthaltbarkeitsdatum=='1' || $chargenverwaltung=='2')
     {
@@ -5410,7 +5387,7 @@ class Artikel extends GenArtikel {
     {
       $this->app->Tpl->Add('TAB1','<h2>Reservierungen</h2>');
 
-      // easy table mit arbeitspaketen YUI als template 
+      // easy table mit arbeitspaketen YUI als template
       $table = new EasyTable($this->app);
       $table->Query("SELECT adr.name as kunde, trim(r.menge)+0 as menge, if(r.datum='0000-00-00','Kein Datum hinterlegt',r.datum) as bis,
           p.abkuerzung as projekt,r.grund, IF('".$this->app->erp->RechteVorhanden("artikel","ausreservieren")."'=1,CONCAT('<a onclick=\"var menge = prompt(\'Anzahl Artikel aus Reservierung entfernen:\',',(trim(r.menge)+0),'); if(parseFloat(menge.replace(\',\',\'.\')) > 0) window.location.href=\'index.php?module=artikel&action=ausreservieren&id=$id&lid=',r.id,'&menge=\'+menge;\" href=\"#\"><img src=\"./themes/[THEME]/images/delete.svg\" border=\"0\"></a>'),'') AS Aktion FROM lager_reserviert r LEFT JOIN artikel a ON a.id=r.artikel LEFT JOIN projekt p ON
@@ -5427,10 +5404,10 @@ class Artikel extends GenArtikel {
       $this->app->Tpl->Set('INHALT','');
 
       $this->app->Tpl->Add('TAB1','<h2>Offene Auftr&auml;ge</h2>');
-      // easy table mit arbeitspaketen YUI als template 
+      // easy table mit arbeitspaketen YUI als template
       $table = new EasyTable($this->app);
-      $table->Query("SELECT 
-          CONCAT('<a href=\"index.php?module=auftrag&action=edit&id=',a.id,'\">',a.belegnr,'</a>') as belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') as datum, 
+      $table->Query("SELECT
+          CONCAT('<a href=\"index.php?module=auftrag&action=edit&id=',a.id,'\">',a.belegnr,'</a>') as belegnr, DATE_FORMAT(a.datum,'%d.%m.%Y') as datum,
           DATE_FORMAT(a.tatsaechlicheslieferdatum,'%d.%m.%Y') as 'Auslieferung Lager',
           trim(SUM(ap.menge))+0 as menge,
           CONCAT(
@@ -5440,15 +5417,15 @@ class Artikel extends GenArtikel {
             ,'&menge=\'+menge;\" href=\"#\"><img src=\"./themes/[THEME]/images/delete.svg\" border=\"0\"></a>-->
             ') as reserviert,
           a.zahlungsweise, adr.kundenfreigabe as freigabe, CONCAT(a.name, ' ',a.ansprechpartner
-            ,'<br>', a.email) as Kunde, 
+            ,'<br>', a.email) as Kunde,
             if(
             (SELECT b.belegnr FROM auftrag sub_a Left Join auftrag_position ap on ap.auftrag=sub_a.id LEFT JOIN bestellung_position bp on ap.id=bp.auftrag_position_id LEFT JOIN bestellung b on b.id= bp.bestellung where sub_a.id=a.id LIMIT 1)
             ,CONCAT('<a href=\"index.php?module=bestellung&action=edit&id=',
             (SELECT b.id FROM auftrag sub_a Left Join auftrag_position ap on ap.auftrag=sub_a.id LEFT JOIN bestellung_position bp on ap.id=bp.auftrag_position_id LEFT JOIN bestellung b on b.id= bp.bestellung where sub_a.id=a.id LIMIT 1)
             ,'\" target=\"_blank\">',
-            (SELECT b.belegnr FROM auftrag sub_a Left Join auftrag_position ap on ap.auftrag=sub_a.id LEFT JOIN bestellung_position bp on ap.id=bp.auftrag_position_id LEFT JOIN bestellung b on b.id= bp.bestellung where sub_a.id=a.id LIMIT 1),'</a>'),'-') as 'Bestell Nr.',            
-            a.zahlungsweise, 
-          format(ap.geliefert_menge,4) as gelieferte, 
+            (SELECT b.belegnr FROM auftrag sub_a Left Join auftrag_position ap on ap.auftrag=sub_a.id LEFT JOIN bestellung_position bp on ap.id=bp.auftrag_position_id LEFT JOIN bestellung b on b.id= bp.bestellung where sub_a.id=a.id LIMIT 1),'</a>'),'-') as 'Bestell Nr.',
+            a.zahlungsweise,
+          format(ap.geliefert_menge,4) as gelieferte,
           FORMAT(ap.preis,2) as preis  FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag, adresse adr WHERE adr.id=a.adresse AND ap.artikel='$id' AND ap.geliefert_menge < ap.menge AND a.status='freigegeben' GROUP by a.belegnr
           ORDER by a.tatsaechlicheslieferdatum, a.id
           ");
@@ -5470,7 +5447,7 @@ class Artikel extends GenArtikel {
           {
             $table->datasets[$k]['menge'] = round($v['menge']);
             $table->datasets[$k]['gelieferte'] = round($v['gelieferte']);
-          }          
+          }
         }
       }
       //$table->DisplayNew('INHALT',"<a href=\"index.php?module=bestellung&action=edit&id=%value%\">Bestellung</a>");
@@ -5484,14 +5461,14 @@ class Artikel extends GenArtikel {
       $this->app->Tpl->Add('TAB1','<h2>Offene Bestellungen</h2>');
 
       $table = new EasyTable($this->app);
-      $table->Query("SELECT DATE_FORMAT(b.datum,'%d.%m.%Y') as datum, CONCAT('<a href=\"index.php?module=bestellung&action=edit&id=',b.id,'\" target=\"_blank\">',b.belegnr,'</a>') as 'bestellung Nr.', 
+      $table->Query("SELECT DATE_FORMAT(b.datum,'%d.%m.%Y') as datum, CONCAT('<a href=\"index.php?module=bestellung&action=edit&id=',b.id,'\" target=\"_blank\">',b.belegnr,'</a>') as 'bestellung Nr.',
       if(
       (SELECT nummer from auftrag_position where id=bp.auftrag_position_id LIMIT 1),CONCAT('<a href=\"index.php?module=auftrag&action=edit&id=',
       (SELECT auftrag from auftrag_position where id=bp.auftrag_position_id LIMIT 1),'\" target=\"_blank\">',
       (SELECT a.belegnr from auftrag a LEFT JOIN auftrag_position ap on a.id=ap.auftrag where ap.id=bp.auftrag_position_id LIMIT 1),'</a>'),'-') as 'Auftrag Nr.',
-      bp.bestellnummer as Nummer, 
-      
-      bp.menge, bp.geliefert, bp.vpe as VPE, a.lieferantennummer as lieferant, a.name as name, if(bp.lieferdatum!='0000-00-00', DATE_FORMAT(bp.lieferdatum,'%d.%m.%Y'),'sofort') as lieferdatum, 
+      bp.bestellnummer as Nummer,
+
+      bp.menge, bp.geliefert, bp.vpe as VPE, a.lieferantennummer as lieferant, a.name as name, if(bp.lieferdatum!='0000-00-00', DATE_FORMAT(bp.lieferdatum,'%d.%m.%Y'),'sofort') as lieferdatum,
       if(b.bestaetigteslieferdatum!='0000-00-00', DATE_FORMAT(b.bestaetigteslieferdatum,'%d.%m.%Y'),'-') as 'best. Lieferdatum', b.status as status_Bestellung, bp.bestellung
           FROM bestellung_position bp LEFT JOIN bestellung b ON bp.bestellung=b.id LEFT JOIN adresse a ON b.adresse=a.id
           WHERE artikel='$id' AND b.status!='storniert' AND b.status!='abgeschlossen' AND bp.geliefert<bp.menge ORDER by bp.lieferdatum DESC");
@@ -5513,23 +5490,23 @@ class Artikel extends GenArtikel {
           {
             $table->datasets[$k]['menge'] = round($v['menge']);
             $table->datasets[$k]['geliefert'] = round($v['geliefert']);
-          }          
+          }
         }
       }
       $table->DisplayNew('INHALT',"<a href=\"index.php?module=bestellung&action=pdf&id=%value%\"><img src=\"./themes/new/images/pdf.svg\" border=\"0\"></a>&nbsp;      <a href=\"index.php?module=bestellung&action=edit&id=%value%\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" border=\"0\"></a>");
       $this->app->Tpl->Parse('TAB1','rahmen70.tpl');
-    }   
+    }
     $this->app->Tpl->Set('INHALT','');
     $this->app->Tpl->Add('TAB1','<h2>Lagerplatz Bewegungen</h2>');
-    // easy table mit arbeitspaketen YUI als template 
+    // easy table mit arbeitspaketen YUI als template
     $this->app->YUI->TableSearch('TAB1','lagerbewegungartikel', 'show','','',basename(__FILE__), __CLASS__);
 
 
     $this->app->Tpl->Set('INHALT','');
 
     //$this->app->Tpl->Set('TABTEXT',"Lagerbestand");
-    
-    $lager_platz_vpe = $this->app->DB->SelectArr("SELECT * FROM lager_platz_vpe WHERE artikel = '$id'");
+
+    $lager_platz_vpe = $this->app->DatabaseService->select("SELECT * FROM lager_platz_vpe WHERE artikel = :id", ['id' => (int)$id]);
     if($lager_platz_vpe)
     {
       foreach($lager_platz_vpe as $v)
@@ -5550,14 +5527,14 @@ class Artikel extends GenArtikel {
     $id = $this->app->Secure->GetGET('id');
     $sid = $this->app->Secure->GetGET('sid');
     if($sid > 0){
-      $data = $this->app->DB->SelectRow("SELECT * FROM lager_charge WHERE id='$sid' LIMIT 1");
+      $data = $this->app->DatabaseService->selectRow("SELECT * FROM lager_charge WHERE id = :sid LIMIT 1", ['sid' => (int)$sid]);
     }
     if(!empty($data)){
       $lager_platz = $data['lager_platz'];
       $artikel = $data['artikel'];
       $menge = $data['menge'];
-      $this->app->DB->Delete("DELETE FROM lager_charge WHERE id='$sid' LIMIT 1");
-      if($this->app->DB->Select("SELECT mindesthaltbarkeitsdatum FROM artikel WHERE id = '$artikel' LIMIT 1"))
+      $this->app->DatabaseService->delete("DELETE FROM lager_charge WHERE id = :sid LIMIT 1", ['sid' => (int)$sid]);
+      if($this->app->DatabaseService->selectValue("SELECT mindesthaltbarkeitsdatum FROM artikel WHERE id = :artikel LIMIT 1", ['artikel' => (int)$artikel]))
       {
         $this->app->erp->Chargenlog($artikel, $lager_platz, 0, $data['charge'], $menge, 'Charge und/oder MHD gel&ouml;scht', "", 0);
       }else{
@@ -5565,7 +5542,7 @@ class Artikel extends GenArtikel {
       }
     }
     $this->app->Location->execute("index.php?module=artikel&action=chargen&id=$id");
-  }     
+  }
 
 
   public function ArticleBatchAdd()
@@ -5578,12 +5555,7 @@ class Artikel extends GenArtikel {
       $this->app->Location->execute('index.php?module=artikel&action=chargen&id='.$id);
     }
     if($lid > 0){
-      $data = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT * FROM `lager_charge` WHERE `id` = %d LIMIT 1',
-          $lid
-        )
-      );
+      $data = $this->app->DatabaseService->selectRow("SELECT * FROM lager_charge WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
     }
     if(!empty($data)){
       $lager_platz = $data['lager_platz'];
@@ -5603,12 +5575,7 @@ class Artikel extends GenArtikel {
       $this->app->Location->execute('index.php?module=artikel&action=mindesthaltbarkeitsdatum&id='.$lid);
     }
     if($lid > 0){
-      $data = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT * FROM `lager_mindesthaltbarkeitsdatum` WHERE `id` = %d LIMIT 1',
-          $lid
-        )
-      );
+      $data = $this->app->DatabaseService->selectRow("SELECT * FROM lager_mindesthaltbarkeitsdatum WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
     }
     if(!empty($data)){
       $lager_platz = $data['lager_platz'];
@@ -5629,22 +5596,12 @@ class Artikel extends GenArtikel {
       $this->app->Location->execute('index.php?module=artikel&action=chargen&id='.$id);
     }
     if($lid > 0){
-      $data = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT * FROM `lager_charge` WHERE `id` = %d LIMIT 1',
-          $lid
-        )
-      );
+      $data = $this->app->DatabaseService->selectRow("SELECT * FROM lager_charge WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
     }
     if(!empty($data)){
       $lager_platz = $data['lager_platz'];
       $artikel = $data['artikel'];
-      $lpi = round((float)$this->app->DB->Select(
-        sprintf(
-          'SELECT SUM(menge) FROM `lager_platz_inhalt` WHERE `artikel` = %d AND `lager_platz` = %d',
-          $artikel, $lager_platz
-        )
-      ),8);
+      $lpi = round((float)$this->app->DatabaseService->selectValue("SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel = :artikel AND lager_platz = :lager_platz", ['artikel' => (int)$artikel, 'lager_platz' => (int)$lager_platz]),8);
       if($menge > $lpi) {
         $menge = $lpi;
       }
@@ -5664,22 +5621,12 @@ class Artikel extends GenArtikel {
       $this->app->Location->execute('index.php?module=artikel&action=mindesthaltbarkeitsdatum&id='.$id);
     }
     if($lid > 0){
-      $data = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT * FROM `lager_mindesthaltbarkeitsdatum` WHERE `id` = %d LIMIT 1',
-          $lid
-        )
-      );
+      $data = $this->app->DatabaseService->selectRow("SELECT * FROM lager_mindesthaltbarkeitsdatum WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
     }
     if(!empty($data)){
       $lager_platz = $data['lager_platz'];
       $artikel = $data['artikel'];
-      $lpi = round((float)$this->app->DB->Select(
-        sprintf(
-          'SELECT SUM(menge) FROM `lager_platz_inhalt` WHERE `artikel` = %d AND `lager_platz` = %d',
-          $artikel, $lager_platz
-        )
-      ),8);
+      $lpi = round((float)$this->app->DatabaseService->selectValue("SELECT SUM(menge) FROM lager_platz_inhalt WHERE artikel = :artikel AND lager_platz = :lager_platz", ['artikel' => (int)$artikel, 'lager_platz' => (int)$lager_platz]),8);
       if($menge > $lpi) {
         $menge = $lpi;
       }
@@ -5694,7 +5641,8 @@ class Artikel extends GenArtikel {
     $id = $this->app->Secure->GetGET('id');
     $sid = $this->app->Secure->GetGET('sid');
     if($sid > 0){
-      $data = $this->app->DB->SelectArr("SELECT * FROM lager_mindesthaltbarkeitsdatum WHERE id='$sid' LIMIT 1");
+      $data = $this->app->DatabaseService->selectRow("SELECT * FROM lager_mindesthaltbarkeitsdatum WHERE id = :sid LIMIT 1", ['sid' => (int)$sid]);
+      if($data) { $data = [$data]; } // legacy compat: was SelectArr returning array-of-arrays
     }
     if(!empty($data)){
       $lager_platz = $data[0]['lager_platz'];
@@ -5702,22 +5650,18 @@ class Artikel extends GenArtikel {
       $menge = $data[0]['menge'];
       $charge = $data[0]['charge'];
 
-      $this->app->DB->Delete("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE id='$sid' LIMIT 1");
-      if($this->app->DB->Select("SELECT chargenverwaltung FROM artikel WHERE id = '$artikel' LIMIT 1")){
+      $this->app->DatabaseService->delete("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE id = :sid LIMIT 1", ['sid' => (int)$sid]);
+      if($this->app->DatabaseService->selectValue("SELECT chargenverwaltung FROM artikel WHERE id = :artikel LIMIT 1", ['artikel' => (int)$artikel])){
         if(!empty($charge))
         {
-          $charge = $this->app->DB->real_escape_string($charge);
-          $amount_mhdcharge = $this->app->DB->Select("SELECT IFNULL(SUM(lm.menge),0) 
-            FROM lager_mindesthaltbarkeitsdatum as lm 
-            WHERE lm.artikel = $artikel AND lm.charge = '$charge'");
-          $amount_charge = $this->app->DB->Select("SELECT IFNULL(SUM(lc.menge),0)
-            FROM lager_charge AS lc
-            WHERE lc.artikel = $artikel AND lc.charge = '$charge'");
+          $amount_mhdcharge = $this->app->DatabaseService->selectValue("SELECT IFNULL(SUM(lm.menge),0) FROM lager_mindesthaltbarkeitsdatum as lm WHERE lm.artikel = :artikel AND lm.charge = :charge",
+            ['artikel' => (int)$artikel, 'charge' => $charge]);
+          $amount_charge = $this->app->DatabaseService->selectValue("SELECT IFNULL(SUM(lc.menge),0) FROM lager_charge AS lc WHERE lc.artikel = :artikel AND lc.charge = :charge",
+            ['artikel' => (int)$artikel, 'charge' => $charge]);
           if($amount_charge >= $amount_mhdcharge + $menge)
           {
-            $chargen = $this->app->DB->SelectArr("SELECT lc.* 
-            FROM lager_charge AS lc
-            WHERE lc.artikel = $artikel AND lc.charge = '$charge' ORDER BY lc.menge >= $menge DESC");
+            $chargen = $this->app->DatabaseService->select("SELECT lc.* FROM lager_charge AS lc WHERE lc.artikel = :artikel AND lc.charge = :charge ORDER BY lc.menge >= :menge DESC",
+              ['artikel' => (int)$artikel, 'charge' => $charge, 'menge' => $menge]);
             $nochmenge = $menge;
             foreach($chargen as $chargenrow)
             {
@@ -5727,13 +5671,13 @@ class Artikel extends GenArtikel {
               }
               if($nochmenge >= $chargenrow['menge'])
               {
-                $this->app->DB->Delete("DELETE FROM lager_charge WHERE id = ".$chargenrow['id']);
-                if($this->app->DB->affected_rows() > 0){
+                $rows = $this->app->DatabaseService->delete("DELETE FROM lager_charge WHERE id = :cid", ['cid' => (int)$chargenrow['id']]);
+                if($rows > 0){
                   $nochmenge = round($nochmenge - $chargenrow['menge'], 8);
                 }
               }else{
-                $this->app->DB->Update("UPDATE lager_charge SET menge = menge - $nochmenge WHERE id = ".$chargenrow['id']);
-                if($this->app->DB->affected_rows() > 0){
+                $rows = $this->app->DatabaseService->update("UPDATE lager_charge SET menge = menge - :nochmenge WHERE id = :cid", ['nochmenge' => $nochmenge, 'cid' => (int)$chargenrow['id']]);
+                if($rows > 0){
                   $nochmenge = 0;
                   break;
                 }
@@ -5751,7 +5695,7 @@ class Artikel extends GenArtikel {
       }
     }
     $this->app->Location->execute("index.php?module=artikel&action=mindesthaltbarkeitsdatum&id=$id");
-  }     
+  }
 
   public function ArtikelChargen()
   {
@@ -5780,11 +5724,11 @@ class Artikel extends GenArtikel {
       $charge = $this->app->Secure->GetPOST('charge');
       $lagerplatz = $this->app->Secure->GetPOST('lagerplatz');
       $datum = $this->app->String->Convert($datum,'%1.%2.%3','%3-%2-%1');
-      $lagerplatz = $this->app->DB->Select("SELECT id FROM lager_platz WHERE kurzbezeichnung='$lagerplatz' LIMIT 1");
+      $lagerplatz = $this->app->DatabaseService->selectValue("SELECT id FROM lager_platz WHERE kurzbezeichnung = :kbez LIMIT 1", ['kbez' => $lagerplatz]);
 
       if(is_numeric($formmenge) && is_numeric($lagerplatz) && $datum!='--')
       {
-        if($this->app->DB->Select("SELECT chargenverwaltung FROM artikel WHERE id = '$id' LIMIT 1"))
+        if($this->app->DatabaseService->selectValue("SELECT chargenverwaltung FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]))
         {
           if(!empty($charge)){
           $this->app->erp->AddChargeLagerOhneBewegung(
@@ -5800,16 +5744,16 @@ class Artikel extends GenArtikel {
           $this->app->erp->AddMindesthaltbarkeitsdatumLagerOhneBewegung($id,$formmenge,$lagerplatz,$datum,$charge,0 , '', 0, 'MHD angelegt');
         }
       } else {
-        $this->app->Tpl->Add('TAB1','<div class="error">Fehler: Bitte Menge, MHD und Lager angeben!</div>');        
+        $this->app->Tpl->Add('TAB1','<div class="error">Fehler: Bitte Menge, MHD und Lager angeben!</div>');
       }
     }
 
     $menge = $this->app->erp->ArtikelImLager($id);
-    $mhd = $this->app->DB->Select("SELECT SUM(menge) FROM lager_mindesthaltbarkeitsdatum WHERE artikel='$id'");
+    $mhd = $this->app->DatabaseService->selectValue("SELECT SUM(menge) FROM lager_mindesthaltbarkeitsdatum WHERE artikel = :id", ['id' => (int)$id]);
     if($menge > $mhd)
-      $this->app->Tpl->Add('TAB1',"<div class=error>Achtung: Es sind ".($menge-$mhd)." Eintr&auml;ge zu wenig vorhanden!</div>"); 
+      $this->app->Tpl->Add('TAB1',"<div class=error>Achtung: Es sind ".($menge-$mhd)." Eintr&auml;ge zu wenig vorhanden!</div>");
     else if ($menge < $mhd)
-      $this->app->Tpl->Add('TAB1',"<div class=error>Achtung: Es sind ".($mhd-$menge)." Eintr&auml;ge zu viel vorhanden!</div>");  
+      $this->app->Tpl->Add('TAB1',"<div class=error>Achtung: Es sind ".($mhd-$menge)." Eintr&auml;ge zu viel vorhanden!</div>");
 
     $this->app->Tpl->Add('TAB1',"<br><center><form method=\"post\" action=\"\">Menge:&nbsp;<input name=\"menge\" type=\"text\" size=\"5\" value=\"1\">&nbsp;MHD:&nbsp;<input type=text size=\"15\" id=\"datum\" name=\"datum\">&nbsp;Lager:&nbsp;<input type=\"text\" size=\"20\" id=\"lagerplatz\" name=\"lagerplatz\">&nbsp;Charge (optional):&nbsp;<input type=text size=\"15\" id=\"charge\" name=\"charge\">&nbsp;<input type=\"submit\" value=\"fehlende Eintr&auml;ge anlegen\" name=\"anlegen\"></form></center>");
 
@@ -5818,10 +5762,10 @@ class Artikel extends GenArtikel {
     $this->app->Tpl->Parse('PAGE','tabview.tpl');
   }
 
-  
+
   function getStuecklistenbaum(&$sbaum, $parent, $menge = 1)
   {
-    $res = $this->app->DB->SelectArr("SELECT s.id, trim(s.menge)+0 as menge, s.art, s.stuecklistevonartikel, art.nummer, s.artikel, art.name_de FROM stueckliste s INNER JOIN artikel art ON s.artikel = art.id WHERE stuecklistevonartikel = '$parent' ORDER by sort");
+    $res = $this->app->DatabaseService->select("SELECT s.id, trim(s.menge)+0 as menge, s.art, s.stuecklistevonartikel, art.nummer, s.artikel, art.name_de FROM stueckliste s INNER JOIN artikel art ON s.artikel = art.id WHERE stuecklistevonartikel = :parent ORDER by sort", ['parent' => (int)$parent]);
     if(!empty($res))
     {
       foreach($res as $k => $v)
@@ -5956,17 +5900,17 @@ class Artikel extends GenArtikel {
       $this->app->Tpl->Add('TAB1','
       span.img'.$k.' {
         background-image:url('.$icon.') !important;
-        
+
       }
       ');
-      
+
     }
 
     $this->app->YUI->AutoComplete('artikel', 'artikelnummerstueckliste');
     //$this->app->YUI->AutoComplete('alternative', 'artikelnummer');
 
     $this->app->Tpl->Add('TAB1','</style>');
-    
+
     if($this->app->erp->IstStuecklistenZirkel($id))
     {
       $this->app->Tpl->Add('MESSAGE', '<div class="error">{|Diese St&uuml;ckliste enth&auml;lt Artikel die einen Zirkelbezug verursachen!|}</div>');
@@ -5979,7 +5923,7 @@ class Artikel extends GenArtikel {
     if($this->app->Secure->GetGET('cmd') === 'getalternative'){
       $id = (int)$this->app->Secure->GetPOST('id');
 
-      $data = $this->app->DB->SelectRow("SELECT s.id, s.art FROM stueckliste s WHERE s.id = '$id' LIMIT 1");
+      $data = $this->app->DatabaseService->selectRow("SELECT s.id, s.art FROM stueckliste s WHERE s.id = :id LIMIT 1", ['id' => (int)$id]);
 
       if(empty($data)) {
         $data['id'] = 0;
@@ -5993,11 +5937,10 @@ class Artikel extends GenArtikel {
     elseif($this->app->Secure->GetGET('cmd') === 'getalternativedetails') {
       $alternativeId = (int)$this->app->Secure->GetPOST('id');
 
-      $data = $this->app->DB->SelectArr("SELECT id as alternativeId, alternative_article_id, reason FROM parts_list_alternative WHERE id = '$alternativeId'");
+      $data = $this->app->DatabaseService->selectRow("SELECT id as alternativeId, alternative_article_id, reason FROM parts_list_alternative WHERE id = :id", ['id' => $alternativeId]);
 
       if($data){
-        $data = reset($data);
-        $data['article'] = $this->app->DB->Select("SELECT CONCAT(nummer, ' ', name_de) FROM artikel WHERE id = '".$data['alternative_article_id']."' LIMIT 1");
+        $data['article'] = $this->app->DatabaseService->selectValue("SELECT CONCAT(nummer, ' ', name_de) FROM artikel WHERE id = :altArticleId LIMIT 1", ['altArticleId' => (int)$data['alternative_article_id']]);
 
 
       }else{
@@ -6023,7 +5966,7 @@ class Artikel extends GenArtikel {
         $alternativeArticleNo = explode(' ', $alternativeArticle);
         $alternativeArticleNo = $alternativeArticleNo[0];
         if($alternativeArticleNo != ""){
-          $alternativeArticleId = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer = '$alternativeArticleNo' LIMIT 1 ");
+          $alternativeArticleId = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer LIMIT 1", ['nummer' => $alternativeArticleNo]);
           if($alternativeArticleId <= 0 || $alternativeArticleId == ''){
             $error .= "Kein gültiger Artikel\n";
           }
@@ -6034,7 +5977,7 @@ class Artikel extends GenArtikel {
 
       if($alternativeArticleId > 0){
         //NOCH PRUEFEN
-        $alternativeArticleAlreadyExists = $this->app->DB->Select("SELECT id FROM parts_list_alternative WHERE alternative_article_id = '$alternativeArticleId' AND parts_list_id = '$id' AND id != '$alternativeId' LIMIT 1");
+        $alternativeArticleAlreadyExists = $this->app->DatabaseService->selectValue("SELECT id FROM parts_list_alternative WHERE alternative_article_id = :altId AND parts_list_id = :partsId AND id != :altListId LIMIT 1", ['altId' => (int)$alternativeArticleId, 'partsId' => $id, 'altListId' => (int)$alternativeId]);
         if($alternativeArticleAlreadyExists != '' && $alternativeArticleAlreadyExists > 0){
           $error .= "Alternativer Artikel existiert bereits\n";
         }
@@ -6043,9 +5986,9 @@ class Artikel extends GenArtikel {
       if($error == ""){
         if($id){
           if($alternativeId > 0 && $alternativeId != ''){
-            $this->app->DB->Update("UPDATE parts_list_alternative SET alternative_article_id = '$alternativeArticleId', reason = '$reason' WHERE id = '$alternativeId'");
+            $this->app->DatabaseService->update("UPDATE parts_list_alternative SET alternative_article_id = :altId, reason = :reason WHERE id = :id", ['altId' => (int)$alternativeArticleId, 'reason' => $reason, 'id' => (int)$alternativeId]);
           }else{
-            $this->app->DB->Insert("INSERT INTO parts_list_alternative (parts_list_id, alternative_article_id, reason) VALUES ('$id', '$alternativeArticleId', '$reason')");
+            $this->app->DatabaseService->insert("INSERT INTO parts_list_alternative (parts_list_id, alternative_article_id, reason) VALUES (:partsId, :altId, :reason)", ['partsId' => $id, 'altId' => (int)$alternativeArticleId, 'reason' => $reason]);
           }
 
           echo json_encode(array('status'=>1));
@@ -6062,7 +6005,7 @@ class Artikel extends GenArtikel {
     }elseif($this->app->Secure->GetGET('cmd') === 'deletealternative'){
       $id = (int) $this->app->Secure->GetPOST('id');
       if($id)
-        $this->app->DB->Update("DELETE FROM parts_list_alternative WHERE id = '$id'");
+        $this->app->DatabaseService->delete("DELETE FROM parts_list_alternative WHERE id = :id", ['id' => $id]);
 
       echo json_encode(array('status'=>1));
       $this->app->ExitXentral();
@@ -6071,7 +6014,7 @@ class Artikel extends GenArtikel {
       $type = $this->app->Secure->GetPOST('type');
 
       if($type != "" && $id > 0){
-        $this->app->DB->Update("UPDATE stueckliste SET art = '$type' WHERE id = '$id'");
+        $this->app->DatabaseService->update("UPDATE stueckliste SET art = :type WHERE id = :id", ['type' => $type, 'id' => $id]);
         echo json_encode(array('status'=>1));
         $this->app->ExitXentral();
       }else{
@@ -6085,7 +6028,7 @@ class Artikel extends GenArtikel {
     $this->app->YUI->AutoComplete('parts_list_alternative_article', 'artikelnummer');
 
     $this->app->YUI->TableSearch('PARTSLISTALTERNATIVES', 'parts_list_alternatives', 'show', '', '', basename(__FILE__), __CLASS__);
-    
+
     $this->app->Tpl->Parse('PAGE','stuecklisteuebersicht.tpl');
   }
 
@@ -6093,7 +6036,7 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
-      $this->app->DB->Delete("DELETE FROM stueckliste WHERE stuecklistevonartikel='$id'");
+      $this->app->DatabaseService->delete("DELETE FROM stueckliste WHERE stuecklistevonartikel = :id", ['id' => (int)$id]);
     }
     $this->app->Location->execute("index.php?module=artikel&action=stueckliste&id=$id");
   }
@@ -6102,8 +6045,8 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
-      $sql = "SELECT avon.nummer as stuecklistevon, a.nummer, a.name_de, a.hersteller,a.herstellernummer,  REPLACE(TRIM(s.menge)+0,'.',',') as menge, s.referenz, s.place, s.layer, s.wert, s.bauform, s.zachse,s.xpos, s.ypos, s.art, s.rotation FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel LEFT JOIN artikel avon ON avon.id=s.stuecklistevonartikel WHERE s.stuecklistevonartikel='$id'";
-      $result = $this->app->DB->SelectArr($sql);
+      $sql = "SELECT avon.nummer as stuecklistevon, a.nummer, a.name_de, a.hersteller,a.herstellernummer,  REPLACE(TRIM(s.menge)+0,'.',',') as menge, s.referenz, s.place, s.layer, s.wert, s.bauform, s.zachse,s.xpos, s.ypos, s.art, s.rotation FROM stueckliste s LEFT JOIN artikel a ON a.id=s.artikel LEFT JOIN artikel avon ON avon.id=s.stuecklistevonartikel WHERE s.stuecklistevonartikel=:id";
+      $result = $this->app->DatabaseService->select($sql, ['id' => (int)$id]);
     }
     header('Content-type: text/csv');
     header('Content-Disposition: attachment; filename=file.csv');
@@ -6143,12 +6086,12 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     if($id > 0){
-      $sort = $this->app->DB->Select("SELECT sort FROM stueckliste WHERE id='$id' LIMIT 1");
-      $sid = $this->app->DB->Select("SELECT stuecklistevonartikel FROM stueckliste WHERE id='$id' LIMIT 1");
+      $sort = $this->app->DatabaseService->selectValue("SELECT sort FROM stueckliste WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $sid = $this->app->DatabaseService->selectValue("SELECT stuecklistevonartikel FROM stueckliste WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
-      $this->app->DB->Delete("DELETE FROM stueckliste WHERE id='$id'");
+      $this->app->DatabaseService->delete("DELETE FROM stueckliste WHERE id = :id", ['id' => (int)$id]);
 
-      $this->app->DB->Delete("UPDATE stueckliste SET sort=sort-1 WHERE stuecklistevonartikel='$sid' AND sort > $sort LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE stueckliste SET sort=sort-1 WHERE stuecklistevonartikel = :sid AND sort > :sort LIMIT 1", ['sid' => (int)$sid, 'sort' => (int)$sort]);
     }
     $this->app->Location->execute('index.php?module=artikel&action=stueckliste&id='.$sid);
   }
@@ -6168,15 +6111,15 @@ class Artikel extends GenArtikel {
     if($cmd === 'edit'){
 
       $id = (int)$this->app->Secure->GetPOST('id');
-        
-      $data = $this->app->DB->SelectRow("SELECT s.id, s.artikel, trim(s.menge)+0 as menge, s.art, s.referenz, s.layer, s.place, s.wert, s.bauform, s.zachse, s.xpos, s.ypos, s.rotation FROM stueckliste s WHERE s.id = '$id' LIMIT 1");
-      
+
+      $data = $this->app->DatabaseService->selectRow("SELECT s.id, s.artikel, trim(s.menge)+0 as menge, s.art, s.referenz, s.layer, s.place, s.wert, s.bauform, s.zachse, s.xpos, s.ypos, s.rotation FROM stueckliste s WHERE s.id = :id LIMIT 1", ['id' => $id]);
+
         if($data){
           if($data['artikel'] == 0){
             $data['artikel'] = '';
           }else{
             if($data['artikel'] != ''){
-              $artikel = $this->app->DB->SelectRow("SELECT nummer, name_de FROM artikel WHERE id = '".$data['artikel']."' LIMIT 1");
+              $artikel = $this->app->DatabaseService->selectRow("SELECT nummer, name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$data['artikel']]);
               if(!empty($artikel)){
                 $data['artikel'] = $artikel['nummer'].' '.$artikel['name_de'];
               }
@@ -6253,7 +6196,7 @@ class Artikel extends GenArtikel {
       }else{
         $artikelnr = explode(' ', $artikel);
         $artikelnr = $artikelnr[0];
-        $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer = '$artikelnr' LIMIT 1");
+        $artikelid = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer LIMIT 1", ['nummer' => $artikelnr]);
         if($artikelid != ''){
         }else{
           $error .= "Bitte gültigen Artikel ausfüllen\n";
@@ -6274,7 +6217,7 @@ class Artikel extends GenArtikel {
       $errordoppelt = $ergebnis['errordoppelt'];
       $doppeltid = $ergebnis['doppeltid'];
 
-        
+
       /*$alternativeid = 0;
       if($alternative != ''){
         $alternativenr = explode(' ', $alternative);
@@ -6292,17 +6235,23 @@ class Artikel extends GenArtikel {
 
       if($error == "" && $errordoppelt == ''){
         if($cmdsave === 'doppeltsave' && $mengeerhoehen == 1 && $doppeltid > 0){
-          $this->app->DB->Update("UPDATE stueckliste SET menge = menge + '$menge' WHERE id = '$doppeltid'");
+          $this->app->DatabaseService->update("UPDATE stueckliste SET menge = menge + :menge WHERE id = :id", ['menge' => $menge, 'id' => (int)$doppeltid]);
           echo json_encode(array('status'=>1));
           $this->app->ExitXentral();
         }
         if($id){
-          $this->app->DB->Update("UPDATE stueckliste SET artikel = '$artikelid', menge = '$menge', art = '$art', referenz = '$referenz', layer = '$layer', place = '$place', wert = '$wert', bauform = '$bauform', zachse = '$zachse', xpos = '$xpos', ypos = '$ypos', rotation = '$rotation' WHERE id = '$id'");
+          $this->app->DatabaseService->update(
+            "UPDATE stueckliste SET artikel = :artikel, menge = :menge, art = :art, referenz = :referenz, layer = :layer, place = :place, wert = :wert, bauform = :bauform, zachse = :zachse, xpos = :xpos, ypos = :ypos, rotation = :rotation WHERE id = :id",
+            ['artikel' => (int)$artikelid, 'menge' => $menge, 'art' => $art, 'referenz' => $referenz, 'layer' => $layer, 'place' => $place, 'wert' => $wert, 'bauform' => $bauform, 'zachse' => $zachse, 'xpos' => $xpos, 'ypos' => $ypos, 'rotation' => $rotation, 'id' => $id]
+          );
           echo json_encode(array('status'=>1));
           $this->app->ExitXentral();
         }
         if(($cmdsave === 'doppeltsave' && $einfuegen == 1) || $cmdsave === 'save'){
-          $this->app->DB->Insert("INSERT INTO stueckliste (sort, artikel, referenz, place, layer, stuecklistevonartikel, menge, art, firma, wert, bauform, zachse, xpos, ypos, rotation) VALUES (0, '$artikelid', '$referenz', '$place', '$layer', '$startikelid', '$menge', '$art', 1, '$wert', '$bauform', '$zachse', '$xpos', '$ypos', '$rotation')");
+          $this->app->DatabaseService->insert(
+            "INSERT INTO stueckliste (sort, artikel, referenz, place, layer, stuecklistevonartikel, menge, art, firma, wert, bauform, zachse, xpos, ypos, rotation) VALUES (0, :artikel, :referenz, :place, :layer, :startikelid, :menge, :art, 1, :wert, :bauform, :zachse, :xpos, :ypos, :rotation)",
+            ['artikel' => (int)$artikelid, 'referenz' => $referenz, 'place' => $place, 'layer' => $layer, 'startikelid' => $startikelid, 'menge' => $menge, 'art' => $art, 'wert' => $wert, 'bauform' => $bauform, 'zachse' => $zachse, 'xpos' => $xpos, 'ypos' => $ypos, 'rotation' => $rotation]
+          );
           echo json_encode(array('status'=>1));
           $this->app->ExitXentral();
         }
@@ -6322,7 +6271,7 @@ class Artikel extends GenArtikel {
 
   function artinsturec($hauptartikelid, $unterartikelid, $cmdsave, $id){
 
-    $stuecklistenunterartikel = $this->app->DB->SelectArr("SELECT id, artikel FROM stueckliste WHERE stuecklistevonartikel = '$hauptartikelid' AND id != '$id'");
+    $stuecklistenunterartikel = $this->app->DatabaseService->select("SELECT id, artikel FROM stueckliste WHERE stuecklistevonartikel = :hauptartikelid AND id != :id", ['hauptartikelid' => (int)$hauptartikelid, 'id' => (int)$id]);
     foreach($stuecklistenunterartikel as $key=>$value){
       if($unterartikelid == $value['artikel']){
         $ergebnis['doppeltid'] = $value['id'];
@@ -6330,7 +6279,7 @@ class Artikel extends GenArtikel {
         if($cmdsave === 'save'){
           $ergebnis['errordoppelt'] = 'doppelt';
           //$errordoppelt .= "doppelt";
-        }            
+        }
       }else{
         $ergebnis = $this->artinsturec($value['artikel'], $unterartikelid, $cmdsave, $id);
       }
@@ -6349,10 +6298,10 @@ class Artikel extends GenArtikel {
     $summe['jahr']='<b>Summe</b>';
     $summe['monat']='';
 
-    $auftraege = $this->app->DB->SelectArr("SELECT  EXTRACT(YEAR FROM a.datum) as jahr,  EXTRACT(MONTH FROM a.datum) as monat, TRIM(sum(ap.menge))+0 as menge
-        FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag 
-        WHERE ap.artikel='$id'  AND (a.status<>'storniert' and a.status <> 'angelegt')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC"
-        );
+    $auftraege = $this->app->DatabaseService->select("SELECT  EXTRACT(YEAR FROM a.datum) as jahr,  EXTRACT(MONTH FROM a.datum) as monat, TRIM(sum(ap.menge))+0 as menge
+        FROM auftrag_position ap LEFT JOIN auftrag a ON a.id=ap.auftrag
+        WHERE ap.artikel = :id  AND (a.status<>'storniert' and a.status <> 'angelegt')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC",
+        ['id' => (int)$id]);
     $mengeauftraege = 0;
     $mengeanfragen = 0;
     $mengeangebote = 0;
@@ -6371,12 +6320,12 @@ class Artikel extends GenArtikel {
     }
 
 
-    $lieferscheine = $this->app->DB->SelectArr(
+    $lieferscheine = $this->app->DatabaseService->select(
         "SELECT  EXTRACT(YEAR FROM l.datum) as jahr,  EXTRACT(MONTH FROM l.datum) as monat, TRIM(sum(lp.menge))+0 as menge
-        from lieferschein l 
+        from lieferschein l
         LEFT JOIN lieferschein_position lp on l.id = lp.lieferschein
-        WHERE lp.artikel='$id' AND (l.status='versendet')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC"
-        );
+        WHERE lp.artikel = :id AND (l.status='versendet')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC",
+        ['id' => (int)$id]);
 
     if($lieferscheine)
     {
@@ -6389,12 +6338,12 @@ class Artikel extends GenArtikel {
         $summe['lieferschein']='';
     }
 
-    $rechnungen = $this->app->DB->SelectArr(
+    $rechnungen = $this->app->DatabaseService->select(
         "SELECT  EXTRACT(YEAR FROM r.datum) as jahr,  EXTRACT(MONTH FROM r.datum) as monat, TRIM(sum(rp.menge))+0 as menge
-        from rechnung r 
+        from rechnung r
         LEFT JOIN rechnung_position rp on r.id = rp.rechnung
-        WHERE rp.artikel='$id' AND (r.status!='angelegt' AND r.status!='storniert')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC"
-        );
+        WHERE rp.artikel = :id AND (r.status!='angelegt' AND r.status!='storniert')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC",
+        ['id' => (int)$id]);
 
     if($rechnungen)
     {
@@ -6406,10 +6355,10 @@ class Artikel extends GenArtikel {
     } else {
         $summe['rechnungen'] = '';
     }
-    $angebote = $this->app->DB->SelectArr("SELECT  EXTRACT(YEAR FROM a.datum) as jahr,  EXTRACT(MONTH FROM a.datum) as monat, TRIM(sum(ap.menge))+0 as menge
-        FROM angebot_position ap LEFT JOIN angebot a ON a.id=ap.angebot 
-        WHERE ap.artikel='$id'  AND (a.status<>'storniert' and a.status <> 'angelegt')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC"
-        );
+    $angebote = $this->app->DatabaseService->select("SELECT  EXTRACT(YEAR FROM a.datum) as jahr,  EXTRACT(MONTH FROM a.datum) as monat, TRIM(sum(ap.menge))+0 as menge
+        FROM angebot_position ap LEFT JOIN angebot a ON a.id=ap.angebot
+        WHERE ap.artikel = :id  AND (a.status<>'storniert' and a.status <> 'angelegt')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC",
+        ['id' => (int)$id]);
 
     if($angebote)
     {
@@ -6424,10 +6373,10 @@ class Artikel extends GenArtikel {
 
 
 
-    $bestellungen = $this->app->DB->SelectArr("SELECT  EXTRACT(YEAR FROM a.datum) as jahr,  EXTRACT(MONTH FROM a.datum) as monat, TRIM(sum(ap.menge))+0 as menge
-        FROM bestellung_position ap LEFT JOIN bestellung a ON a.id=ap.bestellung 
-        WHERE ap.artikel='$id'  AND (a.status<>'storniert' and a.status <> 'angelegt')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC"
-        );
+    $bestellungen = $this->app->DatabaseService->select("SELECT  EXTRACT(YEAR FROM a.datum) as jahr,  EXTRACT(MONTH FROM a.datum) as monat, TRIM(sum(ap.menge))+0 as menge
+        FROM bestellung_position ap LEFT JOIN bestellung a ON a.id=ap.bestellung
+        WHERE ap.artikel = :id  AND (a.status<>'storniert' and a.status <> 'angelegt')  GROUP By monat,jahr ORDER by jahr DESC, monat DESC",
+        ['id' => (int)$id]);
 
     if($bestellungen)
     {
@@ -6450,7 +6399,7 @@ class Artikel extends GenArtikel {
         krsort($monate);
         foreach($monate as $monat => $row)
         {
-          
+
           $displayrow[0] = $jahr;
           $displayrow[1] = $monat;
           $displayrow[2] = isset($row['auftraege'])?$row['auftraege']:'';
@@ -6481,7 +6430,7 @@ class Artikel extends GenArtikel {
       $this->app->Tpl->Set('NACHPRODUKTION','-->');
     }
     $belege = array('auftrag','rechnung','angebot','bestellung','lieferschein');
-    
+
     foreach($belege as $beleg)
     {
       if(!$this->app->erp->RechteVorhanden($beleg,'list'))
@@ -6508,9 +6457,9 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     $lid = (int)$this->app->Secure->GetGET('lid');
-    $vpeid = $lid?$this->app->DB->Select("SELECT lager_platz_vpe FROM lager_platz_inhalt WHERE id = '$lid' LIMIT 1"):0;
+    $vpeid = $lid?$this->app->DatabaseService->selectValue("SELECT lager_platz_vpe FROM lager_platz_inhalt WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]):0;
     $menge = str_replace(',','.',$this->app->Secure->GetGET('menge'));
-    $seriennummern = $this->app->DB->Select("SELECT seriennummern FROM artikel WHERE id = '$id' LIMIT 1");
+    $seriennummern = $this->app->DatabaseService->selectValue("SELECT seriennummern FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($seriennummern != '' && $seriennummern !== 'keine'){
       $menge = (int)$menge;
     }
@@ -6518,11 +6467,11 @@ class Artikel extends GenArtikel {
 
     // menge holen in lagerregaplplatz
     //$menge_lager = $this->app->DB->Select("SELECT menge FROM lager_platz_inhalt WHERE id='$lid' LIMIT 1");
-    $lager_platz = $this->app->DB->Select("SELECT lager_platz FROM lager_platz_inhalt WHERE id='$lid' LIMIT 1");
-    $projekt = $this->app->DB->Select("SELECT projekt FROM lager_platz_inhalt WHERE id='$lid' LIMIT 1");
+    $lager_platz = $this->app->DatabaseService->selectValue("SELECT lager_platz FROM lager_platz_inhalt WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM lager_platz_inhalt WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
 
     //$neuemenge = $menge_lager + $menge;
-    $name_de = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$id' LIMIT 1");
+    $name_de = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if(is_numeric($menge)  || is_float($menge))
     {
       $this->app->erp->LagerEinlagern($id,$menge,$lager_platz,$projekt,'Manuell Bestand angepasst ('.$grund.')','','','',0,$vpeid);
@@ -6530,7 +6479,7 @@ class Artikel extends GenArtikel {
     } else {
       $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Fehler: Unbekannte oder falsche Menge: $menge bei Artikel \"$name_de\". Die Artikel wurden nicht eingelagert!</div>");
     }
-    
+
 
     $this->app->Location->execute("index.php?module=artikel&action=lager&id=$id&msg=$msg");
   }
@@ -6539,18 +6488,18 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     $lid = (int)$this->app->Secure->GetGET('lid');
-    $vpeid = $this->app->DB->Select("SELECT lager_platz_vpe FROM lager_platz_inhalt WHERE id = '$lid' LIMIT 1");
+    $vpeid = $this->app->DatabaseService->selectValue("SELECT lager_platz_vpe FROM lager_platz_inhalt WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
     $menge = str_replace(',','.',$this->app->Secure->GetGET('menge'));
     $grund = $this->app->Secure->GetGET('grund');
-    $seriennummern = $this->app->DB->Select("SELECT seriennummern FROM artikel WHERE id = '$id' LIMIT 1");
+    $seriennummern = $this->app->DatabaseService->selectValue("SELECT seriennummern FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($seriennummern != '' && $seriennummern !== 'keine'){
       $menge = (int)$menge;
     }
     // menge holen in lagerregaplplatz
-    $lager_platz = $this->app->DB->Select("SELECT lager_platz FROM lager_platz_inhalt WHERE id='$lid' LIMIT 1");
+    $lager_platz = $this->app->DatabaseService->selectValue("SELECT lager_platz FROM lager_platz_inhalt WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
     //$projekt = $this->app->DB->Select("SELECT projekt FROM lager_platz_inhalt WHERE id='$lid' LIMIT 1");
     $menge_lager = $this->app->erp->ArtikelImLagerPlatz($id,$lager_platz);
-    
+
     if($menge_lager > 0)
     {
       if($menge > $menge_lager)
@@ -6575,9 +6524,9 @@ class Artikel extends GenArtikel {
   {
     $id = $this->app->Secure->GetGET('id');
     $lid = $this->app->Secure->GetGET('lid');
-    $vpeid = $lid?$this->app->DB->Select("SELECT lager_platz_vpe FROM lager_platz_inhalt WHERE id = '$lid' LIMIT 1"):0;
+    $vpeid = $lid?$this->app->DatabaseService->selectValue("SELECT lager_platz_vpe FROM lager_platz_inhalt WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]):0;
     $menge = str_replace(',','.',$this->app->Secure->GetGET('menge'));
-    $seriennummern = $this->app->DB->Select("SELECT seriennummern FROM artikel WHERE id = '$id' LIMIT 1");
+    $seriennummern = $this->app->DatabaseService->selectValue("SELECT seriennummern FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($seriennummern != '' && $seriennummern !== 'keine'){
       $menge = (int)$menge;
     }
@@ -6585,10 +6534,10 @@ class Artikel extends GenArtikel {
 
     // menge holen in lagerregaplplatz
     //$menge_lager = $this->app->DB->Select("SELECT menge FROM lager_platz_inhalt WHERE id='$lid' LIMIT 1");
-    $lager_platz = $this->app->DB->Select("SELECT lager_platz FROM lager_platz_inhalt WHERE id='$lid' LIMIT 1");
-    $projekt = $this->app->DB->Select("SELECT projekt FROM lager_platz_inhalt WHERE id='$lid' LIMIT 1");
-    
-    $name_de = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$id' LIMIT 1");
+    $lager_platz = $this->app->DatabaseService->selectValue("SELECT lager_platz FROM lager_platz_inhalt WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM lager_platz_inhalt WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
+
+    $name_de = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if(is_numeric($menge) || is_float($menge))
     {
@@ -6606,31 +6555,31 @@ class Artikel extends GenArtikel {
     $this->app->Location->execute("index.php?module=artikel&action=lager&id=$id&msg=$msg");
   }
 
-  public function ArtikelAusreservieren()                                                                                                                                                                                   
-  {                                                                                                                                                                   
-    $id = $this->app->Secure->GetGET('id');                                                                                                                           
-    $lid = $this->app->Secure->GetGET('lid');                                                                                                                         
+  public function ArtikelAusreservieren()
+  {
+    $id = $this->app->Secure->GetGET('id');
+    $lid = $this->app->Secure->GetGET('lid');
     $menge = str_replace(',','.',$this->app->Secure->GetGET('menge'));
-    $seriennummern = $this->app->DB->Select("SELECT seriennummern FROM artikel WHERE id = '$id' LIMIT 1");
+    $seriennummern = $this->app->DatabaseService->selectValue("SELECT seriennummern FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($seriennummern != '' && $seriennummern !== 'keine'){
       $menge = (int)$menge;
-    }                                                                                                                                                          
-    // menge holen in lagerregaplplatz                                                                                                                                                                          
-    $menge_lager = $this->app->DB->Select("SELECT menge FROM lager_reserviert WHERE id='$lid' LIMIT 1");                                                                                                      
-    $neuemenge = $menge_lager - $menge;                                                                                                                           
-    //echo "menge_lager = $menge_lager; menge raus = $menge; neuemenge = $neuemenge; lid=$lid";                                                                                                                     
+    }
+    // menge holen in lagerregaplplatz
+    $menge_lager = $this->app->DatabaseService->selectValue("SELECT menge FROM lager_reserviert WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
+    $neuemenge = $menge_lager - $menge;
+    //echo "menge_lager = $menge_lager; menge raus = $menge; neuemenge = $neuemenge; lid=$lid";
     if($menge_lager <= $menge){
-      $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE id='$lid' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM lager_reserviert WHERE id = :lid LIMIT 1", ['lid' => (int)$lid]);
     }
     else{
-      $this->app->DB->Update("UPDATE lager_reserviert SET menge='$neuemenge' WHERE id='$lid' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE lager_reserviert SET menge = :neuemenge WHERE id = :lid LIMIT 1", ['neuemenge' => $neuemenge, 'lid' => (int)$lid]);
     }
     if($menge_lager < $menge) {
       $menge = $menge_lager;
-    }                                                                                                                                                            
+    }
 
-    $name_de = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$id' LIMIT 1");                                                                                                                    
-    $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Die Reservierung \"$name_de\" wurde $menge mal entfernt.</div>");                                                                                                  
+    $name_de = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $msg = $this->app->erp->base64_url_encode("<div class=\"error\">Die Reservierung \"$name_de\" wurde $menge mal entfernt.</div>");
     $this->app->Location->execute("index.php?module=artikel&action=lager&id=$id&msg=$msg");
   }
 
@@ -6651,12 +6600,12 @@ class Artikel extends GenArtikel {
       }
     }
 
-    $anzahl_stueckliste = $this->app->DB->Select("SELECT id FROM stueckliste WHERE artikel='$id'");
+    $anzahl_stueckliste = $this->app->DatabaseService->selectValue("SELECT id FROM stueckliste WHERE artikel = :id LIMIT 1", ['id' => (int)$id]);
     if($anzahl_stueckliste > 0) {
       return ['status'=>false, 'article_in'=>'stueckliste'];
     }
 
-    $abos = $this->app->DB->Select("SELECT COUNT(id) FROM abrechnungsartikel WHERE artikel='$id'");
+    $abos = $this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM abrechnungsartikel WHERE artikel = :id", ['id' => (int)$id]);
     if($abos > 0) {
       return ['status'=>false, 'article_in'=>'abrechnungsartikel'];
     }
@@ -6666,7 +6615,7 @@ class Artikel extends GenArtikel {
 
   public function deleteArticleById($id, $sperrenbeiLager = false)
   {
-    $name_de = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$id' LIMIT 1");
+    $name_de = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     $check_tables = array('anfrage','angebot','auftrag','rechnung','gutschrift','lieferschein','produktion','bestellung','retoure');
     $anzahl = 0;
@@ -6675,20 +6624,20 @@ class Artikel extends GenArtikel {
       $anzahl += (int)$this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM `{$table}_position` WHERE artikel = :artikelId", ['artikelId' => (int)$id]);
     }
 
-    $anzahl_stueckliste = $this->app->DB->Select("SELECT SUM(menge) FROM stueckliste WHERE artikel='$id'");
+    $anzahl_stueckliste = $this->app->DatabaseService->selectValue("SELECT SUM(menge) FROM stueckliste WHERE artikel = :id", ['id' => (int)$id]);
 
-    $abos = $this->app->DB->Select("SELECT COUNT(id) FROM abrechnungsartikel WHERE artikel='$id'");
+    $abos = $this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM abrechnungsartikel WHERE artikel = :id", ['id' => (int)$id]);
 
     $anzahl += (int)$abos;
     $sperren = false;
     if($sperrenbeiLager){
       if(
-        $this->app->DB->Select(sprintf('SELECT id FROM lager_platz_inhalt WHERE artikel = %d', $id))
-        || $this->app->DB->Select(sprintf('SELECT id FROM lager_mindesthaltbarkeitsdatum WHERE artikel = %d', $id))
-        || $this->app->DB->Select(sprintf('SELECT id FROM lager_charge WHERE artikel = %d', $id))
-        || $this->app->DB->Select(sprintf('SELECT id FROM lager_seriennummern WHERE artikel = %d', $id))
-        || $this->app->DB->Select(sprintf('SELECT id FROM mhd_log WHERE artikel = %d', $id))
-        || $this->app->DB->Select(sprintf('SELECT id FROM chargen_log WHERE artikel = %d', $id))
+        $this->app->DatabaseService->selectValue('SELECT id FROM lager_platz_inhalt WHERE artikel = :id LIMIT 1', ['id' => (int)$id])
+        || $this->app->DatabaseService->selectValue('SELECT id FROM lager_mindesthaltbarkeitsdatum WHERE artikel = :id LIMIT 1', ['id' => (int)$id])
+        || $this->app->DatabaseService->selectValue('SELECT id FROM lager_charge WHERE artikel = :id LIMIT 1', ['id' => (int)$id])
+        || $this->app->DatabaseService->selectValue('SELECT id FROM lager_seriennummern WHERE artikel = :id LIMIT 1', ['id' => (int)$id])
+        || $this->app->DatabaseService->selectValue('SELECT id FROM mhd_log WHERE artikel = :id LIMIT 1', ['id' => (int)$id])
+        || $this->app->DatabaseService->selectValue('SELECT id FROM chargen_log WHERE artikel = :id LIMIT 1', ['id' => (int)$id])
       ) {
         $sperren = true;
       }
@@ -6696,31 +6645,27 @@ class Artikel extends GenArtikel {
 
     if($anzahl <=0 && $anzahl_stueckliste <=0) {
       if($sperren) {
-        $this->app->DB->Update("UPDATE artikel SET intern_gesperrt = 1 WHERE id='$id'");
+        $this->app->DatabaseService->update("UPDATE artikel SET intern_gesperrt = 1 WHERE id = :id", ['id' => (int)$id]);
       }
       else{
-        $this->app->DB->Update("UPDATE artikel SET geloescht='1', nummer='DEL' WHERE id='$id'");
+        $this->app->DatabaseService->update("UPDATE artikel SET geloescht = '1', nummer = 'DEL' WHERE id = :id", ['id' => (int)$id]);
         // Lager reseten
-        $this->app->DB->Delete("DELETE FROM lager_platz_inhalt WHERE artikel='$id'");
-        $this->app->DB->Delete("DELETE FROM lager_reserviert WHERE artikel='$id'");
-        $this->app->DB->Delete("DELETE FROM lager_charge WHERE artikel='$id'");
-        $this->app->DB->Delete("DELETE FROM lager_bewegung WHERE artikel='$id'");
-        $this->app->DB->Delete("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE artikel='$id'");
-        $this->app->DB->Delete("DELETE FROM einkaufspreise WHERE artikel='$id'");
-        $this->app->DB->Delete("DELETE FROM verkaufspreise WHERE artikel='$id'");
-        $this->app->DB->Delete("DELETE FROM artikelbaum_artikel WHERE artikel='$id'");
-        $this->app->DB->Delete("DELETE FROM artikel_arbeitsanweisung WHERE artikel='$id'");
-        $this->app->DB->Delete("DELETE FROM eigenschaften WHERE artikel='$id'");
-        $this->app->DB->Delete(
-          sprintf('DELETE FROM shopexport_artikel WHERE artikel = %d', $id)
-        );
-        $this->app->DB->Delete(
-          sprintf('DELETE FROM shopexport_artikeluebertragen WHERE artikel = %d', $id)
-        );
+        $this->app->DatabaseService->delete("DELETE FROM lager_platz_inhalt WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM lager_reserviert WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM lager_charge WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM lager_bewegung WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM lager_mindesthaltbarkeitsdatum WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM einkaufspreise WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM verkaufspreise WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM artikelbaum_artikel WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM artikel_arbeitsanweisung WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM eigenschaften WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM shopexport_artikel WHERE artikel = :id", ['id' => (int)$id]);
+        $this->app->DatabaseService->delete("DELETE FROM shopexport_artikeluebertragen WHERE artikel = :id", ['id' => (int)$id]);
 
         //TODO vielleicht besser machen? mit Hinweis oder so
       }
-      $this->app->DB->Update("UPDATE artikel SET variante=0,variante_von=0 WHERE variante_von='$id' AND variante_von > 0");
+      $this->app->DatabaseService->update("UPDATE artikel SET variante=0,variante_von=0 WHERE variante_von = :id AND variante_von > 0", ['id' => (int)$id]);
 
       $this->app->erp->RunHook('article_delete', 1, $id);
 
@@ -6774,7 +6719,7 @@ class Artikel extends GenArtikel {
       {
         $projekttmp = explode(' ', $projekttmp);
         $projekttmp = reset($projekttmp);
-        $projekttmp = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung = '$projekttmp' LIMIT 1");
+        $projekttmp = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :abk LIMIT 1", ['abk' => $projekttmp]);
       }
       $_artikelart = $this->app->erp->GetArtikelgruppe($projekttmp);
       foreach($_artikelart as $k => $v){
@@ -6802,10 +6747,10 @@ class Artikel extends GenArtikel {
         success: function(data) {
           $(\'select[name="typ"]\').html(data);
         }});
-      
+
     });
     ');
-    
+
     $this->app->Tpl->Set('UEBERSCHRIFT','Artikel (Neu anlegen)');
     $this->app->Tpl->Set('ABBRECHEN',"<input type=\"button\" value=\"Abbrechen\" onclick=\"window.location.href='index.php?module=artikel&action=list';\">");
     //    $this->app->Tpl->Set(KURZUEBERSCHRIFT,"Artikel anlegen");
@@ -6855,7 +6800,7 @@ class Artikel extends GenArtikel {
       }else{
         $ret['error'] = 'Sie haben nicht die Rechte Artikel zu löschen';
       }
-      
+
       echo json_encode($ret);
       $this->app->ExitXentral();
     }
@@ -6871,9 +6816,10 @@ class Artikel extends GenArtikel {
         {
           $this->app->erp->CheckShopTabelle($v);
         }
+        $listeInts = array_map('intval', $liste);
         $shops = $this->app->DB->SelectArr('SELECT s.id,s.bezeichnung FROM artikel_onlineshops AS ao
         INNER JOIN shopexport s ON ao.shop = s.id AND s.aktiv = 1 AND (s.lagerexport = 1 OR s.artikelexport = 1)
-          WHERE ao.aktiv = 1 AND ao.artikel IN ('.implode(', ',$liste).')
+          WHERE ao.aktiv = 1 AND ao.artikel IN ('.implode(', ',$listeInts).')
           GROUP BY s.id, s.bezeichnung
         ');
         if(empty($shops))
@@ -6901,17 +6847,19 @@ class Artikel extends GenArtikel {
           $articlelista[] = (int)$v;
         }
       }
+      $frmshopsInts = array_map('intval', (array)$frmshops);
+      $frmshopsInts = array_filter($frmshopsInts, fn($v) => $v > 0);
       $allready = (int)$this->app->DB->Select('SELECT count(DISTINCT ao.shop,ao.artikel)
       FROM artikel_onlineshops AS ao
             INNER JOIN shopexport s ON ao.shop = s.id AND s.aktiv = 1 AND (s.lagerexport = 1 OR s.artikelexport = 1)
             INNER JOIN shopexport_artikeluebertragen AS sa ON ao.artikel = sa.artikel AND ao.shop = sa.shop
-            WHERE  ao.aktiv = 1 AND ao.artikel IN ('.implode(', ',$articlelista).') AND s.id IN ('.implode(', ',$frmshops).')');
+            WHERE  ao.aktiv = 1 AND ao.artikel IN ('.implode(', ',$articlelista).') AND s.id IN ('.implode(', ',$frmshopsInts).')');
 
       $this->app->DB->Insert('INSERT INTO  `shopexport_artikeluebertragen` (shop, artikel)
           SELECT ao.shop,ao.artikel FROM artikel_onlineshops AS ao
             INNER JOIN shopexport s ON ao.shop = s.id AND s.aktiv = 1 AND (s.lagerexport = 1 OR s.artikelexport = 1)
             LEFT JOIN shopexport_artikeluebertragen AS sa ON ao.artikel = sa.artikel AND ao.shop = sa.shop
-            WHERE ISNULL(sa.id) AND ao.aktiv = 1 AND ao.artikel IN ('.implode(', ',$articlelista).') AND s.id IN ('.implode(', ',$frmshops).')');
+            WHERE ISNULL(sa.id) AND ao.aktiv = 1 AND ao.artikel IN ('.implode(', ',$articlelista).') AND s.id IN ('.implode(', ',$frmshopsInts).')');
       $anz = $this->app->DB->affected_rows();
       $msg = $this->app->erp->base64_url_encode('<div class="info">Es wurden '.($anz > 0?$anz:'keine') .' Artikel zum &Uuml;bertragen &uuml;bergeben'.($allready > 0?' (Es sind bereits '. $allready.' Eintr&auml;ge vorhanden)':'').'.</div>');
       $this->app->Location->execute('index.php?module=artikel&action=list&msg='.$msg);
@@ -6941,7 +6889,7 @@ class Artikel extends GenArtikel {
     if($this->app->erp->Firmendaten('artikel_bilder_uebersicht')=='1')
     {
       $this->app->YUI->TableSearch('TAB1','artikeltabellebilder', 'show','','',basename(__FILE__), __CLASS__);
-      
+
       $this->app->Tpl->Add('JSSCRIPTS',"
       <script>
       var ttimeouthandle = null;
@@ -6950,7 +6898,7 @@ class Artikel extends GenArtikel {
       {
         if(tintervalhandle)clearInterval(tintervalhandle);
         if(ttimeouthandle)clearTimeout(ttimeouthandle);
-        
+
         $('#artikeltabellebilder').find('img.tocheck').first().each(function()
         {
           var el = this;
@@ -6989,7 +6937,7 @@ class Artikel extends GenArtikel {
               }
             });
           }
-          
+
           if(todo && aid > 0)
           {
             $(this).toggleClass('tocheck',false);
@@ -7021,13 +6969,13 @@ class Artikel extends GenArtikel {
                 }
               }
             }).fail( function( jqXHR, textStatus ) {
-              
+
               $(el).toggleClass('tocheck',false);
             });
             ttimeouthandle = setTimeout(function(){donextthumb();},1000);
             return;
           }else{
-            
+
           }
         });
         tintervalhandle = setInterval(function(){donextthumb();},2000);
@@ -7037,8 +6985,8 @@ class Artikel extends GenArtikel {
       });
       </script>
       ");
-      
-      
+
+
     } else {
       $this->app->YUI->TableSearch('TAB1','artikeltabelle', 'show','','',basename(__FILE__), __CLASS__);
     }
@@ -7080,7 +7028,7 @@ class Artikel extends GenArtikel {
         if($where !== 'and (0 ')
         {
           $where .= ')';
-          $artikel = $this->app->DB->SelectArr("select artikel from eigenschaften where hauptkategorie = '".$keys[$lvl]."' and wert = '".$k."' ".$where);
+          $artikel = $this->app->DatabaseService->select("select artikel from eigenschaften where hauptkategorie = :hauptkategorie and wert = :wert ".$where, ['hauptkategorie' => $keys[$lvl], 'wert' => $k]);
           foreach($found as $kf => $el)
           {
             $foundnew[$kf] = false;
@@ -7138,7 +7086,7 @@ class Artikel extends GenArtikel {
 
     if($id)
     {
-      $tmp = $this->app->DB->SelectArr("SELECT * FROM artikel WHERE id='$id' LIMIT 1");
+      $tmp = $this->app->DatabaseService->select("SELECT * FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       if($tmp)
       {
         $nummer = $tmp[0]['nummer'];
@@ -7166,7 +7114,7 @@ class Artikel extends GenArtikel {
         }
 
 
-        $rabatt = $this->app->DB->Select("SELECT rabatt FROM artikel WHERE id='$id' LIMIT 1");
+        $rabatt = $this->app->DatabaseService->selectValue("SELECT rabatt FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
         $this->app->erp->MenuEintrag("index.php?module=artikel&action=artikelfreifelder&id=$id", 'Freifelder');
 
@@ -7220,7 +7168,7 @@ class Artikel extends GenArtikel {
         }
 
 
-        if($this->app->DB->Select("SELECT COUNT(id) FROM stueckliste WHERE artikel='$id' AND stuecklistevonartikel!='$id'") > 0){
+        if($this->app->DatabaseService->selectValue("SELECT COUNT(id) FROM stueckliste WHERE artikel = :id AND stuecklistevonartikel != :id2", ['id' => (int)$id, 'id2' => (int)$id]) > 0){
           $this->app->erp->MenuEintrag("index.php?module=artikel&action=instueckliste&id=$id",'In St&uuml;ckliste');
         }
 
@@ -7273,9 +7221,9 @@ class Artikel extends GenArtikel {
         $sid = (int)$this->app->Secure->GetPOST('sid');
         $arr = null;
         if($sid){
-          $arr = $this->app->DB->SelectRow("SELECT * FROM artikel_onlineshops WHERE id = '$sid' AND artikel = '$id' LIMIT 1");
+          $arr = $this->app->DatabaseService->selectRow("SELECT * FROM artikel_onlineshops WHERE id = :sid AND artikel = :artikel LIMIT 1", ['sid' => (int)$sid, 'artikel' => (int)$id]);
         }
-        
+
         $felder = array(
         'lagerkorrekturwert',
         'pseudolager',
@@ -7292,7 +7240,7 @@ class Artikel extends GenArtikel {
         if($arr)
         {
           $arr['sid'] = $arr['id'];
-          $arr['shop'] = $arr['shop']?($arr['shop'].' '.$this->app->DB->Select("SELECT bezeichnung FROM shopexport WHERE id = '".$arr['shop']."' LIMIT 1")):'';
+          $arr['shop'] = $arr['shop']?($arr['shop'].' '.$this->app->DatabaseService->selectValue("SELECT bezeichnung FROM shopexport WHERE id = :shopId LIMIT 1", ['shopId' => (int)$arr['shop']])):'';
           echo json_encode($arr);
           $this->app->ExitXentral();
         }
@@ -7325,42 +7273,43 @@ class Artikel extends GenArtikel {
         );
         $shop = explode(' ', $this->app->Secure->GetPOST('shop'));
         $shop = (int)reset($shop);
-        if($this->app->DB->Select("SELECT id FROM artikel_onlineshops WHERE aktiv = 1 AND shop = '$shop' AND id <> '$sid' AND artikel = '$id' LIMIT 1"))
+        if($this->app->DatabaseService->selectValue("SELECT id FROM artikel_onlineshops WHERE aktiv = 1 AND shop = :shop AND id <> :sid AND artikel = :artikel LIMIT 1", ['shop' => (int)$shop, 'sid' => (int)$sid, 'artikel' => (int)$id]))
         {
           echo json_encode(array('status'=>0,'Error'=>'Es existiert bereits ein Eintrag mit diesem Shop'));
           $this->app->ExitXentral();
         }
-        if($sid && !$this->app->DB->Select("SELECT id FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid'"))
+        if($sid && !$this->app->DatabaseService->selectValue("SELECT id FROM artikel_onlineshops WHERE artikel = :artikel AND id = :sid LIMIT 1", ['artikel' => (int)$id, 'sid' => (int)$sid]))
         {
           echo json_encode(array('status'=>0,'Error'=>'Der Eintrag wurde nicht gefunden oder passt nicht zum Artikel'));
           $this->app->ExitXentral();
         }
         if(!$sid)
         {
-          $this->app->DB->Insert("INSERT INTO artikel_onlineshops (artikel,autolagerlampe,ausartikel) VALUES ('$id',0,1)");
-          $sid = $this->app->DB->GetInsertID();
+          $sid = $this->app->DatabaseService->insert("INSERT INTO artikel_onlineshops (artikel,autolagerlampe,ausartikel) VALUES (:artikel,0,1)", ['artikel' => (int)$id]);
         }
         if($sid)
         {
-          
-          $this->app->DB->Update("UPDATE artikel_onlineshops SET shop = '$shop' WHERE id = '$sid' LIMIT 1");
-          $inhalt = null;
+          $this->app->DatabaseService->update("UPDATE artikel_onlineshops SET shop = :shop WHERE id = :sid LIMIT 1", ['shop' => (int)$shop, 'sid' => (int)$sid]);
+          $feldParams = ['sid' => (int)$sid];
+          $feldSet = [];
           foreach($felder as $feld)
           {
-            $inhalt[] = " $feld = '".$this->app->Secure->GetPOST($feld)."'";
+            $this->app->DatabaseService->validateIdentifier($feld);
+            $feldSet[] = " `{$feld}` = :{$feld}";
+            $feldParams[$feld] = $this->app->Secure->GetPOST($feld);
           }
-          $this->app->DB->Update('UPDATE artikel_onlineshops SET '.implode(', ', $inhalt)." WHERE id = '$sid' LIMIT 1");
+          $this->app->DatabaseService->update('UPDATE artikel_onlineshops SET '.implode(', ', $feldSet)." WHERE id = :sid LIMIT 1", $feldParams);
           if(!$this->app->DB->error())
           {
-            $shop = $this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
-            if($this->app->DB->Select("SELECT id FROM artikel_onlineshops WHERE artikel = '$id' AND shop = '$shop' AND aktiv = 1 LIMIT 1")){
+            $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM artikel_onlineshops WHERE artikel = :artikel AND id = :sid LIMIT 1", ['artikel' => (int)$id, 'sid' => (int)$sid]);
+            if($this->app->DatabaseService->selectValue("SELECT id FROM artikel_onlineshops WHERE artikel = :artikel AND shop = :shop AND aktiv = 1 LIMIT 1", ['artikel' => (int)$id, 'shop' => (int)$shop])){
               $shop = null;
             }
             if($shop)
             {
-              $this->app->DB->Update("UPDATE artikel SET shop = 0 WHERE id = '$id' AND shop = '$shop' LIMIT 1");
-              $this->app->DB->Update("UPDATE artikel SET shop2 = 0 WHERE id = '$id' AND shop2 = '$shop' LIMIT 1");
-              $this->app->DB->Update("UPDATE artikel SET shop3 = 0 WHERE id = '$id' AND shop3 = '$shop' LIMIT 1");
+              $this->app->DatabaseService->update("UPDATE artikel SET shop = 0 WHERE id = :id AND shop = :shop LIMIT 1", ['id' => (int)$id, 'shop' => (int)$shop]);
+              $this->app->DatabaseService->update("UPDATE artikel SET shop2 = 0 WHERE id = :id AND shop2 = :shop LIMIT 1", ['id' => (int)$id, 'shop' => (int)$shop]);
+              $this->app->DatabaseService->update("UPDATE artikel SET shop3 = 0 WHERE id = :id AND shop3 = :shop LIMIT 1", ['id' => (int)$id, 'shop' => (int)$shop]);
             }
           }
           echo json_encode(array('status'=>1));
@@ -7371,15 +7320,15 @@ class Artikel extends GenArtikel {
       }
       if($cmd === 'deleteonlineshop')
       {
-        $sid = $this->app->Secure->GetPOST("sid");
-        $shop = $this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
+        $sid = (int)$this->app->Secure->GetPOST("sid");
+        $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM artikel_onlineshops WHERE artikel = :artikel AND id = :sid LIMIT 1", ['artikel' => (int)$id, 'sid' => $sid]);
         if($shop)
         {
-          $this->app->DB->Update("UPDATE artikel SET shop = 0 WHERE id = '$id' AND shop = '$shop' LIMIT 1");
-          $this->app->DB->Update("UPDATE artikel SET shop2 = 0 WHERE id = '$id' AND shop2 = '$shop' LIMIT 1");
-          $this->app->DB->Update("UPDATE artikel SET shop3 = 0 WHERE id = '$id' AND shop3 = '$shop' LIMIT 1");
+          $this->app->DatabaseService->update("UPDATE artikel SET shop = 0 WHERE id = :id AND shop = :shop LIMIT 1", ['id' => (int)$id, 'shop' => (int)$shop]);
+          $this->app->DatabaseService->update("UPDATE artikel SET shop2 = 0 WHERE id = :id AND shop2 = :shop LIMIT 1", ['id' => (int)$id, 'shop' => (int)$shop]);
+          $this->app->DatabaseService->update("UPDATE artikel SET shop3 = 0 WHERE id = :id AND shop3 = :shop LIMIT 1", ['id' => (int)$id, 'shop' => (int)$shop]);
         }
-        $this->app->DB->Delete("DELETE FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
+        $this->app->DatabaseService->delete("DELETE FROM artikel_onlineshops WHERE artikel = :artikel AND id = :sid LIMIT 1", ['artikel' => (int)$id, 'sid' => $sid]);
         echo json_encode(array('status'=>1));
         $this->app->ExitXentral();
       }
@@ -7401,7 +7350,7 @@ class Artikel extends GenArtikel {
           }
           if(!empty($wherea))
           {
-            $shops = $this->app->DB->SelectArr("SELECT ao.* FROM artikel_onlineshops ao INNER JOIN shopexport s ON ao.shop = s.id 
+            $shops = $this->app->DB->SelectArr("SELECT ao.* FROM artikel_onlineshops ao INNER JOIN shopexport s ON ao.shop = s.id
             WHERE ao.id IN (".implode(',', $wherea).") AND s.shoptyp = 'intern' AND s.modulename != '' ORDER BY s.shoptyp");
             if(!empty($shops))
             {
@@ -7418,9 +7367,9 @@ class Artikel extends GenArtikel {
           }
         }
         $return = array('html'=>$html);
-        if($firstid > 0 && $artikel = $this->app->DB->Select("SELECT artikel FROM artikel_onlineshops WHERE id = ".$firstid))
+        if($firstid > 0 && $artikel = $this->app->DatabaseService->selectValue("SELECT artikel FROM artikel_onlineshops WHERE id = :firstid LIMIT 1", ['firstid' => $firstid]))
         {
-          $shops = $this->app->DB->SelectArr("SELECT ao.id, s.shoptyp, s.modulename FROM artikel_onlineshops AS ao INNER JOIN shopexport AS s ON ao.shop = s.id  WHERE ao.artikel = $artikel ORDER BY s.modulename");
+          $shops = $this->app->DatabaseService->select("SELECT ao.id, s.shoptyp, s.modulename FROM artikel_onlineshops AS ao INNER JOIN shopexport AS s ON ao.shop = s.id  WHERE ao.artikel = :artikel ORDER BY s.modulename", ['artikel' => (int)$artikel]);
           if(!empty($shops))
           {
             $canimport = 0;
@@ -7463,37 +7412,37 @@ class Artikel extends GenArtikel {
       }
       $this->app->YUI->Autocomplete('onlinshopspopup_shop','shopnameid');
       //$this->app->YUI->HideFormular('onlinshopspopup_ausartikel', array('unchecked'=>'dummy','checked'=>'onlineshopeditdis'));
-      
-      
+
+
       $this->app->Tpl->Set('NEUERONLINESHOPBUTTON','<input type="button" class="btnGreen" value="{|Neuer Eintrag|}" onclick="editonlineshop(0);" />');
       $this->app->erp->CheckShopTabelle($id);
     }
-    
+
     $this->app->YUI->TableSearch('SHOPTABELLE','artikel_onlineshops', 'show','','',basename(__FILE__), __CLASS__);
-    
+
     $shop1export =$this->app->Secure->GetPOST('shop1export');
     $shop2export =$this->app->Secure->GetPOST('shop2export');
     $shop3export =$this->app->Secure->GetPOST('shop3export');
 
     if($this->app->erp->Version()==='stock')
     {
-      $this->app->DB->Update("UPDATE artikel SET lagerartikel=1 WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE artikel SET lagerartikel=1 WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     // 18.05 heute entfernt
     //$this->app->DB->Update("UPDATE artikel SET herkunftsland='".$this->app->erp->Firmendaten('land')."' WHERE id='$id' AND herkunftsland='' LIMIT 1");
 
-    $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id = '$id' LIMIT 1");
+    $nummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if(strpos($nummer, ' ') !== false)
     {
-      $nummer = $this->app->DB->real_escape_string(str_replace(' ','', trim($nummer)));
+      $nummer = str_replace(' ','', trim($nummer));
       if($nummer=='') {
-        $artikelart = $this->app->DB->Select("SELECT projekt,typ FROM artikel WHERE id='$id'");
-        $nummer=$this->app->erp->GetNextArtikelnummer($artikelart[0]['typ'],$this->app->User->GetFirma(),$artikelart[0]['projekt']);
+        $artikelart = $this->app->DatabaseService->selectRow("SELECT projekt,typ FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+        $nummer=$this->app->erp->GetNextArtikelnummer($artikelart['typ'],$this->app->User->GetFirma(),$artikelart['projekt']);
       }
-      $this->app->DB->Update("UPDATE artikel SET nummer = '$nummer' WHERE id = '$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE artikel SET nummer = :nummer WHERE id = :id LIMIT 1", ['nummer' => $nummer, 'id' => (int)$id]);
     }
-    
+
     $this->app->erp->CheckArtikel($id);
 
     if($shop1export!=''){
@@ -7526,9 +7475,9 @@ class Artikel extends GenArtikel {
       $this->app->Location->execute("index.php?module=artikel&action=shopimport&id=$id&shop=3");
       return;
     }
-    
+
     $POST = $this->app->Secure->POST;
-    
+
     if($POST && is_array($POST))
     {
       foreach($POST as $key => $value)
@@ -7571,32 +7520,27 @@ class Artikel extends GenArtikel {
     $this->app->YUI->SaveReally();
     $this->app->erp->LagerArtikelZusammenfassen($id);
 
-    $nummer = $this->app->Secure->GetGET('nummer'); 
+    $nummer = $this->app->Secure->GetGET('nummer');
     if(!is_numeric($id) && $nummer!='')
     {
-      $id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='".$nummer."' LIMIT 1");
+      $id = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer LIMIT 1", ['nummer' => $nummer]);
       $this->app->Location->execute("index.php?module=artikel&action=edit&id=$id");
       return;
     }
 
     $mark = $this->app->Secure->GetPOST('bookmark');
     if($mark!='' && !in_array($id, $_SESSION['bookmarked'])) {
-      $_SESSION['bookmarked'][] = $id; 
+      $_SESSION['bookmarked'][] = $id;
     }
 
-    $articleArr = $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT juststueckliste, lagerartikel,name_de, kurztext_de,anabregs_text 
-        FROM artikel 
-        WHERE id=%d 
-        LIMIT 1",
-        $id
-      )
+    $articleArr = $this->app->DatabaseService->selectRow(
+      "SELECT juststueckliste, lagerartikel,name_de, kurztext_de,anabregs_text FROM artikel WHERE id = :id LIMIT 1",
+      ['id' => (int)$id]
     );
     $juststueckliste = $articleArr['juststueckliste'];
     $lagerartikel = $articleArr['lagerartikel'];
 
-    $shops = $this->app->DB->SelectArr("SELECT * FROM artikel_onlineshops WHERE artikel = '$id' ORDER BY aktiv DESC, shop");
+    $shops = $this->app->DatabaseService->select("SELECT * FROM artikel_onlineshops WHERE artikel = :id ORDER BY aktiv DESC, shop", ['id' => (int)$id]);
     if($shops)
     {
       $exshops = null;
@@ -7609,12 +7553,12 @@ class Artikel extends GenArtikel {
           $this->app->erp->RunHook('artikel_shopbutton',4, $nr, $shop['shop'], $id,$buttontarget);
         }
       }
-      
+
       $this->app->Tpl->Parse('SHOPTABELLE','artikel_onlineshopbuttons.tpl');
-      
+
     }
     $this->app->Tpl->Add('SHOPTABELLE','<span id="shoptabelleafter"></span>');
-    
+
     //$shop= $this->app->DB->Select("SELECT shop FROM artikel WHERE id='$id' LIMIT 1");
 
     $this->app->Tpl->Set('ABBRECHEN',"<input type=\"button\" value=\"Abbrechen\" onclick=\"window.location.href='index.php?module=artikel&action=list';\">");
@@ -7636,9 +7580,9 @@ class Artikel extends GenArtikel {
 
     parent::ArtikelEdit();
 
-    /* anzeige formular */ 
+    /* anzeige formular */
     $this->ArtikelMenu();
-    $artikel = $this->app->DB->Select("SELECT CONCAT(name_de,' (',nummer,')') FROM artikel WHERE id='$id' LIMIT 1");
+    $artikel = $this->app->DatabaseService->selectValue("SELECT CONCAT(name_de,' (',nummer,')') FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->Tpl->Set('UEBERSCHRIFT','Artikel: '.$artikel);
 
     $shop1export = $this->app->User->GetParameter('artikel_shopexport_shop1');
@@ -7651,7 +7595,7 @@ class Artikel extends GenArtikel {
       $this->app->Location->execute("index.php?module=artikel&action=shopexport&id=$id&artikelshopid=".$artikel_shopexport_shop);
       return;
     }
-    
+
     if($shop1export!='')
     {
       $this->app->User->SetParameter('artikel_shopexport_shop1','');
@@ -7671,17 +7615,17 @@ class Artikel extends GenArtikel {
       $this->app->User->SetParameter('artikel_shopexport_shop3','');
       $this->app->Location->execute("index.php?module=artikel&action=shopexport&id=$id&shop=3");
       return;
-    }	
+    }
 
     $this->app->erp->MessageHandlerStandardForm();
 
     /* sperrmeldung */
-    $intern_gesperrt = $this->app->DB->Select("SELECT intern_gesperrt FROM artikel WHERE id='$id' LIMIT 1");
+    $intern_gesperrt = $this->app->DatabaseService->selectValue("SELECT intern_gesperrt FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($intern_gesperrt)
     {
       if($this->app->erp->CheckSamePage())
       {
-        $intern_gesperrtgrund = $this->app->DB->Select("SELECT intern_gesperrtgrund FROM artikel WHERE id='$id' LIMIT 1");
+        $intern_gesperrtgrund = $this->app->DatabaseService->selectValue("SELECT intern_gesperrtgrund FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
         if($intern_gesperrtgrund=='') {
           $intern_gesperrtgrund='Artikel gesperrt';
         }
@@ -7718,21 +7662,21 @@ class Artikel extends GenArtikel {
     {
       $formetikettautodruck = $this->app->Secure->GetPOST('etikettautodruck');
       if($formetikettautodruck) {
-        $this->app->DB->Update("UPDATE artikel SET etikettautodruck='1' WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE artikel SET etikettautodruck='1' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       }
       else {
-        $this->app->DB->Update("UPDATE artikel SET etikettautodruck='0' WHERE id='$id' LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE artikel SET etikettautodruck='0' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       }
       $formautodrucketikett = $this->app->Secure->GetPOST('autodrucketikett');
-      $this->app->DB->Update("UPDATE artikel SET autodrucketikett='$formautodrucketikett' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE artikel SET autodrucketikett = :val WHERE id = :id LIMIT 1", ['val' => $formautodrucketikett, 'id' => (int)$id]);
     }
 
-    $etikettautodruck = $this->app->DB->Select("SELECT etikettautodruck FROM artikel WHERE id='$id' LIMIT 1");
+    $etikettautodruck = $this->app->DatabaseService->selectValue("SELECT etikettautodruck FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($etikettautodruck) {
       $this->app->Tpl->Set('ETIKETTAUTODRUCK','checked');
     }
 
-    $autodrucketikett = $this->app->DB->Select("SELECT autodrucketikett FROM artikel WHERE id='$id' LIMIT 1");
+    $autodrucketikett = $this->app->DatabaseService->selectValue("SELECT autodrucketikett FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $etiketten_tmp = $this->app->DB->SelectArr("SELECT * FROM etiketten WHERE verwendenals='artikel_klein' ORDER by name");
     $autodrucketiketttpl = '<option value="0">-</option>';
     $cetiketten_tmp = $etiketten_tmp?count($etiketten_tmp):0;
@@ -7752,37 +7696,37 @@ class Artikel extends GenArtikel {
       $etiketten='<option>Standard</option>';
     }
 
-    $drucker = $this->app->erp->GetSelectEtikettenDrucker($etikettendrucker); 
+    $drucker = $this->app->erp->GetSelectEtikettenDrucker($etikettendrucker);
 
     $this->app->Tpl->Set('ETIKETTENOPTION',$etiketten);
     $this->app->Tpl->Set('DRUCKEROPTION',$drucker);
     $this->app->YUI->AutoComplete('etikettenartikel', 'artikelnummer');
 
-    $mhdartikel = $this->app->DB->Select("SELECT mindesthaltbarkeitsdatum FROM artikel WHERE id = '$id' LIMIT 1");
+    $mhdartikel = $this->app->DatabaseService->selectValue("SELECT mindesthaltbarkeitsdatum FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($mhdartikel)
     {
       $this->app->Tpl->Add('FORMULAR',"<tr><td>Mindeshaltbarkeitsdatum:</td><td><input type=\"text\" id=\"mhd\" name=\"mhd\" value=\"\"></td></tr>");
       $this->app->YUI->DatePicker('mhd');
       $this->app->YUI->AutoComplete('mhd', 'lagermindesthaltbarkeitsdatum',0,"&artikel=$id");
     }
-    $chargenverwaltung = $this->app->DB->Select("SELECT chargenverwaltung FROM artikel WHERE id = '$id' LIMIT 1");
+    $chargenverwaltung = $this->app->DatabaseService->selectValue("SELECT chargenverwaltung FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($chargenverwaltung)
     {
       $this->app->Tpl->Add('FORMULAR',"<tr><td>Charge:</td><td><input type=\"text\" id=\"charge\" name=\"charge\" value=\"\" size=\"40\"></td></tr>");
       $this->app->YUI->AutoComplete('charge', 'lagercharge',0,"&artikel=$id");
     }
 
-    $seriennummern = $this->app->DB->Select("SELECT seriennummern FROM artikel WHERE id = '$id' LIMIT 1");
+    $seriennummern = $this->app->DatabaseService->selectValue("SELECT seriennummern FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($seriennummern==='eigene' || $seriennummern==='vomprodukt' || $seriennummern==='vomprodukteinlagern')
     {
       $this->app->Tpl->Add('FORMULAR',"<tr><td>Seriennummer:</td><td><input type=\"text\" id=\"seriennummer\" name=\"seriennummer\" value=\"\" size=\"40\"></td></tr>");
       $this->app->YUI->AutoComplete('seriennummer', 'lagerseriennummern',0,"&artikel=$id");
-    }    
+    }
 
     $standardbild = $this->app->erp->GetEtikettenbild($id,true);
 
     if($standardbild==''){
-      $standardbild = $this->app->DB->Select("SELECT datei FROM datei_stichwoerter WHERE subjekt='Shopbild' AND objekt='Artikel' AND parameter='$id' LIMIT 1");
+      $standardbild = $this->app->DatabaseService->selectValue("SELECT datei FROM datei_stichwoerter WHERE subjekt='Shopbild' AND objekt='Artikel' AND parameter = :id LIMIT 1", ['id' => (int)$id]);
     }
 
     if($standardbild > 0){
@@ -7795,14 +7739,14 @@ class Artikel extends GenArtikel {
     if($external=='1')
     {
       $menge = $this->app->Secure->GetGET('menge');
-    }    
+    }
 
 
     if($menge!='' && ($etikettendrucken == 'Drucken' || $external == '1'))
     {
       //$nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$id' LIMIT 1");
       //$projekt = $this->app->DB->Select("SELECT projekt FROM artikel WHERE id='$id' LIMIT 1");
-      $name_de = $this->app->erp->UmlauteEntfernen($this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$id' LIMIT 1"));
+      $name_de = $this->app->erp->UmlauteEntfernen($this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]));
       //$name_de_base64 = $this->app->erp->base64_url_encode($name_de);
 
       if(!is_numeric($etikettenauswahl)) {
@@ -7825,7 +7769,7 @@ class Artikel extends GenArtikel {
     }
 
     if($external=='1')
-    { 
+    {
       $this->app->Location->execute($_SERVER['HTTP_REFERER']);
     }
 
@@ -7834,11 +7778,11 @@ class Artikel extends GenArtikel {
     if($cmd === 'get'){
       $id = (int)$this->app->Secure->GetPOST('id');
 
-      $data = $this->app->DB->SelectRow("SELECT al.id, e.id as label, al.type, al.amount, d.id as printer
-                                         FROM article_label al 
+      $data = $this->app->DatabaseService->selectRow("SELECT al.id, e.id as label, al.type, al.amount, d.id as printer
+                                         FROM article_label al
                                          LEFT JOIN etiketten e ON al.label_id = e.id
                                          LEFT JOIN drucker d ON al.printer_id = d.id
-                                         WHERE al.id = '$id' LIMIT 1");
+                                         WHERE al.id = :id LIMIT 1", ['id' => (int)$id]);
 
       if(empty($data)) {
         $data['id'] = 0;
@@ -7864,7 +7808,7 @@ class Artikel extends GenArtikel {
       if($label == ""){
         $error .= "Bitte ein Etikett auswählen\n";
       }else{
-        $labelId = $this->app->DB->Select("SELECT id FROM etiketten WHERE id = '$label' LIMIT 1");
+        $labelId = $this->app->DatabaseService->selectValue("SELECT id FROM etiketten WHERE id = :label LIMIT 1", ['label' => (int)$label]);
         if($labelId <= 0 || $labelId == ''){
           $error .= "Bitte gültiges Etikett auswählen\n";
         }
@@ -7884,29 +7828,28 @@ class Artikel extends GenArtikel {
       if($printer == ""){
         $error .= "Bitte einen Drucker auswählen"."\n";
       }else{
-        $printerId = $this->app->DB->Select("SELECT id FROM drucker WHERE id = '$printer' LIMIT 1");
+        $printerId = $this->app->DatabaseService->selectValue("SELECT id FROM drucker WHERE id = :printer LIMIT 1", ['printer' => (int)$printer]);
         if($printerId <= 0 || $printerId == ''){
           $error .= "Bitte gültigen Drucker auswählen\n";
         }
       }
 
-      $labelAlreadyExists = $this->app->DB->Select("SELECT id 
-                                                    FROM article_label 
-                                                    WHERE label_id = '$labelId' AND type = '$type' AND article_id = '$articleId' 
-                                                          AND id != '$id' LIMIT 1");
+      $labelAlreadyExists = $this->app->DatabaseService->selectValue("SELECT id FROM article_label WHERE label_id = :labelId AND type = :type AND article_id = :articleId AND id != :id LIMIT 1",
+        ['labelId' => (int)$labelId, 'type' => $type, 'articleId' => (int)$articleId, 'id' => (int)$id]);
       if($labelAlreadyExists != '' && $labelAlreadyExists > 0){
         $error .= "Dieses Label gibt es bereits für diesen Artikel mit dieser Art";
       }
 
       if($error == ""){
         if($id){
-          $this->app->DB->Update("UPDATE article_label SET label_id = '$labelId', type = '$type', amount = '$amount', printer_id = '$printerId' WHERE id = '$id'");
+          $this->app->DatabaseService->update("UPDATE article_label SET label_id = :labelId, type = :type, amount = :amount, printer_id = :printerId WHERE id = :id",
+            ['labelId' => (int)$labelId, 'type' => $type, 'amount' => $amount, 'printerId' => (int)$printerId, 'id' => (int)$id]);
 
           echo json_encode(array('status'=>1));
           $this->app->ExitXentral();
         }else{
-          $this->app->DB->Insert("INSERT INTO article_label (article_id, label_id, type, amount, printer_id) 
-                                  VALUES ('$articleId', '$labelId', '$type', '$amount', '$printerId')");
+          $this->app->DatabaseService->insert("INSERT INTO article_label (article_id, label_id, type, amount, printer_id) VALUES (:articleId, :labelId, :type, :amount, :printerId)",
+            ['articleId' => (int)$articleId, 'labelId' => (int)$labelId, 'type' => $type, 'amount' => $amount, 'printerId' => (int)$printerId]);
 
           echo json_encode(array('status'=>1));
           $this->app->ExitXentral();
@@ -7918,7 +7861,7 @@ class Artikel extends GenArtikel {
     }elseif($cmd == 'delete'){
       $id = (int) $this->app->Secure->GetPOST('id');
       if($id)
-        $this->app->DB->Update("DELETE FROM article_label WHERE id = '$id'");
+        $this->app->DatabaseService->delete("DELETE FROM article_label WHERE id = :id", ['id' => $id]);
 
       echo json_encode(array('status'=>1));
       $this->app->ExitXentral();
@@ -7949,31 +7892,31 @@ class Artikel extends GenArtikel {
     $artikelgruppe = $this->app->Secure->GetPOST('artikelgruppe');
     $ok= $this->app->Secure->GetPOST('ok');
     if($artikelgruppe!='' && $ok=='') {
-      $this->app->DB->Insert("INSERT INTO artikel_artikelgruppe (id,artikel,artikelgruppe) VALUES ('','$id','$artikelgruppe')");
+      $this->app->DatabaseService->insert("INSERT INTO artikel_artikelgruppe (artikel,artikelgruppe) VALUES (:artikel,:artikelgruppe)", ['artikel' => (int)$id, 'artikelgruppe' => (int)$artikelgruppe]);
     }
     //warengruppe geloescht
     $sid= $this->app->Secure->GetGET('sid');
     $cmd= $this->app->Secure->GetGET('cmd');
     if($sid!='' && $cmd==='del') {
-      $this->app->DB->DELETE("DELETE FROM artikel_artikelgruppe WHERE id='$sid' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM artikel_artikelgruppe WHERE id = :sid LIMIT 1", ['sid' => (int)$sid]);
     }
     if($sid!='' && $cmd==='image') {
-      $this->app->DB->DELETE("UPDATE artikel SET standardbild='$sid' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE artikel SET standardbild = :sid WHERE id = :id LIMIT 1", ['sid' => (int)$sid, 'id' => (int)$id]);
     }
 
-    $name = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$id' LIMIT 1");
-    $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$id' LIMIT 1");
+    $name = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $nummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->Tpl->Set('SUBSUBHEADING',"Online-Shop Attribute: $name ($nummer)");
     $this->app->Tpl->Set('AKTIV_TAB1','selected');
 
     //Warengruppen
     $tmp = new EasyTable($this->app);
-    $tmp->Query("SELECT a.bezeichnung, aa.id FROM artikel_artikelgruppe aa LEFT JOIN artikelgruppen a ON a.id=aa.artikelgruppe WHERE artikel='$id'");
+    $tmp->Query("SELECT a.bezeichnung, aa.id FROM artikel_artikelgruppe aa LEFT JOIN artikelgruppen a ON a.id=aa.artikelgruppe WHERE artikel='".(int)$id."'");
     $tmp->DisplayNew('WARENGRUPPEN',"<a href=\"#\" onclick=\"if(!confirm('Wirklich löschen?')) return false; else window.location.href='index.php?module=artikel&cmd=del&action=onlineshop&id=$id&sid=%value%';\"><img src=\"./themes/[THEME]/images/delete.svg\" border=\"0\"></a>");
 
-    $shop = $this->app->DB->Select("SELECT shop FROM artikel WHERE id='$id' LIMIT 1");
+    $shop = $this->app->DatabaseService->selectValue("SELECT shop FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
-    $arr = $this->app->DB->SelectArr("SELECT bezeichnung,id FROM artikelgruppen WHERE shop='$shop'");
+    $arr = $this->app->DatabaseService->select("SELECT bezeichnung,id FROM artikelgruppen WHERE shop = :shop", ['shop' => (int)$shop]);
     $html = '';
     if(!empty($arr)){
       foreach ($arr as $key => $value) {
@@ -7985,16 +7928,16 @@ class Artikel extends GenArtikel {
     $this->app->Tpl->Add('WARENGRUPPEN',"<input type=submit value=\"hinzuf&uuml;gen\"></center>");
 
     // standard bild
-    $standardbild = $this->app->DB->Select("SELECT standardbild FROM artikel WHERE id='$id'");
+    $standardbild = $this->app->DatabaseService->selectValue("SELECT standardbild FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $tmp = new EasyTable($this->app);
-    $tmp->Query("SELECT d.titel, d.id FROM datei d LEFT JOIN datei_stichwoerter s ON d.id=s.datei  
+    $tmp->Query("SELECT d.titel, d.id FROM datei d LEFT JOIN datei_stichwoerter s ON d.id=s.datei
         LEFT JOIN datei_version v ON v.datei=d.id
-        WHERE s.objekt='Artikel' AND s.parameter='$id' AND s.subjekt='Shopbild' AND d.geloescht=0");
+        WHERE s.objekt='Artikel' AND s.parameter='".(int)$id."' AND s.subjekt='Shopbild' AND d.geloescht=0");
 
     $tmp->DisplayNew('HAUPTBILD',
         "<a href=\"#\" onclick=\"if(!confirm('Als Standard definieren?')) return false; else window.location.href='index.php?module=artikel&action=onlineshop&cmd=image&id=$id&sid=%value%';\"><img src=\"./themes/[THEME]/images/ack.png\" border=\"0\"></a>");
 
-    $standardbild_name = $this->app->DB->Select("SELECT titel FROM datei WHERE id='$standardbild'");
+    $standardbild_name = $this->app->DatabaseService->selectValue("SELECT titel FROM datei WHERE id = :sid LIMIT 1", ['sid' => (int)$standardbild]);
     $this->app->Tpl->Add('HAUPTBILD',"<br>Standardbild: <b>$standardbild_name</b>");
 
     $this->app->Tpl->Parse('PAGE','onlineshop.tpl');
@@ -8012,7 +7955,7 @@ class Artikel extends GenArtikel {
 
     $this->app->Tpl->Set('TAB1','
 
-        <table><tr><td>Datei:</td><td><input type="file"></td></tr></table>');        
+        <table><tr><td>Datei:</td><td><input type="file"></td></tr></table>');
     $this->app->Tpl->Parse('PAGE','tabview.tpl');
   }
 
@@ -8028,19 +7971,19 @@ class Artikel extends GenArtikel {
           array('menge'=>2,'nummer'=>13,'bauform'=>5,'wert'=>6,'referenz'=>3),
           ';',$parsetarget);
 
-    } 
+    }
     else if($vorlage==='solidedgest2'){
       $result = $this->StuecklisteImport(
           array('nummer'=>'Artikelnummer','menge'=>'Menge'),
           array('nummer'=>2,'menge'=>5),
           ';',$parsetarget);
-    } 
+    }
     else if($vorlage==='minimal'){
       $result = $this->StuecklisteImport(
           array('nummer'=>'Artikelnummer','menge'=>'Menge'),
           array('nummer'=>1,'menge'=>2),
           ';',$parsetarget);
-    } 
+    }
     else {
       $result = $this->StuecklisteImport(
           array('nummer'=>'Artikelnummer','menge'=>'Menge'),
@@ -8051,19 +7994,18 @@ class Artikel extends GenArtikel {
     if(is_array($result))
     {
       $fehlerhaftes_bauteil = '';
-      $this->app->DB->Delete("DELETE FROM stueckliste WHERE stuecklistevonartikel='$id'");
+      $this->app->DatabaseService->delete("DELETE FROM stueckliste WHERE stuecklistevonartikel = :id", ['id' => (int)$id]);
       foreach($result as $key=>$value)
       {
         $value['menge'] = str_replace(',','.',$value['menge']);
-        $artikelid = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='".$value['nummer']."' AND nummer!='' LIMIT 1");
-        $maxsort = $this->app->DB->Select("SELECT MAX(sort) FROM stueckliste WHERE stuecklistevonartikel='".$id."'") + 1;
-        if($artikelid > 0) 
+        $artikelid = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE nummer = :nummer AND nummer != '' LIMIT 1", ['nummer' => $value['nummer']]);
+        $maxsort = (int)$this->app->DatabaseService->selectValue("SELECT MAX(sort) FROM stueckliste WHERE stuecklistevonartikel = :id", ['id' => (int)$id]) + 1;
+        if($artikelid > 0)
         {
           if(!$this->app->erp->IstStuecklistenZirkel($artikelid, $id))
           {
-            $this->app->DB->Insert("INSERT INTO stueckliste 
-              (id,sort,artikel,menge,wert,bauform,referenz,stuecklistevonartikel,firma) VALUE ('','$maxsort','$artikelid','".$value['menge']."',
-            '".$value['wert']."','".$value['bauform']."','".$value['referenz']."','$id','".$this->app->User->GetFirma()."')");
+            $this->app->DatabaseService->insert("INSERT INTO stueckliste (sort,artikel,menge,wert,bauform,referenz,stuecklistevonartikel,firma) VALUES (:sort,:artikel,:menge,:wert,:bauform,:referenz,:stuecklistevonartikel,:firma)",
+              ['sort' => $maxsort, 'artikel' => (int)$artikelid, 'menge' => $value['menge'], 'wert' => $value['wert'] ?? '', 'bauform' => $value['bauform'] ?? '', 'referenz' => $value['referenz'] ?? '', 'stuecklistevonartikel' => (int)$id, 'firma' => (int)$this->app->User->GetFirma()]);
           }else{
             $fehlerhaftes_bauteil .= 'St&uuml;ckliste enth&auml;lt Artikel die einen Zirkelbezug verursachen!<br>';
           }
@@ -8071,7 +8013,7 @@ class Artikel extends GenArtikel {
           if($value['nummer']!=''){
             $fehlerhaftes_bauteil .= 'Unbekannte Artikelnummer: ' . $value['nummer'] . ' (Menge ' . $value['menge'] . ' St&uuml;ck)<br>';
           }
-        } 
+        }
       }
       if($fehlerhaftes_bauteil!='')
       {
@@ -8107,7 +8049,7 @@ class Artikel extends GenArtikel {
       {
         $findcols .= '<div class="error">Zeile wählen</div>';
         $importerror++;
-      } 
+      }
       $ccols = !empty($cols)?count($cols):0;
       $colcounter = 0;
       for($i=0;$i<$ccols;$i++)
@@ -8129,7 +8071,7 @@ class Artikel extends GenArtikel {
             $rowcounter++;
             $num = (!empty($data)?count($data):0);
 
-            if($rowcounter > $row_post){        
+            if($rowcounter > $row_post){
               for ($c=0; $c < $num; $c++) {
                 // wenn schluessel vorhanden feld uebernehmen
                 if($cols[$c]!='')
@@ -8137,7 +8079,7 @@ class Artikel extends GenArtikel {
               }
               $result[] = $singlerow;
               $singlerow=array();
-            }   
+            }
           }
         }
         fclose($handle);
@@ -8185,13 +8127,13 @@ overflow: scroll;
 width: 1050px;
 border: 1px solid #000;
 padding: 10px;\">
-           <table border=0 cellpadding=0 cellspacing=0>";       
+           <table border=0 cellpadding=0 cellspacing=0>";
            while (($data = fgetcsv($handle, 1000, $this->app->User->GetParameter("artikel_stueckliste_delimiter"))) !== FALSE) {
              $num = (!empty($data)?count($data):0);
 
              if($row==1)
              {
-               $findcols .= "<tr><td></td><td colspan=\"".($num)."\" 
+               $findcols .= "<tr><td></td><td colspan=\"".($num)."\"
                  style=\"border: 1px solid black; background-color:#ffcc00;font-size:10pt;\">&nbsp;Spalten ausw&auml;hlen</td></tr>";
                $findcols .= "<tr><td style=\"border: 1px solid black; background-color:#ff6666; font-size:10pt;\" nowrap>&nbsp;Erste Zeile mit Daten&nbsp;<br>&nbsp;ausw&auml;hlen</td>";
                for ($c=0; $c < $num; $c++) {
@@ -8199,7 +8141,7 @@ padding: 10px;\">
                    &nbsp;&nbsp;<select name=\"cols[$c]\"><option></option>";
 
                  foreach($fields as $key=>$value){
-                   if((!empty($cols)?count($cols):0)==0) { 
+                   if((!empty($cols)?count($cols):0)==0) {
                      if($preselected[$key]==($c+1)) {
                        $selected='selected';
                      } else $selected='';
@@ -8207,7 +8149,7 @@ padding: 10px;\">
                      if($cols[$c]==$key) {
                        $selected='selected';
                      } else $selected='';
-                   }    
+                   }
                    $findcols .="<option value=\"$key\" $selected>$value</option>";
                  }
 
@@ -8253,7 +8195,7 @@ padding: 10px;\">
         <option value=\"altium\">Altium Designer</option>
         <option value=\"solidedgest2\">Solid Edge ST2</option>
         <!--<option value=\"eagle\">Eagle (Cadsoft) </option>-->
-        </select> 
+        </select>
         </td><td align=\"right\">
         Trennzeichen: &nbsp;<input type=\"text\" size=\"3\" name=\"delimiter\" value=\";\">&nbsp;
       <!--Daten: &nbsp;<input type=\"text\" size=\"3\" value=\"&quot;\" name=\"quote\">&nbsp;-->
@@ -8269,11 +8211,11 @@ padding: 10px;\">
       return $result;
     }
   }
-*/  
+*/
   function getArtikelThumbnailDateiVersion($id)
   {
-    $datei = $this->app->DB->SelectArr('
-        SELECT 
+    $datei = $this->app->DatabaseService->select('
+        SELECT
         datei_version.id
         FROM
         datei_stichwoerter
@@ -8281,11 +8223,11 @@ padding: 10px;\">
         WHERE
         datei_stichwoerter.objekt LIKE "artikel"
         AND
-        datei_stichwoerter.parameter = "' . $id . '"
+        datei_stichwoerter.parameter = :id
         AND
         (datei_stichwoerter.subjekt like "Shopbild" OR datei_stichwoerter.subjekt like "Druckbild" OR datei_stichwoerter.subjekt like "Bild" OR datei_stichwoerter.subjekt like "Gruppenbild")
         ORDER BY  datei_stichwoerter.subjekt like "Shopbild" DESC,subjekt like "Druckbild" DESC, datei_stichwoerter.subjekt like "Bild" DESC,datei_stichwoerter.sort, datei_version.version DESC
-        ');
+        ', ['id' => (int)$id]);
     if(empty($datei)){
       return;
     }
@@ -8393,15 +8335,13 @@ padding: 10px;\">
       return null;
     }
 
-    return $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT dv.*
+    return $this->app->DatabaseService->selectRow(
+      'SELECT dv.*
         FROM `datei_version` AS `dv`
-        WHERE dv.datei = %d
+        WHERE dv.datei = :fileId
         ORDER BY dv.version DESC
         LIMIT 1',
-        $fileId
-      )
+      ['fileId' => (int)$fileId]
     );
   }
 
@@ -8415,28 +8355,26 @@ padding: 10px;\">
     if($articleId <= 0) {
       return null;
     }
-    return $this->app->DB->SelectRow(
-      sprintf(
-        "SELECT  dv.*
+    return $this->app->DatabaseService->selectRow(
+      "SELECT  dv.*
         FROM `datei_stichwoerter` AS `ds`
         INNER JOIN `datei_version` AS `dv` ON dv.datei = ds.datei
         INNER JOIN `datei` AS `d` ON dv.datei = d.id AND IFNULL(d.geloescht, 0) = 0
-        WHERE ds.objekt LIKE 'artikel' AND ds.parameter = '%d' AND d.geloescht = 0
+        WHERE ds.objekt LIKE 'artikel' AND ds.parameter = :articleId AND d.geloescht = 0
               AND
               (
-                  ds.subjekt like 'Shopbild' 
-                  OR ds.subjekt like 'Druckbild' 
-                  OR ds.subjekt like 'Bild' 
+                  ds.subjekt like 'Shopbild'
+                  OR ds.subjekt like 'Druckbild'
+                  OR ds.subjekt like 'Bild'
                   OR ds.subjekt like 'Gruppenbild'
               )
         ORDER BY ds.subjekt like 'Shopbild' DESC,
-                 ds.subjekt like 'Druckbild' DESC, 
-                 ds.subjekt like 'Bild' DESC, 
+                 ds.subjekt like 'Druckbild' DESC,
+                 ds.subjekt like 'Bild' DESC,
                  ds.sort,
-                 dv.version DESC 
+                 dv.version DESC
         LIMIT 1",
-        $articleId
-      )
+      ['articleId' => (int)$articleId]
     );
   }
 
@@ -8454,11 +8392,9 @@ padding: 10px;\">
       return $res;
     }
 
-    $bildvorschau = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT `id`, `bildvorschau`, `projekt` FROM `artikel` WHERE `id` = %d LIMIT 1',
-        $id
-      )
+    $bildvorschau = $this->app->DatabaseService->selectRow(
+      'SELECT `id`, `bildvorschau`, `projekt` FROM `artikel` WHERE `id` = :id LIMIT 1',
+      ['id' => (int)$id]
     );
 
     if(empty($bildvorschau)) {
@@ -8498,14 +8434,9 @@ padding: 10px;\">
       }
 
       if($bildvorschau['bildvorschau'] != $datei['id'].'_'.$size.'_'.$size) {
-        $this->app->DB->Update(
-          sprintf(
-            "UPDATE `artikel` 
-            SET `bildvorschau` = '%d_%d_%d' 
-            WHERE `id` = %d 
-            LIMIT 1",
-            $datei['id'], $size, $size, $id
-          )
+        $this->app->DatabaseService->update(
+          "UPDATE `artikel` SET `bildvorschau` = :bildvorschau WHERE `id` = :id LIMIT 1",
+          ['bildvorschau' => $datei['id'].'_'.$size.'_'.$size, 'id' => (int)$id]
         );
         $res['reload'] = 1;
       }
@@ -8533,11 +8464,9 @@ padding: 10px;\">
     }
 
     if($bildvorschau['bildvorschau'] !== 'KEINBILD') {
-      $this->app->DB->Update(
-        sprintf(
-          "UPDATE `artikel` SET `bildvorschau` = 'KEINBILD' WHERE `id` = %d LIMIT 1",
-          $id
-        )
+      $this->app->DatabaseService->update(
+        "UPDATE `artikel` SET `bildvorschau` = 'KEINBILD' WHERE `id` = :id LIMIT 1",
+        ['id' => (int)$id]
       );
       $res['reload'] = 1;
     }
@@ -8566,11 +8495,9 @@ padding: 10px;\">
     $direkt = $this->app->Secure->GetGET('direkt');
 
     if($direkt && $id) {
-      $bildvorschau = $this->app->DB->SelectRow(
-        sprintf(
-          'SELECT `id`, `bildvorschau`, `projekt` FROM `artikel` WHERE `id` = %d LIMIT 1',
-          $id
-        )
+      $bildvorschau = $this->app->DatabaseService->selectRow(
+        'SELECT `id`, `bildvorschau`, `projekt` FROM `artikel` WHERE `id` = :id LIMIT 1',
+        ['id' => (int)$id]
       );
       $datei = 0;
       if($fileid > 0){
@@ -8617,7 +8544,7 @@ padding: 10px;\">
     }
 
     $vorschau = $this->app->Secure->GetGET('bildvorschau');
-    
+
     if(!$vorschau) {
       if ($this->app->erp->Firmendaten('iconset_dunkel')) {
         $str = file_get_contents(dirname(__DIR__) . '/themes/new/images/keinbild_dunkel.png');
@@ -8651,18 +8578,17 @@ padding: 10px;\">
         }
 
         if(is_numeric($vorschaua[0]) && is_numeric($vorschaua[1]) && is_numeric($vorschaua[2]) && file_exists($cachefolder.'/'.$vorschau)) {
-          if($this->app->DB->Select(
-            sprintf(
+          if($this->app->DatabaseService->selectValue(
               "SELECT ds.id
               FROM datei_stichwoerter AS ds
               INNER JOIN datei_version AS dv ON dv.datei = ds.datei
-              WHERE ds.objekt LIKE 'artikel' AND ds.parameter = '%d' AND dv.id = %d LIMIT 1",
-              $id, $vorschaua[0]
-            )
+              WHERE ds.objekt LIKE 'artikel' AND ds.parameter = :artId AND dv.id = :dvId LIMIT 1",
+              ['artId' => (int)$id, 'dvId' => (int)$vorschaua[0]]
           )
           ) {
-            $bildvorschau = $this->app->DB->SelectRow(
-              "SELECT id, bildvorschau, projekt FROM artikel WHERE id = '$id' LIMIT 1"
+            $bildvorschau = $this->app->DatabaseService->selectRow(
+              "SELECT id, bildvorschau, projekt FROM artikel WHERE id = :id LIMIT 1",
+              ['id' => (int)$id]
             );
             $cachefile = $this->getThumbnailCacheFilename($id, (int)$bildvorschau['projekt']);
             $cachedir = dirname($cachefile);
@@ -8680,7 +8606,7 @@ padding: 10px;\">
         }
       }
       if($id) {
-        $this->app->DB->Update(sprintf("UPDATE artikel SET bildvorschau = '' WHERE id = %d", $id));
+        $this->app->DatabaseService->update("UPDATE artikel SET bildvorschau = '' WHERE id = :id", ['id' => (int)$id]);
       }
     }
 
@@ -8707,11 +8633,11 @@ padding: 10px;\">
 
     if($submit_barcode!='' && $barcode!='')
     {
-      $checkbarcode = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='$barcode' OR herstellernummer='$barcode' OR nummer='$barcode' LIMIT 1");
+      $checkbarcode = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE ean=:barcode OR herstellernummer=:barcode2 OR nummer=:barcode3 LIMIT 1", ['barcode' => $barcode, 'barcode2' => $barcode, 'barcode3' => $barcode]);
 
       if($checkbarcode > 0)
       {
-        $name_nummer = $this->app->DB->Select("SELECT CONCAT(nummer,' ',name_de) FROM artikel WHERE id='$checkbarcode' LIMIT 1");
+        $name_nummer = $this->app->DatabaseService->selectValue("SELECT CONCAT(nummer,' ',name_de) FROM artikel WHERE id=:id LIMIT 1", ['id' => (int)$checkbarcode]);
         $msg = $this->app->erp->base64_url_encode("<div class=info>Es gibt bereits einen Artikel mit dieser Nummer ($name_nummer).</div>");
         $this->app->Location->execute("index.php?module=artikel&action=schnellanlegen&msg=$msg");
         return;
@@ -8730,7 +8656,7 @@ padding: 10px;\">
 
       $this->app->Tpl->Parse('PAGE','artikel_schnellanlegen_formular.tpl');
 
-    } 
+    }
     else if ($submit_anlegen=='') {
       $this->app->Tpl->Parse('PAGE','artikel_schnellanlegen.tpl');
     }
@@ -8751,25 +8677,25 @@ padding: 10px;\">
     {
       if($artikel && $id)
       {
-        $check = $this->app->DB->Select("SELECT id FROM artikelbaum_artikel WHERE artikel = '$artikel' AND kategorie = '$id' LIMIT 1");
+        $check = $this->app->DatabaseService->selectValue("SELECT id FROM artikelbaum_artikel WHERE artikel = :artikel AND kategorie = :kategorie LIMIT 1", ['artikel' => $artikel, 'kategorie' => $id]);
         if(!$check)
         {
-          $this->app->DB->Insert("INSERT INTO artikelbaum_artikel (artikel, kategorie) VALUES ('$artikel','$id')");
+          $this->app->DatabaseService->insert("INSERT INTO artikelbaum_artikel (artikel, kategorie) VALUES (:artikel, :kategorie)", ['artikel' => $artikel, 'kategorie' => $id]);
         }
       }
       $this->app->ExitXentral();
     }
     if($todo === 'uncheck'){
-      $this->app->DB->Delete("DELETE FROM artikelbaum_artikel WHERE artikel = '$artikel' AND kategorie = '$id'");
+      $this->app->DatabaseService->delete("DELETE FROM artikelbaum_artikel WHERE artikel = :artikel AND kategorie = :kategorie", ['artikel' => $artikel, 'kategorie' => $id]);
       $this->app->ExitXentral();
     }
     echo "<h1>hallo $id</h1>";
     $this->app->ExitXentral();
   }
-  
+
   function getKategorien(&$kategorien, $parent)
   {
-    $res = $this->app->DB->SelectArr("SELECT id, bezeichnung, parent FROM artikelkategorien WHERE geloescht != 1 AND parent = '$parent' ORDER by bezeichnung");
+    $res = $this->app->DatabaseService->select("SELECT id, bezeichnung, parent FROM artikelkategorien WHERE geloescht != 1 AND parent = :parent ORDER by bezeichnung", ['parent' => (int)$parent]);
     if($res)
     {
       foreach($res as $k => $v)
@@ -8779,7 +8705,7 @@ padding: 10px;\">
       }
     }
   }
-  
+
   public function ArtikelBaumAjax()
   {
     $disabled = true;
@@ -8789,8 +8715,8 @@ padding: 10px;\">
     $id = (int)$this->app->Secure->GetGET('artikel');
     $kategorien = null;
     $this->getKategorien($kategorien, 0);
-    $kategorie = $this->app->DB->SelectArr("SELECT kategorie FROM artikelbaum_artikel WHERE artikel = '$id'");
-    
+    $kategorie = $this->app->DatabaseService->select("SELECT kategorie FROM artikelbaum_artikel WHERE artikel = :id", ['id' => $id]);
+
     if(!empty($kategorien))
     {
       $maxlvl = 0;
@@ -8890,14 +8816,15 @@ padding: 10px;\">
       for ($i = 1; $i <= 40; $i++) {
         $sqla[] = ' SELECT '.$i.' as nummer ';
       }
-      $sql = "INSERT INTO artikel_freifelder (artikel, sprache, nummer, wert)
-        SELECT '$artikelid', s.iso, n.nummer,'' 
+      $this->app->DatabaseService->insert(
+        "INSERT INTO artikel_freifelder (artikel, sprache, nummer, wert)
+        SELECT :artikelid, s.iso, n.nummer,''
         FROM (SELECT iso FROM sprachen WHERE aktiv = 1 AND iso <> 'DE' AND iso <> '' GROUP BY iso) s
-        INNER JOIN (".implode(' UNION ', $sqla).") n 
-        LEFT JOIN artikel_freifelder af ON s.iso = af.sprache AND af.artikel = '$artikelid' AND n.nummer = af.nummer
-        WHERE  isnull(af.id)
-      ";
-      $this->app->DB->Insert($sql);
+        INNER JOIN (".implode(' UNION ', $sqla).") n
+        LEFT JOIN artikel_freifelder af ON s.iso = af.sprache AND af.artikel = :artikelid2 AND n.nummer = af.nummer
+        WHERE  isnull(af.id)",
+        ['artikelid' => (int)$artikelid, 'artikelid2' => (int)$artikelid]
+      );
     }
 
     $this->app->YUI->TableSearch('TAB1','artikelfreifelder_list', 'show','','',basename(__FILE__), __CLASS__);
@@ -8910,27 +8837,28 @@ padding: 10px;\">
       $id = (int)$this->app->Secure->GetPOST('id');
       $sprache = $this->app->Secure->GetPOST('sprache');
       $nummer = (int)$this->app->Secure->GetPOST('nummer');
-      
+
       for($i=1; $i<=40; $i++){
         $freifelderfirmendaten[] = '(SELECT '.$i.' AS nummer, if(f.freifeld'.$i." != '', f.freifeld".$i.", CONCAT('Freifeld ',".$i.')) AS bezeichnung FROM firmendaten f)';
         $freifeldtypen[] = '(SELECT '.$i.' AS nummer, wert AS inputtyp FROM firmendaten_werte WHERE name = CONCAT("freifeld",'.$i.',"typ"))';
       }
 
       if($sprache != '' && $sprache !== 'DE'){
-        $data = $this->app->DB->SelectRow('SELECT af.id, af.nummer as nummer, af.wert, af.sprache, f.bezeichnung, ft.inputtyp 
-                                           FROM artikel_freifelder af 
-                                           LEFT JOIN ('.implode(' UNION ALL ', $freifelderfirmendaten).") f ON af.nummer = f.nummer 
+        $data = $this->app->DatabaseService->selectRow('SELECT af.id, af.nummer as nummer, af.wert, af.sprache, f.bezeichnung, ft.inputtyp
+                                           FROM artikel_freifelder af
+                                           LEFT JOIN ('.implode(' UNION ALL ', $freifelderfirmendaten).") f ON af.nummer = f.nummer
                                            LEFT JOIN (".implode(' UNION ALL ', $freifeldtypen).") ft ON af.nummer = ft.nummer
-                                           WHERE af.id = '$id' 
-                                           LIMIT 1");
+                                           WHERE af.id = :id
+                                           LIMIT 1", ['id' => $id]);
 
       }elseif($sprache === 'DE'){
-        $data = $this->app->DB->SelectRow('SELECT a.id, '.$nummer.' as nummer, a.freifeld'.$nummer." AS wert, 'DE' AS sprache, 
-                              (SELECT IF(f.freifeld".$nummer." != '', f.freifeld".$nummer.", CONCAT('Freifeld ',".$nummer.")) FROM firmendaten f) AS bezeichnung,
-                              (SELECT wert AS inputtyp FROM firmendaten_werte ft WHERE name = CONCAT('freifeld',".$nummer.",'typ')) AS inputtyp 
-                      FROM artikel a 
-                      WHERE a.id = '$id' 
-                      LIMIT 1");
+        $freifeld = $this->app->DatabaseService->validateIdentifier('freifeld'.$nummer);
+        $data = $this->app->DatabaseService->selectRow("SELECT a.id, {$nummer} as nummer, a.{$freifeld} AS wert, 'DE' AS sprache,
+                              (SELECT IF(f.{$freifeld} != '', f.{$freifeld}, CONCAT('Freifeld ',{$nummer})) FROM firmendaten f) AS bezeichnung,
+                              (SELECT wert AS inputtyp FROM firmendaten_werte ft WHERE name = CONCAT('freifeld',{$nummer},'typ')) AS inputtyp
+                      FROM artikel a
+                      WHERE a.id = :id
+                      LIMIT 1", ['id' => $id]);
 
       }else{
         $data = null;
@@ -8943,7 +8871,7 @@ padding: 10px;\">
         $data['bezeichnung'] = '';
         $data['nummer'] = '';
         $data['inputtyp'] = 'einzeilig';
-        
+
       }
       echo json_encode($data);
       $this->app->ExitXentral();
@@ -8962,10 +8890,12 @@ padding: 10px;\">
     if($error == ''){
       if($id){
         if($sprache === 'DE'){
-          if($nummer > 0)
-            $this->app->DB->Update("UPDATE artikel SET freifeld".$nummer." = '$inhalt' WHERE id = '$id'");
+          if($nummer > 0) {
+            $freifeld = $this->app->DatabaseService->validateIdentifier('freifeld'.$nummer);
+            $this->app->DatabaseService->update("UPDATE artikel SET {$freifeld} = :inhalt WHERE id = :id", ['inhalt' => $inhalt, 'id' => $id]);
+          }
         }else{
-          $this->app->DB->Update("UPDATE artikel_freifelder SET wert = '$inhalt' WHERE id = '$id'");
+          $this->app->DatabaseService->update("UPDATE artikel_freifelder SET wert = :inhalt WHERE id = :id", ['inhalt' => $inhalt, 'id' => $id]);
         }
         echo json_encode(array('status'=>1));
         $this->app->ExitXentral();
@@ -8974,7 +8904,7 @@ padding: 10px;\">
         echo json_encode(array('status'=>0,'statusText'=>'Kein gültiger Artikel'));
         $this->app->ExitXentral();
       }
-      $this->app->DB->Insert("INSERT INTO artikel_freifelder (wert) VALUES ('$inhalt')");
+      $this->app->DatabaseService->insert("INSERT INTO artikel_freifelder (wert) VALUES (:inhalt)", ['inhalt' => $inhalt]);
 
       echo json_encode(array('status'=>1));
       $this->app->ExitXentral();
@@ -8986,7 +8916,7 @@ padding: 10px;\">
   public function ArtikelFreifelderDelete(){
     $id = (int) $this->app->Secure->GetPOST('id');
     if($id > 0){
-      $this->app->DB->Delete("DELETE FROM artikel_freifelder WHERE id = '$id' LIMIT 1");
+      $this->app->DatabaseService->delete("DELETE FROM artikel_freifelder WHERE id = :id LIMIT 1", ['id' => $id]);
     }
     echo json_encode(array('status'=>1));
     $this->app->ExitXentral();
@@ -9051,12 +8981,12 @@ padding: 10px;\">
     $this->app->DB->Select('SELECT lager_gesamt FROM artikel_cached_fields LIMIT 1');
     if($this->app->DB->error()){
       $this->app->erp->CheckColumn('lager_gesamt', 'DECIMAL(14,4)', 'artikel_cached_fields', 'DEFAULT 0 NOT NULL');
-      $this->app->DB->Update("UPDATE artikel_cached_fields acf 
+      $this->app->DB->Update("UPDATE artikel_cached_fields acf
         INNER JOIN artikel a ON acf.artikel = a.id AND a.lagerartikel = 1
         LEFT JOIN (
-           SELECT lpi2.artikel, sum(lpi2.menge) as minmenge 
-          FROM lager_platz_inhalt  lpi2 
-          GROUP BY lpi2.artikel 
+           SELECT lpi2.artikel, sum(lpi2.menge) as minmenge
+          FROM lager_platz_inhalt  lpi2
+          GROUP BY lpi2.artikel
          ) verf ON a.id = verf.artikel
         SET acf.lager_gesamt = ifnull(verf.minmenge,0)
       ");
@@ -9092,13 +9022,15 @@ padding: 10px;\">
           return;
       }
 
-      $query = sprintf("UPDATE `artikel` AS `a` 
-      INNER JOIN `datei_stichwoerter` AS `ds` ON a.id = ds.parameter 
+      $this->app->DatabaseService->update(
+        "UPDATE `artikel` AS `a`
+      INNER JOIN `datei_stichwoerter` AS `ds` ON a.id = ds.parameter
       INNER JOIN `datei_version` AS `dv` ON ds.id = dv.datei
-      INNER JOIN (SELECT MAX(dv.version) AS `version` FROM `datei_version` AS `dv` WHERE dv.datei = %d) AS `v` ON v.version = dv.version 
-      SET a.bildvorschau = '' 
-      WHERE ds.id = %d AND a.bildvorschau = CONCAT(dv.id,'_100_100')", $fileId, $fileId);
-      $this->app->DB->Update($query);
+      INNER JOIN (SELECT MAX(dv.version) AS `version` FROM `datei_version` AS `dv` WHERE dv.datei = :fileId1) AS `v` ON v.version = dv.version
+      SET a.bildvorschau = ''
+      WHERE ds.id = :fileId2 AND a.bildvorschau = CONCAT(dv.id,'_100_100')",
+        ['fileId1' => (int)$fileId, 'fileId2' => (int)$fileId]
+      );
   }
 
   /**
@@ -9114,15 +9046,14 @@ padding: 10px;\">
     }
 
     $articleId = $detailQuery->getItemIdentifier();
-    $sql = sprintf(
-      "SELECT a.id, CONCAT(a.name_de, ' (', a.nummer, ')') AS title, a.name_de, a.kurztext_de, a.nummer 
-       FROM artikel AS a 
-       WHERE a.id = '%s' LIMIT 1",
-      $this->app->DB->real_escape_string($articleId)
+    $article = $this->app->DatabaseService->selectRow(
+      "SELECT a.id, CONCAT(a.name_de, ' (', a.nummer, ')') AS title, a.name_de, a.kurztext_de, a.nummer
+       FROM artikel AS a
+       WHERE a.id = :id LIMIT 1",
+      ['id' => (int)$articleId]
     );
-    $article = $this->app->DB->SelectRow($sql);
     if (empty($article)) {
-      return;;
+      return;
     }
 
     $detailResult->setTitle($article['title']);
@@ -9134,11 +9065,11 @@ padding: 10px;\">
   public function createNewAricleCache()
   {
     $this->app->DB->Insert(
-      "INSERT INTO artikel_cached_fields 
-      (artikel,lager_verfuegbar, ek_netto, vk_netto, ek_brutto, vk_brutto, inzulauf,imsperrlager,inproduktion) 
+      "INSERT INTO artikel_cached_fields
+      (artikel,lager_verfuegbar, ek_netto, vk_netto, ek_brutto, vk_brutto, inzulauf,imsperrlager,inproduktion)
       SELECT a.id,0, 0, 0, 0, 0, 0, 0, 0
-      FROM artikel a 
-      LEFT JOIN artikel_cached_fields acf ON a.id = acf.artikel 
+      FROM artikel a
+      LEFT JOIN artikel_cached_fields acf ON a.id = acf.artikel
       WHERE isnull(acf.id)"
     );
   }
@@ -9158,82 +9089,82 @@ padding: 10px;\">
     $normal = 1+ $normal / 100;
     $ermaessigt = 1+ $ermaessigt / 100;
     $this->app->DB->Update(
-      "UPDATE artikel_cached_fields AS acf 
+      "UPDATE artikel_cached_fields AS acf
       INNER JOIN artikel AS a ON acf.artikel = a.id
       LEFT JOIN (
-        SELECT artikel, min(preis) as minpreis 
-        FROM einkaufspreise 
+        SELECT artikel, min(preis) as minpreis
+        FROM einkaufspreise
         WHERE (gueltig_bis = '0000-00-00' OR gueltig_bis >= curdate())
-          AND preis > 0 
+          AND preis > 0
         GROUP BY artikel
       ) AS ek ON a.id = ek.artikel
       LEFT JOIN (
-        SELECT artikel, min(preis) as minpreis 
-        FROM einkaufspreise 
+        SELECT artikel, min(preis) as minpreis
+        FROM einkaufspreise
         WHERE (gueltig_bis = '0000-00-00' OR gueltig_bis >= curdate())
-          AND preis > 0 
-          AND (ifnull(waehrung,'EUR') = 'EUR' OR waehrung = '') 
+          AND preis > 0
+          AND (ifnull(waehrung,'EUR') = 'EUR' OR waehrung = '')
         GROUP BY artikel
       ) AS ek2 ON a.id = ek2.artikel
-      SET acf.ek_netto = ifnull( ifnull(ek2.minpreis,ek.minpreis),0), 
+      SET acf.ek_netto = ifnull( ifnull(ek2.minpreis,ek.minpreis),0),
           acf.ek_brutto = if(a.umsatzsteuer = 'befreit', 1, if(a.umsatzsteuer = 'ermaessigt', $ermaessigt,$normal))
                               *ifnull( ifnull(ek2.minpreis,ek.minpreis),0)
       WHERE a.geloescht <> 1"
     );
     $this->app->DB->Update(
-      "UPDATE artikel_cached_fields AS acf 
+      "UPDATE artikel_cached_fields AS acf
       INNER JOIN artikel AS a ON acf.artikel = a.id
       LEFT JOIN (
-        SELECT artikel, min(preis) as minpreis 
-        FROM verkaufspreise 
-        WHERE (gueltig_bis = '0000-00-00' OR gueltig_bis >= curdate()) 
+        SELECT artikel, min(preis) as minpreis
+        FROM verkaufspreise
+        WHERE (gueltig_bis = '0000-00-00' OR gueltig_bis >= curdate())
           AND (gueltig_ab = '0000-00-00' OR gueltig_ab <= curdate())
-          AND art <> 'Gruppe' AND art <> 'gruppe' 
-          AND adresse=0 AND preis > 0 
+          AND art <> 'Gruppe' AND art <> 'gruppe'
+          AND adresse=0 AND preis > 0
         GROUP BY artikel
       ) AS vk ON a.id = vk.artikel
       LEFT JOIN (
-        SELECT artikel, min(preis) as minpreis 
-        FROM verkaufspreise 
+        SELECT artikel, min(preis) as minpreis
+        FROM verkaufspreise
         WHERE (gueltig_bis = '0000-00-00' OR gueltig_bis >= curdate())
           AND (gueltig_ab = '0000-00-00' OR gueltig_ab <= curdate())
           AND art <> 'Gruppe' AND art <> 'gruppe'
-          AND adresse=0 AND preis > 0 AND (ifnull(waehrung,'EUR') = 'EUR' OR waehrung = '') 
-        GROUP BY artikel 
+          AND adresse=0 AND preis > 0 AND (ifnull(waehrung,'EUR') = 'EUR' OR waehrung = '')
+        GROUP BY artikel
       ) AS vk2 ON a.id = vk2.artikel
           LEFT JOIN (
-        SELECT artikel, min(preis) as minpreis 
-        FROM verkaufspreise 
+        SELECT artikel, min(preis) as minpreis
+        FROM verkaufspreise
         WHERE (gueltig_bis = '0000-00-00' OR gueltig_bis >= curdate())
           AND (gueltig_ab = '0000-00-00' OR gueltig_ab <= curdate())
           AND art <> 'Gruppe' AND art <> 'gruppe'
-          AND adresse=0 AND preis > 0 AND (ifnull(waehrung,'EUR') = 'EUR' OR waehrung = '') AND ab_menge = 1 
-        GROUP BY artikel 
+          AND adresse=0 AND preis > 0 AND (ifnull(waehrung,'EUR') = 'EUR' OR waehrung = '') AND ab_menge = 1
+        GROUP BY artikel
       ) AS vk3 ON a.id = vk3.artikel
 
-      SET acf.vk_netto = ifnull( ifnull( ifnull(vk3.minpreis,vk2.minpreis),vk.minpreis),0), 
+      SET acf.vk_netto = ifnull( ifnull( ifnull(vk3.minpreis,vk2.minpreis),vk.minpreis),0),
           acf.vk_brutto = if(a.umsatzsteuer = 'befreit', 1, if(a.umsatzsteuer = 'ermaessigt', $ermaessigt,$normal))
                               *ifnull( ifnull( ifnull(vk3.minpreis,vk2.minpreis),vk.minpreis),0)
       WHERE a.geloescht <> 1"
     );
 
     $this->app->DB->Update(
-      "UPDATE artikel_cached_fields AS acf 
+      "UPDATE artikel_cached_fields AS acf
       INNER JOIN artikel AS a ON acf.artikel = a.id
       LEFT JOIN artikel AS a2 ON a.variante_von = a2.id AND a.variante = 1 AND IFNULL(a2.geloescht,0) = 0 AND a2.nummer <> 'DEL'
       LEFT JOIN projekt as pr ON a.projekt = pr.id
       LEFT JOIN (
-        SELECT pos.artikel, SUM(pos.menge) AS produktion 
-        FROM produktion_position pos 
+        SELECT pos.artikel, SUM(pos.menge) AS produktion
+        FROM produktion_position pos
         LEFT JOIN produktion p ON pos.produktion = p.id
         WHERE p.status = 'gestartet' AND pos.sort = 1
         GROUP BY pos.artikel
       ) AS prod ON a.id = prod.artikel
       LEFT JOIN (
-        SELECT artikel, sum(bp.menge - bp.geliefert) as zulauf 
-        FROM bestellung_position AS bp 
+        SELECT artikel, sum(bp.menge - bp.geliefert) as zulauf
+        FROM bestellung_position AS bp
         LEFT JOIN bestellung b ON bp.bestellung=b.id
-        WHERE b.status!='storniert' AND b.status!='abgeschlossen' AND bp.geliefert<bp.menge 
+        WHERE b.status!='storniert' AND b.status!='abgeschlossen' AND bp.geliefert<bp.menge
         GROUP BY bp.artikel
       ) AS zul ON a.id = zul.artikel
       SET acf.name = a.name_de,
@@ -9253,8 +9184,7 @@ padding: 10px;\">
           acf.project_id = a.projekt,
           acf.project_name = IFNULL(pr.abkuerzung,''),
           acf.inzulauf = ifnull(zul.zulauf,0),
-          acf.inproduktion = ifnull(prod.produktion,0),
-          acf.inzulauf = ifnull(zul.zulauf,0)
+          acf.inproduktion = ifnull(prod.produktion,0)
       WHERE a.geloescht <> 1"
     );
 
@@ -9293,8 +9223,8 @@ padding: 10px;\">
     }
     $ekNumbers = $this->app->DB->Query(
       sprintf(
-        "SELECT DISTINCT artikel, kundenartikelnummer 
-        FROM verkaufspreise WHERE IFNULL(kundenartikelnummer,'') <> '' 
+        "SELECT DISTINCT artikel, kundenartikelnummer
+        FROM verkaufspreise WHERE IFNULL(kundenartikelnummer,'') <> ''
         ORDER BY artikel"
       )
     );
@@ -9331,12 +9261,12 @@ padding: 10px;\">
   public function updateStorageToAricleCache()
   {
     $this->app->DB->Update(
-      "UPDATE artikel_cached_fields AS acf 
+      "UPDATE artikel_cached_fields AS acf
       INNER JOIN artikel AS a ON acf.artikel = a.id AND a.lagerartikel = 1
       LEFT JOIN (
-        SELECT lpi2.artikel, sum(lpi2.menge) AS minmenge 
-        FROM lager_platz_inhalt  lpi2 
-        GROUP BY lpi2.artikel 
+        SELECT lpi2.artikel, sum(lpi2.menge) AS minmenge
+        FROM lager_platz_inhalt  lpi2
+        GROUP BY lpi2.artikel
       ) AS verf ON a.id = verf.artikel
       SET acf.lager_gesamt = ifnull(verf.minmenge,0)"
     );
@@ -9346,18 +9276,18 @@ padding: 10px;\">
   {
     $this->app->DB->Update(
       sprintf(
-        "UPDATE artikel_cached_fields AS acf 
+        "UPDATE artikel_cached_fields AS acf
         LEFT JOIN artikeleigenschaftenwerte AS aew ON acf.artikel = aew.artikel
-        LEFT JOIN artikeleigenschaften AS ae 
+        LEFT JOIN artikeleigenschaften AS ae
           ON aew.artikeleigenschaften = ae.id AND ifnull(ae.geloescht,0) = 0 AND ae.name <> ''
-        SET acf.eigenschaften = '' 
+        SET acf.eigenschaften = ''
         WHERE ISNULL(ae.name)"
       )
     );
     $attributes = $this->app->DB->Query(
       "SELECT aew.artikel, ae.name,aew.wert
       FROM artikeleigenschaftenwerte AS aew
-      INNER JOIN artikeleigenschaften AS ae 
+      INNER JOIN artikeleigenschaften AS ae
           ON aew.artikeleigenschaften = ae.id AND ifnull(ae.geloescht,0) = 0 AND ae.name != ''
       ORDER BY aew.artikel, ae.name, aew.wert"
     );
@@ -9397,14 +9327,12 @@ padding: 10px;\">
    */
   public function updateArticlePicturePreview($limit = 1000)
   {
-    $articleIds = $this->app->DB->SelectFirstCols(
-      sprintf(
-        "SELECT art.id
+    $articleIds = $this->app->DatabaseService->selectColumn(
+      "SELECT art.id
         FROM `artikel` AS `art`
         WHERE IFNULL(art.bildvorschau,'') = ''
-        LIMIT %d",
-        $limit
-      )
+        LIMIT :limit",
+      ['limit' => (int)$limit]
     );
     $res = 0;
     if(empty($articleIds)) {
@@ -9452,36 +9380,36 @@ padding: 10px;\">
   public function updateExplodingPartListSellableToAricleCache()
   {
     $this->app->DB->Update(
-      "UPDATE artikel_cached_fields AS acf 
+      "UPDATE artikel_cached_fields AS acf
       INNER JOIN artikel AS a ON acf.artikel = a.id AND a.lagerartikel = 1 AND a.juststueckliste = 1
       LEFT JOIN
       (
         SELECT s.stuecklistevonartikel, min(FLOOR((ifnull(lpi.menge,0) - if(ifnull(r.menge,0) > ifnull(off.menge,0),ifnull(r.menge,0),ifnull(off.menge,0))) / s.menge)) as minmenge
         FROM
         (
-          SELECT artikel,sum(menge) as menge ,stuecklistevonartikel 
-          FROM stueckliste 
-          WHERE art!='it' 
+          SELECT artikel,sum(menge) as menge ,stuecklistevonartikel
+          FROM stueckliste
+          WHERE art!='it'
           GROUP BY artikel,stuecklistevonartikel
         ) AS s
         INNER JOIN artikel AS a2 ON s.artikel = a2.id
         LEFT JOIN (
-          SELECT lpi2.artikel, sum(lpi2.menge) as menge 
-          FROM lager_platz_inhalt  lpi2 
-            INNER JOIN lager_platz lp ON lpi2.lager_platz = lp.id 
-          WHERE lp.sperrlager <> 1 
-          GROUP BY lpi2.artikel 
+          SELECT lpi2.artikel, sum(lpi2.menge) as menge
+          FROM lager_platz_inhalt  lpi2
+            INNER JOIN lager_platz lp ON lpi2.lager_platz = lp.id
+          WHERE lp.sperrlager <> 1
+          GROUP BY lpi2.artikel
         ) AS lpi ON a2.id = lpi.artikel
         LEFT JOIN (
-          SELECT artikel, ifnull(sum(menge),0) as menge 
-          FROM lager_reserviert 
-          GROUP BY artikel 
+          SELECT artikel, ifnull(sum(menge),0) as menge
+          FROM lager_reserviert
+          GROUP BY artikel
         ) AS r ON a2.id = r.artikel
         LEFT JOIN (
-          SELECT ifnull(SUM(ap.menge),0) as menge,ap.artikel 
-          FROM auftrag_position ap 
-          INNER JOIN auftrag a ON a.id=ap.auftrag 
-          WHERE a.status='freigegeben' 
+          SELECT ifnull(SUM(ap.menge),0) as menge,ap.artikel
+          FROM auftrag_position ap
+          INNER JOIN auftrag a ON a.id=ap.auftrag
+          WHERE a.status='freigegeben'
           GROUP BY ap.artikel
         ) AS off ON a2.id = off.artikel
         GROUP BY s.stuecklistevonartikel
@@ -9493,8 +9421,8 @@ padding: 10px;\">
   public function updatePartListJitArticleStorageCache()
   {
     $jitArticles = $this->app->DB->Query(
-      'SELECT `id` 
-      FROM `artikel` 
+      'SELECT `id`
+      FROM `artikel`
       WHERE `juststueckliste` = 1 AND `lagerartikel` = 0 AND (`geloescht` = 0 OR `geloescht` IS NULL)'
     );
     while($article = $this->app->DB->Fetch_Assoc($jitArticles)) {
@@ -9516,52 +9444,52 @@ padding: 10px;\">
   public function updatePartListSellableToAricleCache()
   {
     $this->app->DB->Update(
-      "UPDATE artikel_cached_fields AS acf 
+      "UPDATE artikel_cached_fields AS acf
       INNER JOIN artikel AS a ON acf.artikel = a.id AND a.lagerartikel = 1 AND a.juststueckliste = 1
       LEFT JOIN
       (
         SELECT s.stuecklistevonartikel, min(FLOOR((ifnull(lpi.menge,0) - if(ifnull(r.menge,0) > ifnull(off.menge,0),ifnull(r.menge,0),ifnull(off.menge,0))) / s.menge)) as minmenge
           FROM
             (
-              SELECT artikel,sum(menge) as menge ,stuecklistevonartikel 
-              FROM stueckliste 
-              WHERE art!='it' 
+              SELECT artikel,sum(menge) as menge ,stuecklistevonartikel
+              FROM stueckliste
+              WHERE art!='it'
               GROUP BY artikel,stuecklistevonartikel
             ) AS s
             INNER JOIN artikel a2 ON s.artikel = a2.id
             LEFT JOIN (
-              SELECT lpi2.artikel, sum(lpi2.menge) as menge 
-              FROM lager_platz_inhalt  lpi2 
-              INNER JOIN lager_platz lp ON lpi2.lager_platz = lp.id 
-              WHERE lp.sperrlager <> 1 
-              GROUP BY lpi2.artikel 
+              SELECT lpi2.artikel, sum(lpi2.menge) as menge
+              FROM lager_platz_inhalt  lpi2
+              INNER JOIN lager_platz lp ON lpi2.lager_platz = lp.id
+              WHERE lp.sperrlager <> 1
+              GROUP BY lpi2.artikel
             ) AS lpi ON a2.id = lpi.artikel
             LEFT JOIN (SELECT artikel, ifnull(sum(menge),0) as menge FROM lager_reserviert GROUP BY artikel ) r ON a2.id = r.artikel
             LEFT JOIN (SELECT ifnull(SUM(ap.menge),0) as menge,ap.artikel FROM auftrag_position ap INNER JOIN auftrag a ON a.id=ap.auftrag WHERE a.status='freigegeben' GROUP BY ap.artikel) off ON a2.id = off.artikel
         GROUP BY s.stuecklistevonartikel
       ) verf ON acf.artikel = verf.stuecklistevonartikel
       LEFT JOIN (
-        SELECT artikel, ifnull(sum(menge),0) as menge 
-        FROM lager_reserviert 
-        GROUP BY artikel 
+        SELECT artikel, ifnull(sum(menge),0) as menge
+        FROM lager_reserviert
+        GROUP BY artikel
       ) AS r2 ON acf.artikel = r2.artikel
       LEFT JOIN (
-        SELECT ifnull(SUM(ap.menge),0) as menge,ap.artikel 
-        FROM auftrag_position ap 
-        INNER JOIN auftrag a ON a.id=ap.auftrag 
-        WHERE a.status='freigegeben' 
+        SELECT ifnull(SUM(ap.menge),0) as menge,ap.artikel
+        FROM auftrag_position ap
+        INNER JOIN auftrag a ON a.id=ap.auftrag
+        WHERE a.status='freigegeben'
         GROUP BY ap.artikel
       ) AS off2 ON acf.artikel = off2.artikel
-      SET acf.lager_verfuegbar = 
+      SET acf.lager_verfuegbar =
         if(
-          ifnull(verf.minmenge,0) - 
+          ifnull(verf.minmenge,0) -
             if(
               ifnull(r2.menge,0) > ifnull(off2.menge,0),
               ifnull(r2.menge,0),
               ifnull(off2.menge,0)
               ) <= 0,
-          0, 
-            verf.minmenge - 
+          0,
+            verf.minmenge -
             if(
               ifnull(r2.menge,0) > ifnull(off2.menge,0),
               ifnull(r2.menge,0),
@@ -9573,14 +9501,14 @@ padding: 10px;\">
 
   public function updateQuarantineStoreToAricleCache() {
     $this->app->DB->Update(
-      "UPDATE artikel_cached_fields acf 
+      "UPDATE artikel_cached_fields acf
       INNER JOIN artikel a ON acf.artikel = a.id AND a.lagerartikel = 1 AND a.juststueckliste = 0
       LEFT JOIN (
-        SELECT lpi2.artikel, sum(lpi2.menge) as minmenge 
-        FROM lager_platz_inhalt  lpi2 
-        INNER JOIN lager_platz lp ON lpi2.lager_platz = lp.id 
-        WHERE lp.sperrlager = 1 
-        GROUP BY lpi2.artikel 
+        SELECT lpi2.artikel, sum(lpi2.menge) as minmenge
+        FROM lager_platz_inhalt  lpi2
+        INNER JOIN lager_platz lp ON lpi2.lager_platz = lp.id
+        WHERE lp.sperrlager = 1
+        GROUP BY lpi2.artikel
       ) verf ON a.id = verf.artikel
       SET acf.imsperrlager = ifnull(verf.minmenge,0)"
     );
@@ -9589,21 +9517,21 @@ padding: 10px;\">
   public function updateSellableToAricleCache()
   {
     $this->app->DB->Update(
-      "UPDATE artikel_cached_fields acf 
+      "UPDATE artikel_cached_fields acf
      INNER JOIN artikel a ON acf.artikel = a.id AND a.lagerartikel = 1 AND a.juststueckliste = 0
      LEFT JOIN (SELECT artikel, ifnull(sum(menge),0) as menge FROM lager_reserviert GROUP BY artikel ) r2 ON acf.artikel = r2.artikel
      LEFT JOIN (SELECT ifnull(SUM(ap.menge),0) as menge,ap.artikel FROM auftrag_position ap INNER JOIN auftrag a ON a.id=ap.auftrag WHERE a.status='freigegeben' GROUP BY ap.artikel) off2 ON acf.artikel = off2.artikel
      LEFT JOIN (SELECT lpi2.artikel, sum(lpi2.menge) as minmenge FROM lager_platz_inhalt  lpi2 INNER JOIN lager_platz lp ON lpi2.lager_platz = lp.id WHERE lp.sperrlager <> 1 GROUP BY lpi2.artikel ) verf ON a.id = verf.artikel
-     SET acf.lager_verfuegbar = 
+     SET acf.lager_verfuegbar =
        if(
-         ifnull(verf.minmenge,0) - 
+         ifnull(verf.minmenge,0) -
          if(
            ifnull(r2.menge,0) > ifnull(off2.menge,0),
            ifnull(r2.menge,0),
            ifnull(off2.menge,0)
            ) <= 0,
-         0, 
-         verf.minmenge - 
+         0,
+         verf.minmenge -
          if(
            ifnull(r2.menge,0) > ifnull(off2.menge,0),
            ifnull(r2.menge,0),
@@ -9617,21 +9545,21 @@ padding: 10px;\">
   public function ArtikelLagerInfo($artikel)
   {
 
-    $summe = $this->app->DB->Select("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi LEFT JOIN lager_platz lp ON lp.id=lpi.lager_platz
-        WHERE lpi.artikel='$artikel' AND lp.sperrlager!=1");
+    $summe = $this->app->DatabaseService->selectValue("SELECT SUM(lpi.menge) FROM lager_platz_inhalt lpi LEFT JOIN lager_platz lp ON lp.id=lpi.lager_platz
+        WHERE lpi.artikel=:artikel AND lp.sperrlager!=1", ['artikel' => (int)$artikel]);
 
-    $reserviert = $this->app->DB->Select("SELECT SUM(menge) FROM lager_reserviert WHERE artikel='$artikel'");// AND datum >= NOW()");
+    $reserviert = $this->app->DatabaseService->selectValue("SELECT SUM(menge) FROM lager_reserviert WHERE artikel=:artikel", ['artikel' => (int)$artikel]);// AND datum >= NOW()");
 
-    $auftraege = $this->app->DB->Select("SELECT SUM(ap.menge) as menge,ap.bezeichnung FROM auftrag_position ap
-      LEFT JOIN artikel a ON a.id=ap.artikel LEFT JOIN auftrag auf ON auf.id=ap.auftrag WHERE a.id='$artikel' AND a.lagerartikel=1 AND auf.status='freigegeben'");
+    $auftraege = $this->app->DatabaseService->selectValue("SELECT SUM(ap.menge) as menge FROM auftrag_position ap
+      LEFT JOIN artikel a ON a.id=ap.artikel LEFT JOIN auftrag auf ON auf.id=ap.auftrag WHERE a.id=:artikel AND a.lagerartikel=1 AND auf.status='freigegeben'", ['artikel' => (int)$artikel]);
 
-    $liefern= $this->app->DB->Select("SELECT SUM(ap.menge) as menge,ap.bezeichnung FROM auftrag_position ap, auftrag aa, artikel a WHERE a.id=ap.artikel AND aa.id = ap.auftrag AND a.id='$artikel' AND a.lagerartikel=1 AND aa.status='freigegeben'");
+    $liefern = $this->app->DatabaseService->selectValue("SELECT SUM(ap.menge) as menge FROM auftrag_position ap, auftrag aa, artikel a WHERE a.id=ap.artikel AND aa.id = ap.auftrag AND a.id=:artikel AND a.lagerartikel=1 AND aa.status='freigegeben'", ['artikel' => (int)$artikel]);
 
-    $reserviert_im_versand = $this->app->DB->Select("SELECT SUM(menge) FROM lager_reserviert WHERE artikel='$artikel' AND objekt='lieferschein'");
+    $reserviert_im_versand = $this->app->DatabaseService->selectValue("SELECT SUM(menge) FROM lager_reserviert WHERE artikel=:artikel AND objekt='lieferschein'", ['artikel' => (int)$artikel]);
 
     $berechnet = $summe -  $auftraege - $reserviert_im_versand;
 
-    $offenebestellungen = $this->app->DB->Select("SELECT SUM(bp.menge-bp.geliefert) as menge FROM bestellung_position bp, bestellung bs, artikel a WHERE a.id=bp.artikel AND bs.id = bp.bestellung AND a.id='$artikel' AND a.lagerartikel=1 AND (bs.status='freigegeben' OR bs.status='versendet') AND bp.menge > bp.geliefert");
+    $offenebestellungen = $this->app->DatabaseService->selectValue("SELECT SUM(bp.menge-bp.geliefert) as menge FROM bestellung_position bp, bestellung bs, artikel a WHERE a.id=bp.artikel AND bs.id = bp.bestellung AND a.id=:artikel AND a.lagerartikel=1 AND (bs.status='freigegeben' OR bs.status='versendet') AND bp.menge > bp.geliefert", ['artikel' => (int)$artikel]);
 
     $verkaufte = $auftraege + $reserviert_im_versand;
 
@@ -9666,31 +9594,46 @@ padding: 10px;\">
     if (empty($scan)) {
         return(0);
     }
-    $trimmedscan = $this->app->DB->real_escape_string($trimmedscan);
-    $scan = $this->app->DB->real_escape_string($scan);
 
     // Default
-    $sql = "SELECT id FROM artikel WHERE nummer='$trimmedscan' ".($ignoreprefixpostfix?"OR '$scan' LIKE CONCAT('%',nummer,'%')":"")." AND ifnull(geloescht,0) = 0 AND nummer != 'DEL' LIMIT 1";
-    $artikel = $this->app->DB->Select($sql);
+    if($ignoreprefixpostfix) {
+        $sql = "SELECT id FROM artikel WHERE (nummer=:trimmedscan OR :scan LIKE CONCAT('%',nummer,'%')) AND ifnull(geloescht,0) = 0 AND nummer != 'DEL' LIMIT 1";
+        $artikel = $this->app->DatabaseService->selectValue($sql, ['trimmedscan' => $trimmedscan, 'scan' => $scan]);
+    } else {
+        $sql = "SELECT id FROM artikel WHERE nummer=:trimmedscan AND ifnull(geloescht,0) = 0 AND nummer != 'DEL' LIMIT 1";
+        $artikel = $this->app->DatabaseService->selectValue($sql, ['trimmedscan' => $trimmedscan]);
+    }
     if (!empty($artikel)) {
         return($artikel);
     }
 
     // EAN/GTIN
-    $artikel = $this->app->DB->Select("SELECT id FROM artikel WHERE ean='$scan' ".($ignoreprefixpostfix?"OR '$scan' LIKE CONCAT('%',ean,'%')":"")." AND ifnull(geloescht,0) = 0 AND nummer != 'DEL' LIMIT 1");
+    if($ignoreprefixpostfix) {
+        $artikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE (ean=:scan OR :scan2 LIKE CONCAT('%',ean,'%')) AND ifnull(geloescht,0) = 0 AND nummer != 'DEL' LIMIT 1", ['scan' => $scan, 'scan2' => $scan]);
+    } else {
+        $artikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE ean=:scan AND ifnull(geloescht,0) = 0 AND nummer != 'DEL' LIMIT 1", ['scan' => $scan]);
+    }
     if (!empty($artikel)) {
         return($artikel);
     }
 
     // Hersteller
-    $artikel = $this->app->DB->Select("SELECT id FROM artikel WHERE herstellernummer='$scan' ".($ignoreprefixpostfix?"OR '$scan' LIKE CONCAT('%',herstellernummer,'%')":"")." AND ifnull(geloescht,0) = 0 AND nummer != 'DEL' LIMIT 1");
+    if($ignoreprefixpostfix) {
+        $artikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE (herstellernummer=:scan OR :scan2 LIKE CONCAT('%',herstellernummer,'%')) AND ifnull(geloescht,0) = 0 AND nummer != 'DEL' LIMIT 1", ['scan' => $scan, 'scan2' => $scan]);
+    } else {
+        $artikel = $this->app->DatabaseService->selectValue("SELECT id FROM artikel WHERE herstellernummer=:scan AND ifnull(geloescht,0) = 0 AND nummer != 'DEL' LIMIT 1", ['scan' => $scan]);
+    }
     if (!empty($artikel)) {
         return($artikel);
     }
 
     // Lieferantnummer
     if (!empty($adresse)) {
-        $artikel = $this->app->DB->Select("SELECT artikel FROM einkaufspreise WHERE bestellnummer='$scan' ".($ignoreprefixpostfix?"OR '$scan' LIKE CONCAT('%',bestellnummer,'%')":"")." AND ifnull(geloescht,0) = 0 AND adresse = $adresse LIMIT 1");
+        if($ignoreprefixpostfix) {
+            $artikel = $this->app->DatabaseService->selectValue("SELECT artikel FROM einkaufspreise WHERE (bestellnummer=:scan OR :scan2 LIKE CONCAT('%',bestellnummer,'%')) AND ifnull(geloescht,0) = 0 AND adresse = :adresse LIMIT 1", ['scan' => $scan, 'scan2' => $scan, 'adresse' => $adresse]);
+        } else {
+            $artikel = $this->app->DatabaseService->selectValue("SELECT artikel FROM einkaufspreise WHERE bestellnummer=:scan AND ifnull(geloescht,0) = 0 AND adresse = :adresse LIMIT 1", ['scan' => $scan, 'adresse' => $adresse]);
+        }
         if (!empty($artikel)) {
             return($artikel);
         }
@@ -9699,8 +9642,13 @@ padding: 10px;\">
     // Fremdnummer
     if($fremdnummern)
     {
-        $artikel = $this->app->DB->Select("SELECT art.id FROM artikel art INNER JOIN artikelnummer_fremdnummern af ON art.id = af.artikel AND ifnull(art.geloescht,0) = 0 AND af.aktiv = 1 AND art.nummer <> 'DEL'
-        INNER JOIN shopexport s  ON af.shopid = s.id WHERE af.nummer = '$scan' ".($ignoreprefixpostfix?"OR '$scan' LIKE 'CONCAT('%',af.nummer,'%')":"")." LIMIT 1");
+        if($ignoreprefixpostfix) {
+            $artikel = $this->app->DatabaseService->selectValue("SELECT art.id FROM artikel art INNER JOIN artikelnummer_fremdnummern af ON art.id = af.artikel AND ifnull(art.geloescht,0) = 0 AND af.aktiv = 1 AND art.nummer <> 'DEL'
+        INNER JOIN shopexport s ON af.shopid = s.id WHERE (af.nummer = :scan OR :scan2 LIKE CONCAT('%',af.nummer,'%')) LIMIT 1", ['scan' => $scan, 'scan2' => $scan]);
+        } else {
+            $artikel = $this->app->DatabaseService->selectValue("SELECT art.id FROM artikel art INNER JOIN artikelnummer_fremdnummern af ON art.id = af.artikel AND ifnull(art.geloescht,0) = 0 AND af.aktiv = 1 AND art.nummer <> 'DEL'
+        INNER JOIN shopexport s ON af.shopid = s.id WHERE af.nummer = :scan LIMIT 1", ['scan' => $scan]);
+        }
         if (!empty($artikel)) {
             return($artikel);
         }

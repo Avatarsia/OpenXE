@@ -734,7 +734,7 @@ class Auftrag extends GenAuftrag
         break;
         case 'positionen_teillieferung':
 
-                $id = $app->Secure->GetGET('id');
+                $id = (int)$app->Secure->GetGET('id');
                 $allowed['positionen_teillieferung'] = array('list');
                 $heading = array('Position','Artikel','Nr.','Menge','Lager','Teilmenge','');
                 $width = array(  '1%',      '60%',    '29%','5%','5%'); // Fill out manually later
@@ -6869,11 +6869,10 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
                 $this->app->erp->AddDateiStichwort($fileid,'auftrag','auftrag',$v);
                 $this->app->erp->DokumentSend($adresse,'auftrag', $v, 'email',$emailtext['betreff'],$emailtext['text'],array($tmpfile),"","",$projekt,$email, $name);
                 $ansprechpartner = $name." <".$email.">";
-                $this->app->DatabaseService->insert(
+                $tmpid = $this->app->DatabaseService->insert(
                   "INSERT INTO dokumente_send (id,dokument,zeit,bearbeiter,adresse,parameter,art,betreff,text,projekt,ansprechpartner,versendet,dateiid) VALUES ('','auftrag',NOW(),:bearbeiter,:adresse,:v,'email',:betreff,:text,:projekt,:ansprechpartner,1,:fileid)",
                   ['bearbeiter' => $this->app->User->GetName(), 'adresse' => (int)$adresse, 'v' => (int)$v, 'betreff' => $emailtext['betreff'], 'text' => $emailtext['text'], 'projekt' => (int)$projekt, 'ansprechpartner' => $ansprechpartner, 'fileid' => (int)$fileid]
                 );
-                $tmpid = $this->app->DB->GetInsertID();
                 unlink($tmpfile);
                 $this->app->DatabaseService->update(
                   "UPDATE auftrag SET versendet=1, versendet_am=NOW(), versendet_per='email', versendet_durch = :durch, schreibschutz='1' WHERE id = :id LIMIT 1",

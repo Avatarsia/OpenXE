@@ -1,13 +1,13 @@
 <?php
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -44,9 +44,9 @@ class Zeiterfassung { //extends GenZeiterfassung {
                                                else
                                                oMoreData' . $r . $name . ' = 1;
 
-                                               $(\'#' . $name . '\').dataTable().fnFilter( 
+                                               $(\'#' . $name . '\').dataTable().fnFilter(
                                                  \'\',
-                                                 i, 
+                                                 i,
                                                  0,0
                                                  );
                                                }
@@ -88,7 +88,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
         // SQL statement
         $sql = "SELECT SQL_CALC_FOUND_ROWS z.id,
                   '<img src=./themes/{$this->app->Conf->WFconf['defaulttheme']}/images/details_open.png class=details>' as open,
-                  DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum, 
+                  DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum,
                   DATE_FORMAT(z.von,'%H:%i') as von, DATE_FORMAT(z.bis,'%H:%i') as bis,
                   format((HOUR(TIMEDIFF(z.bis, z.von))) + MINUTE(TIMEDIFF(z.bis, z.von))/60,2) AS Dauer,
                   a.name as Mitarbeiter,z.art,
@@ -96,10 +96,10 @@ class Zeiterfassung { //extends GenZeiterfassung {
                   if(z.abrechnen > 0,'(A)',''),
                   p.abkuerzung,
                   z.id
-                FROM zeiterfassung z 
-                LEFT JOIN adresse a ON a.id=z.adresse 
+                FROM zeiterfassung z
+                LEFT JOIN adresse a ON a.id=z.adresse
                 LEFT JOIN adresse b ON b.id=z.adresse_abrechnung
-                LEFT JOIN projekt p ON p.id=z.projekt 
+                LEFT JOIN projekt p ON p.id=z.projekt
                 LEFT JOIN arbeitspaket ap ON z.arbeitspaket=ap.id";
 
         // Fester filter
@@ -152,9 +152,9 @@ class Zeiterfassung { //extends GenZeiterfassung {
                                                else
                                                oMoreData' . $r . $name . ' = 1;
 
-                                               $(\'#' . $name . '\').dataTable().fnFilter( 
+                                               $(\'#' . $name . '\').dataTable().fnFilter(
                                                  \'\',
-                                                 i, 
+                                                 i,
                                                  0,0
                                                  );
                                                }
@@ -194,7 +194,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
         $sql = "SELECT SQL_CALC_FOUND_ROWS z.id,
                                            '<img src=./themes/{$this->app->Conf->WFconf['defaulttheme']}/images/details_open.png class=details>' as open,
 
-                                           CONCAT('<!--',DATE_FORMAT(z.von,'%Y%m%d'),'-->',DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR'))) AS Datum, 
+                                           CONCAT('<!--',DATE_FORMAT(z.von,'%Y%m%d'),'-->',DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR'))) AS Datum,
                                            DATE_FORMAT(z.von,'%H:%i') as von, DATE_FORMAT(z.bis,'%H:%i') as bis,
                                             round(HOUR(TIMEDIFF(z.bis, z.von)) + MINUTE(TIMEDIFF(z.bis, z.von))/60,2) AS Dauer,
 
@@ -204,10 +204,10 @@ class Zeiterfassung { //extends GenZeiterfassung {
                                              p.abkuerzung,
                                                z.id
 
-                                                 FROM zeiterfassung z 
-                                                 LEFT JOIN adresse a ON a.id=z.adresse 
+                                                 FROM zeiterfassung z
+                                                 LEFT JOIN adresse a ON a.id=z.adresse
                                                  LEFT JOIN adresse b ON b.id=z.adresse_abrechnung
-                                                 LEFT JOIN projekt p ON p.id=z.projekt 
+                                                 LEFT JOIN projekt p ON p.id=z.projekt
                                                  LEFT JOIN arbeitspaket ap ON z.arbeitspaket=ap.id";
 
         // Fester filter
@@ -231,10 +231,10 @@ class Zeiterfassung { //extends GenZeiterfassung {
           }
         }
         if($fprojekt){
-          $fprojekt = $this->app->DB->Select("SELECT id FROM projekt WHERE abkuerzung = '$fprojekt' AND geloescht != 1 LIMIT 1");
+          $fprojekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :abkuerzung AND geloescht != 1 LIMIT 1", ['abkuerzung' => $fprojekt]);
         }
         if($fmitarbeiter){
-          $fmitarbeiter = $this->app->DB->Select("SELECT id FROM adresse WHERE mitarbeiternummer = '$fmitarbeiter' AND geloescht != 1 LIMIT 1");
+          $fmitarbeiter = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE mitarbeiternummer = :mitarbeiternummer AND geloescht != 1 LIMIT 1", ['mitarbeiternummer' => $fmitarbeiter]);
         }
 
         $more_data1 = $this->app->Secure->GetGET('more_data10');
@@ -283,10 +283,10 @@ class Zeiterfassung { //extends GenZeiterfassung {
                                             oMoreData'.$r.$name.' = 0;
                                             else
                                             oMoreData'.$r.$name.' = 1;
-        
-                                            $(\'#'.$name.'\').dataTable().fnFilter( 
+
+                                            $(\'#'.$name.'\').dataTable().fnFilter(
                                             \'\',
-                                            i, 
+                                            i,
                                             0,0
                                             );
                                             }
@@ -319,7 +319,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
         $sql = "SELECT SQL_CALC_FOUND_ROWS z.id,
                                            a.name,a.kundennummer,
-         (SELECT ".$this->app->erp->FormatMenge("SUM(TIME_TO_SEC(TIMEDIFF(z2.bis, z2.von)))/3600")." FROM zeiterfassung z2 LEFT JOIN projekt p2 ON z2.projekt = p2.id WHERE (z2.adresse_abrechnung = a.id OR p2.kunde = a.id) AND z2.abrechnen=1 AND z2.abgerechnet!=1 $subwhere2) as offen,                                
+         (SELECT ".$this->app->erp->FormatMenge("SUM(TIME_TO_SEC(TIMEDIFF(z2.bis, z2.von)))/3600")." FROM zeiterfassung z2 LEFT JOIN projekt p2 ON z2.projekt = p2.id WHERE (z2.adresse_abrechnung = a.id OR p2.kunde = a.id) AND z2.abrechnen=1 AND z2.abgerechnet!=1 $subwhere2) as offen,
          (SELECT ".$this->app->erp->FormatMenge("SUM(TIME_TO_SEC(TIMEDIFF(z2.bis, z2.von)))/3600")." FROM zeiterfassung z2 LEFT JOIN projekt p2 ON z2.projekt = p2.id WHERE (z2.adresse_abrechnung = a.id OR p2.kunde = a.id) AND z2.abrechnen!=1 AND z2.abgerechnet!=1 $subwhere2) as offen2,
                                            a.id
                                              FROM zeiterfassung z LEFT JOIN adresse a ON a.id=z.adresse_abrechnung ";
@@ -490,16 +490,16 @@ class Zeiterfassung { //extends GenZeiterfassung {
           if($this->app->User->GetParameter('zeiterfassung_buchen_termine')=='1' && $cmd!='mitarbeiteransichtdata') {
            if($nurmeine > 0)
             {
-              $data = $this->app->DB->SelectArr("SELECT DISTINCT ke.id, ort,beschreibung, bezeichnung AS title, von AS start, bis AS end, allDay, color, public,erinnerung,adresse,adresseintern,projekt
+              $data = $this->app->DatabaseService->select("SELECT DISTINCT ke.id, ort,beschreibung, bezeichnung AS title, von AS start, bis AS end, allDay, color, public,erinnerung,adresse,adresseintern,projekt
         FROM kalender_event AS ke
         LEFT JOIN kalender_user AS ku ON ke.id=ku.event
-        WHERE (ku.userid='$user') AND (ke.von < '$end' AND (ke.bis >= '$start' OR ke.bis='0000-00-00 00:00:00') ) GROUP by ke.id ORDER by start");
+        WHERE (ku.userid = :user) AND (ke.von < :end AND (ke.bis >= :start OR ke.bis='0000-00-00 00:00:00') ) GROUP by ke.id ORDER by start", ['user' => $user, 'end' => $end, 'start' => $start]);
             } else {
-      $data = $this->app->DB->SelectArr("SELECT DISTINCT ke.id, ort,beschreibung, ke.bezeichnung AS title, von AS start, bis AS end, allDay, color, public,erinnerung,adresse,adresseintern,projekt,kg.farbe
+      $data = $this->app->DatabaseService->select("SELECT DISTINCT ke.id, ort,beschreibung, ke.bezeichnung AS title, von AS start, bis AS end, allDay, color, public,erinnerung,adresse,adresseintern,projekt,kg.farbe
         FROM kalender_event AS ke
         LEFT JOIN kalender_user ku ON ke.id=ku.event
         LEFT JOIN kalender_gruppen kg ON kg.id=ku.gruppe
-        WHERE (ke.von < '$end_datum' AND (ke.bis >= '$start_datum' OR (ke.bis='0000-00-00 00:00:00' AND ke.von!='0000-00-00 00:00:00') AND NOT (ke.von < '$start_datum' AND ke.bis='0000-00-00 00:00:00'))  ) $subwhere GROUP by ke.id ORDER by start");
+        WHERE (ke.von < :end_datum AND (ke.bis >= :start_datum OR (ke.bis='0000-00-00 00:00:00' AND ke.von!='0000-00-00 00:00:00') AND NOT (ke.von < :start_datum2 AND ke.bis='0000-00-00 00:00:00'))  ) $subwhere GROUP by ke.id ORDER by start", ['end_datum' => $end_datum, 'start_datum' => $start_datum, 'start_datum2' => $start_datum]);
             }
             $cdata = !empty($data)?count($data):0;
             for($i=0;$i<$cdata;$i++)
@@ -579,14 +579,14 @@ class Zeiterfassung { //extends GenZeiterfassung {
           $data['ort']=$result['ort'];
           $data['art']=$result['art'];
           $data['internerkommentar']=$result['internerkommentar'];
-          $data['projekt_manuell']=$this->app->DB->Select("SELECT CONCAT(abkuerzung,' ',name) FROM projekt WHERE id='".$result['projekt']."' LIMIT 1");
+          $data['projekt_manuell']=$this->app->DatabaseService->selectValue("SELECT CONCAT(abkuerzung,' ',name) FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$result['projekt']]);
         //  $data['serviceauftrag'] = $this->app->DB->Select("SELECT belegnr FROM serviceauftrag WHERE id='".$result["serviceauftrag"]."' LIMIT 1");
-          $data['adresse_abrechnung'] = $this->app->DB->Select("SELECT CONCAT(kundennummer,' ',name) FROM adresse WHERE id='".$result["adresse_abrechnung"]."'");
-          $data['auftragpositionid']=$this->app->DB->Select("SELECT CONCAT(a.belegnr,'-',ap.sort,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y'),' ',ap.bezeichnung) FROM auftrag_position ap LEFT JOIN auftrag a ON ap.auftrag=a.id WHERE ap.id='".$result["auftragpositionid"]."'");
-          $data['produktion']=$this->app->DB->Select("SELECT CONCAT(belegnr,' ',name,' ', DATE_FORMAT(datum,'%d.%m.%Y')) FROM produktion WHERE id='".$result["produktion"]."'");
+          $data['adresse_abrechnung'] = $this->app->DatabaseService->selectValue("SELECT CONCAT(kundennummer,' ',name) FROM adresse WHERE id = :id", ['id' => (int)$result["adresse_abrechnung"]]);
+          $data['auftragpositionid']=$this->app->DatabaseService->selectValue("SELECT CONCAT(a.belegnr,'-',ap.sort,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y'),' ',ap.bezeichnung) FROM auftrag_position ap LEFT JOIN auftrag a ON ap.auftrag=a.id WHERE ap.id = :id", ['id' => (int)$result["auftragpositionid"]]);
+          $data['produktion']=$this->app->DatabaseService->selectValue("SELECT CONCAT(belegnr,' ',name,' ', DATE_FORMAT(datum,'%d.%m.%Y')) FROM produktion WHERE id = :id", ['id' => (int)$result["produktion"]]);
 
-          $data['auftrag'] = $this->app->DB->Select("SELECT CONCAT(belegnr,' ',name,' ', DATE_FORMAT(datum,'%d.%m.%Y')) FROM auftrag WHERE id='".$result["auftrag"]."'");
-          $data['arbeitspaket'] = $this->app->DB->Select("SELECT CONCAT(ap.id,' ',p.abkuerzung,' ',ap.aufgabe) as name2 FROM arbeitspaket ap LEFT JOIN projekt p ON p.id=ap.projekt WHERE ap.id='".$result["arbeitspaket"]."' LIMIT 1");
+          $data['auftrag'] = $this->app->DatabaseService->selectValue("SELECT CONCAT(belegnr,' ',name,' ', DATE_FORMAT(datum,'%d.%m.%Y')) FROM auftrag WHERE id = :id", ['id' => (int)$result["auftrag"]]);
+          $data['arbeitspaket'] = $this->app->DatabaseService->selectValue("SELECT CONCAT(ap.id,' ',p.abkuerzung,' ',ap.aufgabe) as name2 FROM arbeitspaket ap LEFT JOIN projekt p ON p.id=ap.projekt WHERE ap.id = :id LIMIT 1", ['id' => (int)$result["arbeitspaket"]]);
           $data['abrechnen'] = $result['abrechnen'];
 /*
       $adresse_abrechnung_komplett = $this->app->DB->Select("SELECT CONCAT(kundennummer,' ',name) FROM adresse WHERE id='".$tmp[0]["adresse_abrechnung"]."'");
@@ -638,18 +638,18 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
           if($check == $id && $check > 0 && $checkzeit)
           {
-            $this->app->DB->Delete("DELETE FROM zeiterfassung WHERE id='$check' LIMIT 1");
+            $this->app->DatabaseService->delete("DELETE FROM zeiterfassung WHERE id = :id LIMIT 1", ['id' => (int)$check]);
             $status['status']=1;
-            $status['statusText']=''; 
+            $status['statusText']='';
 
           } else if ($checkzeit==false)
           {
             $status['status']=0;
-            $status['statusText']='Die Zeit ist zu alt und darf daher nicht mehr bearbeitet werden!'; 
+            $status['statusText']='Die Zeit ist zu alt und darf daher nicht mehr bearbeitet werden!';
           }
           else {
             $status['status']=0;
-            $status['statusText']='Diese Zeiterfassung konnte nicht gelöscht werden (fehlende Rechte)'; 
+            $status['statusText']='Diese Zeiterfassung konnte nicht gelöscht werden (fehlende Rechte)';
           }
           echo json_encode($status);
           exit;
@@ -731,11 +731,11 @@ class Zeiterfassung { //extends GenZeiterfassung {
               '',0,'',0,$internerkommentar,$auftrag,$produktion,0,$auftragpositionid,$serviceauftrag);
             //$this->app->erp->AddArbeitszeit($adr_id, $start, $end, $aufgabe, $beschreibung,$ort, $projekt, $paketauswahl,$art,$kunde="",$abrechnen="",$verrechnungsart="",$kostenstelle="",$abgerechnet="0",$gps="",$aufgabeid=0,$internerkommentar="",$auftrag=0,$produktion=0, $preis = 0,$auftragpositionid="");
             }
-            $status['status']=1; 
-            $status['statusText']=''; 
+            $status['status']=1;
+            $status['statusText']='';
           } else {
-            $status['status']=0; 
-            $status['statusText']='Die Zeiterfassung konnte nicht angelegt werden da das Datum im Zeitbereich liegt der bereits geschlossen ist.'; 
+            $status['status']=0;
+            $status['statusText']='Die Zeiterfassung konnte nicht angelegt werden da das Datum im Zeitbereich liegt der bereits geschlossen ist.';
           }
           echo json_encode($status);
           exit;
@@ -745,7 +745,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
           $start=$this->app->Secure->GetGET('start');
           $end=$this->app->Secure->GetGET('end');
 
-          $datum = strstr($start, ' ', true); 
+          $datum = strstr($start, ' ', true);
           $checkzeit = $this->app->erp->ZeiterfassungAllowEdit($datum);
           if($eid > 0 && $checkzeit)
           {
@@ -753,8 +753,8 @@ class Zeiterfassung { //extends GenZeiterfassung {
           }
           else if(!$checkzeit)
           {
-            $status['status']=0; 
-            $status['statusText']='Die Zeiterfassung konnte nicht angelegt werden da das Datum im Zeitbereich liegt der bereits geschlossen ist.'; 
+            $status['status']=0;
+            $status['statusText']='Die Zeiterfassung konnte nicht angelegt werden da das Datum im Zeitbereich liegt der bereits geschlossen ist.';
             echo json_encode($status);
             exit;
           }
@@ -765,14 +765,14 @@ class Zeiterfassung { //extends GenZeiterfassung {
       header('Content-type: application/json');
       echo json_encode($data);
       exit;
-    }  
+    }
 
 
     $id=$this->app->Secure->GetGET('id');
     if($msg=='' && $id <=0){
       $this->app->User->SetParameter('zeiterfassung_create_datumzeiterfassung', '');
     }
-      
+
 
     //    $this->app->erp->MenuEintrag("index.php?module=zeiterfassung&action=list","&Uuml;bersicht");
     //   $this->app->erp->MenuEintrag("index.php?module=zeiterfassung&action=create","Neue Zeiterfassung");
@@ -785,16 +785,16 @@ class Zeiterfassung { //extends GenZeiterfassung {
       //      $this->app->Tpl->Add(KURZUEBERSCHRIFT,"Zeiterfassung");
     }
 
-    $id =  $this->app->User->GetId();      
+    $id =  $this->app->User->GetId();
     if(is_numeric($id)){
-      $adr_id = $this->app->DB->Select("SELECT adresse FROM user WHERE id='$id'");
+      $adr_id = $this->app->DatabaseService->selectValue("SELECT adresse FROM user WHERE id = :id", ['id' => (int)$id]);
     }
 
 
     if($this->app->erp->Firmendaten('zeiterfassung_abrechnenvorausgewaehlt')=='1' && $this->app->Secure->GetGET('id') <=0)
     {
       $this->app->Tpl->Set('ABRECHNEN','checked');
-    } 
+    }
 
 
     $this->ZeiterfassungManuell($adr_id);
@@ -813,28 +813,28 @@ class Zeiterfassung { //extends GenZeiterfassung {
       if($lid!='')
       {
         if($back=='zeiterfassung') {
-          $this->app->DB->Delete("DELETE FROM zeiterfassung WHERE id='".$lid."'");
+          $this->app->DatabaseService->delete("DELETE FROM zeiterfassung WHERE id = :id", ['id' => (int)$lid]);
           header('Location: index.php?module=zeiterfassung&action=list');
         }
         else if($back=='zeiterfassungmitarbeiter') {
           $id = $this->app->Secure->GetGET('id');
-          $this->app->DB->Delete("DELETE FROM zeiterfassung WHERE id='".$lid."'");
+          $this->app->DatabaseService->delete("DELETE FROM zeiterfassung WHERE id = :id", ['id' => (int)$lid]);
           header("Location: index.php?module=adresse&action=zeiterfassung&id=$id");
         }
         else if($back=='service') {
           $id = $this->app->Secure->GetGET('id');
-          $this->app->DB->Delete("DELETE FROM zeiterfassung WHERE id='".$lid."'");
+          $this->app->DatabaseService->delete("DELETE FROM zeiterfassung WHERE id = :id", ['id' => (int)$lid]);
           header("Location: index.php?module=service&action=list");
         }
         else if($back=='aufgabe') {
           $id = $this->app->Secure->GetGET('id');
-          $this->app->DB->Delete("DELETE FROM zeiterfassung WHERE id='".$lid."'");
+          $this->app->DatabaseService->delete("DELETE FROM zeiterfassung WHERE id = :id", ['id' => (int)$lid]);
           header("Location: index.php?module=aufgaben&action=list");
         }
 
         else if($back=='zeiterfassunguser')
         {
-          $this->app->DB->Delete("DELETE FROM zeiterfassung WHERE id='".$lid."' AND gebucht_von_user='".$this->app->User->GetID()."'");
+          $this->app->DatabaseService->delete("DELETE FROM zeiterfassung WHERE id = :id AND gebucht_von_user = :user_id", ['id' => (int)$lid, 'user_id' => (int)$this->app->User->GetID()]);
           header('Location: index.php?module=zeiterfassung&action=listuser');
         }
         else if ($back=='projekt')
@@ -850,7 +850,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
         else if ($back=='adresse')
         {
           $back_id = $this->app->Secure->GetGET('back_id');
-          header("Location: index.php?module=adresse&action=abrechnungzeit&id=$back_id");                  
+          header("Location: index.php?module=adresse&action=abrechnungzeit&id=$back_id");
         }
         else{
           header('Location: index.php?module=zeiterfassung&action=create#tabs-1');
@@ -935,10 +935,10 @@ class Zeiterfassung { //extends GenZeiterfassung {
       $this->app->Tpl->Set('WOCHESOLL',number_format($this->app->erp->ZeitGesamtWocheSoll($this->app->User->GetAdresse(),"","",$datum),2,",",""));
       $this->app->Tpl->Set('OFFEN',number_format($offen,2,",",""));
     }
-    
+
     $this->app->Tpl->Set('URLAUBOFFEN',number_format($this->app->erp->ZeitUrlaubOffen($this->app->User->GetAdresse(), $datum),2,",",""));
     $this->app->Tpl->Set('URLAUBGENOMMEN',number_format($this->app->erp->ZeitUrlaubGenommen($this->app->User->GetAdresse(), $datum),2,",",""));
-    
+
   }
 
 
@@ -953,7 +953,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
       $back = $this->app->Secure->GetGET('back');
       if($lid!='')
       {
-        $this->app->DB->Delete("DELETE FROM zeiterfassung WHERE id=$lid");
+        $this->app->DatabaseService->delete("DELETE FROM zeiterfassung WHERE id = :id", ['id' => (int)$lid]);
 
         if($back=='zeiterfassung')
           header('Location: index.php?module=zeiterfassung&action=list');
@@ -981,7 +981,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
         else if ($back=='adresse')
         {
           $back_id = $this->app->Secure->GetGET('back_id');
-          header("Location: index.php?module=adresse&action=abrechnungzeit&id=$back_id");                  
+          header("Location: index.php?module=adresse&action=abrechnungzeit&id=$back_id");
         }
         else
           header('Location: index.php?module=zeiterfassung&action=create#tabs-1');
@@ -1003,12 +1003,12 @@ class Zeiterfassung { //extends GenZeiterfassung {
     if($mitarbeiterkalenderansicht!='')
     {
       $tmpmitarbeiter = strtok($mitarbeiterkalenderansicht, ' ');
-      $mitarbeiterid = $this->app->DB->Select("SELECT id FROM adresse WHERE mitarbeiternummer='$tmpmitarbeiter' AND mitarbeiternummer!='' LIMIT 1");
+      $mitarbeiterid = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE mitarbeiternummer = :mitarbeiternummer AND mitarbeiternummer != '' LIMIT 1", ['mitarbeiternummer' => $tmpmitarbeiter]);
       $this->app->User->SetParameter('zeiterfassung_list_mitarbeiterkalenderansicht',$mitarbeiterid);
     }
 
     $mitarbeiterid = $this->app->User->GetParameter('zeiterfassung_list_mitarbeiterkalenderansicht');
-    $mitarbeiterkalenderansicht = $this->app->DB->Select("SELECT concat(mitarbeiternummer,' ',name) FROM adresse WHERE id='".$mitarbeiterid."'");
+    $mitarbeiterkalenderansicht = $this->app->DatabaseService->selectValue("SELECT concat(mitarbeiternummer,' ',name) FROM adresse WHERE id = :id", ['id' => (int)$mitarbeiterid]);
     $this->app->Tpl->Set('MITARBEITERKALENDERANSICHT',$mitarbeiterkalenderansicht);
 
     //TODO wenn man das Recht  hat
@@ -1050,7 +1050,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
   function ArbeitspaketReadDetails($index,&$ref)
   {
-    $pakete = $ref->app->DB->SelectArr("SELECT * FROM arbeitspakete WHERE id='$index'");
+    $pakete = $ref->app->DatabaseService->select("SELECT * FROM arbeitspakete WHERE id = :id", ['id' => (int)$index]);
     $myArr = $pakete[0];
 
     $ref->app->Tpl->Set('AUFGABE', $myArr['aufgabe']);
@@ -1077,13 +1077,13 @@ class Zeiterfassung { //extends GenZeiterfassung {
     // Adress-ID mit USER-ID abfragen
     $id =  $this->app->User->GetId();
     if($id!=''){
-      $adr_id = $this->app->DB->Select("SELECT adresse FROM user WHERE id=$id");
+      $adr_id = $this->app->DatabaseService->selectValue("SELECT adresse FROM user WHERE id = :id", ['id' => (int)$id]);
     }
 
     $ap_id = $this->app->Secure->GetGET('lid');
 
-    $pakete = $this->app->DB->SelectArr('SELECT * FROM arbeitspaket WHERE id='.$ap_id.' AND adresse='.$adr_id);
-    $myArr = $pakete[0];    
+    $pakete = $this->app->DatabaseService->select("SELECT * FROM arbeitspaket WHERE id = :ap_id AND adresse = :adr_id", ['ap_id' => (int)$ap_id, 'adr_id' => (int)$adr_id]);
+    $myArr = $pakete[0];
 
     $this->app->Tpl->Set('AUFGABE', $myArr['aufgabe']);
     $this->app->Tpl->Set('PROJEKT', $myArr['projekt']);
@@ -1100,7 +1100,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
     }
 
     if($this->app->Secure->GetPOST("abgabefeld") == 'nicht abgegeben'){
-      $this->app->DB->Update('UPDATE arbeitspakete SET abgabe="abgegeben", abgabedatum="'.date('Y-m-d').'" WHERE id='.$myArr['id']);
+      $this->app->DatabaseService->update("UPDATE arbeitspakete SET abgabe = 'abgegeben', abgabedatum = :abgabedatum WHERE id = :id", ['abgabedatum' => date('Y-m-d'), 'id' => (int)$myArr['id']]);
       $myArr['abgabe'] = 'abgegeben';
     }
     $this->app->Tpl->Parse('INHALT', 'arbeitspaket_details.tpl');
@@ -1127,8 +1127,8 @@ class Zeiterfassung { //extends GenZeiterfassung {
       $datumzeiterfassung = date('Y-m-d');
     }
 
-    $this->app->Tpl->Set('ZURUECKDATUM',$this->app->DB->Select("SELECT DATE_FORMAT(DATE_SUB('$datumzeiterfassung',INTERVAL 1 DAY),'%d.%m.%Y')"));
-    $this->app->Tpl->Set('VORWAERTSDATUM',$this->app->DB->Select("SELECT DATE_FORMAT(DATE_ADD('$datumzeiterfassung',INTERVAL 1 DAY),'%d.%m.%Y')"));
+    $this->app->Tpl->Set('ZURUECKDATUM',$this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(DATE_SUB(:datum, INTERVAL 1 DAY),'%d.%m.%Y')", ['datum' => $datumzeiterfassung]));
+    $this->app->Tpl->Set('VORWAERTSDATUM',$this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(DATE_ADD(:datum, INTERVAL 1 DAY),'%d.%m.%Y')", ['datum' => $datumzeiterfassung]));
 
 
     $this->app->Tpl->Set('DATUMZEITERFASSUNG',$this->app->String->Convert($datumzeiterfassung,'%3-%2-%1','%1.%2.%3'));
@@ -1147,9 +1147,9 @@ class Zeiterfassung { //extends GenZeiterfassung {
       $spalte='';
     }
 
-    //DATE_FORMAT(z.bis, '%d.%m.') AS Datum, 
+    //DATE_FORMAT(z.bis, '%d.%m.') AS Datum,
     $table = new EasyTable($this->app);
-    $table->Query("SELECT 
+    $table->Query("SELECT
         if(z.adresse_abrechnung > 0, CONCAT('<i style=color:#999>Kunde: ', a.name, ' (', a.kundennummer,')</i><br />', z.aufgabe), z.aufgabe) as Taetigkeit,
         DATE_FORMAT(z.von,'%H:%i') AS Von,
         CONCAT(TIME_FORMAT(TIMEDIFF(z.bis, z.von),'%H:%i'),IF(z.abrechnen=1,' (A)','')) AS Dauer,
@@ -1165,7 +1165,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
     $this->app->YUI->DatePicker('datumzeiterfassung');
 
 
-    //wenn id und kein post einmalig aus db holen    
+    //wenn id und kein post einmalig aus db holen
     $id = $this->app->Secure->GetGET('id');
     $id_old = $id;
     $copyid = $this->app->Secure->GetGET('copyid');
@@ -1203,29 +1203,29 @@ class Zeiterfassung { //extends GenZeiterfassung {
         $this->app->Tpl->Set('DISPLAYANDERERMITARBEITER','none');
       }
 
-      $mitarbeiter = $this->app->DB->Select("SELECT CONCAT(mitarbeiternummer,' ',name) FROM adresse WHERE id='".$tmp[0]['adresse']."'");
+      $mitarbeiter = $this->app->DatabaseService->selectValue("SELECT CONCAT(mitarbeiternummer,' ',name) FROM adresse WHERE id = :id", ['id' => (int)$tmp[0]['adresse']]);
       $adresse_abrechnung = $tmp[0]['adresse_abrechnung'];
-      $projektabgeschlossen = $this->app->DB->Select("SELECT id FROM projekt WHERE id = '".$tmp[0]['projekt']."' AND status = 'abgeschlossen' LIMIT 1");
-      $projekt_komplett = $this->app->DB->Select("SELECT CONCAT(abkuerzung,' ',name) FROM projekt WHERE id='".$tmp[0]['projekt']."'");
+      $projektabgeschlossen = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => (int)$tmp[0]['projekt']]);
+      $projekt_komplett = $this->app->DatabaseService->selectValue("SELECT CONCAT(abkuerzung,' ',name) FROM projekt WHERE id = :id", ['id' => (int)$tmp[0]['projekt']]);
 
       $check = $this->app->DB->Select("SHOW TABLES LIKE 'SERVICEAUFTRAG'");
 
-      if (!empty($check)) {                     
-        $serviceauftrag_anzeige = $this->app->DB->Select("SELECT belegnr FROM serviceauftrag WHERE id='".$tmp[0]['serviceauftrag']."' LIMIT 1");
+      if (!empty($check)) {
+        $serviceauftrag_anzeige = $this->app->DatabaseService->selectValue("SELECT belegnr FROM serviceauftrag WHERE id = :id LIMIT 1", ['id' => (int)$tmp[0]['serviceauftrag']]);
       }
 
-      $adresse_abrechnung_komplett = $this->app->DB->Select("SELECT CONCAT(kundennummer,' ',name) FROM adresse WHERE id='".$tmp[0]['adresse_abrechnung']."'");
+      $adresse_abrechnung_komplett = $this->app->DatabaseService->selectValue("SELECT CONCAT(kundennummer,' ',name) FROM adresse WHERE id = :id", ['id' => (int)$tmp[0]['adresse_abrechnung']]);
 
       if($tmp[0]['adresse_abrechnung']<=0){
         $adresse_abrechnung_komplett = '';
       }
 
-      $mitarbeiter_komplett = $this->app->DB->Select("SELECT CONCAT(mitarbeiternummer,' ',name) FROM adresse WHERE id='".$tmp[0]['adresse']."'");
-      $kostenstelle_komplett = $this->app->DB->Select("SELECT CONCAT(nummer,' ',beschreibung) FROM kostenstellen WHERE nummer='".$tmp[0]['kostenstelle']."'");
-      $verrechnungsart_komplett = $this->app->DB->Select("SELECT CONCAT(nummer,' ',beschreibung) FROM verrechnungsart WHERE nummer='".$tmp[0]['verrechnungsart']."'");
-      $auftrag_komplett = $this->app->DB->Select("SELECT CONCAT(belegnr,' ',name,' ', DATE_FORMAT(datum,'%d.%m.%Y')) FROM auftrag WHERE id='".$tmp[0]['auftrag']."'");
-      $auftragpositionid_komplett = $this->app->DB->Select("SELECT CONCAT(a.belegnr,'-',ap.sort,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y'),' ',ap.bezeichnung) FROM auftrag_position ap LEFT JOIN auftrag a ON ap.auftrag=a.id WHERE ap.id='".$tmp[0]['auftragpositionid']."'");
-      $produktion_komplett = $this->app->DB->Select("SELECT CONCAT(belegnr,' ',name,' ', DATE_FORMAT(datum,'%d.%m.%Y')) FROM produktion WHERE id='".$tmp[0]['produktion']."'");
+      $mitarbeiter_komplett = $this->app->DatabaseService->selectValue("SELECT CONCAT(mitarbeiternummer,' ',name) FROM adresse WHERE id = :id", ['id' => (int)$tmp[0]['adresse']]);
+      $kostenstelle_komplett = $this->app->DatabaseService->selectValue("SELECT CONCAT(nummer,' ',beschreibung) FROM kostenstellen WHERE nummer = :nummer", ['nummer' => $tmp[0]['kostenstelle']]);
+      $verrechnungsart_komplett = $this->app->DatabaseService->selectValue("SELECT CONCAT(nummer,' ',beschreibung) FROM verrechnungsart WHERE nummer = :nummer", ['nummer' => $tmp[0]['verrechnungsart']]);
+      $auftrag_komplett = $this->app->DatabaseService->selectValue("SELECT CONCAT(belegnr,' ',name,' ', DATE_FORMAT(datum,'%d.%m.%Y')) FROM auftrag WHERE id = :id", ['id' => (int)$tmp[0]['auftrag']]);
+      $auftragpositionid_komplett = $this->app->DatabaseService->selectValue("SELECT CONCAT(a.belegnr,'-',ap.sort,' ',a.name,' ',DATE_FORMAT(a.datum,'%d.%m.%Y'),' ',ap.bezeichnung) FROM auftrag_position ap LEFT JOIN auftrag a ON ap.auftrag=a.id WHERE ap.id = :id", ['id' => (int)$tmp[0]['auftragpositionid']]);
+      $produktion_komplett = $this->app->DatabaseService->selectValue("SELECT CONCAT(belegnr,' ',name,' ', DATE_FORMAT(datum,'%d.%m.%Y')) FROM produktion WHERE id = :id", ['id' => (int)$tmp[0]['produktion']]);
 
       $vonZeit = $tmp[0]['von'];
       $bisZeit = $tmp[0]['bis'];
@@ -1304,11 +1304,11 @@ class Zeiterfassung { //extends GenZeiterfassung {
     $datum_db = $this->app->String->Convert($datum,'%1.%2.%3','%3-%2-%1');
     $zeiteedit = $this->app->erp->ZeiterfassungAllowEdit($datum_db);
 
-    $string = $mitarbeiter;	
+    $string = $mitarbeiter;
     $string = trim ($string);
     $mitarbeiter = substr ($string , 0 , strpos ($string , ' '));
 
-    $string = $kostenstelle;	
+    $string = $kostenstelle;
     $string = trim ($string);
     $kostenstelle = substr ($string , 0 , strpos ($string , ' '));
 
@@ -1373,13 +1373,12 @@ class Zeiterfassung { //extends GenZeiterfassung {
       if($datumzeiterfassung=='') {
         $datumzeiterfassung = date('Y-m-d');
       }
-      $vonZeit =  $this->app->DB->Select("SELECT DATE_FORMAT(MAX(bis),'%H:%i') FROM zeiterfassung 
-          WHERE adresse='$adr_id' AND DATE_FORMAT(bis,'%Y-%m-%d')=DATE_FORMAT('$datumzeiterfassung','%Y-%m-%d')");
+      $vonZeit = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(MAX(bis),'%H:%i') FROM zeiterfassung WHERE adresse = :adresse AND DATE_FORMAT(bis,'%Y-%m-%d') = DATE_FORMAT(:datum,'%Y-%m-%d')", ['adresse' => (int)$adr_id, 'datum' => $datumzeiterfassung]);
 
       if($this->app->erp->ModulVorhanden('mitarbeiterzeiterfassung'))
       {
         if(!$vonZeit){
-          $vonZeit = $this->app->DB->Select("SELECT date_format(standardstartzeit,'%H:%i') FROM mitarbeiterzeiterfassung_einstellungen WHERE adresse = '".$this->app->User->GetAdresse()."' ORDER by id DESC LIMIT 1");
+          $vonZeit = $this->app->DatabaseService->selectValue("SELECT date_format(standardstartzeit,'%H:%i') FROM mitarbeiterzeiterfassung_einstellungen WHERE adresse = :adresse ORDER by id DESC LIMIT 1", ['adresse' => (int)$this->app->User->GetAdresse()]);
         }
       }
     }
@@ -1397,7 +1396,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
     $serviceauftrag = reset(explode(' ',$serviceauftrag));
     $serviceauftrag = $this->app->DB->Select("SELECT id FROM serviceauftrag WHERE belegnr='".$serviceauftrag."' LIMIT 1");
 */
-    
+
     // Projekt grabben und notfalls wieder anzeigen
     $projekt_kennung = reset(explode(' ',$projekt));
     $projekt = $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE abkuerzung = :abkuerzung LIMIT 1", ['abkuerzung' => $projekt_kennung]);
@@ -1424,7 +1423,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
     $this->app->Tpl->Set('DATUM', $datum);
     $this->app->Tpl->Set('PROJEKT_MANUELL',$projekt_komplett);
     $this->app->Tpl->Set('SERVICEAUFTRAG',$serviceauftrag_anzeige);
-    
+
     $this->app->Tpl->Set('ADRESSE_ABRECHNUNG',$adresse_abrechnung_komplett);
     $this->app->Tpl->Set('KOSTENSTELLE',$kostenstelle_komplett);
     $this->app->Tpl->Set('VERRECHNUNGSART',$verrechnungsart_komplett);
@@ -1446,11 +1445,11 @@ class Zeiterfassung { //extends GenZeiterfassung {
       $this->app->Tpl->Set('GPSIMAGE',"<img width='180' height='180' src='http://maps.google.com/maps/api/staticmap?center=".$tmpgps[0].",".$tmpgps[1].
           '&markers=size:small|color:blue|'.$tmpgps[0].",".$tmpgps[1]."&zoom=14&size=180x180&sensor=false' />");
     } else {
-      $this->app->Tpl->Set('GPSBUTTON','<input type="button" value="GPS Daten laden" onclick="Standpunkt();">');	
+      $this->app->Tpl->Set('GPSBUTTON','<input type="button" value="GPS Daten laden" onclick="Standpunkt();">');
     }
     $this->app->Tpl->Set('ART', $this->app->erp->GetSelect($this->app->erp->GetZeiterfassungArt(),$art));
 
-    $pakete = $this->app->DB->SelectArr('SELECT id, aufgabe,art,projekt FROM arbeitspaket WHERE (adresse = '.$adr_id.' or (art="teilprojekt" '.$this->app->erp->ProjektRechte("projekt").')) AND abgenommen!=1 AND geloescht!=1 AND status!=\'abgeschlossen\' order by projekt');
+    $pakete = $this->app->DatabaseService->select('SELECT id, aufgabe,art,projekt FROM arbeitspaket WHERE (adresse = :adr_id or (art="teilprojekt" '.$this->app->erp->ProjektRechte("projekt").')) AND abgenommen!=1 AND geloescht!=1 AND status!=\'abgeschlossen\' order by projekt', ['adr_id' => (int)$adr_id]);
     /*
        $select = '<option value="0">-- kein --</option>';
        for($i =0; $i<sizeof($pakete); $i++){
@@ -1458,11 +1457,11 @@ class Zeiterfassung { //extends GenZeiterfassung {
        if($myArr["art"]=="") $myArr["art"]="arbeitspaket";
        $projekt_ap = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='".$myArr["projekt"]."' LIMIT 1");
        if($paketauswahl==$myArr["id"])$checked=" selected"; else $checked ="";
-       $select = $select.'<option value="'.$myArr["id"].'" '.$checked.'>Projekt: '.$projekt_ap.'->'.ucfirst($myArr["art"]).': '.$myArr["aufgabe"].'</option>';  
+       $select = $select.'<option value="'.$myArr["id"].'" '.$checked.'>Projekt: '.$projekt_ap.'->'.ucfirst($myArr["art"]).': '.$myArr["aufgabe"].'</option>';
        }
      */
     if($paketauswahl > 0) {
-      $tmp = $this->app->DB->Select("SELECT CONCAT(ap.id,' ',p.abkuerzung,' ',ap.aufgabe) as name2 FROM arbeitspaket ap LEFT JOIN projekt p ON p.id=ap.projekt WHERE ap.id='$paketauswahl' LIMIT 1");
+      $tmp = $this->app->DatabaseService->selectValue("SELECT CONCAT(ap.id,' ',p.abkuerzung,' ',ap.aufgabe) as name2 FROM arbeitspaket ap LEFT JOIN projekt p ON p.id=ap.projekt WHERE ap.id = :id LIMIT 1", ['id' => (int)$paketauswahl]);
       $this->app->Tpl->Set('PAKETAUSWAHL', $tmp);
     }
 
@@ -1477,15 +1476,15 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
 
       if($paketauswahl == 0){
-        if(($aufgabe!='') && ($this->app->Secure->GetPOST('vonZeit')!='') && ($this->app->Secure->GetPOST('bisZeit')!='') && ($datum!='') && ($checkbis > $checkvon) && $zeiteedit && !$this->app->DB->Select("SELECT id FROM projekt WHERE id = '$projekt' AND status = 'abgeschlossen' LIMIT 1")){	
+        if(($aufgabe!='') && ($this->app->Secure->GetPOST('vonZeit')!='') && ($this->app->Secure->GetPOST('bisZeit')!='') && ($datum!='') && ($checkbis > $checkvon) && $zeiteedit && !$this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => (int)$projekt])){
           {
             // Hier fehlt abrechnen und adresse_abrechnung
-            $zeitid = $this->app->erp->AddArbeitszeit($adr_id, $vonZeit, $bisZeit, $aufgabe, $beschreibung, $ort, 
+            $zeitid = $this->app->erp->AddArbeitszeit($adr_id, $vonZeit, $bisZeit, $aufgabe, $beschreibung, $ort,
                 $projekt, 0,$art,$adresse_kunde,$abrechnen,$verrechnungsart,$kostenstelle,$abgrechnet,$gps,0,$internerkommentar,$auftrag,$produktion,"",$auftragpositionid);
             $this->app->erp->RunHook('zeiterfassung_create_guihook1',1,$zeitid);
 
             if($serviceauftrag){
-              $this->app->DB->Update("UPDATE zeiterfassung SET serviceauftrag = '$serviceauftrag' WHERE id = '$zeitid' LIMIT 1");
+              $this->app->DatabaseService->update("UPDATE zeiterfassung SET serviceauftrag = :serviceauftrag WHERE id = :id LIMIT 1", ['serviceauftrag' => $serviceauftrag, 'id' => (int)$zeitid]);
             }
             $this->app->Tpl->Set('MESSAGE',"<div class=\"success\">Zeit erfolgreich gebucht!</div>");
             $msg = $this->app->erp->base64_url_encode("<div class=\"success\">Zeit erfolgreich gebucht!</div>  ");
@@ -1493,10 +1492,11 @@ class Zeiterfassung { //extends GenZeiterfassung {
             exit;
           }
         }else{
-          if($this->app->DB->Select("SELECT id FROM projekt WHERE id = '$projekt' AND status = 'abgeschlossen' LIMIT 1"))
+          if($this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => (int)$projekt]))
           {
-            $msg = $this->app->erp->base64_url_encode('<div class="error">Das Projekt '.$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$projekt' LIMIT 1").' ist bereits abgeschlossen.</div>');
-            $this->app->Tpl->Set('MESSAGE','<div class="error">Das Projekt '.$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$projekt' LIMIT 1").' ist bereits abgeschlossen.</div>');
+            $_projekt_abkuerzung = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
+            $msg = $this->app->erp->base64_url_encode('<div class="error">Das Projekt '.$_projekt_abkuerzung.' ist bereits abgeschlossen.</div>');
+            $this->app->Tpl->Set('MESSAGE','<div class="error">Das Projekt '.$_projekt_abkuerzung.' ist bereits abgeschlossen.</div>');
           }
           elseif(!$zeiteedit)
           {
@@ -1511,36 +1511,38 @@ class Zeiterfassung { //extends GenZeiterfassung {
           //          $this->app->Tpl->Add('JQUERYREADY', '$("#accordion").accordion({ active: 2, event: "click" });');
         }
       }else{
-        if(($this->app->Secure->GetPOST('vonZeit')!='') && ($this->app->Secure->GetPOST('bisZeit')!='') && ($datum!='') && $aufgabe!='' && ($checkbis > $checkvon) && $zeiteedit && !$this->app->DB->Select("SELECT id FROM projekt WHERE id = '$projekt' AND status = 'abgeschlossen' LIMIT 1")){
+        if(($this->app->Secure->GetPOST('vonZeit')!='') && ($this->app->Secure->GetPOST('bisZeit')!='') && ($datum!='') && $aufgabe!='' && ($checkbis > $checkvon) && $zeiteedit && !$this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => (int)$projekt])){
           //Paketauswahl buchen ...
-          $projekt = $this->app->DB->Select("SELECT projekt FROM arbeitspaket WHERE id='$paketauswahl' LIMIT 1");
-          if($this->app->DB->Select("SELECT id FROM projekt WHERE id = '$projekt' AND status = 'abgeschlossen' LIMIT 1"))
+          $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM arbeitspaket WHERE id = :id LIMIT 1", ['id' => (int)$paketauswahl]);
+          if($this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => (int)$projekt]))
           {
-            $this->app->Tpl->Set('MESSAGE','<div class="error">Das Projekt '.$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$projekt' LIMIT 1").' ist bereits abgeschlossen.</div>');
+            $_projekt_abkuerzung = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
+            $this->app->Tpl->Set('MESSAGE','<div class="error">Das Projekt '.$_projekt_abkuerzung.' ist bereits abgeschlossen.</div>');
           }else{
-            $kunde = $this->app->DB->Select("SELECT kunde FROM projekt WHERE id='$projekt' LIMIT 1");
+            $kunde = $this->app->DatabaseService->selectValue("SELECT kunde FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
             if($adresse_kunde=='') {
               $adresse_kunde=$kunde;
             }
 
 
-            $zeitid = $this->app->erp->AddArbeitszeit($adr_id, $vonZeit, $bisZeit, $aufgabe, $beschreibung, $ort, 
-                $projekt, $paketauswahl,$art,$adresse_kunde,$abrechnen,$verrechnungsart,$kostenstelle,$abgerechnet,$gps,0,$internerkommentar,$auftrag,$produktion); 
+            $zeitid = $this->app->erp->AddArbeitszeit($adr_id, $vonZeit, $bisZeit, $aufgabe, $beschreibung, $ort,
+                $projekt, $paketauswahl,$art,$adresse_kunde,$abrechnen,$verrechnungsart,$kostenstelle,$abgerechnet,$gps,0,$internerkommentar,$auftrag,$produktion);
 
             $this->app->erp->RunHook('zeiterfassung_create_guihook1',1,$zeitid);
 
             if($serviceauftrag){
-              $this->app->DB->Update("UPDATE zeiterfassung SET serviceauftrag = '$serviceauftrag' WHERE id = '$zeitid' LIMIT 1");
+              $this->app->DatabaseService->update("UPDATE zeiterfassung SET serviceauftrag = :serviceauftrag WHERE id = :id LIMIT 1", ['serviceauftrag' => $serviceauftrag, 'id' => (int)$zeitid]);
             }
             $msg = $this->app->erp->base64_url_encode('<div class="success">Zeit erfolgreich gebucht!</div>  ');
             header("Location: index.php?module=zeiterfassung&action=create&msg=$msg#tabs-1");
             exit;
           }
         }else{
-          if($this->app->DB->Select("SELECT id FROM projekt WHERE id = '$projekt' AND status = 'abgeschlossen' LIMIT 1"))
+          if($this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => (int)$projekt]))
           {
-            $msg = $this->app->erp->base64_url_encode('<div class="error">Das Projekt '.$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$projekt' LIMIT 1").' ist bereits abgeschlossen.</div>');
-            $this->app->Tpl->Add('MESSAGE','<div class="error">Das Projekt '.$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$projekt' LIMIT 1").' ist bereits abgeschlossen.</div>');
+            $_projekt_abkuerzung = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
+            $msg = $this->app->erp->base64_url_encode('<div class="error">Das Projekt '.$_projekt_abkuerzung.' ist bereits abgeschlossen.</div>');
+            $this->app->Tpl->Add('MESSAGE','<div class="error">Das Projekt '.$_projekt_abkuerzung.' ist bereits abgeschlossen.</div>');
           }elseif(!$zeiteedit)
           {
             $fehlerangezeigt = true;
@@ -1556,12 +1558,12 @@ class Zeiterfassung { //extends GenZeiterfassung {
       }
 
       if($id==''){
-        $vonZeit = $this->app->DB->Select("SELECT DATE_FORMAT(MAX(bis),'%H:%i') FROM zeiterfassung WHERE adresse='$adr_id' AND DATE_FORMAT(bis,'%Y-%m-%d')=DATE_FORMAT(NOW(),'%Y-%m-%d')");
+        $vonZeit = $this->app->DatabaseService->selectValue("SELECT DATE_FORMAT(MAX(bis),'%H:%i') FROM zeiterfassung WHERE adresse = :adresse AND DATE_FORMAT(bis,'%Y-%m-%d') = DATE_FORMAT(NOW(),'%Y-%m-%d')", ['adresse' => (int)$adr_id]);
       }
 
     }  else {
       if($this->app->Secure->GetPOST('update')){
-        if(($aufgabe!='') && ($this->app->Secure->GetPOST('vonZeit')!='') && ($this->app->Secure->GetPOST('bisZeit')!='') && ($datum!='') && ($checkbis > $checkvon) && $zeiteedit && !$this->app->DB->Select("SELECT id FROM projekt WHERE id = '$projekt' AND status = 'abgeschlossen' LIMIT 1")){	
+        if(($aufgabe!='') && ($this->app->Secure->GetPOST('vonZeit')!='') && ($this->app->Secure->GetPOST('bisZeit')!='') && ($datum!='') && ($checkbis > $checkvon) && $zeiteedit && !$this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => (int)$projekt])){
           //				echo "update";
           //echo $datum;
           $vonZeit = $this->app->String->Convert($datum,'%1.%2.%3','%3-%2-%1').' '.$this->app->Secure->GetPOST('vonZeit').':00';
@@ -1569,20 +1571,20 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
           if($paketauswahl == 0)
           {
-            $this->app->erp->UpdateArbeitszeit($id,$adr_id, $vonZeit, $bisZeit, $aufgabe, $beschreibung, $ort, 
-                $projekt, $paketauswahl,$art,$adresse_kunde,$abrechnen,$verrechnungsart,$kostenstelle,$abgerechnet,$gps,$internerkommentar,$auftrag,$produktion,"",$auftragpositionid); 
+            $this->app->erp->UpdateArbeitszeit($id,$adr_id, $vonZeit, $bisZeit, $aufgabe, $beschreibung, $ort,
+                $projekt, $paketauswahl,$art,$adresse_kunde,$abrechnen,$verrechnungsart,$kostenstelle,$abgerechnet,$gps,$internerkommentar,$auftrag,$produktion,"",$auftragpositionid);
 
             if($serviceauftrag){
-              $this->app->DB->Update("UPDATE zeiterfassung SET serviceauftrag = '$serviceauftrag' WHERE id = '$id' LIMIT 1");
+              $this->app->DatabaseService->update("UPDATE zeiterfassung SET serviceauftrag = :serviceauftrag WHERE id = :id LIMIT 1", ['serviceauftrag' => $serviceauftrag, 'id' => (int)$id]);
             }
           }
           else
           {
-            $this->app->erp->UpdateArbeitszeit($id,$adr_id, $vonZeit, $bisZeit, $aufgabe, $beschreibung, $ort, 
-                $projekt, $paketauswahl,$art,'',$abrechnen,$verrechnungsart,$kostenstelle,$gps,$internerkommentar,$auftrag,$produktion,'',$auftragpositionid); 
+            $this->app->erp->UpdateArbeitszeit($id,$adr_id, $vonZeit, $bisZeit, $aufgabe, $beschreibung, $ort,
+                $projekt, $paketauswahl,$art,'',$abrechnen,$verrechnungsart,$kostenstelle,$gps,$internerkommentar,$auftrag,$produktion,'',$auftragpositionid);
 
             if($serviceauftrag){
-              $this->app->DB->Update("UPDATE zeiterfassung SET serviceauftrag = '$serviceauftrag' WHERE id = '$id' LIMIT 1");
+              $this->app->DatabaseService->update("UPDATE zeiterfassung SET serviceauftrag = :serviceauftrag WHERE id = :id LIMIT 1", ['serviceauftrag' => $serviceauftrag, 'id' => (int)$id]);
             }
           }
           $this->app->erp->RunHook('zeiterfassung_create_guihook1');
@@ -1601,7 +1603,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
           else if($back=='aufgabe'){
             header('Location: index.php?module=aufgaben&action=list');
           }
-          else if($back=='zeiterfassungmitarbeiter') 
+          else if($back=='zeiterfassungmitarbeiter')
           {
             $sid = $this->app->Secure->GetGET('sid');
             header("Location: index.php?module=adresse&action=zeiterfassung&id=$sid");
@@ -1612,7 +1614,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
           {
             $back_id = $this->app->Secure->GetGET('back_id');
             $back_sid = $this->app->Secure->GetGET('back_sid');
-            header("Location: index.php?module=projekt&action=zeit&id=$back_id&sid=$back_sid");	
+            header("Location: index.php?module=projekt&action=zeit&id=$back_id&sid=$back_sid");
           }
           else if ($back=='lohnabrechnung')
           {
@@ -1621,7 +1623,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
           else if ($back=='adresse')
           {
             $back_id = $this->app->Secure->GetGET('back_id');
-            header("Location: index.php?module=adresse&action=abrechnungzeit&id=$back_id");	
+            header("Location: index.php?module=adresse&action=abrechnungzeit&id=$back_id");
           }
           else{
             header('Location: index.php?module=zeiterfassung&action=create#tabs-1');
@@ -1629,9 +1631,10 @@ class Zeiterfassung { //extends GenZeiterfassung {
           exit;
 
         } else {
-          if(!$this->app->DB->Select("SELECT id FROM projekt WHERE id = '$projekt' AND status = 'abgeschlossen' LIMIT 1"))
+          if(!$this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :id AND status = 'abgeschlossen' LIMIT 1", ['id' => (int)$projekt]))
           {
-            $this->app->Tpl->Add('MESSAGE','<div class="error">Das Projekt '.$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$projekt' LIMIT 1").' ist bereits abgeschlossen.</div>');
+            $_projekt_abkuerzung = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
+            $this->app->Tpl->Add('MESSAGE','<div class="error">Das Projekt '.$_projekt_abkuerzung.' ist bereits abgeschlossen.</div>');
           }elseif(!$zeiteedit)
           {
             $fehlerangezeigt = true;
@@ -1653,7 +1656,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
     {
       $table = new EasyTable($this->app);
 
-      $table->Query("SELECT DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum, 
+      $table->Query("SELECT DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR')) AS Datum,
           z.aufgabe as Taetigkeit,
 
           (SELECT name FROM adresse adr WHERE adr.id=z.adresse) as mitarbeiter,
@@ -1664,7 +1667,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
           ap.aufgabe as 'Unterprojekt/Arbeitspaket',
 
 
-          IF(DATEDIFF(CURDATE(), z.bis)<= 5, 
+          IF(DATEDIFF(CURDATE(), z.bis)<= 5,
             CONCAT('<a href=\"#\" onclick=\"if(!confirm(\'Wirklich stornieren?\')) return false; else window.location.href=\'index.php?module=zeiterfassung&action=list&do=stornieren&lid=', z.id, '\'\">Stornieren</a>&nbsp;|&nbsp;<a href=\"index.php?module=zeiterfassung&action=create&id=', z.id, '#tabs-1\">Edit</a>'), '')
           FROM zeiterfassung z LEFT JOIN projekt p ON p.id=z.projekt LEFT JOIN arbeitspaket ap ON z.arbeitspaket=ap.id
           WHERE z.gebucht_von_user=".$this->app->User->GetID()." AND DATE_FORMAT(z.bis,'%Y-%m-%d')= DATE_FORMAT(NOW(),'%Y-%m-%d')
@@ -1694,7 +1697,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
       else if ($back=="adresse")
       {
         $back_id = $this->app->Secure->GetGET("back_id");
-        $link = "index.php?module=adresse&action=abrechnungzeit&id=$back_id";                  
+        $link = "index.php?module=adresse&action=abrechnungzeit&id=$back_id";
       }
       else{
         $link = 'index.php?module=zeiterfassung&action=create#tabs-1';
@@ -1709,7 +1712,8 @@ class Zeiterfassung { //extends GenZeiterfassung {
       }else{
         if($projektabgeschlossen)
         {
-          $this->app->Tpl->Add('MESSAGE','<div class="warning">Das Projekt '.$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$projekt' LIMIT 1").' ist bereits abgeschlossen.</div>');
+          $_projekt_abkuerzung = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id LIMIT 1", ['id' => (int)$projekt]);
+          $this->app->Tpl->Add('MESSAGE','<div class="warning">Das Projekt '.$_projekt_abkuerzung.' ist bereits abgeschlossen.</div>');
         }else{
           if(!$fehlerangezeigt)$this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Das Anlegen/Editieren von Zeiten kleiner ".$this->app->erp->Firmendaten('zeiterfassung_schliessentage')." Tagen ist nicht erlaubt!</div>");
         }
@@ -1731,25 +1735,25 @@ class Zeiterfassung { //extends GenZeiterfassung {
     {
       $this->app->Tpl->Set('STARTANDEREERLAUBEN','<!--');
       $this->app->Tpl->Set('ENDEANDEREERLAUBEN','-->');
-    } 
+    }
 
     if($this->app->erp->Firmendaten('zeiterfassung_erweitert')!=1)
     {
       $this->app->Tpl->Set('STARTERWEITERT','<!--');
       $this->app->Tpl->Set('ENDEERWEITERT','-->');
-    } 
+    }
 
     if($this->app->erp->Firmendaten('zeiterfassung_kommentar')!=1)
     {
       $this->app->Tpl->Set('STARTKOMMENTAR','<!--');
       $this->app->Tpl->Set('ENDEKOMMENTAR','-->');
-    } 
+    }
 
     if($this->app->erp->Firmendaten('zeiterfassung_ort')!=1)
     {
       $this->app->Tpl->Set('STARTORT','<!--');
       $this->app->Tpl->Set('ENDEORT','-->');
-    } 
+    }
 
     $this->app->YUI->AutoSaveUserParameter('projekt_manuell','teilprojekt_filter');
 
@@ -1792,7 +1796,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
       $this->app->Tpl->Set('ZEITERFASSUNGTABS','<li id="list"><a href="#tabs-2">{|Kalenderansicht|}</a></li><li><a href="#tabs-1">{|Formular|}</a></li>');
     }
 
-    //$this->app->Tpl->Set(TABTEXT,'Zeiterfassung'); 
+    //$this->app->Tpl->Set(TABTEXT,'Zeiterfassung');
     $this->app->Tpl->Parse('TAB1', 'zeiterfassung_manuell.tpl');
     $this->app->Tpl->Parse('PAGE', 'zeiterfassung_buchen.tpl');
   }
@@ -1805,8 +1809,8 @@ class Zeiterfassung { //extends GenZeiterfassung {
     $this->app->Tpl->Set('INHALT','');
 
     $table = new EasyTable($this->app);
-    $table->Query("SELECT DISTINCT a.aufgabe, a.zeit_geplant as vorgabe, 
-        (SELECT FORMAT(SUM(TIMEDIFF(bis,von)/10000),2) FROM zeiterfassung WHERE arbeitspaket=a.id) as Gebucht, 
+    $table->Query("SELECT DISTINCT a.aufgabe, a.zeit_geplant as vorgabe,
+        (SELECT FORMAT(SUM(TIMEDIFF(bis,von)/10000),2) FROM zeiterfassung WHERE arbeitspaket=a.id) as Gebucht,
         DATE_FORMAT(a.abgabedatum,'%d.%m.%y') as bis, a.id
         FROM arbeitspaket a LEFT JOIN zeiterfassung z ON z.arbeitspaket=a.id
         WHERE a.adresse='$adr_id' AND (a.status = 'gestartet' OR a.status = 'besprochen')");
@@ -1831,13 +1835,13 @@ class Zeiterfassung { //extends GenZeiterfassung {
     $table->Query("SELECT DATE_FORMAT(bis, GET_FORMAT(DATE,'EUR')) AS Datum, DATE_FORMAT(von,'%H:%i') as von, DATE_FORMAT(bis,'%H:%i') as bis,
         TIMEDIFF(bis, von) AS Dauer,
         aufgabe as Taetigkeit,
-        IF(DATEDIFF(CURDATE(), bis)<= 5, 
+        IF(DATEDIFF(CURDATE(), bis)<= 5,
           CONCAT('<a href=\"#\" onclick=\"if(!confirm(\'Wirklich stornieren?\')) return false; else window.location.href=\'index.php?module=zeiterfassung&action=list&do=stornieren&lid=', id, '\'\">Stornieren</a>&nbsp;|&nbsp;<a href=\"\">Edit</a>'), '')
         FROM zeiterfassung
         WHERE adresse=$adr_id
         AND (
           MONTH(bis) = MONTH(NOW()) OR DATEDIFF(CURDATE(), bis)<= 5
-          )  
+          )
         ORDER BY 1 DESC,2 DESC
         ");
 
@@ -1856,19 +1860,18 @@ class Zeiterfassung { //extends GenZeiterfassung {
     if($this->app->Secure->GetPOST('ok') != ''){
       $aufg_id = $this->app->Secure->GetPOST('aufg_id');
       foreach($aufg_id as $myId){
-        $this->app->DB->Update("UPDATE aufgabe SET abgeschlossen_am = CURDATE(), abgeschlossen='1' WHERE id=$myId LIMIT 1");
+        $this->app->DatabaseService->update("UPDATE aufgabe SET abgeschlossen_am = CURDATE(), abgeschlossen = '1' WHERE id = :id LIMIT 1", ['id' => (int)$myId]);
         // Kopie nach aufgabe_erledigt
-        $this->app->DB->Insert("INSERT INTO aufgabe_erledigt (adresse, aufgabe, abgeschlossen_am)
-            VALUES ($adr_id, $myId, CURDATE())");
+        $this->app->DatabaseService->insert("INSERT INTO aufgabe_erledigt (adresse, aufgabe, abgeschlossen_am) VALUES (:adresse, :aufgabe, CURDATE())", ['adresse' => (int)$adr_id, 'aufgabe' => (int)$myId]);
       }
     }
 
-    $table = new EasyTable($this->app); 
+    $table = new EasyTable($this->app);
     // Hole einmalige und wiederholende Aufgaben
     // bei wiederholenden Aufgaben werden nur die vom heutigen Tag und nach Schema startdatum + (intervall*n) geholt
     $table->Query("SELECT
-        CONCAT(\"<input type='checkbox' name='aufg_id[]' value='\", id, \"'>\") AS Ok, 
-        IF(intervall_tage=0, DATE_FORMAT(startdatum, '%d.%m.%Y'), 
+        CONCAT(\"<input type='checkbox' name='aufg_id[]' value='\", id, \"'>\") AS Ok,
+        IF(intervall_tage=0, DATE_FORMAT(startdatum, '%d.%m.%Y'),
           DATE_FORMAT(DATE_SUB(CURDATE(), INTERVAL MOD(DATEDIFF(CURDATE(),DATE_FORMAT(startdatum, '%Y:%m:%d')),intervall_tage) day),'%d.%m.%Y')) AS Datum,
         IF(intervall_tage=0, DATEDIFF(CURDATE(), startdatum) ,MOD(DATEDIFF(CURDATE(), startdatum),intervall_tage)) AS Verzug,
         IF(intervall_tage=0, 'einmalig', intervall_tage) AS Intervall,
@@ -1876,7 +1879,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
         FROM aufgabe
         WHERE
         (abgeschlossen=0 AND (adresse=$adr_id OR adresse=0))
-        OR 
+        OR
         (DATE_SUB(CURDATE(), INTERVAL MOD(DATEDIFF(CURDATE(),DATE_FORMAT(startdatum, '%Y:%m:%d')),intervall_tage) day)=CURDATE()
          AND DATE_SUB(CURDATE(), INTERVAL MOD(DATEDIFF(CURDATE(),DATE_FORMAT(startdatum, '%Y:%m:%d')),intervall_tage) day) != abgeschlossen_am
          AND intervall_tage>0 AND (adresse=$adr_id OR adresse=0))
@@ -1884,21 +1887,21 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
     $table->DisplayNew('INHALT','Beschreibung','noAction');
 
-    $this->app->Tpl->Parse('AUFGABEN','rahmen_submit_100.tpl');   
+    $this->app->Tpl->Parse('AUFGABEN','rahmen_submit_100.tpl');
   }
 
   function ZeiterfassungArchiv($adr_id)
   {
     $this->app->Tpl->Set('SUBHEADING', 'Archiv');
-    $this->app->Tpl->Set('INHALT','');  
+    $this->app->Tpl->Set('INHALT','');
 
     $table = new EasyTable($this->app);
-    $table->Query("SELECT 
+    $table->Query("SELECT
         MONTHNAME(bis) AS Monat,
         YEAR(bis) Jahr,
         CONCAT(ROUND(SUM(TIME_TO_SEC(TIMEDIFF(bis,von)))/3600,1),' Stunden') AS Arbeitszeit,
         CONCAT('<a href=\"index.php?module=zeiterfassung&action=details&month=', MONTH(bis),'&year=', YEAR(bis),'\" class=\"popup\" title=\"Details\">Details</a>')
-        FROM `zeiterfassung` 
+        FROM `zeiterfassung`
         WHERE adresse=$adr_id
         GROUP BY MONTHNAME(bis)
         ORDER BY bis DESC");
@@ -1922,13 +1925,13 @@ class Zeiterfassung { //extends GenZeiterfassung {
 
       $id =  $this->app->User->GetId();
       if($id!=''){
-        $adr_id = $this->app->DB->Select("SELECT adresse FROM user WHERE id=$id");
+        $adr_id = $this->app->DatabaseService->selectValue("SELECT adresse FROM user WHERE id = :id", ['id' => (int)$id]);
       }
 
-      $monatsname = $this->app->DB->Select("SELECT MONTHNAME('$jahr-$monat-01')");
+      $monatsname = $this->app->DatabaseService->selectValue("SELECT MONTHNAME(:datum)", ['datum' => $jahr.'-'.$monat.'-01']);
 
       $this->app->Tpl->Set('SUBHEADING', "Arbeitszeiten f&uuml;r $monatsname");
-      $this->app->Tpl->Set('INHALT','');  
+      $this->app->Tpl->Set('INHALT','');
 
 
       //    $this->app->Tpl->Add(KURZUEBERSCHRIFT,"Zeiterfassung");
@@ -1937,7 +1940,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
       //  "<li><a href=\"index.php?module=zeiterfassung&action=list\">Zur&uuml;ck zur &Uuml;bersicht</a></li>");
 
       $table = new EasyTable($this->app);
-      $table->Query("SELECT  
+      $table->Query("SELECT
           DATE_FORMAT(bis,'%d.%m.%y') as Datum,
           ROUND((TIME_TO_SEC(TIMEDIFF(bis,von))/3600)) AS Dauer,
           buchungsart,
@@ -1945,10 +1948,10 @@ class Zeiterfassung { //extends GenZeiterfassung {
           FROM zeiterfassung
           WHERE adresse=$adr_id
           AND MONTH(bis)=$monat
-          AND YEAR(bis)=$jahr");	
+          AND YEAR(bis)=$jahr");
 
         $table->DisplayNew('INHALT','T&auml;tigkeit', 'noAction');
-      //$this->app->Tpl->Set(AKTIV_TAB5,'selected'); 
+      //$this->app->Tpl->Set(AKTIV_TAB5,'selected');
       $this->app->Tpl->Parse('PAGE','rahmen.tpl');
       $this->app->BuildNavigation=false;
     }

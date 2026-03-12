@@ -81,11 +81,9 @@ class Shopimport {
             throw new Exception('no Data given');
         }
 
-        $shop = $this->app->DB->SelectRow(
-                sprintf(
-                        'SELECT `aktiv`, `id`, `artikelrabatt` FROM `shopexport` WHERE `id` = %d',
-                        $shopId
-                )
+        $shop = $this->app->DatabaseService->selectRow(
+                'SELECT `aktiv`, `id`, `artikelrabatt` FROM `shopexport` WHERE `id` = :shopId',
+                ['shopId' => (int) $shopId]
         );
         if (empty($shop)) {
             throw new Exception('Shop not found');
@@ -95,26 +93,22 @@ class Shopimport {
         }
 
         if (!empty($data->extid)) {
-            $order = $this->app->DB->SelectRow(
-                    sprintf(
-                            "SELECT * 
-          FROM `auftrag` 
-          WHERE `shop` = %d AND `shopextid` = '%s' AND `shopextid` <> '' 
+            $order = $this->app->DatabaseService->selectRow(
+                    "SELECT *
+          FROM `auftrag`
+          WHERE `shop` = :shopId AND `shopextid` = :extid AND `shopextid` <> ''
           AND `status` <> 'storniert'
           LIMIT 1",
-                            $shopId, $this->app->DB->real_escape_string((string) $data->extid)
-                    )
+                    ['shopId' => (int) $shopId, 'extid' => (string) $data->extid]
             );
         } elseif (!empty($data->internet)) {
-            $order = $this->app->DB->SelectRow(
-                    sprintf(
-                            "SELECT * 
-          FROM `auftrag` 
-          WHERE `shop` = %d AND `internet` = '%s' AND `internet` <> '' 
+            $order = $this->app->DatabaseService->selectRow(
+                    "SELECT *
+          FROM `auftrag`
+          WHERE `shop` = :shopId AND `internet` = :extid AND `internet` <> ''
           AND `status` <> 'storniert'
           LIMIT 1",
-                            $shopId, $this->app->DB->real_escape_string((string) $data->extid)
-                    )
+                    ['shopId' => (int) $shopId, 'extid' => (string) $data->extid]
             );
         } else {
             throw new Exception('No order given');
@@ -124,11 +118,9 @@ class Shopimport {
             throw new Exception('order not found');
         }
 
-        $invoice = $this->app->DB->SelectRow(
-                sprintf(
-                        "SELECT * FROM `rechnung` WHERE `auftragid` = %d ORDER BY `status` = 'storniert' LIMIT 1",
-                        $order['id']
-                )
+        $invoice = $this->app->DatabaseService->selectRow(
+                "SELECT * FROM `rechnung` WHERE `auftragid` = :auftragId ORDER BY `status` = 'storniert' LIMIT 1",
+                ['auftragId' => (int) $order['id']]
         );
 
         if (empty($invoice)) {
@@ -140,11 +132,9 @@ class Shopimport {
             $this->app->erp->RechnungProtokoll($invoiceId, 'Rechnung erstellt durch Shop-Trigger');
             $this->app->erp->BelegFreigabe('rechnung', $invoiceId);
             $this->app->erp->RechnungNeuberechnen($invoiceId);
-            $invoice = $this->app->DB->SelectRow(
-                    sprintf(
-                            "SELECT * FROM `rechnung` WHERE `auftragid` = %d ORDER BY `status` = 'storniert' LIMIT 1",
-                            $order['id']
-                    )
+            $invoice = $this->app->DatabaseService->selectRow(
+                    "SELECT * FROM `rechnung` WHERE `auftragid` = :auftragId ORDER BY `status` = 'storniert' LIMIT 1",
+                    ['auftragId' => (int) $order['id']]
             );
         }
 
@@ -152,14 +142,12 @@ class Shopimport {
             throw new Exception('order invoice is already cancelled');
         }
         if (!empty($data->positions)) {
-            $positions = $this->app->DB->SelectArr(
-                    sprintf(
-                            "SELECT `op`.webid, ip.artikel, ip.menge,ip.preis, ip.rabatt, ip.auftrag_position_id
+            $positions = $this->app->DatabaseService->select(
+                    "SELECT `op`.webid, ip.artikel, ip.menge,ip.preis, ip.rabatt, ip.auftrag_position_id
           FROM `rechnung_position` AS `ip`
-          INNER JOIN `auftrag_position` AS `op` ON ip.auftrag_position_id = op.id 
-          WHERE `ip`.rechnung = %d",
-                            $invoice['id']
-                    )
+          INNER JOIN `auftrag_position` AS `op` ON ip.auftrag_position_id = op.id
+          WHERE `ip`.rechnung = :rechnungId",
+                    ['rechnungId' => (int) $invoice['id']]
             );
             if (empty($positions)) {
                 throw new Exception('invoice has no positions');
@@ -201,46 +189,36 @@ class Shopimport {
             $this->app->erp->RechnungProtokoll($invoice['id'], 'Rechnung durch Shop-Trigger storniert');
             $this->app->erp->GutschriftProtokoll($creditNoteId, 'Gutschrift durch Shop-Trigger angelegt');
             $this->app->erp->BelegFreigabe('gutschrift', $creditNoteId);
-            $this->app->DB->Delete(
-                    sprintf(
-                            "DELETE FROM `gutschrift_position` WHERE `gutschrift` = %d AND `auftrag_position_id` IN (%s)",
-                            $creditNoteId, implode(',', $toDeleteInvoicePositionIds)
-                    )
+            $this->app->DatabaseService->delete(
+                    "DELETE FROM `gutschrift_position` WHERE `gutschrift` = :creditNoteId AND `auftrag_position_id` IN (" . implode(',', array_map('intval', $toDeleteInvoicePositionIds)) . ")",
+                    ['creditNoteId' => (int) $creditNoteId]
             );
             $hasCreditNoteTax = !empty($this->app->erp->GutschriftMitUmsatzeuer($creditNoteId));
             $this->app->erp->GutschriftNeuberechnen($creditNoteId);
-            $creditNote = $this->app->DB->SelectRow(
-                    sprintf(
-                            'SELECT * FROM `gutschrift` WHERE `id` = %d',
-                            $creditNoteId
-                    )
+            $creditNote = $this->app->DatabaseService->selectRow(
+                    'SELECT * FROM `gutschrift` WHERE `id` = :creditNoteId',
+                    ['creditNoteId' => (int) $creditNoteId]
             );
-            $creditNotePositions = $this->app->DB->SelectArr(
-                    sprintf(
-                            "SELECT op.webid, cnp.id, cnp.menge, cnp.preis, cnp.rabatt, cnp.umsatzsteuer, 
-            cnp.steuersatz 
+            $creditNotePositions = $this->app->DatabaseService->select(
+                    "SELECT op.webid, cnp.id, cnp.menge, cnp.preis, cnp.rabatt, cnp.umsatzsteuer,
+            cnp.steuersatz
           FROM `gutschrift_position` AS `cnp`
           INNER JOIN `auftrag_position` AS `op` ON cnp.auftrag_position_id = op.id
-          WHERE cnp.gutschrift = %d",
-                            $creditNoteId
-                    )
+          WHERE cnp.gutschrift = :creditNoteId",
+                    ['creditNoteId' => (int) $creditNoteId]
             );
             foreach ($creditNotePositions as $creditNotePosition) {
                 if (isset($webIdToPosition[$creditNotePosition['webid']])) {
                     $position = $webIdToPosition[$creditNotePosition['webid']];
                     if (!empty($position->quantity)) {
-                        $this->app->DB->Update(
-                                sprintf(
-                                        "UPDATE `gutschrift_position` SET `menge` = %f WHERE `id` = %d",
-                                        (float) $position->quantity, $creditNotePosition['id']
-                                )
+                        $this->app->DatabaseService->update(
+                                "UPDATE `gutschrift_position` SET `menge` = :menge WHERE `id` = :id",
+                                ['menge' => (float) $position->quantity, 'id' => (int) $creditNotePosition['id']]
                         );
                     } elseif (!empty($position->menge)) {
-                        $this->app->DB->Update(
-                                sprintf(
-                                        "UPDATE `gutschrift_position` SET `menge` = %f WHERE `id` = %d",
-                                        (float) $position->menge, $creditNotePosition['id']
-                                )
+                        $this->app->DatabaseService->update(
+                                "UPDATE `gutschrift_position` SET `menge` = :menge WHERE `id` = :id",
+                                ['menge' => (float) $position->menge, 'id' => (int) $creditNotePosition['id']]
                         );
                     }
                     $preis = null;
@@ -261,11 +239,9 @@ class Shopimport {
                                 $preis /= 1 + $creditNote['steuersatz_normal'] / 100;
                             }
                         }
-                        $this->app->DB->Update(
-                                sprintf(
-                                        'UPDATE `gutschrift_position` SET `preis` = %f, `rabatt` = 0 WHERE `id` = %d',
-                                        $preis, $creditNotePosition['id']
-                                )
+                        $this->app->DatabaseService->update(
+                                'UPDATE `gutschrift_position` SET `preis` = :preis, `rabatt` = 0 WHERE `id` = :id',
+                                ['preis' => (float) $preis, 'id' => (int) $creditNotePosition['id']]
                         );
                     }
                 }
@@ -274,7 +250,7 @@ class Shopimport {
             $this->app->erp->GutschriftNeuberechnen($creditNoteId);
 
             if (!empty($data->amount)) {
-                $soll = $this->app->DB->Select(sprintf('SELECT `soll` FROM `gutschrift` WHERE `id` = %d', $creditNoteId));
+                $soll = $this->app->DatabaseService->selectValue('SELECT `soll` FROM `gutschrift` WHERE `id` = :creditNoteId', ['creditNoteId' => (int) $creditNoteId]);
                 $diff = round($soll, 2) - round((float) $data->amount, 2);
                 if ($diff == 0) {
                     return $creditNoteId;
@@ -292,7 +268,7 @@ class Shopimport {
         $this->app->erp->BelegFreigabe('gutschrift', $creditNoteId);
         $this->app->erp->GutschriftNeuberechnen($creditNoteId);
         if (!empty($data->amount)) {
-            $soll = $this->app->DB->Select(sprintf('SELECT `soll` FROM `gutschrift` WHERE `id` = %d', $creditNoteId));
+            $soll = $this->app->DatabaseService->selectValue('SELECT `soll` FROM `gutschrift` WHERE `id` = :creditNoteId', ['creditNoteId' => (int) $creditNoteId]);
             $diff = round($soll, 2) - round((float) $data->amount, 2);
             if ($diff == 0) {
                 return $creditNoteId;
@@ -501,7 +477,7 @@ class Shopimport {
         }
         $deleteauftrag = (int) $this->app->Secure->GetPOST('deleteauftrag');
         if (!empty($id) && !empty($nummer)) {
-            $shoparr = $this->app->DB->SelectRow("SELECT projekt,holealle FROM shopexport WHERE id = '$id' LIMIT 1");
+            $shoparr = $this->app->DatabaseService->selectRow("SELECT projekt,holealle FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int) $id]);
             $projekt = $shoparr['projekt']; //$this->app->DB->Select("SELECT projekt FROM shopexport WHERE id = '$id' LIMIT 1");
             $holealle = $shoparr['holealle']; //$this->app->DB->Select("SELECT holealle FROM shopexport WHERE id = '$id' LIMIT 1");
             if ($holealle) {
@@ -536,9 +512,9 @@ class Shopimport {
         $i = 0;
         $success_import = 0;
         $shopid = $this->app->DatabaseService->selectValue("SELECT shopid FROM shopimport_auftraege WHERE id = :shopimportid LIMIT 1", ['shopimportid' => (int) $shopimportid]);
-        $shopexportArr = $this->app->DB->SelectRow(sprintf('SELECT * FROM shopexport WHERE id=%d', $shopid));
+        $shopexportArr = $this->app->DatabaseService->selectRow('SELECT * FROM shopexport WHERE id = :shopid', ['shopid' => (int) $shopid]);
         $projekt = $shopexportArr['projekt']; //$this->app->DB->Select("SELECT projekt FROM shopexport WHERE id='$shopid'");
-        if (!empty($warenkorb['projekt']) && $this->app->DB->Select("SELECT id FROM projekt WHERE id = '" . (int) $warenkorb['projekt'] . "' LIMIT 1")) {
+        if (!empty($warenkorb['projekt']) && $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => (int) $warenkorb['projekt']])) {
             $projekt = (int) $warenkorb['projekt'];
         }
         $adresseprojekt = '';
@@ -579,9 +555,9 @@ class Shopimport {
             }
         }
 
-        $kundenurvonprojekt = $this->app->DB->Select("SELECT kundenurvonprojekt FROM shopexport WHERE id = '$shopid' LIMIT 1");
+        $kundenurvonprojekt = $this->app->DatabaseService->selectValue("SELECT kundenurvonprojekt FROM shopexport WHERE id = :shopid LIMIT 1", ['shopid' => (int) $shopid]);
         if ($kundenurvonprojekt) {
-            $adresseprojekt = " AND projekt = '" . $adresseprojekt . "' ";
+            $adresseprojekt = " AND projekt = '" . (int) $adresseprojekt . "' ";
         } else {
             $adresseprojekt = '';
         }
@@ -615,24 +591,24 @@ class Shopimport {
                 $warenkorb['customer_created'] = true;
                 if (isset($warenkorb['kunde_sprache'])) {
                     if ($warenkorb['kunde_sprache'] == 'englisch' || $warenkorb['kunde_sprache'] == 'english') {
-                        $this->app->DB->Update("UPDATE adresse SET sprache = 'englisch' WHERE id = '$adresse' LIMIT 1");
+                        $this->app->DatabaseService->update("UPDATE adresse SET sprache = 'englisch' WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                     } elseif ($warenkorb['kunde_sprache'] == 'deutsch' || $warenkorb['kunde_sprache'] == 'german') {
-                        $this->app->DB->Update("UPDATE adresse SET sprache = 'deutsch' WHERE id = '$adresse' LIMIT 1");
+                        $this->app->DatabaseService->update("UPDATE adresse SET sprache = 'deutsch' WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                     } elseif (method_exists($this->app->erp, 'GetSprachenSelect')) {
-                        $sprachen = $this->app->erp->GetSprachenSelect;
+                        $sprachen = $this->app->erp->GetSprachenSelect();
                         if (isset($sprachen[strtolower($warenkorb['kunde_sprache'])])) {
-                            $this->app->DB->Update("UPDATE adresse SET sprache = '" . strtolower($warenkorb['kunde_sprache']) . "' WHERE id = '$adresse' LIMIT 1");
+                            $this->app->DatabaseService->update("UPDATE adresse SET sprache = :sprache WHERE id = :adresse LIMIT 1", ['sprache' => strtolower($warenkorb['kunde_sprache']), 'adresse' => (int) $adresse]);
                         }
                     }
                 }
                 if ($warenkorb['titel'] != '') {
-                    $this->app->DB->Update("UPDATE adresse SET titel = '" . $this->app->DB->real_escape_string($warenkorb['titel']) . "' WHERE id = '$adresse' LIMIT 1");
+                    $this->app->DatabaseService->update("UPDATE adresse SET titel = :titel WHERE id = :adresse LIMIT 1", ['titel' => (string) $warenkorb['titel'], 'adresse' => (int) $adresse]);
                 }
                 if (isset($warenkorb['ust_befreit'])) {
-                    $this->app->DB->Update("UPDATE adresse SET ust_befreit = '" . (int) $warenkorb['ust_befreit'] . "' WHERE id = '$adresse' LIMIT 1");
+                    $this->app->DatabaseService->update("UPDATE adresse SET ust_befreit = :ust_befreit WHERE id = :adresse LIMIT 1", ['ust_befreit' => (int) $warenkorb['ust_befreit'], 'adresse' => (int) $adresse]);
                 }
 
-                $kundenGruppen = $this->app->DB->SelectArr("SELECT gruppeid,type FROM shopexport_kundengruppen WHERE shopid=$shopid AND aktiv=1 AND apply_to_new_customers=1 AND type<>'Artikel' AND (projekt=0 OR projekt='$projekt')");
+                $kundenGruppen = $this->app->DatabaseService->select("SELECT gruppeid,type FROM shopexport_kundengruppen WHERE shopid = :shopid AND aktiv = 1 AND apply_to_new_customers = 1 AND type <> 'Artikel' AND (projekt = 0 OR projekt = :projekt)", ['shopid' => (int) $shopid, 'projekt' => (int) $projekt]);
                 if (!empty($kundenGruppen)) {
                     foreach ($kundenGruppen as $gruppe) {
                         $this->app->erp->AddRolleZuAdresse($adresse, $gruppe['type'], 'von', 'Gruppe', $gruppe['gruppeid']);
@@ -643,36 +619,32 @@ class Shopimport {
                     $this->shopimportAdresseGruppenMapping($warenkorb['kundengruppe'], $adresse, $shopid, $projekt);
                 }
                 if ($shopexportArr['vertrieb']) {
-                    $this->app->DB->Update(
-                            sprintf(
-                                    'UPDATE adresse SET vertrieb = %d WHERE id = %d',
-                                    $shopexportArr['vertrieb'], $adresse
-                            )
+                    $this->app->DatabaseService->update(
+                            'UPDATE adresse SET vertrieb = :vertrieb WHERE id = :adresse',
+                            ['vertrieb' => (int) $shopexportArr['vertrieb'], 'adresse' => (int) $adresse]
                     );
                 }
-                $this->app->DB->Update(
-                        sprintf(
-                                'UPDATE adresse SET fromshop = %d WHERE fromshop = 0 AND id = %d',
-                                $shopexportArr['id'], $adresse
-                        )
+                $this->app->DatabaseService->update(
+                        'UPDATE adresse SET fromshop = :fromshop WHERE fromshop = 0 AND id = :adresse',
+                        ['fromshop' => (int) $shopexportArr['id'], 'adresse' => (int) $adresse]
                 );
             } else {
                 if (!empty($warenkorb['anrede'])) {
                     $typ = $warenkorb['anrede'];
                 } else {
-                    $typ = $this->app->DB->Select("SELECT typ FROM adresse WHERE id = '$adresse' LIMIT 1");
+                    $typ = $this->app->DatabaseService->selectValue("SELECT typ FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                 }
                 $name = $warenkorb['name'];
 
                 if (!empty($warenkorb['abteilung'])) {
                     $abteilung = $warenkorb['abteilung'];
                 } else {
-                    $abteilung = $this->app->DB->Select("SELECT abteilung FROM adresse WHERE id = '$adresse' LIMIT 1");
+                    $abteilung = $this->app->DatabaseService->selectValue("SELECT abteilung FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                 }
                 if (!empty($warenkorb['unterabteilung'])) {
                     $unterabteilung = $warenkorb['unterabteilung'];
                 } else {
-                    $unterabteilung = $this->app->DB->Select("SELECT unterabteilung FROM adresse WHERE id = '$adresse' LIMIT 1");
+                    $unterabteilung = $this->app->DatabaseService->selectValue("SELECT unterabteilung FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                 }
 
                 $ansprechpartner = $warenkorb['ansprechpartner'];
@@ -684,49 +656,48 @@ class Shopimport {
                 if (!empty($warenkorb['email'])) {
                     $email = $warenkorb['email'];
                 } else {
-                    $email = $this->app->DB->Select("SELECT email FROM adresse WHERE id = '$adresse' LIMIT 1");
+                    $email = $this->app->DatabaseService->selectValue("SELECT email FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                 }
                 if (!empty($warenkorb['telefon'])) {
                     $telefon = $warenkorb['telefon'];
                 } else {
-                    $telefon = $this->app->DB->Select("SELECT telefon FROM adresse WHERE id = '$adresse' LIMIT 1");
+                    $telefon = $this->app->DatabaseService->selectValue("SELECT telefon FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                 }
                 if (!empty($warenkorb['telefax'])) {
                     $telefax = $warenkorb['telefax'];
                 } else {
-                    $telefax = $this->app->DB->Select("SELECT telefax FROM adresse WHERE id = '$adresse' LIMIT 1");
+                    $telefax = $this->app->DatabaseService->selectValue("SELECT telefax FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                 }
                 if (!empty($warenkorb['ustid'])) {
                     $ustid = $warenkorb['ustid'];
                 } else {
-                    $ustid = $this->app->DB->Select("SELECT ustid FROM adresse WHERE id = '$adresse' LIMIT 1");
+                    $ustid = $this->app->DatabaseService->selectValue("SELECT ustid FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                 }
                 if (!empty($warenkorb['affiliate_ref'])) {
                     $partner = $warenkorb['affiliate_ref'];
                 } else {
-                    $partner = $this->app->DB->Select("SELECT partner FROM adresse WHERE id = '$adresse' LIMIT 1");
+                    $partner = $this->app->DatabaseService->selectValue("SELECT partner FROM adresse WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                 }
                 // Update + protokoll
-                if (!$this->app->DB->Select("SELECT adressennichtueberschreiben FROM shopexport WHERE id = '$shopid' LIMIT 1")) {
+                if (!$this->app->DatabaseService->selectValue("SELECT adressennichtueberschreiben FROM shopexport WHERE id = :shopid LIMIT 1", ['shopid' => (int) $shopid])) {
                     if ($warenkorb['mobil'] != '') {
-                        $this->app->DB->Update("UPDATE adresse SET mobil = '" . $this->app->DB->real_escape_string($warenkorb['mobil']) . "' WHERE id = '$adresse' LIMIT 1");
+                        $this->app->DatabaseService->update("UPDATE adresse SET mobil = :mobil WHERE id = :adresse LIMIT 1", ['mobil' => (string) $warenkorb['mobil'], 'adresse' => (int) $adresse]);
                     }
                     if ($warenkorb['titel'] != '') {
-                        $this->app->DB->Update("UPDATE adresse SET titel = '" . $this->app->DB->real_escape_string($warenkorb['titel']) . "' WHERE id = '$adresse' LIMIT 1");
+                        $this->app->DatabaseService->update("UPDATE adresse SET titel = :titel WHERE id = :adresse LIMIT 1", ['titel' => (string) $warenkorb['titel'], 'adresse' => (int) $adresse]);
                     }
                     if ($warenkorb['geburtstag'] != '') {
-                        $this->app->DB->Update("UPDATE adresse SET geburtstag = '" . $this->app->DB->real_escape_string($warenkorb['geburtstag']) . "' WHERE id = '$adresse' AND ISNULL(geburtstag) LIMIT 1");
+                        $this->app->DatabaseService->update("UPDATE adresse SET geburtstag = :geburtstag WHERE id = :adresse AND ISNULL(geburtstag) LIMIT 1", ['geburtstag' => (string) $warenkorb['geburtstag'], 'adresse' => (int) $adresse]);
                     }
                     if (isset($warenkorb['ust_befreit'])) {
-                        $query = sprintf('UPDATE `adresse` SET `ust_befreit` = %d WHERE `id` = %d LIMIT 1',
-                                $warenkorb['ust_befreit'], $adresse);
-                        $this->app->DB->Update($query);
+                        $this->app->DatabaseService->update('UPDATE `adresse` SET `ust_befreit` = :ust_befreit WHERE `id` = :adresse LIMIT 1',
+                                ['ust_befreit' => (int) $warenkorb['ust_befreit'], 'adresse' => (int) $adresse]);
                     }
                     $this->app->erp->KundeUpdate($adresse, $typ, $name, $abteilung,
                             $unterabteilung, $ansprechpartner, $adresszusatz, $strasse, $land, $plz, $ort, $email, $telefon, $telefax, $ustid, $partner, $projekt);
 
                     if (!empty($warenkorb['bundesland'])) {
-                        $this->app->DB->Update("UPDATE adresse SET bundesland = '" . $this->app->DB->real_escape_string($warenkorb['bundesland']) . "' WHERE id = '$adresse' LIMIT 1");
+                        $this->app->DatabaseService->update("UPDATE adresse SET bundesland = :bundesland WHERE id = :adresse LIMIT 1", ['bundesland' => (string) $warenkorb['bundesland'], 'adresse' => (int) $adresse]);
                     }
                 }
             }
@@ -764,37 +735,34 @@ class Shopimport {
                         $unterabteilung, $ansprechpartner, $adresszusatz, $strasse, $land, $plz, $ort, $email, $telefon, $telefax, $ustid, $partner, $projekt);
                 $warenkorb['customer_created'] = true;
                 if (!empty($warenkorb['bundesland'])) {
-                    $this->app->DB->Update("UPDATE adresse SET bundesland = '" . $this->app->DB->real_escape_string($warenkorb['bundesland']) . "' WHERE id = '$adresse' LIMIT 1");
+                    $this->app->DatabaseService->update("UPDATE adresse SET bundesland = :bundesland WHERE id = :adresse LIMIT 1", ['bundesland' => (string) $warenkorb['bundesland'], 'adresse' => (int) $adresse]);
                 }
 
                 if (isset($warenkorb['kunde_sprache'])) {
                     if ($warenkorb['kunde_sprache'] === 'englisch' || $warenkorb['kunde_sprache'] === 'english') {
-                        $this->app->DB->Update("UPDATE adresse SET sprache = 'englisch' WHERE id = '$adresse' LIMIT 1");
+                        $this->app->DatabaseService->update("UPDATE adresse SET sprache = 'englisch' WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                     } elseif ($warenkorb['kunde_sprache'] === 'deutsch' || $warenkorb['kunde_sprache'] === 'german') {
-                        $this->app->DB->Update("UPDATE adresse SET sprache = 'deutsch' WHERE id = '$adresse' LIMIT 1");
+                        $this->app->DatabaseService->update("UPDATE adresse SET sprache = 'deutsch' WHERE id = :adresse LIMIT 1", ['adresse' => (int) $adresse]);
                     } elseif (method_exists($this->app->erp, 'GetAdressSprachen')) {
                         $sprachen = $this->app->erp->GetAdressSprachen();
                         if (isset($sprachen[strtolower($warenkorb['kunde_sprache'])])) {
-                            $this->app->DB->Update("UPDATE adresse SET sprache = '" . strtolower($warenkorb['kunde_sprache']) . "' WHERE id = '$adresse' LIMIT 1");
+                            $this->app->DatabaseService->update("UPDATE adresse SET sprache = :sprache WHERE id = :adresse LIMIT 1", ['sprache' => strtolower($warenkorb['kunde_sprache']), 'adresse' => (int) $adresse]);
                         }
                     }
                 }
                 if ($warenkorb['titel'] != '') {
-                    $this->app->DB->Update("UPDATE adresse SET titel = '" . $this->app->DB->real_escape_string($warenkorb['titel']) . "' WHERE id = '$adresse' LIMIT 1");
+                    $this->app->DatabaseService->update("UPDATE adresse SET titel = :titel WHERE id = :adresse LIMIT 1", ['titel' => (string) $warenkorb['titel'], 'adresse' => (int) $adresse]);
                 }
                 if (isset($warenkorb['ust_befreit'])) {
-                    $this->app->DB->Update("UPDATE adresse SET ust_befreit = '" . (int) $warenkorb['ust_befreit'] . "' WHERE id = '$adresse' LIMIT 1");
+                    $this->app->DatabaseService->update("UPDATE adresse SET ust_befreit = :ust_befreit WHERE id = :adresse LIMIT 1", ['ust_befreit' => (int) $warenkorb['ust_befreit'], 'adresse' => (int) $adresse]);
                 }
                 if ($warenkorb['mobil'] != '') {
-                    $this->app->DB->Update("UPDATE adresse SET mobil = '" . $this->app->DB->real_escape_string($warenkorb['mobil']) . "' WHERE id = '$adresse' LIMIT 1");
+                    $this->app->DatabaseService->update("UPDATE adresse SET mobil = :mobil WHERE id = :adresse LIMIT 1", ['mobil' => (string) $warenkorb['mobil'], 'adresse' => (int) $adresse]);
                 }
                 if (!empty($warenkorb['geburtstag'])) {
-                    $query = sprintf("UPDATE `adresse` SET `geburtstag` = '%s' WHERE `id` = %d",
-                            $this->app->DB->real_escape_string($warenkorb['geburtstag']),
-                            $adresse);
-                    $this->app->DB->Update($query);
+                    $this->app->DatabaseService->update("UPDATE `adresse` SET `geburtstag` = :geburtstag WHERE `id` = :adresse", ['geburtstag' => (string) $warenkorb['geburtstag'], 'adresse' => (int) $adresse]);
                 }
-                $kundenGruppen = $this->app->DB->SelectArr("SELECT gruppeid,type FROM shopexport_kundengruppen WHERE shopid=$shopid AND aktiv=1 AND apply_to_new_customers=1 AND (projekt=0 OR projekt='$projekt')");
+                $kundenGruppen = $this->app->DatabaseService->select("SELECT gruppeid,type FROM shopexport_kundengruppen WHERE shopid = :shopid AND aktiv = 1 AND apply_to_new_customers = 1 AND (projekt = 0 OR projekt = :projekt)", ['shopid' => (int) $shopid, 'projekt' => (int) $projekt]);
                 if (!empty($kundenGruppen)) {
                     foreach ($kundenGruppen as $gruppe) {
                         $this->app->erp->AddRolleZuAdresse($adresse, $gruppe['type'], 'von', 'Gruppe', $gruppe['gruppeid']);
@@ -805,26 +773,22 @@ class Shopimport {
                     $this->shopimportAdresseGruppenMapping($warenkorb['kundengruppe'], $adresse, $shopid, $projekt);
                 }
                 if ($shopexportArr['vertrieb']) {
-                    $this->app->DB->Update(
-                            sprintf(
-                                    'UPDATE adresse SET vertrieb = %d WHERE id = %d AND geloescht <> 1 AND vertrieb = 0',
-                                    $shopexportArr['vertrieb'], $adresse
-                            )
+                    $this->app->DatabaseService->update(
+                            'UPDATE adresse SET vertrieb = :vertrieb WHERE id = :adresse AND geloescht <> 1 AND vertrieb = 0',
+                            ['vertrieb' => (int) $shopexportArr['vertrieb'], 'adresse' => (int) $adresse]
                     );
                 }
-                $this->app->DB->Update(
-                        sprintf(
-                                'UPDATE adresse SET fromshop = %d WHERE fromshop = 0 AND id = %d',
-                                $shopexportArr['id'], $adresse
-                        )
+                $this->app->DatabaseService->update(
+                        'UPDATE adresse SET fromshop = :fromshop WHERE fromshop = 0 AND id = :adresse',
+                        ['fromshop' => (int) $shopexportArr['id'], 'adresse' => (int) $adresse]
                 );
             } else {
                 // Update + protokoll
-                if (!$this->app->DB->Select("SELECT adressennichtueberschreiben FROM shopexport WHERE id = '$shopid' LIMIT 1")) {
+                if (!$this->app->DatabaseService->selectValue("SELECT adressennichtueberschreiben FROM shopexport WHERE id = :shopid LIMIT 1", ['shopid' => (int) $shopid])) {
                     $this->app->erp->KundeUpdate($adresse, $typ, $name, $abteilung,
                             $unterabteilung, $ansprechpartner, $adresszusatz, $strasse, $land, $plz, $ort, $email, $telefon, $telefax, $ustid, $partner, $projekt);
                     if (!empty($warenkorb['bundesland'])) {
-                        $this->app->DB->Update("UPDATE adresse SET bundesland = '" . $this->app->DB->real_escape_string($warenkorb['bundesland']) . "' WHERE id = '$adresse' LIMIT 1");
+                        $this->app->DatabaseService->update("UPDATE adresse SET bundesland = :bundesland WHERE id = :adresse LIMIT 1", ['bundesland' => (string) $warenkorb['bundesland'], 'adresse' => (int) $adresse]);
                     }
                 }
             }
@@ -859,7 +823,7 @@ class Shopimport {
             $success_import = true;
 
             $doctype = 'auftrag';
-            if ($this->app->DB->Select("SELECT angeboteanlegen FROM shopexport WHERE id = '$shopid' LIMIT 1")) {
+            if ($this->app->DatabaseService->selectValue("SELECT angeboteanlegen FROM shopexport WHERE id = :shopid LIMIT 1", ['shopid' => (int) $shopid])) {
                 $doctype = 'angebot';
             }
 
@@ -867,7 +831,8 @@ class Shopimport {
                 $doctype = 'angebot';
             }
 
-            $warenkorb['zahlungsweise'] = $this->app->DB->Select("SELECT zahlungsweise FROM $doctype WHERE id = '$tmpauftragid' LIMIT 1");
+            $doctypeTable = $this->app->DatabaseService->validateIdentifier($doctype);
+            $warenkorb['zahlungsweise'] = $this->app->DatabaseService->selectValue("SELECT zahlungsweise FROM `$doctypeTable` WHERE id = :tmpauftragid LIMIT 1", ['tmpauftragid' => (int) $tmpauftragid]);
             if ($warenkorb['zahlungsweise'] != '') {
                 if (!isset($bekanntezahlungsweisen[$warenkorb['zahlungsweise']])) {
                     if (!$unbekanntezahlungsweisen || !isset($unbekanntezahlungsweisen[strtolower($warenkorb['zahlungsweise'])])) {
@@ -883,10 +848,10 @@ class Shopimport {
                 $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET imported = 1 WHERE id = :shopimportid LIMIT 1", ['shopimportid' => (int) $shopimportid]);
             }
             if ($shopimportid) {
-                $shopextid = $this->app->DatabaseService->selectValue("SELECT extid FROM shopimport_auftraege WHERE id = ? LIMIT 1", [(int) $shopimportid]);
+                $shopextid = $this->app->DatabaseService->selectValue("SELECT extid FROM shopimport_auftraege WHERE id = :shopimportid LIMIT 1", ['shopimportid' => (int) $shopimportid]);
             }
             if ($shopextid) {
-                $this->app->DatabaseService->execute("UPDATE `$doctype` SET shopextid = ? WHERE id = ? LIMIT 1", [(string) $shopextid, (int) $tmpauftragid]);
+                $this->app->DatabaseService->execute("UPDATE `$doctypeTable` SET shopextid = :shopextid WHERE id = :tmpauftragid LIMIT 1", ['shopextid' => (string) $shopextid, 'tmpauftragid' => (int) $tmpauftragid]);
             }
             $this->app->erp->RunHook('Shopimportwarenkorb', 4, $doctype, $tmpauftragid, $shopid, $warenkorb);
             $this->app->erp->RunHook('Shopimport', 3, $doctype, $tmpauftragid, $shopid);
@@ -926,11 +891,11 @@ class Shopimport {
      * @return array
      */
     private function getShopimportKundenGruppenZuordnungen($gruppenBezeichnung, $shopId, $projektId) {
-        $gefundeneGruppen = $this->app->DatabaseService->select("SELECT gruppeid, type FROM shopexport_kundengruppen WHERE shopid = ? AND extgruppename = ? AND projekt = ?", [(int) $shopId, (string) $gruppenBezeichnung, (int) $projektId]);
+        $gefundeneGruppen = $this->app->DatabaseService->select("SELECT gruppeid, type FROM shopexport_kundengruppen WHERE shopid = :shopId AND extgruppename = :extgruppename AND projekt = :projektId", ['shopId' => (int) $shopId, 'extgruppename' => (string) $gruppenBezeichnung, 'projektId' => (int) $projektId]);
 
         if (empty($gefundeneGruppen)) {
             //Fallback, falls kein projektspezifisches Mapping gefunden
-            $gefundeneGruppen = $this->app->DatabaseService->select("SELECT gruppeid, type FROM shopexport_kundengruppen WHERE shopid = ? AND extgruppename = ? AND projekt = 0", [(int) $shopId, (string) $gruppenBezeichnung]);
+            $gefundeneGruppen = $this->app->DatabaseService->select("SELECT gruppeid, type FROM shopexport_kundengruppen WHERE shopid = :shopId AND extgruppename = :extgruppename AND projekt = 0", ['shopId' => (int) $shopId, 'extgruppename' => (string) $gruppenBezeichnung]);
         }
 
         if (empty($gefundeneGruppen)) {
@@ -951,21 +916,17 @@ class Shopimport {
      * @return bool
      */
     public function setShopImportedOrderTrash($shopImportedOrderId) {
-        $this->app->DB->Update(
-                sprintf(
-                        'UPDATE shopimport_auftraege SET trash=1 WHERE id= %d LIMIT 1',
-                        (int) $shopImportedOrderId
-                )
+        $affected = $this->app->DatabaseService->update(
+                'UPDATE shopimport_auftraege SET trash=1 WHERE id = :id LIMIT 1',
+                ['id' => (int) $shopImportedOrderId]
         );
-        return $this->app->DB->affected_rows() > 0;
+        return $affected > 0;
     }
 
     public function importShopOrder($shopImportedOrderId, $utf8coding, $customerNumber, $custumerNumberImported, &$unknownPaymentTypes) {
-        $shopImportedOrder = $this->app->DB->SelectRow(
-                sprintf(
-                        'SELECT * FROM shopimport_auftraege WHERE imported=0 AND trash=0 AND id=%d LIMIT 1',
-                        $shopImportedOrderId
-                )
+        $shopImportedOrder = $this->app->DatabaseService->selectRow(
+                'SELECT * FROM shopimport_auftraege WHERE imported=0 AND trash=0 AND id=:id LIMIT 1',
+                ['id' => (int) $shopImportedOrderId]
         );
         if (empty($shopImportedOrder)) {
             return ['success' => 0];
@@ -1020,17 +981,14 @@ class Shopimport {
         if (!is_numeric($id) && $this->app->Secure->GetPOST('deletedouble')) {
             $showonly = true;
             $id = (int) $this->app->Secure->GetGET('id');
-            $this->app->DB->Update(
-                    sprintf(
-                            'UPDATE shopimport_auftraege AS sa 
-          INNER JOIN auftrag a ON sa.bestellnummer = a.internet AND sa.shopid = a.shop 
-          SET sa.trash = 1 
-          WHERE IFNULL(a.internet,\'\') <> \'\' AND sa.trash = 0 AND sa.imported = 0 AND 
-                (sa.shopid = %d OR %d = 0)',
-                            $id, $id
-                    )
+            $deletedRows = $this->app->DatabaseService->update(
+                    'UPDATE shopimport_auftraege AS sa
+          INNER JOIN auftrag a ON sa.bestellnummer = a.internet AND sa.shopid = a.shop
+          SET sa.trash = 1
+          WHERE IFNULL(a.internet,\'\') <> \'\' AND sa.trash = 0 AND sa.imported = 0 AND
+                (sa.shopid = :shopId OR :shopIdCheck = 0)',
+                    ['shopId' => (int) $id, 'shopIdCheck' => (int) $id]
             );
-            $deletedRows = (int) $this->app->DB->affected_rows();
             $this->app->Tpl->Add('IMPORT', '<div class="info">Es wurden ' . $deletedRows . ' bereits importierte Datens&auml;tze entfernt.</div>');
         }
         $runningcronjob = $this->app->DB->Select("SELECT id FROM prozessstarter WHERE parameter = 'shopimport' AND aktiv=1 AND mutex = 1 AND UNIX_TIMESTAMP(now()) - UNIX_TIMESTAMP(letzteausfuerhung) < 300 LIMIT 1");
@@ -1041,7 +999,7 @@ class Shopimport {
             $id = $this->app->Secure->GetGET('id');
         }
 
-        $shopexportarr = $this->app->DB->SelectRow("SELECT * FROM shopexport WHERE id='$id'");
+        $shopexportarr = $this->app->DatabaseService->selectRow("SELECT * FROM shopexport WHERE id = :id", ['id' => (int) $id]);
         $projekt = $shopexportarr['projekt']; //$this->app->DB->Select("SELECT projekt FROM shopexport WHERE id='$id'");
         $demomodus = $shopexportarr['demomodus']; //$this->app->DB->Select("SELECT demomodus FROM shopexport WHERE id='$id'");
         $einzelsync = $shopexportarr['einzelsync']; //$this->app->DB->Select("SELECT einzelsync FROM shopexport WHERE id='$id'");
@@ -1068,11 +1026,11 @@ class Shopimport {
                 $shopimportid = $auftraege[$i];
                 $shopid = $this->app->DatabaseService->selectValue("SELECT shopid FROM shopimport_auftraege WHERE id = :shopimportid LIMIT 1", ['shopimportid' => (int) $shopimportid]);
                 if ($shopid) {
-                    $demomodus = $this->app->DB->Select("SELECT demomodus FROM shopexport WHERE id='$shopid'");
-                    $einzelsync = $this->app->DB->Select("SELECT einzelsync FROM shopexport WHERE id='$shopid'");
-                    $utf8codierung = $this->app->DB->Select("SELECT utf8codierung FROM shopexport WHERE id='$shopid'");
+                    $demomodus = $this->app->DatabaseService->selectValue("SELECT demomodus FROM shopexport WHERE id = :shopid", ['shopid' => (int) $shopid]);
+                    $einzelsync = $this->app->DatabaseService->selectValue("SELECT einzelsync FROM shopexport WHERE id = :shopid", ['shopid' => (int) $shopid]);
+                    $utf8codierung = $this->app->DatabaseService->selectValue("SELECT utf8codierung FROM shopexport WHERE id = :shopid", ['shopid' => (int) $shopid]);
                 }
-                $projekt = $this->app->DB->Select("SELECT projekt FROM shopimport_auftraege WHERE id='$shopimportid' LIMIT 1");
+                $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopimport_auftraege WHERE id = :shopimportid LIMIT 1", ['shopimportid' => (int) $shopimportid]);
                 if ($import[$shopimportid] === 'warten') {
                     
                 } else if ($import[$shopimportid] === 'muell') {
@@ -1126,7 +1084,7 @@ class Shopimport {
                 $pageContents = $e->getMessage();
             }
             if ($pageContents === 'success') {
-                $shopexportarr = $this->app->DB->SelectRow("SELECT * FROM shopexport WHERE id = '$id' LIMIT 1");
+                $shopexportarr = $this->app->DatabaseService->selectRow("SELECT * FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int) $id]);
                 $holealle = $shopexportarr['holealle']; //$this->app->DB->Select("SELECT holealle FROM shopexport WHERE id = '$id' LIMIT 1");
                 $statusaendern = $shopexportarr['nummersyncstatusaendern']; //$this->app->DB->Select("SELECT nummersyncstatusaendern FROM shopexport WHERE id = '$id' LIMIT 1");
                 $auftragabgleich = $shopexportarr['auftragabgleich']; //$this->app->DB->Select("SELECT auftragabgleich FROM shopexport WHERE id = '$id' LIMIT 1");
@@ -1148,7 +1106,7 @@ class Shopimport {
                         $mintime = false;
                         $gesamtanzahl = (!empty($result) ? count($result) : 0);
                         for ($i = 0; $i < $gesamtanzahl; $i++) {
-                            $projekt = $this->app->DB->Select("SELECT projekt FROM shopexport WHERE id = '$id' LIMIT 1");
+                            $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int) $id]);
                             $auftrag = $result[$i]['id'];
                             if (isset($result[$i]['warenkorbjson'])) {
                                 $isjson = true;
@@ -1157,7 +1115,7 @@ class Shopimport {
                                 $isjson = false;
                                 $tmpwarenkorb = unserialize(base64_decode($result[$i]['warenkorb']));
                             }
-                            if (!empty($tmpwarenkorb['projekt']) && $this->app->DB->Select("SELECT id FROM projekt WHERE id = '" . (int) $tmpwarenkorb['projekt'] . "' LIMIT 1")) {
+                            if (!empty($tmpwarenkorb['projekt']) && $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => (int) $tmpwarenkorb['projekt']])) {
                                 $projekt = (int) $tmpwarenkorb['projekt'];
                             }
                             if (!empty($tmpwarenkorb['zeitstempel'])) {
@@ -1186,7 +1144,7 @@ class Shopimport {
 
                             if ($holealle && $onlinebestellnummer) {
                                 $neue_nummer = (int) $onlinebestellnummer + 1;
-                                $this->app->DB->Update("UPDATE shopexport SET ab_nummer = '$neue_nummer' WHERE id = '$id'");
+                                $this->app->DatabaseService->update("UPDATE shopexport SET ab_nummer = :neue_nummer WHERE id = :id", ['neue_nummer' => $neue_nummer, 'id' => (int) $id]);
                             }
                             $sessionid = isset($result[$i]['sessionid']) ? $result[$i]['sessionid'] : '';
                             if ($isjson) {
@@ -1199,7 +1157,7 @@ class Shopimport {
                                 $logdatei = date('Y-m-d H:i:s');
                             }
                             if (isset($tmpwarenkorb['subshop']) && $tmpwarenkorb['subshop']) {
-                                $subshopprojekt = $this->app->DB->Select("SELECT projekt FROM shopexport_subshop WHERE shop = '$id' AND aktiv = 1 AND subshopkennung = '" . $this->app->DB->real_escape_string($tmpwarenkorb['subshop']) . "' LIMIT 1");
+                                $subshopprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport_subshop WHERE shop = :shopId AND aktiv = 1 AND subshopkennung = :subshopkennung LIMIT 1", ['shopId' => (int) $id, 'subshopkennung' => (string) $tmpwarenkorb['subshop']]);
                                 if ($subshopprojekt) {
                                     $projekt = $subshopprojekt;
                                 }
@@ -1209,22 +1167,21 @@ class Shopimport {
 
                             //globalerauftragsnummernkreis
                             $standardcheck = true;
-                            $modulename = $this->app->DB->Select(
-                                    sprintf(
-                                            "SELECT modulename FROM shopexport WHERE id = %d AND modulename <> '' AND (shoptyp = 'intern')",
-                                            $id
-                                    )
+                            $modulename = $this->app->DatabaseService->selectValue(
+                                    "SELECT modulename FROM shopexport WHERE id = :id AND modulename <> '' AND (shoptyp = 'intern')",
+                                    ['id' => (int) $id]
                             );
                             $shopIds = [$id];
                             $otherModules = empty($modulename) ? null :
-                                    $this->app->DB->SelectFirstCols(
-                                            sprintf(
-                                                    "SELECT id 
-                  FROM shopexport 
-                  WHERE modulename = '%s' AND id <> %d",
-                                                    $this->app->DB->real_escape_string($modulename), $id
-                                            )
-                            );
+                                    array_column(
+                                            $this->app->DatabaseService->select(
+                                                    "SELECT id
+                  FROM shopexport
+                  WHERE modulename = :modulename AND id <> :id",
+                                                    ['modulename' => (string) $modulename, 'id' => (int) $id]
+                                            ),
+                                            'id'
+                                    );
                             if (!empty($otherModules) && $this->app->erp->ModulVorhanden($modulename)) {
                                 $obj = $this->app->erp->LoadModul($modulename);
                                 if (!empty($obj) && method_exists($obj, 'EinstellungenStruktur')) {
@@ -1241,15 +1198,13 @@ class Shopimport {
                                     }
                                 }
                             }
-                            $checkdoppeltimported = $this->app->DB->Select(
-                                    sprintf(
-                                            "SELECT id 
-                  FROM shopimport_auftraege 
-                  WHERE extid = '%s' and shopid IN (%s) AND trash = 0
+                            $checkdoppeltimported = $this->app->DatabaseService->selectValue(
+                                    "SELECT id
+                  FROM shopimport_auftraege
+                  WHERE extid = :extid AND shopid IN (" . implode(',', array_map('intval', $shopIds)) . ") AND trash = 0
                   AND (imported = 0 OR (imported = 1 AND DATE_SUB(NOW(),INTERVAL 10 MINUTE)>logdatei ))
                   LIMIT 1",
-                                            $this->app->DB->real_escape_string($auftrag), implode(',', $shopIds)
-                                    )
+                                    ['extid' => (string) $auftrag]
                             );
                             /* if($standardcheck)
                               { */
@@ -1263,16 +1218,16 @@ class Shopimport {
                             $insid = null;
                             if (empty($checkdoppeltimported)) {
                                 $this->app->DatabaseService->execute(
-                                    "INSERT INTO shopimport_auftraege (extid,sessionid,warenkorb,imported,projekt,bearbeiter,logdatei) VALUES (?, ?, ?, 0, ?, ?, ?)",
-                                    [(string) $auftrag, (string) $sessionid, (string) $warenkorb, (int) $projekt, (string) $this->app->User->GetName(), (string) $logdatei]
+                                    "INSERT INTO shopimport_auftraege (extid,sessionid,warenkorb,imported,projekt,bearbeiter,logdatei) VALUES (:extid, :sessionid, :warenkorb, 0, :projekt, :bearbeiter, :logdatei)",
+                                    ['extid' => (string) $auftrag, 'sessionid' => (string) $sessionid, 'warenkorb' => (string) $warenkorb, 'projekt' => (int) $projekt, 'bearbeiter' => (string) $this->app->User->GetName(), 'logdatei' => (string) $logdatei]
                                 );
                                 $insid = $this->app->DB->GetInsertID();
                                 if ($insid) {
                                     if ($isjson) {
-                                        $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET jsonencoded = 1 WHERE id = ?", [(int) $insid]);
+                                        $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET jsonencoded = 1 WHERE id = :id", ['id' => (int) $insid]);
                                     }
-                                    $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET shopid = ? WHERE id = ?", [(int) $id, (int) $insid]);
-                                    $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET bestellnummer = ? WHERE id = ?", [(string) $letzteonlinebestellnummer, (int) $insid]);
+                                    $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET shopid = :shopid WHERE id = :id", ['shopid' => (int) $id, 'id' => (int) $insid]);
+                                    $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET bestellnummer = :bestellnummer WHERE id = :id", ['bestellnummer' => (string) $letzteonlinebestellnummer, 'id' => (int) $insid]);
                                 }
                             }
                             if ($demomodus != '1') {
@@ -1302,12 +1257,12 @@ class Shopimport {
                             if ($tmpdatumbis < 0) {
                                 $tmpdatumbis = 0;
                             }
-                            $this->app->DB->Update("UPDATE shopexport SET datumvon = '" . date('Y-m-d H:i:s', $maxtime) . "', tmpdatumbis = '0000-00-00' WHERE id = '$id' LIMIT 1");
+                            $this->app->DatabaseService->update("UPDATE shopexport SET datumvon = :datumvon, tmpdatumbis = '0000-00-00' WHERE id = :id LIMIT 1", ['datumvon' => date('Y-m-d H:i:s', $maxtime), 'id' => (int) $id]);
                         }
                     } else {
                         if (!$demomodus) {
                             if (is_array($result) && !empty($result['zeitstempel'])) {
-                                $this->app->DB->Update("UPDATE shopexport SET datumvon = '" . date('Y-m-d H:i:s', strtotime($result['zeitstempel'])) . "', tmpdatumbis = '0000-00-00' WHERE id = '$id' AND datumvon < '" . date('Y-m-d H:i:s', strtotime($result['zeitstempel'])) . "' LIMIT 1");
+                                $this->app->DatabaseService->update("UPDATE shopexport SET datumvon = :datumvon, tmpdatumbis = '0000-00-00' WHERE id = :id AND datumvon < :datumvonCheck LIMIT 1", ['datumvon' => date('Y-m-d H:i:s', strtotime($result['zeitstempel'])), 'id' => (int) $id, 'datumvonCheck' => date('Y-m-d H:i:s', strtotime($result['zeitstempel']))]);
                             }
                             if (empty($maxtime)) {
                                 $maxtime = strtotime(date('Y-m-d H:i:s'));
@@ -1329,13 +1284,13 @@ class Shopimport {
                                 $tmpdatumbis = 0;
                             }
                             if ($tmpdatumbis) {
-                                $this->app->DB->Update("UPDATE shopexport SET tmpdatumbis = '0000-00-00' WHERE id = '$id' LIMIT 1");
+                                $this->app->DatabaseService->update("UPDATE shopexport SET tmpdatumbis = '0000-00-00' WHERE id = :id LIMIT 1", ['id' => (int) $id]);
                             }
                         }
                     }
                 } else {
                     $gesamtanzahl = $this->app->remote->RemoteGetAuftraegeAnzahl($id);
-                    $maxmanuell = (int) $this->app->DB->Select("SELECT maxmanuell FROM shopexport WHERE id = '$id' LIMIT 1");
+                    $maxmanuell = (int) $this->app->DatabaseService->selectValue("SELECT maxmanuell FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int) $id]);
                     if ($maxmanuell <= 0) {
                         $maxmanuell = 100;
                     }
@@ -1365,7 +1320,7 @@ class Shopimport {
                                 }
                                 if ($holealle && $onlinebestellnummer) {
                                     $neue_nummer = (int) $onlinebestellnummer + 1;
-                                    $this->app->DB->Update("UPDATE shopexport SET ab_nummer = '$neue_nummer' WHERE id = '$id'");
+                                    $this->app->DatabaseService->update("UPDATE shopexport SET ab_nummer = :neue_nummer WHERE id = :id", ['neue_nummer' => $neue_nummer, 'id' => (int) $id]);
                                 }
                                 $sessionid = $result[0]['sessionid'];
                                 if ($isjson) {
@@ -1377,12 +1332,12 @@ class Shopimport {
                                 if (empty($logdatei)) {
                                     $logdatei = date('Y-m-d H:i:s');
                                 }
-                                $projekt = $this->app->DB->Select("SELECT projekt FROM shopexport WHERE id = '$id' LIMIT 1");
-                                if (!empty($tmpwarenkorb['projekt']) && $this->app->DB->Select("SELECT id FROM projekt WHERE id = '" . (int) $tmpwarenkorb['projekt'] . "' LIMIT 1")) {
+                                $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport WHERE id = :id LIMIT 1", ['id' => (int) $id]);
+                                if (!empty($tmpwarenkorb['projekt']) && $this->app->DatabaseService->selectValue("SELECT id FROM projekt WHERE id = :projektId LIMIT 1", ['projektId' => (int) $tmpwarenkorb['projekt']])) {
                                     $projekt = (int) $tmpwarenkorb['projekt'];
                                 }
                                 if (isset($tmpwarenkorb['subshop']) && $tmpwarenkorb['subshop']) {
-                                    $subshopprojekt = $this->app->DB->Select("SELECT projekt FROM shopexport_subshop WHERE shop = '$id' AND aktiv = 1 AND subshopkennung = '" . $this->app->DB->real_escape_string($tmpwarenkorb['subshop']) . "' LIMIT 1");
+                                    $subshopprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport_subshop WHERE shop = :shopId AND aktiv = 1 AND subshopkennung = :subshopkennung LIMIT 1", ['shopId' => (int) $id, 'subshopkennung' => (string) $tmpwarenkorb['subshop']]);
                                     if ($subshopprojekt) {
                                         $projekt = $subshopprojekt;
                                     }
@@ -1390,22 +1345,21 @@ class Shopimport {
                                 unset($tmpwarenkorb);
 
                                 $standardcheck = true;
-                                $modulename = $this->app->DB->Select(
-                                        sprintf(
-                                                "SELECT modulename FROM shopexport WHERE id = %d AND modulename <> '' AND (shoptyp = 'intern')",
-                                                $id
-                                        )
+                                $modulename = $this->app->DatabaseService->selectValue(
+                                        "SELECT modulename FROM shopexport WHERE id = :id AND modulename <> '' AND (shoptyp = 'intern')",
+                                        ['id' => (int) $id]
                                 );
                                 $shopIds = [$id];
                                 $otherModules = empty($modulename) ? null :
-                                        $this->app->DB->SelectFirstCols(
-                                                sprintf(
-                                                        "SELECT id 
-                  FROM shopexport 
-                  WHERE modulename = '%s' AND id <> %d",
-                                                        $this->app->DB->real_escape_string($modulename), $id
-                                                )
-                                );
+                                        array_column(
+                                                $this->app->DatabaseService->select(
+                                                        "SELECT id
+                  FROM shopexport
+                  WHERE modulename = :modulename AND id <> :id",
+                                                        ['modulename' => (string) $modulename, 'id' => (int) $id]
+                                                ),
+                                                'id'
+                                        );
                                 if (!empty($otherModules) && $this->app->erp->ModulVorhanden($modulename)) {
                                     $obj = $this->app->erp->LoadModul($modulename);
                                     if (!empty($obj) && method_exists($obj, 'EinstellungenStruktur')) {
@@ -1422,15 +1376,13 @@ class Shopimport {
                                         }
                                     }
                                 }
-                                $checkdoppeltimported = $this->app->DB->Select(
-                                        sprintf(
-                                                "SELECT id 
-                  FROM shopimport_auftraege 
-                  WHERE extid = '%s' and shopid IN (%s) AND trash = 0
+                                $checkdoppeltimported = $this->app->DatabaseService->selectValue(
+                                        "SELECT id
+                  FROM shopimport_auftraege
+                  WHERE extid = :extid AND shopid IN (" . implode(',', array_map('intval', $shopIds)) . ") AND trash = 0
                   AND (imported = 0 OR (imported = 1 AND DATE_SUB(NOW(),INTERVAL 10 MINUTE)>logdatei ))
                   LIMIT 1",
-                                                $this->app->DB->real_escape_string($auftrag), implode(',', $shopIds)
-                                        )
+                                        ['extid' => (string) $auftrag]
                                 );
 
                                 /* if($standardcheck){ */
@@ -1448,15 +1400,15 @@ class Shopimport {
                                 }
                                 if (!$checkdoppeltimported) {
                                     $this->app->DatabaseService->execute(
-                                        "INSERT INTO shopimport_auftraege (extid,sessionid,warenkorb,imported,projekt,bearbeiter,logdatei) VALUES (?, ?, ?, 0, ?, ?, ?)",
-                                        [(string) $auftrag, (string) $sessionid, (string) $warenkorb, (int) $projekt, (string) $this->app->User->GetName(), (string) $logdatei]
+                                        "INSERT INTO shopimport_auftraege (extid,sessionid,warenkorb,imported,projekt,bearbeiter,logdatei) VALUES (:extid, :sessionid, :warenkorb, 0, :projekt, :bearbeiter, :logdatei)",
+                                        ['extid' => (string) $auftrag, 'sessionid' => (string) $sessionid, 'warenkorb' => (string) $warenkorb, 'projekt' => (int) $projekt, 'bearbeiter' => (string) $this->app->User->GetName(), 'logdatei' => (string) $logdatei]
                                     );
                                     $insid = $this->app->DB->GetInsertID();
                                     if ($insid) {
-                                        $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET shopid = ? WHERE id = ?", [(int) $id, (int) $insid]);
-                                        $this->app->DB->Update("UPDATE shopimport_auftraege set logdatei = now() where id = '$insid' AND logdatei = '0000-00-00' OR logdatei > now()");
+                                        $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET shopid = :shopid WHERE id = :id", ['shopid' => (int) $id, 'id' => (int) $insid]);
+                                        $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET logdatei = NOW() WHERE id = :id AND (logdatei = '0000-00-00' OR logdatei > NOW())", ['id' => (int) $insid]);
                                         if ($isjson) {
-                                            $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET jsonencoded = 1 WHERE id = ?", [(int) $insid]);
+                                            $this->app->DatabaseService->execute("UPDATE shopimport_auftraege SET jsonencoded = 1 WHERE id = :id", ['id' => (int) $insid]);
                                         }
                                     }
                                 }
@@ -1507,46 +1459,46 @@ class Shopimport {
             $warenkorb[$k] = $this->app->erp->fixeUmlaute($v);
         }
 
-        $kundenurvonprojekt = $this->app->DB->Select("SELECT kundenurvonprojekt FROM shopexport WHERE id = '" . $arr['shopid'] . "' LIMIT 1");
+        $kundenurvonprojekt = $this->app->DatabaseService->selectValue("SELECT kundenurvonprojekt FROM shopexport WHERE id = :shopid LIMIT 1", ['shopid' => (int) $arr['shopid']]);
         $adresseprojekt = '';
         if ($kundenurvonprojekt) {
-            $adresseprojekt = $this->app->DB->Select("SELECT projekt FROM shopexport WHERE id = '" . $arr['shopid'] . "' LIMIT 1");
-        }
-        if (!empty($warenkorb['kundennummer'])) {
-            $validkundennummer = $this->app->DatabaseService->selectValue(
-                "SELECT kundennummer FROM adresse WHERE kundennummer = ? AND email <> '' $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1",
-                [(string) $warenkorb['kundennummer']]
-            );
+            $adresseprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport WHERE id = :shopid LIMIT 1", ['shopid' => (int) $arr['shopid']]);
         }
         if (isset($warenkorb['subshop']) && $warenkorb['subshop']) {
-            $subshopprojekt = $this->app->DB->Select("SELECT projekt FROM shopexport_subshop WHERE shop = '" . $arr['shopid'] . "' AND aktiv = 1 AND subshopkennung = '" . $this->app->DB->real_escape_string($warenkorb['subshop']) . "' LIMIT 1");
+            $subshopprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport_subshop WHERE shop = :shopId AND aktiv = 1 AND subshopkennung = :subshopkennung LIMIT 1", ['shopId' => (int) $arr['shopid'], 'subshopkennung' => (string) $warenkorb['subshop']]);
             if ($subshopprojekt) {
                 if (!$kundenurvonprojekt) {
                     $adresseprojekt = $subshopprojekt;
                 }
-                $arr['abkuerzung'] = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$adresseprojekt' LIMIT 1");
+                $arr['abkuerzung'] = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :adresseprojekt LIMIT 1", ['adresseprojekt' => (int) $adresseprojekt]);
             }
         }
         if ($kundenurvonprojekt) {
-            $adresseprojekt = " AND projekt = '" . $adresseprojekt . "' ";
+            $adresseprojekt = " AND projekt = '" . (int) $adresseprojekt . "' ";
         } else {
             $adresseprojekt = '';
         }
+        if (!empty($warenkorb['kundennummer'])) {
+            $validkundennummer = $this->app->DatabaseService->selectValue(
+                "SELECT kundennummer FROM adresse WHERE kundennummer = :kundennummer AND email <> '' $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1",
+                ['kundennummer' => (string) $warenkorb['kundennummer']]
+            );
+        }
 
         $checkid = $this->app->DatabaseService->selectValue(
-            "SELECT kundennummer FROM adresse WHERE `name` = ? AND abteilung = ? AND strasse = ? AND plz = ? AND ort = ? AND kundennummer <> '' AND geloescht != 1 $adresseprojekt ORDER BY email = ? DESC LIMIT 1",
-            [(string) $warenkorb['name'], (string) $warenkorb['abteilung'], (string) $warenkorb['strasse'], (string) $warenkorb['plz'], (string) $warenkorb['ort'], (string) $warenkorb['email']]
+            "SELECT kundennummer FROM adresse WHERE `name` = :name AND abteilung = :abteilung AND strasse = :strasse AND plz = :plz AND ort = :ort AND kundennummer <> '' AND geloescht != 1 $adresseprojekt ORDER BY email = :email DESC LIMIT 1",
+            ['name' => (string) $warenkorb['name'], 'abteilung' => (string) $warenkorb['abteilung'], 'strasse' => (string) $warenkorb['strasse'], 'plz' => (string) $warenkorb['plz'], 'ort' => (string) $warenkorb['ort'], 'email' => (string) $warenkorb['email']]
         );
 
         if ($warenkorb['email'] != '') {
             if ($warenkorb['email'] !== 'amazon_import_bounce@nfxmedia.de') {
-                $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE email = ? AND email <> '' $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1", [(string) $warenkorb['email']]);
+                $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE email = :email AND email <> '' $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1", ['email' => (string) $warenkorb['email']]);
             }
             if ((String) $checkidemail === '') {
-                $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE name LIKE ? AND ort LIKE ? AND geloescht != 1 $adresseprojekt AND kundennummer <> '' LIMIT 1", [(string) $warenkorb['name'], (string) $warenkorb['ort']]);
+                $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE name LIKE :name AND ort LIKE :ort AND geloescht != 1 $adresseprojekt AND kundennummer <> '' LIMIT 1", ['name' => (string) $warenkorb['name'], 'ort' => (string) $warenkorb['ort']]);
             }
         } else {
-            $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE name = ? AND strasse = ? AND plz = ? AND ort = ? $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1", [(string) $warenkorb['name'], (string) $warenkorb['strasse'], (string) $warenkorb['plz'], (string) $warenkorb['ort']]);
+            $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE name = :name AND strasse = :strasse AND plz = :plz AND ort = :ort $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1", ['name' => (string) $warenkorb['name'], 'strasse' => (string) $warenkorb['strasse'], 'plz' => (string) $warenkorb['plz'], 'ort' => (string) $warenkorb['ort']]);
         }
 
         if ($warenkorb['kundennummer'] != '' && !empty($validkundennummer) && $validkundennummer == $warenkorb['kundennummer']) {
@@ -1581,7 +1533,7 @@ class Shopimport {
             $where .= " AND sa.bestellnummer='$bestellnummer'";
         }
 
-        $arr = $this->app->DB->SelectArr("SELECT sa.*, p.abkuerzung FROM shopimport_auftraege sa left join projekt p on sa.projekt = p.id WHERE sa.imported='0' AND sa.trash='0' $where ORDER BY sa.logdatei LIMIT 100");
+        $arr = $this->app->DatabaseService->select("SELECT sa.*, p.abkuerzung FROM shopimport_auftraege sa LEFT JOIN projekt p ON sa.projekt = p.id WHERE sa.imported='0' AND sa.trash='0' $where ORDER BY sa.logdatei LIMIT 100");
         if (is_array($arr) && (!empty($arr) ? count($arr) : 0) > 0) {
 
             //Alte Auftraege prüfen
@@ -1593,9 +1545,9 @@ class Shopimport {
                     } else {
                         $warenkorb = unserialize(base64_decode($row['warenkorb']));
                     }
-                    $this->app->DB->Update("UPDATE shopimport_auftraege set bestellnummer = '" . (isset($warenkorb['onlinebestellnummer']) ? $warenkorb['onlinebestellnummer'] : '') . "' where id = '" . $row['id'] . "'");
+                    $this->app->DatabaseService->update("UPDATE shopimport_auftraege SET bestellnummer = :bestellnummer WHERE id = :id", ['bestellnummer' => (string) (isset($warenkorb['onlinebestellnummer']) ? $warenkorb['onlinebestellnummer'] : ''), 'id' => (int) $row['id']]);
                 } else {
-                    $this->app->DB->Update("UPDATE shopimport_auftraege set bestellnummer = '' where id = '" . $row['id'] . "'");
+                    $this->app->DatabaseService->update("UPDATE shopimport_auftraege SET bestellnummer = '' WHERE id = :id", ['id' => (int) $row['id']]);
                 }
             }
             $this->app->DB->free($alteauftraegeohnebestellnummer);
@@ -1607,9 +1559,9 @@ class Shopimport {
                 if (empty($checkglobal) || !isset($checkglobal[$arr[$i]['shopid']])) {
                     $checkglobal[$arr[$i]['shopid']] = null;
 
-                    if (($modulename = $this->app->DB->Select("SELECT modulename FROM shopexport WHERE id = '" . $arr[$i]['shopid'] . "' AND modulename <> '' AND shoptyp = 'intern'")) && $this->app->DB->Select("SELECT id FROM shopexport WHERE modulename = '" . $this->app->DB->real_escape_string($modulename) . "' AND id <> '" . $arr[$i]['shopid'] . "' LIMIT 1")
+                    if (($modulename = $this->app->DatabaseService->selectValue("SELECT modulename FROM shopexport WHERE id = :shopid AND modulename <> '' AND shoptyp = 'intern'", ['shopid' => (int) $arr[$i]['shopid']])) && $this->app->DatabaseService->selectValue("SELECT id FROM shopexport WHERE modulename = :modulename AND id <> :shopid LIMIT 1", ['modulename' => (string) $modulename, 'shopid' => (int) $arr[$i]['shopid']])
                     ) {
-                        $shopsintern = $this->app->DB->SelectArr("SELECT id FROM shopexport WHERE id = '" . $arr[$i]['shopid'] . "' OR (modulename = '" . $this->app->DB->real_escape_string($modulename) . "' AND shoptyp = 'intern')");
+                        $shopsintern = $this->app->DatabaseService->select("SELECT id FROM shopexport WHERE id = :shopid OR (modulename = :modulename AND shoptyp = 'intern')", ['shopid' => (int) $arr[$i]['shopid'], 'modulename' => (string) $modulename]);
                         if ($shopsintern) {
                             foreach ($shopsintern as $vs) {
                                 $checkglobal[$arr[$i]['shopid']][] = " shopid = '" . $vs['id'] . "' ";
@@ -1636,9 +1588,11 @@ class Shopimport {
             }
 
             $carr = $arr ? count($arr) : 0;
+            $checkidemail = '';
+            $validkundennummer = '';
             for ($i = 0; $i < $carr; $i++) {
-                $projekt = $this->app->DB->Select("SELECT projekt FROM shopexport WHERE id = '" . $arr[$i]['shopid'] . "' LIMIT 1");
-                $auftraegeaufspaeter = $this->app->DB->Select("SELECT auftraegeaufspaeter FROM shopexport WHERE id='" . $arr[$i]['shopid'] . "'");
+                $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport WHERE id = :shopid LIMIT 1", ['shopid' => (int) $arr[$i]['shopid']]);
+                $auftraegeaufspaeter = $this->app->DatabaseService->selectValue("SELECT auftraegeaufspaeter FROM shopexport WHERE id = :shopid", ['shopid' => (int) $arr[$i]['shopid']]);
                 if (!empty($arr[$i]['jsonencoded'])) {
                     $warenkorb = json_decode(base64_decode($arr[$i]['warenkorb']), true);
                 } else {
@@ -1652,43 +1606,51 @@ class Shopimport {
                 foreach ($warenkorb as $k => $v) {
                     $warenkorb[$k] = $this->app->erp->fixeUmlaute($v);
                 }
-                $kundenurvonprojekt = $this->app->DB->Select("SELECT kundenurvonprojekt FROM shopexport WHERE id = '" . $arr[$i]['shopid'] . "' LIMIT 1");
+                $kundenurvonprojekt = $this->app->DatabaseService->selectValue("SELECT kundenurvonprojekt FROM shopexport WHERE id = :shopid LIMIT 1", ['shopid' => (int) $arr[$i]['shopid']]);
                 $adresseprojekt = '';
                 if ($kundenurvonprojekt) {
-                    $adresseprojekt = $this->app->DB->Select("SELECT projekt FROM shopexport WHERE id = '" . $arr[$i]['shopid'] . "' LIMIT 1");
+                    $adresseprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport WHERE id = :shopid LIMIT 1", ['shopid' => (int) $arr[$i]['shopid']]);
                 }
                 if (isset($warenkorb['subshop']) && $warenkorb['subshop']) {
-                    $subshopprojekt = $this->app->DB->Select("SELECT projekt FROM shopexport_subshop WHERE shop = '" . $arr[$i]['shopid'] . "' AND aktiv = 1 AND subshopkennung = '" . $this->app->DB->real_escape_string($warenkorb['subshop']) . "' LIMIT 1");
+                    $subshopprojekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM shopexport_subshop WHERE shop = :shopId AND aktiv = 1 AND subshopkennung = :subshopkennung LIMIT 1", ['shopId' => (int) $arr[$i]['shopid'], 'subshopkennung' => (string) $warenkorb['subshop']]);
                     if ($subshopprojekt) {
                         if (!$kundenurvonprojekt) {
                             $adresseprojekt = $subshopprojekt;
                         }
-                        $arr[$i]['abkuerzung'] = $this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id = '$adresseprojekt' LIMIT 1");
+                        $arr[$i]['abkuerzung'] = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :adresseprojekt LIMIT 1", ['adresseprojekt' => (int) $adresseprojekt]);
                     }
                 }
                 if ($kundenurvonprojekt) {
-                    $adresseprojekt = " AND projekt = '" . $adresseprojekt . "' ";
+                    $adresseprojekt = " AND projekt = '" . (int) $adresseprojekt . "' ";
                 } else {
                     $adresseprojekt = '';
                 }
+                if (!empty($warenkorb['kundennummer'])) {
+                    $validkundennummer = $this->app->DatabaseService->selectValue(
+                        "SELECT kundennummer FROM adresse WHERE kundennummer = :kundennummer AND email <> '' $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1",
+                        ['kundennummer' => (string) $warenkorb['kundennummer']]
+                    );
+                }
 
                 $checkid = $this->app->DatabaseService->selectValue(
-                    "SELECT kundennummer FROM adresse WHERE `name` = ? AND abteilung = ? AND strasse = ? AND plz = ? AND ort = ? AND kundennummer <> '' AND geloescht != 1 $adresseprojekt ORDER BY email = ? DESC LIMIT 1",
-                    [(string) $warenkorb['name'], (string) $warenkorb['abteilung'], (string) $warenkorb['strasse'], (string) $warenkorb['plz'], (string) $warenkorb['ort'], (string) $warenkorb['email']]
+                    "SELECT kundennummer FROM adresse WHERE `name` = :name AND abteilung = :abteilung AND strasse = :strasse AND plz = :plz AND ort = :ort AND kundennummer <> '' AND geloescht != 1 $adresseprojekt ORDER BY email = :email DESC LIMIT 1",
+                    ['name' => (string) $warenkorb['name'], 'abteilung' => (string) $warenkorb['abteilung'], 'strasse' => (string) $warenkorb['strasse'], 'plz' => (string) $warenkorb['plz'], 'ort' => (string) $warenkorb['ort'], 'email' => (string) $warenkorb['email']]
                 );
 
                 if ($warenkorb['email'] != '') {
                     if ((String) $checkidemail === '') {
-            $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE email = ? AND email <> '' $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1", [(string) $warenkorb['email']]);
-            $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE name LIKE ? AND ort LIKE ? AND geloescht != 1 $adresseprojekt AND kundennummer <> '' LIMIT 1", [(string) $warenkorb['name'], (string) $warenkorb['ort']]);
+            $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE email = :email AND email <> '' $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1", ['email' => (string) $warenkorb['email']]);
+            if ((String) $checkidemail === '') {
+                $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE name LIKE :name AND ort LIKE :ort AND geloescht != 1 $adresseprojekt AND kundennummer <> '' LIMIT 1", ['name' => (string) $warenkorb['name'], 'ort' => (string) $warenkorb['ort']]);
+            }
                     }
                 } else {
-                    $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE name = ? AND strasse = ? AND plz = ? AND ort = ? $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1", [(string) $warenkorb['name'], (string) $warenkorb['strasse'], (string) $warenkorb['plz'], (string) $warenkorb['ort']]);
+                    $checkidemail = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE name = :name AND strasse = :strasse AND plz = :plz AND ort = :ort $adresseprojekt AND geloescht != 1 AND kundennummer <> '' LIMIT 1", ['name' => (string) $warenkorb['name'], 'strasse' => (string) $warenkorb['strasse'], 'plz' => (string) $warenkorb['plz'], 'ort' => (string) $warenkorb['ort']]);
                 }
 
                 if ($warenkorb['kundennummer'] != '' && !empty($validkundennummer) && $validkundennummer == $warenkorb['kundennummer']) {
                     $kdrnummer = $warenkorb['kundennummer'];
-                    $kdrArrRed = $this->app->DatabaseService->selectRow("SELECT name, email, strasse, plz, ort FROM adresse WHERE kundennummer = ? $adresseprojekt AND geloescht != 1 LIMIT 1", [(string) $kdrnummer]);
+                    $kdrArrRed = $this->app->DatabaseService->selectRow("SELECT name, email, strasse, plz, ort FROM adresse WHERE kundennummer = :kundennummer $adresseprojekt AND geloescht != 1 LIMIT 1", ['kundennummer' => (string) $kdrnummer]);
                     $kdr_name = $kdrArrRed['name'] ?? '';
                     $email = $kdrArrRed['email'] ?? '';
                     $parts = explode("\n", wordwrap($kdr_name, 20, "\n"));
@@ -1708,7 +1670,7 @@ class Shopimport {
                     $checked = 'checked';
                     $kdrnummer = $checkid;
                     //$kdr_name = "<br><i style=\"color:purple\">".$this->app->DB->Select("SELECT name FROM adresse WHERE kundennummer='$kdrnummer' AND firma='".$this->app->User->GetFirma()."' LIMIT 1")."</i>";
-                    $kdrArr = $this->app->DatabaseService->selectRow("SELECT name, email, strasse, ort, plz FROM adresse WHERE kundennummer = ? AND geloescht != 1 $adresseprojekt LIMIT 1", [(string) $kdrnummer]);
+                    $kdrArr = $this->app->DatabaseService->selectRow("SELECT name, email, strasse, ort, plz FROM adresse WHERE kundennummer = :kundennummer AND geloescht != 1 $adresseprojekt LIMIT 1", ['kundennummer' => (string) $kdrnummer]);
                     $kdr_name = $kdrArr['name'];
                     $email = $kdrArr['email'];
                     $parts = explode("\n", wordwrap($kdr_name, 20, "\n"));
@@ -1722,13 +1684,13 @@ class Shopimport {
                     $kdr_strasse = '<br><i style="color:green">' . $kdr_strasse . '</i>';
 
                     $kdr_plz = '<br><i style="color:green">' . $kdrArr['plz'] . '</i>';
-                    $kdr_ort = '<br><i style="color:green">' . $kdrArr['or'] . '</i>';
+                    $kdr_ort = '<br><i style="color:green">' . $kdrArr['ort'] . '</i>';
                 } elseif ($checkidemail != '') {
                     $checked = 'checked';
                     $kdrnummer = $checkidemail;
                     $warenkorb['kundennummer'] = $kdrnummer;
                     //$kdr_name = "<br><i style=\"color:purple\">".$this->app->DB->Select("SELECT name FROM adresse WHERE kundennummer='$kdrnummer' AND firma='".$this->app->User->GetFirma()."' LIMIT 1")."</i>";
-                    $kdrArr = $this->app->DatabaseService->selectRow("SELECT name, email, strasse, ort, plz FROM adresse WHERE kundennummer = ? AND geloescht != 1 $adresseprojekt LIMIT 1", [(string) $kdrnummer]);
+                    $kdrArr = $this->app->DatabaseService->selectRow("SELECT name, email, strasse, ort, plz FROM adresse WHERE kundennummer = :kundennummer AND geloescht != 1 $adresseprojekt LIMIT 1", ['kundennummer' => (string) $kdrnummer]);
                     $kdr_name = $kdrArr['name'];
                     $email = $kdrArr['email'];
                     $parts = explode("\n", wordwrap($kdr_name, 20, "\n"));
@@ -1755,7 +1717,7 @@ class Shopimport {
                     $email = '';
                 }
                 if ($kdrnummer != '') {
-                    $kdr_addresse_id = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = ? AND geloescht != 1 $adresseprojekt LIMIT 1", [(string) $kdrnummer]);
+                    $kdr_addresse_id = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE kundennummer = :kundennummer AND geloescht != 1 $adresseprojekt LIMIT 1", ['kundennummer' => (string) $kdrnummer]);
                 } else {
                     $kdr_addresse_id = '';
                 }
@@ -1767,12 +1729,12 @@ class Shopimport {
 
                 $doppelteonlinebestellnummer = false;
                 if (!empty($warenkorb['onlinebestellnummer'])) {
-                    $check = $this->app->DatabaseService->selectValue("SELECT id FROM shopimport_auftraege WHERE id <> ? AND shopid = ? AND bestellnummer = ? AND trash = 0 LIMIT 1", [(int) $arr[$i]['id'], (int) $arr[$i]['shopid'], (string) $warenkorb['onlinebestellnummer']]);
+                    $check = $this->app->DatabaseService->selectValue("SELECT id FROM shopimport_auftraege WHERE id <> :id AND shopid = :shopid AND bestellnummer = :bestellnummer AND trash = 0 LIMIT 1", ['id' => (int) $arr[$i]['id'], 'shopid' => (int) $arr[$i]['shopid'], 'bestellnummer' => (string) $warenkorb['onlinebestellnummer']]);
                     if ($check) {
                         $doppelteonlinebestellnummer = true;
                         $enthaeltdoppeltenummern = true;
                     } elseif (!empty($checkglobal) && isset($checkglobal[$arr[$i]['shopid']]) && $checkglobal[$arr[$i]['shopid']]) {
-                        $check = $this->app->DB->Select("SELECT id from shopimport_auftraege where id <> '" . $arr[$i]['id'] . "' and (shopid = '" . $arr[$i]['shopid'] . "' OR " . (implode(" OR ", $checkglobal[$arr[$i]['shopid']])) . ") and bestellnummer = '" . $this->app->DB->real_escape_string($warenkorb['onlinebestellnummer']) . "' and trash = '0' LIMIT 1");
+                        $check = $this->app->DatabaseService->selectValue("SELECT id FROM shopimport_auftraege WHERE id <> :id AND (shopid = :shopid OR " . (implode(" OR ", $checkglobal[$arr[$i]['shopid']])) . ") AND bestellnummer = :bestellnummer AND trash = '0' LIMIT 1", ['id' => (int) $arr[$i]['id'], 'shopid' => (int) $arr[$i]['shopid'], 'bestellnummer' => (string) $warenkorb['onlinebestellnummer']]);
                         if ($check) {
                             $doppelteonlinebestellnummer = true;
                             $enthaeltdoppeltenummern = true;

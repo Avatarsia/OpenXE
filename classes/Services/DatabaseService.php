@@ -252,7 +252,7 @@ final class DatabaseService
 
     /**
      * Validates a table or column name against a strict whitelist.
-     * Only allows letters, digits, underscores, and dots (schema.table notation).
+     * Only allows letters, digits, and underscores.
      *
      * @throws RuntimeException if the identifier contains disallowed characters.
      */

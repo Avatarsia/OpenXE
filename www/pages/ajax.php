@@ -1171,14 +1171,20 @@ class Ajax {
     $term3a = explode( ' ', $term3);
     if((!empty($terma)?count($terma):0) === 1)
     {
+      $escapedTerm = str_replace(['%', '_'], ['\\%', '\\_'], $term);
+      $escapedTerm = $this->app->DB->real_escape_string($escapedTerm);
+      $escapedTerm2 = str_replace(['%', '_'], ['\\%', '\\_'], $term2);
+      $escapedTerm2 = $this->app->DB->real_escape_string($escapedTerm2);
+      $escapedTerm3 = str_replace(['%', '_'], ['\\%', '\\_'], $term3);
+      $escapedTerm3 = $this->app->DB->real_escape_string($escapedTerm3);
       $wherea = [];
       foreach($fields as $v) {
-        $wherea[] = $v . " LIKE '%" . $term . "%'";
+        $wherea[] = $v . " LIKE '%" . $escapedTerm . "%'";
         if($term2 !== $term && $term2 !== ''){
-          $wherea[] = $v . " LIKE '%" . $term2 . "%'";
+          $wherea[] = $v . " LIKE '%" . $escapedTerm2 . "%'";
         }
         if($term3 !== $term && $term3 !== $term2 && $term3!==''){
-          $wherea[] = $v . " LIKE '%" . $term3 . "%'";
+          $wherea[] = $v . " LIKE '%" . $escapedTerm3 . "%'";
         }
       }
       return ' ('.implode(' OR ', $wherea).') ';

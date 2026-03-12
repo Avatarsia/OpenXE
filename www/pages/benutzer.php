@@ -1,13 +1,13 @@
 <?php
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -99,7 +99,7 @@ class Benutzer
       $tmp['beschreibung']=$this->app->DatabaseService->selectValue("SELECT description FROM `user` WHERE id=:id LIMIT 1", ['id' => (int)$id]);
       $tmp['rechte']=$result;
 
-      
+
       header('Content-Type: application/json');
       header('Content-disposition: attachment; filename="'.$tmp['bezeichnung'].'.json"');
       echo json_encode($tmp);
@@ -128,14 +128,18 @@ class Benutzer
   public function isUserLastAdmin(int $userId): bool
   {
     return $this->isUserAdmin($userId) &&
-      (int)$this->app->DB->Select(
-        "SELECT COUNT(`id`) FROM `user` WHERE `type` = 'admin' AND `activ` = 1 AND `id` <> {$userId}"
+      (int)$this->app->DatabaseService->selectValue(
+        "SELECT COUNT(`id`) FROM `user` WHERE `type` = 'admin' AND `activ` = 1 AND `id` <> :userId",
+        ['userId' => $userId]
       ) === 0;
   }
 
   public function isUserAdmin(int $userId): bool
   {
-    return $this->app->DB->Select("SELECT COUNT(`id`) FROM `user` WHERE `type` = 'admin' AND `id` = {$userId}") > 0;
+    return $this->app->DatabaseService->selectValue(
+        "SELECT COUNT(`id`) FROM `user` WHERE `type` = 'admin' AND `id` = :userId",
+        ['userId' => $userId]
+      ) > 0;
   }
 
   public function UserDelete(): void
@@ -172,9 +176,9 @@ class Benutzer
     if($submit!='') {
 
 
-      if($input['username']=='' && $this->app->Secure->GetPOST('hwtoken') != 4) $error .= 'Geben Sie bitte einen Benutzernamen ein.<br>';		
-      if($input['password']=='' && $this->app->Secure->GetPOST('hwtoken') != 4 && $this->app->Secure->GetPOST('hwtoken') != 5) $error .= 'Geben Sie bitte ein Passwort ein.<br>';		
-      if($input['repassword']=='' && $this->app->Secure->GetPOST('hwtoken') != 4 && $this->app->Secure->GetPOST('hwtoken') != 5 ) $error .= 'Wiederholen Sie bitte Ihr Passwort.<br>';		
+      if($input['username']=='' && $this->app->Secure->GetPOST('hwtoken') != 4) $error .= 'Geben Sie bitte einen Benutzernamen ein.<br>';
+      if($input['password']=='' && $this->app->Secure->GetPOST('hwtoken') != 4 && $this->app->Secure->GetPOST('hwtoken') != 5) $error .= 'Geben Sie bitte ein Passwort ein.<br>';
+      if($input['repassword']=='' && $this->app->Secure->GetPOST('hwtoken') != 4 && $this->app->Secure->GetPOST('hwtoken') != 5 ) $error .= 'Wiederholen Sie bitte Ihr Passwort.<br>';
       if($input['password'] != $input['repassword']) $error .= 'Die eingegebenen Passw&ouml;rter stimmen nicht &uuml;berein.<br>';
       if($this->app->DatabaseService->selectValue("SELECT '1' FROM `user` WHERE username=:username LIMIT 1", ['username' => $input['username']])=='1')
         $error .= "Es existiert bereits ein Benutzer mit diesem Namen";
@@ -191,7 +195,7 @@ class Benutzer
         if($input['hwtoken'] == 4 && $input['type'] == 'admin')
         {
           $input['type'] = 'standard';
-          $input['startseite'] = 'index.php?module=stechuhr&action=list';         
+          $input['startseite'] = 'index.php?module=stechuhr&action=list';
         }
         $input['passwordunenescaped'] = $_POST['password'];
         $id = $this->app->erp->CreateBenutzer($input);
@@ -244,14 +248,14 @@ class Benutzer
       $this->app->User->SetParameter('welcome_defaultcolor_fuer_kalender',"");
     }
 
-    
+
     if($this->app->Secure->GetGET('cmd') == 'qrruecksetzen' && $id)
     {
       $this->app->DatabaseService->update("UPDATE `user` set stechuhrdevice = '' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       echo json_encode(array('status'=>1));
       exit;
     }
-    
+
     if($this->app->Secure->GetGET('cmd') == 'getrfid' && $id)
     {
       $rfid = '';
@@ -271,7 +275,10 @@ class Benutzer
           $rfida = explode(';',$rfid);
           if(!empty($rfida[1]))$rfid = $rfida[1];
         }
-        if($this->app->DB->Select("SELECT id FROM `user` WHERE rfidtag = '".$this->app->DB->real_escape_string($rfid)."' AND id <> '$id' LIMIT 1"))$rfid = '';
+        if($this->app->DatabaseService->selectValue(
+          "SELECT id FROM `user` WHERE rfidtag = :rfid AND id <> :id LIMIT 1",
+          ['rfid' => $rfid, 'id' => $id]
+        ))$rfid = '';
       }
       if($rfid == "0")$rfid = '';
       echo json_encode(array('rfid'=>$rfid));
@@ -288,18 +295,27 @@ class Benutzer
         for($i=0;$i<=$anzahl;$i++)
         {
           //echo " $i M ".$tmp->{'rechte'}[$i]->{'module'}." A ".$tmp->{'rechte'}[$i]->{'action'};
-          $tmpmodule  = $this->app->DB->real_escape_string($tmp->{'rechte'}[$i]->{'module'});
-          $tmpaction = $this->app->DB->real_escape_string($tmp->{'rechte'}[$i]->{'action'});
+          $tmpmodule  = (string)$tmp->{'rechte'}[$i]->{'module'};
+          $tmpaction = (string)$tmp->{'rechte'}[$i]->{'action'};
 
           if($tmpmodule!="" && $tmpaction!="")
           {
-            $check = $this->app->DB->Select("SELECT id FROM userrights WHERE module='".$tmpmodule."' AND action='".$tmpaction."' AND user='".$id."' LIMIT 1");
+            $check = $this->app->DatabaseService->selectValue(
+              "SELECT id FROM userrights WHERE module = :module AND action = :action AND user = :user LIMIT 1",
+              ['module' => $tmpmodule, 'action' => $tmpaction, 'user' => $id]
+            );
 
             if($check > 0)
-              $this->app->DB->Update("UPDATE userrights SET permission=1 WHERE module='".$tmpmodule."' AND action='".$tmpaction."' AND user='".$id."' LIMIT 1");
+              $this->app->DatabaseService->update(
+                "UPDATE userrights SET permission = 1 WHERE module = :module AND action = :action AND user = :user LIMIT 1",
+                ['module' => $tmpmodule, 'action' => $tmpaction, 'user' => $id]
+              );
             else {
               $neuerechte++;
-              $this->app->DB->Insert("INSERT INTO userrights (id,module,action,user,permission) VALUES ('','".$tmpmodule."','".$tmpaction."','$id','1')");
+              $this->app->DatabaseService->insert(
+                "INSERT INTO userrights (id, module, action, user, permission) VALUES ('', :module, :action, :user, 1)",
+                ['module' => $tmpmodule, 'action' => $tmpaction, 'user' => $id]
+              );
             }
             $this->permissionLog($this->app->User->GetID(),$id,$tmpmodule,$tmpaction,1);
           }
@@ -308,7 +324,7 @@ class Benutzer
         header("Location: index.php?module=benutzer&action=edit&id=$id&msg=$msg");
         exit;
     }
-    
+
     $this->app->erp->MenuEintrag("index.php?module=benutzer&action=edit&id=$id","Details");
     $username = $this->app->DatabaseService->selectValue("SELECT username FROM `user` WHERE id=:id", ['id' => (int)$id]);
     //		$this->app->Tpl->Add(KURZUEBERSCHRIFT2,$username);
@@ -365,7 +381,7 @@ class Benutzer
         {
           $check = $this->app->DatabaseService->delete("DELETE FROM gpsstechuhr WHERE `user`=:user AND DATE_FORMAT(zeit,'%Y-%m-%d')= DATE_FORMAT( NOW( ) , '%Y-%m-%d' ) LIMIT 1", ['user' => (int)$id]);
         }
-        
+
         if(($input['hwtoken'] == 4) && $input['type'] == 'admin')
         {
           $anzaktivadmin = $this->app->DatabaseService->selectValue("SELECT count(*) from `user` where activ=1 and type = 'admin' and id <> :id", ['id' => (int)$id]);
@@ -377,7 +393,7 @@ class Benutzer
             $input['type'] = 'standard';
             $input['startseite'] = 'index.php?module=stechuhr&action=list';
           }
-          
+
         }
         if($error == "")
         {
@@ -391,7 +407,7 @@ class Benutzer
           }
 
           $spracheBevorzugen = $this->getCurrentDefaultLanguage($input['sprachebevorzugen']);
-          
+
           $this->app->DatabaseService->update(
             "UPDATE `user`
             SET username=:username,
@@ -513,7 +529,7 @@ class Benutzer
 
           $this->app->erp->AbgleichBenutzerVorlagen($id);
         }
-      }	
+      }
     }
 
 
@@ -522,7 +538,7 @@ class Benutzer
     $data = $dataRow !== null ? [$dataRow] : [];
     if($data)
     {
-      
+
       if($data[0]['stechuhrdevice'] != '')$this->app->Tpl->Set('BUTTONQRRESET', '<input type="button" value="Code zur&uuml;cksetzen" onclick="qrruecksetzen();" />');
     }
     if(is_array($data[0])) {
@@ -540,8 +556,8 @@ class Benutzer
     }
     $this->SetInput($data[0]);
     $this->UserRights();
-      
-                       
+
+
     $rfids = $this->app->DB->SelectArr("SELECT seriennummer,bezeichnung FROM adapterbox WHERE verwendenals = 'metratecrfid'");
     if($rfids)
     {
@@ -550,7 +566,7 @@ class Benutzer
         $this->app->Tpl->Add('SELRFID','<option value="'.$v['seriennummer'].'">'.$v['bezeichnung'].'</option>');
       }
     }
-    //                   
+    //
     $this->app->YUI->ColorPicker('defaultcolor');
 
     $extra = '
@@ -789,7 +805,7 @@ class Benutzer
   public function TokenSelect($select='0')
   {
     //$data = array('0'=>'Benutzername + Passwort', '1'=>'Benutzername + Passwort + mOTP', '2'=>'Benutzername + Passwort + Picosafe Login','3'=>'WaWision OTP + Passwort');
-    $data = array('0'=>'Benutzername + Passwort', 
+    $data = array('0'=>'Benutzername + Passwort',
         '3'=>'WaWision LoginKey + Benutzername + Passwort',
         '5'=>'LDAP Verzeichnis'
         );
@@ -832,11 +848,11 @@ class Benutzer
       $modulecount = (!empty($modules)?count($modules):0);
       $curModule = 0;
       foreach($modules as $module=>$actions) {
-        $lower_m = strtolower($module);	
+        $lower_m = strtolower($module);
         $curModule++;
         $actioncount = (!empty($actions)?count($actions):0);
         for($i=0;$i<$actioncount;$i++) {
-          $delimiter = (($curModule<$modulecount || $i+1<$actioncount) ? ', ' : ';');  
+          $delimiter = (($curModule<$modulecount || $i+1<$actioncount) ? ', ' : ';');
           $active = 0;
           if($lower_m == 'stechuhr' && ($actions[$i] == 'list' || $actions[$i] == 'change'))$active = 1;
           if($active==1){
@@ -859,11 +875,11 @@ class Benutzer
         $modulecount = (!empty($modules)?count($modules):0);
         $curModule = 0;
         foreach($modules as $module=>$actions) {
-          $lower_m = strtolower($module);	
+          $lower_m = strtolower($module);
           $curModule++;
           $actioncount = (!empty($actions)?count($actions):0);
           for($i=0;$i<$actioncount;$i++) {
-            $delimiter = (($curModule<$modulecount || $i+1<$actioncount) ? ', ' : ';');  
+            $delimiter = (($curModule<$modulecount || $i+1<$actioncount) ? ', ' : ';');
             $active = ((isset($mytemplate[$lower_m]) && in_array($actions[$i], $mytemplate[$lower_m])) ? '1' : '0');
             if($active==1){
               $this->app->DatabaseService->execute("INSERT INTO userrights (`user`, module, action, permission) VALUES (:user, :module, :action, :permission)", ['user' => (int)$id, 'module' => $lower_m, 'action' => $actions[$i], 'permission' => $active]);
@@ -897,15 +913,15 @@ class Benutzer
     $group = $this->app->DatabaseService->selectValue("SELECT `type` FROM `user` WHERE id=:id LIMIT 1", ['id' => (int)$id]);
 
     $rights = $this->app->Conf->WFconf['permissions'][$group];
-    if(is_array($dbrights) && (!empty($dbrights)?count($dbrights):0)>0) 
+    if(is_array($dbrights) && (!empty($dbrights)?count($dbrights):0)>0)
       $rights = $this->AdaptRights($dbrights, $rights, $group);
 
     $modules = $this->ScanModules();
-    $table = $this->CreateTable($id, $modules, $rights);	
+    $table = $this->CreateTable($id, $modules, $rights);
 
 
-    //$this->app->Tpl->Set('USERTEMPLATES', $this->TemplateSelect());	
-    $this->app->Tpl->Set('USERNAMESELECT', $this->app->erp->GetSelectUser("",$id));	
+    //$this->app->Tpl->Set('USERTEMPLATES', $this->TemplateSelect());
+    $this->app->Tpl->Set('USERNAMESELECT', $this->app->erp->GetSelectUser("",$id));
     $this->app->Tpl->Set('MODULES', $table);
   }
 
@@ -969,7 +985,7 @@ class Benutzer
   }
 
 
-  function AdaptRights($dbarr, $rights) 
+  function AdaptRights($dbarr, $rights)
   {
     $cnt = (!empty($dbarr)?count($dbarr):0);
     for($i=0;$i<$cnt;$i++) {
@@ -978,7 +994,7 @@ class Benutzer
       $perm = $dbarr[$i]['permission'];
 
       if(isset($rights[$module])) {
-        if($perm=='1' && !in_array($action, $rights[$module])) 
+        if($perm=='1' && !in_array($action, $rights[$module]))
           $rights[$module][] = $action;
 
         if($perm=='0' && in_array($action, $rights[$module])) {
@@ -991,7 +1007,7 @@ class Benutzer
     return $rights;
   }
 
-  function CreateTable($user, $modules, $rights) 
+  function CreateTable($user, $modules, $rights)
   {
     $maxcols = 6;
     $width = 100 / $maxcols;
@@ -1001,7 +1017,7 @@ class Benutzer
       $out .= "<tr><td class=\"name\">$key</td></tr>";
 
       $out .= "<tr><td><table class=\"action\">";
-      $module = strtolower($key); 
+      $module = strtolower($key);
       for($i=0;$i<$maxcols || $i<(!empty($value)?count($value):0);$i++) {
         if($i%$maxcols==0) $out .= "<tr>";
 
@@ -1137,7 +1153,7 @@ class Benutzer
       }
     }
 
-    return $modules;	
+    return $modules;
   }
 
   function TemplateSelect()

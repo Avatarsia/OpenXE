@@ -9,13 +9,13 @@
 
 /*
 **** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
-* 
+*
 * Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
 *
-* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+* This file is licensed under the Embedded Projects General Public License *Version 3.1.
 *
-* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
-* to obtain the text of the corresponding license version.  
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis
+* to obtain the text of the corresponding license version.
 *
 **** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
 */
@@ -69,10 +69,10 @@ class Lieferschein extends GenLieferschein
         // SQL statement
         $sql = "SELECT SQL_CALC_FOUND_ROWS l.id,'<img src=./themes/{$app->Conf->WFconf['defaulttheme']}/images/details_open.png class=details>' as open, 'ENTWURF' as belegnr, DATE_FORMAT(l.datum,'%d.%m.%Y') as vom, if(l.lieferantenretoure=1,lfr.lieferantennummer,adr.kundennummer) as kundennummer,
           CONCAT(" . $app->erp->MarkerUseredit("l.name", "l.useredittimestamp") . ", if(l.internebezeichnung!='',CONCAT('<br><i style=color:#999>',l.internebezeichnung,'</i>'),'')) as kunde,
-              l.land as land, $projectCol as projekt, l.versandart as versandart,  
+              l.land as land, $projectCol as projekt, l.versandart as versandart,
               l.lieferscheinart as art, UPPER(l.status) as status, l.id
-                FROM  lieferschein AS l 
-                LEFT JOIN projekt AS p ON p.id=l.projekt 
+                FROM  lieferschein AS l
+                LEFT JOIN projekt AS p ON p.id=l.projekt
                 LEFT JOIN adresse AS lfr ON l.lieferant=lfr.id
                 LEFT JOIN adresse AS adr ON l.adresse=adr.id  ".$abJoin;
         $where = " ( l.status='angelegt') " . $app->erp->ProjektRechte('p.id', true, 'l.vertriebid');
@@ -101,10 +101,10 @@ class Lieferschein extends GenLieferschein
         // SQL statement
         $sql = "SELECT SQL_CALC_FOUND_ROWS l.id,'<img src=./themes/{$app->Conf->WFconf['defaulttheme']}/images/details_open.png class=details>' as open, l.belegnr, DATE_FORMAT(l.datum,'%d.%m.%Y') as vom, if(l.lieferantenretoure=1,lfr.lieferantennummer,adr.kundennummer) as kundennummer,
           CONCAT(" . $app->erp->MarkerUseredit("l.name", "l.useredittimestamp") . ", if(l.internebezeichnung!='',CONCAT('<br><i style=color:#999>',l.internebezeichnung,'</i>'),'')) as kunde,
-              l.land as land, $projectCol as projekt, l.versandart as versandart,  
+              l.land as land, $projectCol as projekt, l.versandart as versandart,
               l.lieferscheinart as art, UPPER(l.status) as status, l.id
-                FROM  lieferschein AS l 
-                LEFT JOIN projekt AS p ON p.id=l.projekt 
+                FROM  lieferschein AS l
+                LEFT JOIN projekt AS p ON p.id=l.projekt
                 LEFT JOIN adresse AS lfr ON l.lieferant=lfr.id
                 LEFT JOIN adresse AS adr ON l.adresse=adr.id  ".$abJoin;
         $where = " l.id!='' AND l.status='freigegeben' " . $app->erp->ProjektRechte('p.id', true, 'l.vertriebid');
@@ -120,55 +120,56 @@ class Lieferschein extends GenLieferschein
         $findcols = array('art.nummer','art.name_de','t2.seriennummer','lag.kurzbezeichnung','t2.id');
         $searchsql = array('art.nummer','art.name_de','t2.seriennummer','lag.kurzbezeichnung' );
 
+          $idInt = (int)$id;
           $sql = "SELECT  SQL_CALC_FOUND_ROWS t2.id, art.nummer, art.name_de, lag.kurzbezeichnung,  t2.seriennummer ,CONCAT('this,',t2.menge)
           FROM (
-            SELECT ls.id, t.artikel, t.menge, count(s.id) as co, ls.seriennummer, ls.lager_platz 
-            FROM lager_seriennummern AS ls 
-            INNER JOIN 
+            SELECT ls.id, t.artikel, t.menge, count(s.id) as co, ls.seriennummer, ls.lager_platz
+            FROM lager_seriennummern AS ls
+            INNER JOIN
             (
-              SELECT lp.artikel, sum(menge) as menge 
-              FROM lieferschein_position AS lp 
-              WHERE lp.lieferschein = '$id' 
-              GROUP BY lp.artikel 
-            ) AS t ON ls.artikel = t.artikel 
-            LEFT JOIN seriennummern s ON s.artikel = t.artikel AND s.lieferschein = '$id' AND s.seriennummer <> ''
+              SELECT lp.artikel, sum(menge) as menge
+              FROM lieferschein_position AS lp
+              WHERE lp.lieferschein = $idInt
+              GROUP BY lp.artikel
+            ) AS t ON ls.artikel = t.artikel
+            LEFT JOIN seriennummern s ON s.artikel = t.artikel AND s.lieferschein = $idInt AND s.seriennummer <> ''
             GROUP BY ls.id, t.artikel
-          ) AS t2 
+          ) AS t2
           INNER JOIN artikel AS art ON t2.artikel = art.id
           INNER JOIN lager_platz AS lag ON t2.lager_platz = lag.id
-          
+
           ";
 
         $menu = "<a href=\"#\" onclick=\"uebernehme(%value%);\" ><img src=./themes/{$app->Conf->WFconf['defaulttheme']}/images/forward.svg border=\"0\"></a>";
-        
+
         $where = "t2.menge > t2.co ";
         $count = "SELECT  count(t2.id)
-          FROM (SELECT ls.id, t.artikel, t.menge, count(s.id) as co, ls.seriennummer, ls.lager_platz 
-          FROM lager_seriennummern ls 
-          INNER JOIN 
-          (SELECT lp.artikel, sum(menge) as menge 
-          FROM lieferschein_position lp WHERE lp.lieferschein = '$id') t 
-          ON ls.artikel = lp.artikel LEFT JOIN seriennummern s ON s.artikel = t.artikel AND s.lieferschein = '$id'  AND s.seriennummer <> ''
-          GROUP BY ls.id, t.artikel) t2 
+          FROM (SELECT ls.id, t.artikel, t.menge, count(s.id) as co, ls.seriennummer, ls.lager_platz
+          FROM lager_seriennummern ls
+          INNER JOIN
+          (SELECT lp.artikel, sum(menge) as menge
+          FROM lieferschein_position lp WHERE lp.lieferschein = $idInt) t
+          ON ls.artikel = lp.artikel LEFT JOIN seriennummern s ON s.artikel = t.artikel AND s.lieferschein = $idInt  AND s.seriennummer <> ''
+          GROUP BY ls.id, t.artikel) t2
           INNER JOIN artikel art ON t2.artikel = art.id
           INNER JOIN lager_platz lag ON t2.lager_platz = lag.id
            WHERE $where";
 
 
-        
+
       break;
 
     }
-    
+
     $erg = [];
-       
+
     foreach($erlaubtevars as $k => $v)
     {
       if(isset($$v)){
         $erg[$v] = $$v;
       }
     }
-    return $erg; 
+    return $erg;
   }
 
   /** @var Application $app */
@@ -273,11 +274,10 @@ class Lieferschein extends GenLieferschein
     }
 
     $lieferscheinId = $detailQuery->getItemIdentifier();
-    $sql = sprintf(
-      "SELECT l.id, l.belegnr, l.datum FROM `lieferschein` AS `l` WHERE l.id = '%s' LIMIT 1",
-      $this->app->DB->real_escape_string($lieferscheinId)
+    $lieferschein = $this->app->DatabaseService->selectRow(
+      "SELECT l.id, l.belegnr, l.datum FROM `lieferschein` AS `l` WHERE l.id = :id LIMIT 1",
+      ['id' => $lieferscheinId]
     );
-    $lieferschein = $this->app->DB->SelectRow($sql);
     if (empty($lieferschein)) {
       return;
     }
@@ -301,17 +301,15 @@ class Lieferschein extends GenLieferschein
     }
 
     $versandId = $detailQuery->getItemIdentifier();
-    $sql = sprintf(
-      "SELECT v.lieferschein FROM `versand` AS `v` WHERE v.id = '%s' LIMIT 1",
-      $this->app->DB->real_escape_string($versandId)
+    $lieferscheinId = $this->app->DatabaseService->selectValue(
+      "SELECT v.lieferschein FROM `versand` AS `v` WHERE v.id = :id LIMIT 1",
+      ['id' => $versandId]
     );
-    $lieferscheinId = $this->app->DB->Select($sql);
 
-    $sql = sprintf(
-      "SELECT l.id, l.belegnr, l.datum FROM `lieferschein` AS `l` WHERE l.id = '%s' LIMIT 1",
-      $this->app->DB->real_escape_string($lieferscheinId)
+    $lieferschein = $this->app->DatabaseService->selectRow(
+      "SELECT l.id, l.belegnr, l.datum FROM `lieferschein` AS `l` WHERE l.id = :id LIMIT 1",
+      ['id' => $lieferscheinId]
     );
-    $lieferschein = $this->app->DB->SelectRow($sql);
     if (empty($lieferschein)) {
       return;
     }
@@ -326,7 +324,7 @@ class Lieferschein extends GenLieferschein
   function LieferscheinMiniDetailkommissionierung()
   {
     $id = (int)$this->app->Secure->GetGET('id');
-    
+
     $table = new EasyTable($this->app);
     $table->Query("SELECT date_format(datum,'%d.%m.%Y') as Datum,belegnr as Lieferschein FROM lieferschein WHERE kommissionierung = '$id' ORDER BY id",0,"");
     echo $table->DisplayNew('return', 'Lieferschein', 'noAction');
@@ -341,11 +339,9 @@ class Lieferschein extends GenLieferschein
     if($deliveryNoteId <= 0) {
       return;
     }
-    $projectId = $this->app->DB->Select(
-      sprintf(
-        'SELECT projekt FROM lieferschein WHERE id = %d LIMIT 1',
-        $deliveryNoteId
-      )
+    $projectId = $this->app->DatabaseService->selectValue(
+      'SELECT projekt FROM lieferschein WHERE id = :id LIMIT 1',
+      ['id' => $deliveryNoteId]
     );
     if(class_exists('LieferscheinPDFCustom')) {
       $Brief = new LieferscheinPDFCustom($this->app, $projectId);
@@ -357,14 +353,12 @@ class Lieferschein extends GenLieferschein
     $tmpfile = $Brief->displayTMP();
     $Brief->ArchiviereDocument(1);
     unlink($tmpfile);
-    $this->app->DB->Update(
-      sprintf(
-        'UPDATE lieferschein SET schreibschutz=1 WHERE id = %d',
-        $deliveryNoteId
-      )
+    $this->app->DatabaseService->update(
+      'UPDATE lieferschein SET schreibschutz=1 WHERE id = :id',
+      ['id' => $deliveryNoteId]
     );
   }
-  
+
   function LieferscheinArchivierePDF()
   {
     $id = (int)$this->app->Secure->GetGET('id');
@@ -372,9 +366,9 @@ class Lieferschein extends GenLieferschein
     header('Location: index.php?module=lieferschein&action=edit&id='.$id);
     exit;
   }
-  
-  
-  function LieferscheinAbschliessen()  {    
+
+
+  function LieferscheinAbschliessen()  {
 
     $id = (int)$this->app->Secure->GetGET("id");
 
@@ -385,7 +379,7 @@ class Lieferschein extends GenLieferschein
       $auftragid = (int)$this->app->DatabaseService->selectValue("SELECT auftragid FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
       if($auftragid && $this->app->erp->ModulVorhanden('produktion') && method_exists($this->app->erp, 'ProduktionEinzelnBerechnen'))
       {
-        $produktionen = $this->app->DB->SelectArr("SELECT id FROM produktion WHERE auftragid = '$auftragid'");
+        $produktionen = $this->app->DatabaseService->select("SELECT id FROM produktion WHERE auftragid = :auftragid", ['auftragid' => $auftragid]);
         if($produktionen)
         {
           foreach($produktionen as $v)$this->app->erp->ProduktionEinzelnBerechnen($v['id']);
@@ -396,7 +390,7 @@ class Lieferschein extends GenLieferschein
     header("Location: index.php?module=lieferschein&action=list&msg=$msg");
     exit;
   }
-  
+
   function LieferscheinAuslagern()
   {
     $id = (int)$this->app->Secure->GetGET("id");
@@ -455,8 +449,7 @@ class Lieferschein extends GenLieferschein
   function LieferscheinUmlagern()
   {
     $id = (int)$this->app->Secure->GetGET("id");
-    $sql = "SELECT belegnr, name, status, umgelagert, standardlager FROM lieferschein WHERE id='$id'";
-    $lieferschein = $this->app->DB->SelectArr($sql)[0];
+    $lieferschein = $this->app->DatabaseService->selectRow("SELECT belegnr, name, status, umgelagert, standardlager FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
     $belegnr = $lieferschein['belegnr'];
     $name = $lieferschein['name'];
     $status = $lieferschein['status'];
@@ -489,24 +482,22 @@ class Lieferschein extends GenLieferschein
             if (empty($quellager_id) || empty($ziellagerplatz_id)) {
                 $this->app->Tpl->AddMessage('error',"Bitte Quell- und Ziellagerplatz angeben.");
             } else {
-                $sql = "SELECT artikel, name_de, a.nummer AS artikelnummer, SUM(menge) AS menge FROM lieferschein_position lp INNER JOIN artikel a ON a.id = lp.artikel WHERE lp.lieferschein = $id GROUP BY lp.artikel";
-	            $positionen = $this->app->DB->SelectArr($sql);
+                $positionen = $this->app->DatabaseService->select("SELECT artikel, name_de, a.nummer AS artikelnummer, SUM(menge) AS menge FROM lieferschein_position lp INNER JOIN artikel a ON a.id = lp.artikel WHERE lp.lieferschein = :id GROUP BY lp.artikel", ['id' => $id]);
 
                 $menge_ok = true;
                 $fehlt = array();
 
                 foreach ($positionen as $position) {
-                    $sql = "SELECT SUM(menge) as menge FROM lager_platz_inhalt WHERE lager_platz=$quellager_id AND artikel = ".$position['artikel'];           
-            	    $menge_lager = $this->app->DB->SelectArr($sql)[0]['menge'];    
+                    $menge_lager = $this->app->DatabaseService->selectValue("SELECT SUM(menge) as menge FROM lager_platz_inhalt WHERE lager_platz = :lager_platz AND artikel = :artikel", ['lager_platz' => (int)$quellager_id, 'artikel' => (int)$position['artikel']]);
 
                     if ($menge_lager < $position['menge']) {
                         $menge_ok = false;
                         $fehlt[] = array('Nummer' => $position['artikelnummer'],'Artikel' => $position['name_de'],'Lieferschein Menge' => (int) $position['menge'],'Lager Menge' => empty($menge_lager)?'-':(int) $menge_lager);
                     }
-                }     
+                }
 
                 if ($menge_ok) {
-                   foreach ($positionen as $position) {                  
+                   foreach ($positionen as $position) {
 
                         $artikel = $position['artikel'];
                         $menge = $position['menge'];
@@ -520,13 +511,12 @@ class Lieferschein extends GenLieferschein
                         $this->app->erp->LagerAuslagernRegal($artikel,$quellager_id,$menge,$projekt,$grund,$importer,$doctype,$doctypeid);
                         $this->app->erp->LagerEinlagern($artikel,$menge,$ziellagerplatz_id,$projekt,$grund,$importer,$paketannahme,$doctype,$doctypeid);
                     }
-                    $sql = "UPDATE lieferschein SET umgelagert = 1 WHERE id = ".$id;
-                    $this->app->DB->Update($sql);
+                    $this->app->DatabaseService->update("UPDATE lieferschein SET umgelagert = 1 WHERE id = :id", ['id' => $id]);
                     $this->app->erp->LieferscheinProtokoll($id,"Lieferschein umgelagert von ".$quelllagerplatz." nach ".$ziellagerplatz);
                     $this->app->Tpl->AddMessage('success','Erfolgreich umgelagert.');
 		    $erneut = null;
-                } else {                
-                    $this->app->Tpl->AddMessage('error',"Mengen im Quelllagerplatz nicht ausreichend.");   
+                } else {
+                    $this->app->Tpl->AddMessage('error',"Mengen im Quelllagerplatz nicht ausreichend.");
                     $tmp = new EasyTable($this->app);
                     $tmp->headings = array('Nummer','Artikel','Lieferschein Menge','Lager Menge','');
                     $tmp->datasets = $fehlt;
@@ -550,7 +540,7 @@ class Lieferschein extends GenLieferschein
 
     $this->app->Tpl->Set('ERNEUT_CHECKED',$erneut?'checked':'');
 
-    $this->app->Tpl->Parse('PAGE',"lieferschein_umlagern.tpl");    
+    $this->app->Tpl->Parse('PAGE',"lieferschein_umlagern.tpl");
   }
 
   function LieferscheinPaketmarke()
@@ -560,13 +550,14 @@ class Lieferschein extends GenLieferschein
     $this->LieferscheinMenu();
     $this->app->Tpl->Set('TABTEXT',"Paketmarke");
 
-    $result = $this->app->DB->SelectRow(
+    $result = $this->app->DatabaseService->selectRow(
         "SELECT v.id, v.modul
         FROM lieferschein l
         LEFT JOIN versandarten v ON (l.versandart=v.type AND v.projekt in (l.projekt, 0))
-        WHERE l.id=$id
+        WHERE l.id = :id
         AND v.aktiv = 1 AND v.ausprojekt = 0 AND v.modul != ''
-        ORDER BY v.projekt DESC LIMIT 1");
+        ORDER BY v.projekt DESC LIMIT 1",
+        ['id' => $id]);
     if (empty($result['modul']) || empty($result['id'])) {
 //      $this->app->Tpl->addMessage('error', 'Bitte zuerst eine gültige Versandart auswählen', false, 'PAGE');
         $this->app->Location->execute("index.php?module=versandpakete&action=add&lieferschein=".$id);
@@ -579,9 +570,9 @@ class Lieferschein extends GenLieferschein
     $versandmodul->Paketmarke('TAB1', $id, gewicht: $gewicht);
     $this->app->Tpl->Parse('PAGE',"tabview.tpl");
   }
-  
+
   function LieferscheinEditable()
-  { 
+  {
     $this->app->YUI->AARLGEditable();
   }
 
@@ -639,9 +630,9 @@ class Lieferschein extends GenLieferschein
 
   function LieferscheinIconMenu($id,$prefix="")
   {
-    $status = $this->app->DB->Select("SELECT status FROM lieferschein WHERE id='$id' LIMIT 1");
-    $adresse = $this->app->DB->Select("SELECT adresse FROM lieferschein WHERE id='$id' LIMIT 1");
-    $lieferantenretoure = $this->app->DB->Select("SELECT lieferantenretoure FROM lieferschein WHERE id='$id' LIMIT 1");
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
+    $adresse = $this->app->DatabaseService->selectValue("SELECT adresse FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
+    $lieferantenretoure = $this->app->DatabaseService->selectValue("SELECT lieferantenretoure FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
 
     if($adresse > 0 && ($status=="angelegt" || $status=="")) {
         $freigabe = "<option value=\"freigabe\">Lieferschein freigeben</option>";
@@ -653,12 +644,12 @@ class Lieferschein extends GenLieferschein
         $abschliessen = "<option value=\"abschliessen\">Lieferschein abschliessen</option>";
     }
 
-    $checkifrgexists = $this->app->DB->Select("SELECT id FROM rechnung WHERE lieferschein='$id' LIMIT 1");
+    $checkifrgexists = $this->app->DatabaseService->selectValue("SELECT id FROM rechnung WHERE lieferschein = :id LIMIT 1", ['id' => $id]);
 
     $optioncustom = $this->Custom('option');
     $casecustom = $this->Custom('case');
 
-    $projekt = $this->app->DB->Select("SELECT projekt FROM lieferschein WHERE id='$id' LIMIT 1");
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
     $auslagern = '';
     $erneut = '';
     $casehook = '';
@@ -669,15 +660,15 @@ class Lieferschein extends GenLieferschein
     $hookcase = '';
     $this->app->erp->RunHook('Lieferschein_Aktion_option',3, $id, $status, $hookoption);
     $this->app->erp->RunHook('Lieferschein_Aktion_case',3, $id, $status, $hookcase);
-    
-    $bestellmengelagerartikel = $this->app->DB->Select("SELECT sum(lp.menge) as bestellmenge from lieferschein_position lp INNER JOIN artikel a on a.id=lp.artikel where a.lagerartikel=1 AND lp.lieferschein = '$id'");
-    $liefermengelagerartikel = $this->app->DB->Select("SELECT sum(lp.geliefert) as liefermenge from lieferschein_position lp INNER JOIN artikel a on a.id=lp.artikel where a.lagerartikel=1 AND lp.lieferschein = '$id'");
-    $liefermengelagerartikel2 = $this->app->DB->Select("SELECT sum(olp.menge) as liefermenge from  lieferschein_position lp INNER JOIN objekt_lager_platz olp ON olp.objekt='lieferschein' AND olp.parameter=lp.id INNER JOIN artikel a on a.id=lp.artikel where a.lagerartikel=1 AND lp.lieferschein = '$id'");
-    $lieferscheinpositionen = (int)$this->app->DB->Select("SELECT count(id) from lieferschein_position where lieferschein = '$id'");
-    $mengegeliefert = $this->app->DB->Select("SELECT ifnull(sum(geliefert),0) from lieferschein_position where lieferschein = '$id'");
-    $schreibschutz = $this->app->DB->Select("SELECT schreibschutz FROM lieferschein WHERE id='$id' LIMIT 1");
 
-    $mengegeliefert = $mengegeliefert + $this->app->DB->Select("SELECT ifnull(sum(olp.menge),0)+0 FROM objekt_lager_platz olp INNER JOIN lieferschein_position lp ON olp.objekt='lieferschein' AND olp.parameter=lp.id AND lp.lieferschein = '$id'");
+    $bestellmengelagerartikel = $this->app->DatabaseService->selectValue("SELECT sum(lp.menge) as bestellmenge from lieferschein_position lp INNER JOIN artikel a on a.id=lp.artikel where a.lagerartikel=1 AND lp.lieferschein = :id", ['id' => $id]);
+    $liefermengelagerartikel = $this->app->DatabaseService->selectValue("SELECT sum(lp.geliefert) as liefermenge from lieferschein_position lp INNER JOIN artikel a on a.id=lp.artikel where a.lagerartikel=1 AND lp.lieferschein = :id", ['id' => $id]);
+    $liefermengelagerartikel2 = $this->app->DatabaseService->selectValue("SELECT sum(olp.menge) as liefermenge from  lieferschein_position lp INNER JOIN objekt_lager_platz olp ON olp.objekt='lieferschein' AND olp.parameter=lp.id INNER JOIN artikel a on a.id=lp.artikel where a.lagerartikel=1 AND lp.lieferschein = :id", ['id' => $id]);
+    $lieferscheinpositionen = (int)$this->app->DatabaseService->selectValue("SELECT count(id) from lieferschein_position where lieferschein = :id", ['id' => $id]);
+    $mengegeliefert = $this->app->DatabaseService->selectValue("SELECT ifnull(sum(geliefert),0) from lieferschein_position where lieferschein = :id", ['id' => $id]);
+    $schreibschutz = $this->app->DatabaseService->selectValue("SELECT schreibschutz FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
+
+    $mengegeliefert = $mengegeliefert + $this->app->DatabaseService->selectValue("SELECT ifnull(sum(olp.menge),0)+0 FROM objekt_lager_platz olp INNER JOIN lieferschein_position lp ON olp.objekt='lieferschein' AND olp.parameter=lp.id AND lp.lieferschein = :id", ['id' => $id]);
 
     if ($status == "versendet" || $status == "freigegeben") {
 
@@ -710,21 +701,21 @@ class Lieferschein extends GenLieferschein
     }
 
     if($this->app->erp->RechteVorhanden('belegeimport', 'belegcsvexport'))
-    { 
+    {
       $casebelegeimport = "case 'belegeimport':  window.location.href='index.php?module=belegeimport&action=belegcsvexport&cmd=lieferschein&id=%value%'; break;";
       $optionbelegeimport = "<option value=\"belegeimport\">Export als CSV</option>";
     }
-    
-    $etiketten_positionen = $this->app->DB->Select("SELECT etiketten_positionen FROM projekt WHERE id='$projekt' LIMIT 1");
-    $etikett_adresse = $this->app->DB->SelectRow("SELECT lieferscheinpositionetikettdruck, lieferscheinpositionetikett FROM adresse WHERE id ='".$adresse."' LIMIT 1");
+
+    $etiketten_positionen = $this->app->DatabaseService->selectValue("SELECT etiketten_positionen FROM projekt WHERE id = :id LIMIT 1", ['id' => $projekt]);
+    $etikett_adresse = $this->app->DatabaseService->selectRow("SELECT lieferscheinpositionetikettdruck, lieferscheinpositionetikett FROM adresse WHERE id = :id LIMIT 1", ['id' => $adresse]);
     if ($etikett_adresse['lieferscheinpositionetikettdruck']) {
         $etiketten_positionen = 1;
     }
     if($etiketten_positionen  > 0)
       $etiketten = "<option value=\"positionenetiketten\">Positionen als Etiketten</option>";
     $casestorno = "case 'storno': if(!confirm('Wirklich stornieren?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else window.location.href='index.php?module=lieferschein&action=delete&id=%value%'; break;";
-    if($this->app->DB->Select("SELECT olp.id FROM objekt_lager_platz olp INNER JOIN lieferschein_position pos ON olp.parameter = pos.id AND olp.objekt = 'lieferschein' WHERE  pos.lieferschein = '$id' LIMIT 1"))$casestorno = "case 'storno': if(!confirm('Wirklich stornieren?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else if(!confirm('Artikel wieder einlagern?')) window.location.href='index.php?module=lieferschein&action=delete&id=%value%';else window.location.href='index.php?module=lieferschein&action=delete&cmd=einlagern&id=%value%'; break;";
-    
+    if($this->app->DatabaseService->selectValue("SELECT olp.id FROM objekt_lager_platz olp INNER JOIN lieferschein_position pos ON olp.parameter = pos.id AND olp.objekt = 'lieferschein' WHERE  pos.lieferschein = :id LIMIT 1", ['id' => $id]))$casestorno = "case 'storno': if(!confirm('Wirklich stornieren?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else if(!confirm('Artikel wieder einlagern?')) window.location.href='index.php?module=lieferschein&action=delete&id=%value%';else window.location.href='index.php?module=lieferschein&action=delete&cmd=einlagern&id=%value%'; break;";
+
     if($checkifrgexists>0) $extendtext = "HINWEIS: Es existiert bereits eine Rechnung zu diesem Lieferschein! "; else $extendtext="";
     $menu ="
       <script type=\"text/javascript\">
@@ -744,7 +735,7 @@ class Lieferschein extends GenLieferschein
           case 'proformarechnung': if(!confirm('".$extendtext."Wirklich als Proformarechnung weiterführen?')) return document.getElementById('aktion$prefix').selectedIndex = 0; else window.location.href='index.php?module=lieferschein&action=proformarechnung&id=%value%'; break;
           $casecustom
           $casehook
-          $hookcase 
+          $hookcase
           $casebelegeimport
           case 'umlagern': window.location.href='index.php?module=lieferschein&action=umlagern&id=%value%'; break;
         }
@@ -752,7 +743,7 @@ class Lieferschein extends GenLieferschein
       }
     </script>
 
-      &nbsp;Aktion:&nbsp;<select id=\"aktion$prefix\" onchange=\"onchangelieferschein(this.value)\"> 
+      &nbsp;Aktion:&nbsp;<select id=\"aktion$prefix\" onchange=\"onchangelieferschein(this.value)\">
       <option>bitte w&auml;hlen ...</option>
       <option value=\"storno\">Lieferschein stornieren</option>
       <option value=\"copy\">Lieferschein kopieren</option>
@@ -767,7 +758,7 @@ class Lieferschein extends GenLieferschein
       $etiketten
       $optioncustom
       $optionhook
-      $hookoption         
+      $hookoption
       </select>&nbsp;
 
     <a href=\"index.php?module=lieferschein&action=pdf&id=%value%\" title=\"PDF\"><img border=\"0\" src=\"./themes/new/images/pdf.svg\"></a>
@@ -781,14 +772,14 @@ class Lieferschein extends GenLieferschein
     $menu = str_replace('%value%',$id,$menu);
     return $menu;
   }
-  
+
   function LieferscheinPDFfromArchiv()
   {
     $id = (int)$this->app->Secure->GetGET("id");
     $archiv = $this->app->DatabaseService->selectValue("SELECT table_id FROM pdfarchiv WHERE id = :id LIMIT 1", ['id' => $id]);
     if($archiv)
     {
-      $projekt = $this->app->DB->Select("SELECT projekt from lieferschein where id = '".(int)$archiv."'");
+      $projekt = $this->app->DatabaseService->selectValue("SELECT projekt from lieferschein where id = :id", ['id' => (int)$archiv]);
     }
     if(class_exists('LieferscheinPDFCustom'))
     {
@@ -812,7 +803,8 @@ class Lieferschein extends GenLieferschein
   {
     $id = (int)$this->app->Secure->GetGET("id");
     if($id > 0){
-      $auftragArr = $this->app->DB->SelectArr("SELECT * FROM lieferschein WHERE id='$id' LIMIT 1");
+      $auftragArrRow = $this->app->DatabaseService->selectRow("SELECT * FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
+      $auftragArr = $auftragArrRow ? [$auftragArrRow] : [];
     }
     $kundennummer = '';
     $projekt = 0;
@@ -839,7 +831,7 @@ class Lieferschein extends GenLieferschein
     if($lieferantenretoure!='1') {
       $this->app->Tpl->Set('LIEFERANTENRETOUREINFOSTART','<!--');
       $this->app->Tpl->Set('LIEFERANTENRETOUREINFOENDE','<!--');
-    }	
+    }
 
     $this->app->Tpl->Set('LIEFERSCHEINID',$id);
 
@@ -854,15 +846,14 @@ class Lieferschein extends GenLieferschein
     $this->app->Tpl->Set('STATUS',$auftragArr[0]['status']);
 
     if($auftragArr[0]['auftragid'] > 0){
-      $orderRow = $this->app->DB->SelectRow(
-        "SELECT belegnr, projekt FROM auftrag WHERE id='".$auftragArr[0]['auftragid']."' LIMIT 1"
+      $orderRow = $this->app->DatabaseService->selectRow(
+        "SELECT belegnr, projekt FROM auftrag WHERE id = :id LIMIT 1",
+        ['id' => (int)$auftragArr[0]['auftragid']]
       );
       if($this->app->erp->ModulVorhanden('batches')) {
-        $abProjekt = $this->app->DB->Select(
-          sprintf(
-            'SELECT abkuerzung FROM projekt WHERE id = %d',
-            $orderRow['projekt']
-          )
+        $abProjekt = $this->app->DatabaseService->selectValue(
+          'SELECT abkuerzung FROM projekt WHERE id = :id',
+          ['id' => (int)$orderRow['projekt']]
         );
         if(!empty($abProjekt)){
           $this->app->Tpl->Set('PROJEKT', $abProjekt);
@@ -877,39 +868,41 @@ class Lieferschein extends GenLieferschein
     }else{
       $this->app->Tpl->Set('AUFTRAG','-');
     }
-   
+
     $link_zur_rechnung = "CONCAT('<a href=\"index.php?module=rechnung&action=edit&id=',r.id,'\" target=\"_blank\"',if(r.status='storniert',' title=\"Rechnung storniert\"><s>','>'),if(r.belegnr='0' OR r.belegnr='','ENTWURF',r.belegnr),if(r.status='storniert','</s>',''),'</a>&nbsp;',".$this->app->YUI->GetRechnungFileDownloadLinkIconSQL().",'&nbsp;            <a href=\"index.php?module=rechnung&action=edit&id=',r.id,'\" target=\"_blank\"><img src=\"./themes/new/images/edit.svg\" title=\"Rechnung bearbeiten\" border=\"0\"></a>')";
 
-    if($auftragArr[0]['auftragid'] > 0){
+    $auftragid_int = (int)$auftragArr[0]['auftragid'];
+    $rechnungid_int = (int)$auftragArr[0]['rechnungid'];
+    if($auftragid_int > 0){
       $rechnung = $this->app->DB->SelectArr(
-        ($auftragArr[0]['auftragid']?
-          "SELECT 
-            ".$link_zur_rechnung." as rechnung          FROM rechnung r WHERE r.auftragid='".$auftragArr[0]['auftragid']."' AND r.auftragid <> '0'
-          union 
-          SELECT 
-            ".$link_zur_rechnung." as rechnung          FROM rechnung r INNER JOIN sammelrechnung_position s ON r.id = s.rechnung INNER JOIN auftrag_position p ON s.auftrag_position_id = p.id WHERE p.auftrag='".$auftragArr[0]['auftragid']."'
+        ($auftragid_int?
+          "SELECT
+            ".$link_zur_rechnung." as rechnung          FROM rechnung r WHERE r.auftragid=$auftragid_int AND r.auftragid <> 0
+          union
+          SELECT
+            ".$link_zur_rechnung." as rechnung          FROM rechnung r INNER JOIN sammelrechnung_position s ON r.id = s.rechnung INNER JOIN auftrag_position p ON s.auftrag_position_id = p.id WHERE p.auftrag=$auftragid_int
           union ":"")."
-          SELECT 
+          SELECT
             ".$link_zur_rechnung." as rechnung
-          FROM rechnung r INNER JOIN sammelrechnung_position s ON r.id = s.rechnung 
+          FROM rechnung r INNER JOIN sammelrechnung_position s ON r.id = s.rechnung
           INNER JOIN lieferschein_position lp ON lp.id = s.lieferschein_position_id
-          WHERE lp.lieferschein='$id'
+          WHERE lp.lieferschein=$id
           "
       );
 
     }
     else{
-      if($auftragArr[0]['rechnungid'] > 0){
+      if($rechnungid_int > 0){
 
-        $rechnung = $this->app->DB->SelectArr("SELECT 
+        $rechnung = $this->app->DB->SelectArr("SELECT
               ".$link_zur_rechnung." as rechnung
-          FROM rechnung r WHERE r.id='".$auftragArr[0]['rechnungid']."' AND r.id <> '0'
-          union          
-          SELECT 
+          FROM rechnung r WHERE r.id=$rechnungid_int AND r.id <> 0
+          union
+          SELECT
               ".$link_zur_rechnung." as rechnung
-          FROM rechnung r INNER JOIN sammelrechnung_position s ON r.id = s.rechnung 
+          FROM rechnung r INNER JOIN sammelrechnung_position s ON r.id = s.rechnung
           INNER JOIN lieferschein_position lp ON lp.id = s.lieferschein_position_id
-          WHERE lp.lieferschein='$id'
+          WHERE lp.lieferschein=$id
           ");
       }
     }
@@ -940,18 +933,16 @@ class Lieferschein extends GenLieferschein
     }
 
     // ARTIKEL
-    $lieferscheinarr = $this->app->DB->SelectRow("SELECT * FROM  lieferschein WHERE id='$id' LIMIT 1");
+    $lieferscheinarr = $this->app->DatabaseService->selectRow("SELECT * FROM  lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
 
     $status = $lieferscheinarr['status'];//$this->app->DB->Select("SELECT status FROM lieferschein WHERE id='$id' LIMIT 1");
     $projekt = $lieferscheinarr['projekt'];
-    $projektlager = $this->app->DB->Select("SELECT projektlager FROM projekt WHERE id = $projekt");
+    $projektlager = $this->app->DatabaseService->selectValue("SELECT projektlager FROM projekt WHERE id = :id", ['id' => (int)$projekt]);
     $auftrag = $lieferscheinarr['auftragid'];
     $standardlager = $lieferscheinarr['standardlager'];//$this->app->DB->Select("SELECT standardlager FROM auftrag WHERE id = $auftrag LIMIT 1");
-    $positionIdsToArticle = $id <= 0?[]:$this->app->DB->SelectPairs(
-      sprintf(
-        'SELECT id, artikel FROM lieferschein_position WHERE lieferschein = %d',
-        $id
-      )
+    $positionIdsToArticle = $id <= 0 ? [] : $this->app->DatabaseService->selectPairs(
+      "SELECT id, artikel FROM lieferschein_position WHERE lieferschein = :id",
+      ['id' => (int)$id]
     );
     if(empty($positionIdsToArticle)) {
       $positionIdsToArticle = [ 0 => 0];
@@ -965,20 +956,20 @@ class Lieferschein extends GenLieferschein
 
     $table = new EasyTable($this->app);
 
-    $sql = "SELECT if(CHAR_LENGTH(ap.beschreibung) > 0,CONCAT(ap.bezeichnung,' *'),ap.bezeichnung) as artikel, 
-      CONCAT('<a href=\"index.php?module=artikel&action=edit&id=',ap.artikel,'\" target=\"_blank\">', 
+    $sql = "SELECT if(CHAR_LENGTH(ap.beschreibung) > 0,CONCAT(ap.bezeichnung,' *'),ap.bezeichnung) as artikel,
+      CONCAT('<a href=\"index.php?module=artikel&action=edit&id=',ap.artikel,'\" target=\"_blank\">',
       ap.nummer,'</a>'
       ) as Nummer,
-      a.gewicht as gewicht, 
+      a.gewicht as gewicht,
       TRIM(ap.menge)+0 as Menge,
           if(
             a.porto,
             '-',
             if(
-              IFNULL(lpi2.menge,0) >= ap.menge AND a.lagerartikel=1, 
+              IFNULL(lpi2.menge,0) >= ap.menge AND a.lagerartikel=1,
               IF(
-                ROUND(ap2.offen,7) > 0 AND 
-                  ROUND(IFNULL(lpi2.menge,0) - IFNULL(r.menge,0) + IFNULL(r2.menge,0),7) < ROUND(ap2.offen,7) 
+                ROUND(ap2.offen,7) > 0 AND
+                  ROUND(IFNULL(lpi2.menge,0) - IFNULL(r.menge,0) + IFNULL(r2.menge,0),7) < ROUND(ap2.offen,7)
                   AND ROUND(IFNULL(r2.menge,0),7) < ROUND(ap2.offen,7),
                 CONCAT('<b style=\"color:red;\">',".$this->app->erp->FormatMenge('IFNULL(lpi2.menge,0)').",'</b>'),
                 ".$this->app->erp->FormatMenge('IFNULL(lpi2.menge,0)')."
@@ -994,45 +985,45 @@ class Lieferschein extends GenLieferschein
               )
             )
           ) as Lager,
-                
+
           CONCAT(".$this->app->erp->FormatMenge('IFNULL(r2.menge,0)').",' von ',"
             .$this->app->erp->FormatMenge('IFNULL(r.menge,0)')
             .",' (Gesamtres.)')as `Res. für Kunde`
-         
-          FROM lieferschein_position AS ap 
+
+          FROM lieferschein_position AS ap
           INNER JOIN artikel AS a ON ap.artikel = a.id
           INNER JOIN (
-            SELECT sum(menge-geliefert) as offen, artikel 
-            FROM lieferschein_position 
-            WHERE id IN (".$positionIdsImplode.") 
+            SELECT sum(menge-geliefert) as offen, artikel
+            FROM lieferschein_position
+            WHERE id IN (".$positionIdsImplode.")
             GROUP BY artikel
           ) as ap2 ON a.id = ap2.artikel
           LEFT JOIN (
-            SELECT sum(lpi.menge) as menge,lpi.artikel 
-            FROM lager_platz_inhalt AS lpi 
-            INNER JOIN lager_platz AS lp 
+            SELECT sum(lpi.menge) as menge,lpi.artikel
+            FROM lager_platz_inhalt AS lpi
+            INNER JOIN lager_platz AS lp
               ON lpi.lager_platz = lp.id AND IFNULL(lp.sperrlager,0) = 0 AND IFNULL(lp.autolagersperre,0) = 0
-            INNER JOIN lager AS `lag` ON lp.lager = `lag`.id 
+            INNER JOIN lager AS `lag` ON lp.lager = `lag`.id
             WHERE lpi.artikel IN (".$artikelidsImplode.")
             ".($standardlager?" AND `lag`.id = $standardlager ":($projektlager?" AND `lag`.projekt = $projekt ":''))."
             GROUP BY lpi.artikel
           ) AS lpi2 ON a.id = lpi2.artikel
           LEFT JOIN (
-            SELECT SUM(menge) as menge,artikel 
-            FROM lager_reserviert 
+            SELECT SUM(menge) as menge,artikel
+            FROM lager_reserviert
             WHERE artikel IN (".$artikelidsImplode.")
             ".($projektlager || ($standardlager && false)?" AND projekt = $projekt ":'')."
-            GROUP BY artikel 
+            GROUP BY artikel
           ) r ON a.id = r.artikel
           LEFT JOIN (
-            SELECT SUM(menge) as menge,artikel 
+            SELECT SUM(menge) as menge,artikel
             FROM lager_reserviert
             WHERE ((objekt = 'lieferschein' AND parameter = $id) "
-              .($auftrag > 0?" OR (objekt = 'auftrag' AND parameter = $auftrag) ":'').") 
+              .($auftrag > 0?" OR (objekt = 'auftrag' AND parameter = $auftrag) ":'').")
              AND artikel IN (".$artikelidsImplode.")
-            GROUP BY artikel 
+            GROUP BY artikel
           ) r2 ON a.id = r2.artikel
-          WHERE ap.id IN (".$positionIdsImplode.") AND ap.lieferschein='$id' 
+          WHERE ap.id IN (".$positionIdsImplode.") AND ap.lieferschein='$id'
           ORDER BY ap.sort, ap.id";
 
       $table->Query($sql,0,"");
@@ -1053,7 +1044,7 @@ class Lieferschein extends GenLieferschein
         $table->headings[4] = $table->headings[5];
         unset($table->headings[5]);
       }
-          
+
       $artikel = $table->DisplayNew("return","Res. für Kunde","noAction","false",0,0,false);
 
 
@@ -1073,28 +1064,28 @@ class Lieferschein extends GenLieferschein
        if(v.tracking_link IS NOT NULL AND v.tracking_link != '', CONCAT(UPPER(versandunternehmen), ':<a href=\"', v.tracking_link, '\">', v.tracking, '</a>'),
          if(versandunternehmen = 'dhlexpress' AND l.land = 'DE' AND v.tracking != '', CONCAT(UPPER(versandunternehmen), ':<a href=\"https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=', v.tracking, '\" target=\"_blank\">', v.tracking, '</a>'),
            if(versandunternehmen = 'dhlexpress' AND l.land != 'DE' AND v.tracking != '', CONCAT(UPPER(versandunternehmen), ':<a href=\"https://www.dhl.com/en/hidden/component_library/express/local_express/dhl_de_tracking/de/sendungsverfolgung_dhlde.html?AWB=', v.tracking, '&brand=DHL\" target=\"_blank\">', v.tracking, '</a>'),
-             if( (versandunternehmen='dhl' OR versandunternehmen='intraship' OR versandunternehmen LIKE '%dhl%') AND v.tracking!='',          CONCAT(UPPER(versandunternehmen),':<a href=\"http://nolp.dhl.de/nextt-online-public/set_identcodes.do?lang=de&idc=',v.tracking,'\" target=\"_blank\">',v.tracking,'</a>'),        
+             if( (versandunternehmen='dhl' OR versandunternehmen='intraship' OR versandunternehmen LIKE '%dhl%') AND v.tracking!='',          CONCAT(UPPER(versandunternehmen),':<a href=\"http://nolp.dhl.de/nextt-online-public/set_identcodes.do?lang=de&idc=',v.tracking,'\" target=\"_blank\">',v.tracking,'</a>'),
                if(versandunternehmen LIKE '%dpd%',CONCAT(UPPER(versandunternehmen),':<a href=\"https://tracking.dpd.de/parcelstatus/?locale=de_DE&query=',v.tracking,'\" target=\"_blank\">',v.tracking,'</a>'),
                  if(versandunternehmen LIKE '%ups%' AND v.tracking != '', CONCAT(UPPER(versandunternehmen),':<a href=\"https://www.ups.com/track?loc=de_DE&tracknum=',v.tracking,'\" target=\"_blank\">',v.tracking,'</a>'),
                    if(versandunternehmen LIKE '%gls%' AND v.tracking != '', CONCAT(UPPER(versandunternehmen),':<a href=\"https://www.gls-group.eu/276-I-PORTAL-WEB/content/GLS/DE03/DE/5004.htm?txtRefNo=',v.tracking,'\" target=\"_blank\">',v.tracking,'</a>'),
-                     if(versandunternehmen LIKE '%postch%' AND v.tracking != '', CONCAT(UPPER(versandunternehmen),':<a href=\"https://service.post.ch/EasyTrack/submitParcelData.do?formattedParcelCodes=',v.tracking,'&from_directentry=True&directSearch=false&p_language=de&VTI-GROUP=1&lang=de&service=ttb\" target=\"_blank\">',v.tracking,'</a>'),  
+                     if(versandunternehmen LIKE '%postch%' AND v.tracking != '', CONCAT(UPPER(versandunternehmen),':<a href=\"https://service.post.ch/EasyTrack/submitParcelData.do?formattedParcelCodes=',v.tracking,'&from_directentry=True&directSearch=false&p_language=de&VTI-GROUP=1&lang=de&service=ttb\" target=\"_blank\">',v.tracking,'</a>'),
                        if(v.tracking!='',
                          CONCAT(UPPER(versandunternehmen),': ',v.tracking),'nicht vorhanden')
                      )
-                   )    
+                   )
                  )
                )
              )
            )
-         ) 
+         )
        ) as versand2,
-       if(versandunternehmen = 'dhlexpress' AND l.land = 'DE' AND vp.tracking != '', CONCAT(UPPER(versandunternehmen), ':<a href=\"https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=', vp.tracking, '\" target=\"_blank\">', vp.tracking, '</a>'), 
-         if(versandunternehmen = 'dhlexpress' AND l.land != 'DE' AND vp.tracking != '', CONCAT(UPPER(versandunternehmen), ':<a href=\"https://www.dhl.com/en/hidden/component_library/express/local_express/dhl_de_tracking/de/sendungsverfolgung_dhlde.html?AWB=', vp.tracking, '&brand=DHL\" target=\"_blank\">', vp.tracking, '</a>'),  
-           if( (versandunternehmen='dhl' OR versandunternehmen='intraship') AND vp.tracking!='',          CONCAT(UPPER(versandunternehmen),':<a href=\"http://nolp.dhl.de/nextt-online-public/set_identcodes.do?lang=de&idc=',vp.tracking,'\" target=\"_blank\">',vp.tracking,'</a>'),        
+       if(versandunternehmen = 'dhlexpress' AND l.land = 'DE' AND vp.tracking != '', CONCAT(UPPER(versandunternehmen), ':<a href=\"https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode=', vp.tracking, '\" target=\"_blank\">', vp.tracking, '</a>'),
+         if(versandunternehmen = 'dhlexpress' AND l.land != 'DE' AND vp.tracking != '', CONCAT(UPPER(versandunternehmen), ':<a href=\"https://www.dhl.com/en/hidden/component_library/express/local_express/dhl_de_tracking/de/sendungsverfolgung_dhlde.html?AWB=', vp.tracking, '&brand=DHL\" target=\"_blank\">', vp.tracking, '</a>'),
+           if( (versandunternehmen='dhl' OR versandunternehmen='intraship') AND vp.tracking!='',          CONCAT(UPPER(versandunternehmen),':<a href=\"http://nolp.dhl.de/nextt-online-public/set_identcodes.do?lang=de&idc=',vp.tracking,'\" target=\"_blank\">',vp.tracking,'</a>'),
              if(versandunternehmen LIKE '%dpd%',CONCAT(UPPER(versandunternehmen),':<a href=\"https://tracking.dpd.de/parcelstatus/?locale=de_DE&query=',vp.tracking,'\" target=\"_blank\">',vp.tracking,'</a>'),
                if(versandunternehmen LIKE '%ups%' AND vp.tracking != '', CONCAT(UPPER(versandunternehmen),':<a href=\"https://www.ups.com/track?loc=de_DE&tracknum=',vp.tracking,'\" target=\"_blank\">',v.tracking,'</a>'),
                  if(versandunternehmen LIKE '%gls%' AND vp.tracking != '', CONCAT(UPPER(versandunternehmen),':<a href=\"https://www.gls-group.eu/276-I-PORTAL-WEB/content/GLS/DE03/DE/5004.htm?txtRefNo=',vp.tracking,'\" target=\"_blank\">',v.tracking,'</a>'),
-                   if(versandunternehmen LIKE '%postch%' AND v.tracking != '', CONCAT(UPPER(versandunternehmen),':<a href=\"https://service.post.ch/EasyTrack/submitParcelData.do?formattedParcelCodes=',v.tracking,'&from_directentry=True&directSearch=false&p_language=de&VTI-GROUP=1&lang=de&service=ttb\" target=\"_blank\">',v.tracking,'</a>'), 
+                   if(versandunternehmen LIKE '%postch%' AND v.tracking != '', CONCAT(UPPER(versandunternehmen),':<a href=\"https://service.post.ch/EasyTrack/submitParcelData.do?formattedParcelCodes=',v.tracking,'&from_directentry=True&directSearch=false&p_language=de&VTI-GROUP=1&lang=de&service=ttb\" target=\"_blank\">',v.tracking,'</a>'),
                      if(vp.tracking!='',
                        CONCAT(UPPER(versandunternehmen),': ',vp.tracking),'nicht vorhanden')
                    )
@@ -1106,7 +1097,7 @@ class Lieferschein extends GenLieferschein
        ) as versand3,
         v.tracking as tracking2, vp.tracking as tracking3
       FROM versand AS v
-      LEFT JOIN versandpakete AS vp ON v.id = vp.versand 
+      LEFT JOIN versandpakete AS vp ON v.id = vp.versand
       LEFT JOIN lieferschein AS l ON v.lieferschein=l.id WHERE l.id='$id'"
     );
 
@@ -1129,11 +1120,11 @@ class Lieferschein extends GenLieferschein
 	}
 */
 
-    $sql = "SELECT SQL_CALC_FOUND_ROWS
-                v.id,                   
+    $tracking = $this->app->DatabaseService->select("SELECT SQL_CALC_FOUND_ROWS
+                v.id,
                 v.tracking as tracking,
                 v.tracking_link
-            FROM 
+            FROM
                 versandpakete v
             LEFT JOIN
                 versandpaket_lieferschein_position vlp ON v.id = vlp.versandpaket
@@ -1141,11 +1132,10 @@ class Lieferschein extends GenLieferschein
                 lieferschein_position lp ON lp.id = vlp.lieferschein_position
             LEFT JOIN
                 lieferschein l ON lp.lieferschein = l.id
-            WHERE l.id = ".$id." OR v.lieferschein_ohne_pos = ".$id."
-            GROUP BY 
+            WHERE l.id = :id OR v.lieferschein_ohne_pos = :id
+            GROUP BY
                v.id
-            ";
-    $tracking = $this->app->DB->SelectArr($sql);
+            ", ['id' => $id]);
     $tracking_list = array();
     foreach ($tracking as $single_tracking) {
         $tracking_list[] =  '<a href="index.php?module=versandpakete&action=edit&id='.$single_tracking['id'].'">Paket Nr.'.$single_tracking['id'].'</a>'.
@@ -1154,16 +1144,9 @@ class Lieferschein extends GenLieferschein
 
     $this->app->Tpl->Set('TRACKING',implode('<br>',$tracking_list));
 
-    $returnOrders = (array)$this->app->DB->SelectArr(
-      sprintf(
-        'SELECT ro.id, ro.belegnr, ro.status
-        FROM `retoure` AS `ro`
-        LEFT JOIN `auftrag` AS `o` ON ro.auftragid = o.id
-        LEFT JOIN `lieferschein` AS `dn` ON o.id = dn.auftragid
-        WHERE ro.lieferscheinid = %d OR dn.id = %d
-        ORDER BY ro.id',
-        $id, $id
-      )
+    $returnOrders = (array)$this->app->DatabaseService->select(
+      'SELECT ro.id, ro.belegnr, ro.status FROM `retoure` AS `ro` LEFT JOIN `auftrag` AS `o` ON ro.auftragid = o.id LEFT JOIN `lieferschein` AS `dn` ON o.id = dn.auftragid WHERE ro.lieferscheinid = :id OR dn.id = :id ORDER BY ro.id',
+      ['id' => $id]
     );
 
     $returnOrderHtml = [];
@@ -1198,7 +1181,7 @@ class Lieferschein extends GenLieferschein
     }else{
       $Brief = new LieferscheinPDF($this->app,$auftragArr[0]['projekt']);
     }
-    
+
     $Dokumentenliste = $Brief->getArchivedFiles($id, 'lieferschein');
     if($Dokumentenliste)
     {
@@ -1217,7 +1200,7 @@ class Lieferschein extends GenLieferschein
           $tmp3->datasets[] = $tmpr;
         }
       }
-      
+
       $tmp3->DisplayNew('PDFARCHIV','Men&uuml;',"noAction");
     }
 
@@ -1229,9 +1212,9 @@ class Lieferschein extends GenLieferschein
 
       $this->app->Tpl->Set("GEWICHT", $nettogewicht . " ".$gewichtbezeichnung);
     }
-  
+
     if($parsetarget=='')
-    { 
+    {
       $this->app->Tpl->Output("lieferschein_minidetail.tpl");
       $this->app->ExitXentral();
     }
@@ -1317,8 +1300,7 @@ class Lieferschein extends GenLieferschein
     $belegnr = $this->app->DatabaseService->selectValue("SELECT belegnr FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
     $name = $this->app->DatabaseService->selectValue("SELECT name FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
     $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
-    $objekt_lager_platz = $this->app->DB->SelectArr("SELECT olp.id, olp.menge, olp.lager_platz, olp.artikel, olp.parameter FROM
-      lieferschein_position lp INNER JOIN  objekt_lager_platz olp ON lp.id = olp.parameter AND olp.objekt = 'lieferschein' AND lp.lieferschein = '$id'");
+    $objekt_lager_platz = $this->app->DatabaseService->select("SELECT olp.id, olp.menge, olp.lager_platz, olp.artikel, olp.parameter FROM lieferschein_position lp INNER JOIN  objekt_lager_platz olp ON lp.id = olp.parameter AND olp.objekt = 'lieferschein' AND lp.lieferschein = :id", ['id' => $id]);
     $cmdEinlagern = $this->app->Secure->GetGET('cmd') === 'einlagern';
     if($cmdEinlagern)
     {
@@ -1328,8 +1310,8 @@ class Lieferschein extends GenLieferschein
         foreach($objekt_lager_platz as $olp)  {
           $this->app->erp->LagerEinlagern($olp['artikel'],$olp['menge'],$olp['lager_platz'],$projekt,
                 'Stornierung Lieferschein '.$belegnr,$this->app->User->GetName(),'','lieferschein',$id);
-          $beleg_chargesnmhd = $this->app->DB->SelectArr("SELECT * FROM `beleg_chargesnmhd` WHERE doctype = 'lieferschein' AND doctypeid = '$id' AND pos = '".$olp['parameter']."'");
-          $seriennummern = $this->app->DB->SelectArr("SELECT * FROM seriennummern WHERE lieferschein = '$id' AND lieferscheinpos = '".$olp['parameter']."'");
+          $beleg_chargesnmhd = $this->app->DatabaseService->select("SELECT * FROM `beleg_chargesnmhd` WHERE doctype = 'lieferschein' AND doctypeid = :id AND pos = :pos", ['id' => $id, 'pos' => (int)$olp['parameter']]);
+          $seriennummern = $this->app->DatabaseService->select("SELECT * FROM seriennummern WHERE lieferschein = :id AND lieferscheinpos = :pos", ['id' => $id, 'pos' => (int)$olp['parameter']]);
           if($seriennummern) {
             foreach($seriennummern as $sn)  {
               $belegesnarr['sn'][] = array('menge'=>1, 'value'=>$sn['seriennummer'],'table'=>'seriennummern','id'=>$sn['id']);
@@ -1382,7 +1364,7 @@ class Lieferschein extends GenLieferschein
 // Xentral Legacy                  $this->app->DB->Delete("DELETE FROM seriennummern WHERE id = '".$v['id']."' LIMIT 1");
                 }
                 elseif(isset($v['table']) && $v['table'] === 'beleg_chargesnmhd' && !empty($v['id'])){
-                  $this->app->DB->Delete("DELETE FROM beleg_chargesnmhd WHERE id = '".$v['id']."' LIMIT 1");
+                  $this->app->DatabaseService->delete("DELETE FROM beleg_chargesnmhd WHERE id = :id LIMIT 1", ['id' => (int)$v['id']]);
                 }
                 if(method_exists($this->app->erp,'AddSeriennummerLager')) {
                   $this->app->erp->AddSeriennummerLager($olp['artikel'], $olp['lager_platz'], $v['value'],'Stornierung Lieferschein '.$belegnr,  '', $mhd, $charge,'lieferschein', $id);
@@ -1416,7 +1398,7 @@ class Lieferschein extends GenLieferschein
 // Xentral Legacy                  $this->app->DB->Delete("DELETE FROM seriennummern WHERE id = '".$v['id']."' LIMIT 1");
                 }
                 elseif(isset($v['table']) && $v['table'] === 'beleg_chargesnmhd' && !empty($v['id'])){
-                  $this->app->DB->Delete("DELETE FROM beleg_chargesnmhd WHERE id = '".$v['id']."' LIMIT 1");
+                  $this->app->DatabaseService->delete("DELETE FROM beleg_chargesnmhd WHERE id = :id LIMIT 1", ['id' => (int)$v['id']]);
                 }
                 if(method_exists($this->app->erp,'AddSeriennummerLager')) {
                   $this->app->erp->AddSeriennummerLager($olp['artikel'],1, $olp['lager_platz'], $v['value'],'Stornierung Lieferschein '.$belegnr,  '', $mhd, $charge,'lieferschein',$id);
@@ -1446,7 +1428,7 @@ class Lieferschein extends GenLieferschein
 // Xentral Legacy                  $this->app->DB->Delete("DELETE FROM seriennummern WHERE id = '".$v['id']."' LIMIT 1");
                 }
                 elseif(isset($v['table']) && $v['table'] === 'beleg_chargesnmhd' && !empty($v['id'])){
-                  $this->app->DB->Delete("DELETE FROM beleg_chargesnmhd WHERE id = '".$v['id']."' LIMIT 1");
+                  $this->app->DatabaseService->delete("DELETE FROM beleg_chargesnmhd WHERE id = :id LIMIT 1", ['id' => (int)$v['id']]);
                 }
                 if(method_exists($this->app->erp,'AddSeriennummerLager')) {
                   $this->app->erp->AddSeriennummerLager($olp['artikel'], $olp['lager_platz'], $v['value'],'Stornierung Lieferschein '.$belegnr,  '', $mhd, $charge,'lieferschein', $id);
@@ -1461,7 +1443,7 @@ class Lieferschein extends GenLieferschein
 // Xentral Legacy                  $this->app->DB->Delete("DELETE FROM seriennummern WHERE id = '".$v['id']."' LIMIT 1");
                 }
                 elseif(isset($v['table']) && $v['table'] === 'beleg_chargesnmhd' && !empty($v['id'])){
-                  $this->app->DB->Delete("DELETE FROM beleg_chargesnmhd WHERE id = '".$v['id']."' LIMIT 1");
+                  $this->app->DatabaseService->delete("DELETE FROM beleg_chargesnmhd WHERE id = :id LIMIT 1", ['id' => (int)$v['id']]);
                 }
                 if(method_exists($this->app->erp,'AddSeriennummerLager')) {
                   $this->app->erp->AddSeriennummerLager($olp['artikel'], $olp['lager_platz'], $v['value'],'Stornierung Lieferschein '.$belegnr, '','','','lieferschein', $id);
@@ -1545,20 +1527,15 @@ class Lieferschein extends GenLieferschein
               }
             }
           }
-          $this->app->DB->Delete("DELETE FROM objekt_lager_platz WHERE id = '".$olp['id']."' LIMIT 1");
+          $this->app->DatabaseService->delete("DELETE FROM objekt_lager_platz WHERE id = :id LIMIT 1", ['id' => (int)$olp['id']]);
         }
       }
     }
 
     if($cmdEinlagern || empty($objekt_lager_platz)) {
-      $sns = $this->app->DB->SelectArr(
-        sprintf(
-          'SELECT bc.id, bc.wert, bc.lagerplatz, lp.artikel, bc.wert2, bc.type2
-                  FROM `beleg_chargesnmhd` AS bc
-                  INNER JOIN lieferschein_position AS lp ON bc.pos = lp.id AND bc.`doctypeid` = %d
-                  WHERE bc.`doctype` = \'lieferschein\' AND bc.`doctypeid` = %d AND bc.`type` = \'sn\' AND bc.lagerplatz > 0 AND bc.wert <> \'\'',
-          $id, $id
-        )
+      $sns = $this->app->DatabaseService->select(
+        "SELECT bc.id, bc.wert, bc.lagerplatz, lp.artikel, bc.wert2, bc.type2 FROM `beleg_chargesnmhd` AS bc INNER JOIN lieferschein_position AS lp ON bc.pos = lp.id AND bc.`doctypeid` = :id WHERE bc.`doctype` = 'lieferschein' AND bc.`doctypeid` = :id AND bc.`type` = 'sn' AND bc.lagerplatz > 0 AND bc.wert <> ''",
+        ['id' => $id]
       );
       if(!empty($sns)) {
         foreach($sns as $sn) {
@@ -1570,11 +1547,11 @@ class Lieferschein extends GenLieferschein
             $mhd = $sn['wert2'];
           }
           $this->app->erp->AddSeriennummerLager($sn['artikel'], $sn['lagerplatz'], $sn['wert'],'Stornierung Lieferschein '.$belegnr,  '', $mhd, $charge,'lieferschein', $id);
-          $this->app->DB->Delete(sprintf('DELETE FROM `beleg_chargesnmhd` WHERE id = %d LIMIT 1', $sn['id']));
+          $this->app->DatabaseService->delete('DELETE FROM `beleg_chargesnmhd` WHERE id = :id LIMIT 1', ['id' => (int)$sn['id']]);
         }
       }
     }
-    
+
     if($belegnr=="0" || $belegnr=="")
     {
       $this->DeleteLieferschein($id);
@@ -1590,9 +1567,10 @@ class Lieferschein extends GenLieferschein
       $maxbelegnr = $this->app->DB->Select("SELECT MAX(belegnr) FROM lieferschein");
       if(0)//$maxbelegnr == $belegnr)
       {
-        $this->app->DB->Delete("DELETE FROM lieferschein_position WHERE lieferschein='$id'");
-        $this->app->DB->Delete("DELETE FROM lieferschein_protokoll WHERE lieferschein='$id'");
-        $this->app->DB->Delete("DELETE FROM lieferschein WHERE id='$id'");
+        // Dead code (if(0)) — migrated for safety in case block is ever re-enabled
+        $this->app->DatabaseService->delete("DELETE FROM lieferschein_position WHERE lieferschein = :id", ['id' => $id]);
+        $this->app->DatabaseService->delete("DELETE FROM lieferschein_protokoll WHERE lieferschein = :id", ['id' => $id]);
+        $this->app->DatabaseService->delete("DELETE FROM lieferschein WHERE id = :id", ['id' => $id]);
         $msg = $this->app->erp->base64_url_encode("<div class=\"warning\">Lieferschein \"$name\" ($belegnr) wurde ge&ouml;scht !</div>");
       } else
       {
@@ -1632,8 +1610,8 @@ class Lieferschein extends GenLieferschein
     $this->app->Tpl->Parse('PAGE',"tabview.tpl");
   }
 
-  function LieferscheinRechnung()  {    
-    $id = $this->app->Secure->GetGET("id");    
+  function LieferscheinRechnung()  {
+    $id = $this->app->Secure->GetGET("id");
     $newid = $this->app->erp->WeiterfuehrenLieferscheinZuRechnung($id);
     $this->app->erp->LieferscheinProtokoll($id,"Lieferschein als Rechnung weitergeführt");
 
@@ -1642,11 +1620,12 @@ class Lieferschein extends GenLieferschein
     exit;
   }
 
-  function LieferscheinProformarechnung()  {    
-    $id = $this->app->Secure->GetGET("id");    
+  function LieferscheinProformarechnung()  {
+    $id = $this->app->Secure->GetGET("id");
     $proformaRechnung = $this->app->erp->LoadModul('proformarechnung');
     if(!empty($proformaRechnung) && method_exists($proformaRechnung, 'CreateProformaInvoiceAndPrint')) {
-      $tmp = $this->app->DB->SelectArr("SELECT adresse,projekt FROM lieferschein WHERE id='$id'");
+      $tmp = $this->app->DatabaseService->selectRow("SELECT adresse,projekt FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+      $tmp = $tmp ? [$tmp] : [];
       $newid = $proformaRechnung->createProformaInvoiceFromDeliveryNotes([$id], $tmp[0]['adresse'], $tmp[0]['projekt']);
     }
     $this->app->erp->LieferscheinProtokoll($id,"Lieferschein als Proformarechnung weitergeführt");
@@ -1670,7 +1649,7 @@ class Lieferschein extends GenLieferschein
       {
         $Brief = new LieferscheinPDFCustom($this->app,$projekt);
       }else{
-        $Brief = new LieferscheinPDF($this->app,$projekt); 
+        $Brief = new LieferscheinPDF($this->app,$projekt);
       }
       $Brief->GetLieferschein($id);
       $Brief->inlineDocument($schreibschutz);
@@ -1681,7 +1660,7 @@ class Lieferschein extends GenLieferschein
     }
   }
 
-   
+
   function LieferscheinPDF()
   {
     $id = (int)$this->app->Secure->GetGET("id");
@@ -1699,7 +1678,7 @@ class Lieferschein extends GenLieferschein
         $Brief = new LieferscheinPDF($this->app,$projekt);
       }
       $Brief->GetLieferschein($id);
-      $Brief->displayDocument($schreibschutz); 
+      $Brief->displayDocument($schreibschutz);
     }// else
     // $this->app->Tpl->Set(MESSAGE,"<div class=\"error\">Noch nicht freigegebene Lieferscheinen k&ouml;nnen nicht als PDF betrachtet werden.!</div>");
 
@@ -1733,21 +1712,21 @@ class Lieferschein extends GenLieferschein
     } else {
         if ($seriennummern_zeigen) {
             $this->app->erp->MenuEintrag("index.php?module=seriennummern&action=enter&lieferschein=".$id."&from=lieferschein", "Seriennummern");
-        }   
+        }
         if ($paketmarke_zeigen) {
             $this->app->erp->MenuEintrag("index.php?module=lieferschein&action=paketmarke&id=$id","Paketmarke");
-        }   
+        }
     }
-    
+
     $anzahldateien = '';
     if ($id > 0) {
       $anzahldateien = $this->app->erp->AnzahlDateien('lieferschein', $id);
       $anzahldateien = $anzahldateien > 0?' ('.$anzahldateien.')':'';
     }
     $this->app->erp->MenuEintrag("index.php?module=lieferschein&action=dateien&id=$id", 'Dateien'.$anzahldateien);
-    
+
     $this->app->erp->MenuEintrag("index.php?module=lieferschein&action=list","Zur&uuml;ck zur &Uuml;bersicht");
-        
+
     $this->app->erp->RunMenuHook('lieferschein');
   }
 
@@ -1762,7 +1741,7 @@ class Lieferschein extends GenLieferschein
     $this->app->YUI->SortListEvent("copy","lieferschein_position","lieferschein");
     $this->LieferscheinPositionen();
   }
-  
+
   function DelLieferscheinPosition()
   {
     $this->app->YUI->SortListEvent("del","lieferschein_position","lieferschein");
@@ -1795,7 +1774,7 @@ class Lieferschein extends GenLieferschein
     } else {
       $widget = new WidgetLieferschein_position($this->app,'PAGE');
     }
-    $sid= $this->app->DB->Select("SELECT lieferschein FROM lieferschein_position WHERE id='$id' LIMIT 1");
+    $sid = $this->app->DatabaseService->selectValue("SELECT lieferschein FROM lieferschein_position WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $widget->form->SpecialActionAfterExecute("close_refresh",
         "index.php?module=lieferschein&action=positionen&id=$sid");
     $widget->Edit();
@@ -1810,7 +1789,7 @@ class Lieferschein extends GenLieferschein
 
     $sid = $this->app->Secure->GetGET("sid");
     $cmd = $this->app->Secure->GetGET("cmd");
-    
+
     if($cmd == 'dadown')
     {
       $erg['status'] = 0;
@@ -1858,7 +1837,7 @@ class Lieferschein extends GenLieferschein
       echo json_encode($erg);
       exit;
     }
-    
+
     if($this->app->erp->VertriebAendern("lieferschein",$id,$cmd,$sid))
       return;
     if($this->app->erp->InnendienstAendern("lieferschein",$id,$cmd,$sid))
@@ -1888,7 +1867,7 @@ class Lieferschein extends GenLieferschein
     $this->app->erp->CheckVertrieb($id,"lieferschein");
     $this->app->erp->CheckBearbeiter($id,"lieferschein");
     if($id > 0){
-      $lieferscheinarr = $this->app->DB->SelectRow("SELECT * FROM lieferschein WHERE id='$id' LIMIT 1");
+      $lieferscheinarr = $this->app->DatabaseService->selectRow("SELECT * FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     }
     if(!empty($lieferscheinarr)){
       $nummer = $lieferscheinarr['belegnr'];//$this->app->DB->Select("SELECT belegnr FROM lieferschein WHERE id='$id' LIMIT 1");
@@ -1907,7 +1886,7 @@ class Lieferschein extends GenLieferschein
       $schreibschutz = 0;
       $status = '';
     }
-    $kundennummer = $this->app->DB->Select("SELECT kundennummer FROM adresse WHERE id='$adresse' LIMIT 1");
+    $kundennummer = $this->app->DatabaseService->selectValue("SELECT kundennummer FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$adresse]);
 
     if($lieferantenretoure=="1" && $lieferant<=0)
     {
@@ -1917,7 +1896,7 @@ class Lieferschein extends GenLieferschein
     {
       $this->app->Tpl->Add('JAVASCRIPT','$(document).ready(function() { if(document.getElementById("adresse"))document.getElementById("adresse").focus(); });');
       $this->app->Tpl->Set('MESSAGE',"<div class=\"error\">Pflichtfeld! Bitte geben Sie eine Kunden-Nr. an!</div>");
-    }	
+    }
 
 
     $bestellmengelagerartikel = $this->app->DatabaseService->selectValue("SELECT sum(lp.menge) as bestellmenge from lieferschein_position lp INNER JOIN artikel a on a.id=lp.artikel where a.lagerartikel=1 AND lp.lieferschein = ?", [$id]);
@@ -1944,11 +1923,9 @@ class Lieferschein extends GenLieferschein
       }
     }
 
-    $deliveryData = $this->app->DB->SelectRow(
-      "SELECT l.status, l.zuarchivieren, l.schreibschutz 
-      FROM `lieferschein` AS `l` 
-      WHERE l.id='$id' 
-      LIMIT 1"
+    $deliveryData = $this->app->DatabaseService->selectRow(
+      "SELECT l.status, l.zuarchivieren, l.schreibschutz FROM `lieferschein` AS `l` WHERE l.id = :id LIMIT 1",
+      ['id' => (int)$id]
     );
 
     $status = $deliveryData['status'];
@@ -1970,7 +1947,7 @@ class Lieferschein extends GenLieferschein
         $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Der Lieferschein wurde noch nicht versendet! <input type=\"button\" value=\"Dokument versenden\" onclick=\"DokumentAbschicken('lieferschein',$id)\"></div>");
       }
     }
-    
+
     if($schreibschutz!="1")
     {
       $this->app->erp->AnsprechpartnerButton($adresse);
@@ -1999,9 +1976,9 @@ class Lieferschein extends GenLieferschein
     if($schreibschutz=="1")
       $this->app->erp->CommonReadonly();
 
-    $status= $this->app->DB->Select("SELECT status FROM lieferschein WHERE id='$id' LIMIT 1");
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     if($status=="")
-      $this->app->DB->Update("UPDATE lieferschein SET status='angelegt' WHERE id='$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE lieferschein SET status='angelegt' WHERE id = :id LIMIT 1", ['id' => (int)$id]);
 
     if($schreibschutz != '1'){
       $this->app->Tpl->Set('BUTTON_UEBERNEHMEN', '
@@ -2018,14 +1995,17 @@ class Lieferschein extends GenLieferschein
     {
       $tmp = $this->app->Secure->GetPOST("adresse");
       $kundennummer = $this->app->erp->FirstTillSpace($tmp);
-      $filter_projekt = $this->app->DB->Select("SELECT projekt FROM lieferschein WHERE id = '$id' LIMIT 1");
+      $filter_projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$id]);
       //if($filter_projekt)$filter_projekt = $this->app->DB->Select("SELECT id FROM projekt WHERE id= '$filter_projekt' and eigenernummernkreis = 1 LIMIT 1");
-      $adresse =  $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='$kundennummer'  AND kundennummer!='' AND geloescht=0 ".$this->app->erp->ProjektRechte("projekt")." ORDER by ".($filter_projekt?" projekt = '$filter_projekt' DESC, ":"")." projekt LIMIT 1");
+      $adresse = $this->app->DatabaseService->selectValue(
+        "SELECT id FROM adresse WHERE kundennummer = :kundennummer AND kundennummer != '' AND geloescht = 0 ".$this->app->erp->ProjektRechte("projekt")." ORDER by ".($filter_projekt?" projekt = :filter_projekt DESC, ":"")." projekt LIMIT 1",
+        array_merge(['kundennummer' => $kundennummer], $filter_projekt ? ['filter_projekt' => (int)$filter_projekt] : [])
+      );
 
       $uebernehmen =$this->app->Secure->GetPOST("uebernehmen");
       if($uebernehmen=="1") // nur neuladen bei tastendruck auf uebernehmen // FRAGEN!!!!
       {
-        $this->app->DB->Update("UPDATE lieferschein SET lieferantenretoure=0,lieferant=0 WHERE id='$id'");
+        $this->app->DatabaseService->update("UPDATE lieferschein SET lieferantenretoure=0,lieferant=0 WHERE id = :id", ['id' => (int)$id]);
         $this->LoadLieferscheinStandardwerte($id,$adresse);
         header("Location: index.php?module=lieferschein&action=edit&id=$id");
         exit;
@@ -2037,36 +2017,34 @@ class Lieferschein extends GenLieferschein
       $tmplieferant = $this->app->Secure->GetPOST("lieferant");
       $lieferantennummer = $this->app->erp->FirstTillSpace($tmplieferant);
 
-      $adresselieferant =  $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='$lieferantennummer' AND lieferantennummer!=''  AND geloescht=0 LIMIT 1");
+      $adresselieferant = $this->app->DatabaseService->selectValue("SELECT id FROM adresse WHERE lieferantennummer = :lieferantennummer AND lieferantennummer != '' AND geloescht = 0 LIMIT 1", ['lieferantennummer' => $lieferantennummer]);
 
       $uebernehmen2 =$this->app->Secure->GetPOST("uebernehmen2");
       if($uebernehmen2=="1") // nur neuladen bei tastendruck auf uebernehmen // FRAGEN!!!!
       {
-        $this->app->DB->Update("UPDATE lieferschein SET lieferantenretoure=1 WHERE id='$id'");
+        $this->app->DatabaseService->update("UPDATE lieferschein SET lieferantenretoure=1 WHERE id = :id", ['id' => (int)$id]);
         $this->LoadLieferscheinStandardwerte($id,$adresselieferant,true);
         header("Location: index.php?module=lieferschein&action=edit&id=$id");
         exit;
       }
     }
 
-    // easy table mit arbeitspaketen YUI als template 
+    // easy table mit arbeitspaketen YUI als template
     $table = new EasyTable($this->app);
     $table->Query("SELECT nummer as Nummer, bezeichnung, menge,vpe as VPE
         FROM lieferschein_position
         WHERE lieferschein='$id'",0,"");
     $table->DisplayNew('POSITIONEN',"VPE","noAction");
 
-    $status= $this->app->DB->Select("SELECT status FROM lieferschein WHERE id='$id' LIMIT 1");
+    $status = $this->app->DatabaseService->selectValue("SELECT status FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->Tpl->Set('STATUS',"<input type=\"text\" size=\"30\" value=\"".$status."\" readonly [COMMONREADONLYINPUT]>");
 
 
     $this->app->Tpl->Set('AKTIV_TAB1',"selected");
     parent::LieferscheinEdit();
-    if($id > 0 && $this->app->DB->Select(
-        sprintf(
-          'SELECT id FROM lieferschein WHERE schreibschutz =1  AND zuarchivieren = 1 AND id = %d',
-          $id
-        )
+    if($id > 0 && $this->app->DatabaseService->selectValue(
+        'SELECT id FROM lieferschein WHERE schreibschutz = 1 AND zuarchivieren = 1 AND id = :id',
+        ['id' => (int)$id]
       )
     ) {
       $this->app->erp->PDFArchivieren('lieferschein', $id, true);
@@ -2093,24 +2071,18 @@ class Lieferschein extends GenLieferschein
     if(empty($deliveryNoteId)) {
       return false;
     }
-    $projectId = $this->app->DB->Select(
-      sprintf(
-        'SELECT projekt FROM lieferschein WHERE id=%d LIMIT 1',
-        $deliveryNoteId
-      )
+    $projectId = $this->app->DatabaseService->selectValue(
+      'SELECT projekt FROM lieferschein WHERE id = :id LIMIT 1',
+      ['id' => (int)$deliveryNoteId]
     );
     if(empty($projectId)) {
       return false;
     }
-    $projectRow = $this->app->DB->SelectRow(
-      sprintf(
-        'SELECT etiketten_positionen, etiketten_art, etiketten_drucker, etiketten_sort  
-        FROM projekt 
-        WHERE id = %d',
-        $projectId
-      )
+    $projectRow = $this->app->DatabaseService->selectRow(
+      'SELECT etiketten_positionen, etiketten_art, etiketten_drucker, etiketten_sort FROM projekt WHERE id = :id',
+      ['id' => (int)$projectId]
     );
-    $etikett_adresse = $this->app->DB->SelectRow("SELECT lieferscheinpositionetikettdruck, lieferscheinpositionetikett FROM adresse WHERE id = (SELECT adresse FROM lieferschein WHERE id = '".$deliveryNoteId."') LIMIT 1");
+    $etikett_adresse = $this->app->DatabaseService->selectRow("SELECT lieferscheinpositionetikettdruck, lieferscheinpositionetikett FROM adresse WHERE id = (SELECT adresse FROM lieferschein WHERE id = :id) LIMIT 1", ['id' => (int)$deliveryNoteId]);
     if ($etikett_adresse['lieferscheinpositionetikettdruck']) {
         $projectRow['etiketten_positionen'] = 1;
         $projectRow['etiketten_art'] = $etikett_adresse['lieferscheinpositionetikett'];
@@ -2142,7 +2114,8 @@ class Lieferschein extends GenLieferschein
 
   function Lieferadresse($id)
   {
-    $data = $this->app->DB->SelectArr("SELECT * FROM lieferschein WHERE id='$id' LIMIT 1");
+    $dataRow = $this->app->DatabaseService->selectRow("SELECT * FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$id]);
+    $data = $dataRow ? [$dataRow] : [];
 
     foreach($data[0] as $key=>$value)
     {
@@ -2191,9 +2164,9 @@ class Lieferschein extends GenLieferschein
         Offene Auftr&auml;ge, die durch andere Mitarbeiter in Bearbeitung sind.
         <br>
         </td>
-        </tr>  
+        </tr>
         </table>
-        <br> 
+        <br>
         [AUFTRAGE]");
 
 
@@ -2252,8 +2225,8 @@ class Lieferschein extends GenLieferschein
             if(!empty($selectedIds)) {
               $this->app->DB->Update(
                 sprintf(
-                  "UPDATE `lieferschein` 
-                  SET `versendet` = 0, `status` = 'freigegeben', `schreibschutz` = 0 
+                  "UPDATE `lieferschein`
+                  SET `versendet` = 0, `status` = 'freigegeben', `schreibschutz` = 0
                   WHERE `id` IN (%s)",
                   implode(',' , $selectedIds)
                 )
@@ -2288,14 +2261,9 @@ class Lieferschein extends GenLieferschein
               $tmpfile = $Brief->displayTMP();
               $Brief->ArchiviereDocument();
               $this->app->erp->LieferscheinProtokoll($v,'Lieferschein storniert');
-              $this->app->DB->Update(
-                sprintf(
-                  "UPDATE lieferschein 
-                  SET status='storniert',schreibschutz=1, versendet = 1 
-                  WHERE id = %d AND status!='angelegt' 
-                  LIMIT 1",
-                  $deliveryNoteId
-                )
+              $this->app->DatabaseService->update(
+                "UPDATE lieferschein SET status='storniert',schreibschutz=1, versendet = 1 WHERE id = :id AND status!='angelegt' LIMIT 1",
+                ['id' => $deliveryNoteId]
               );
               @unlink($tmpfile);
             }
@@ -2313,15 +2281,9 @@ class Lieferschein extends GenLieferschein
               else{
                 $Brief = new LieferscheinPDF($this->app,$projectId);
               }
-              $this->app->DB->Update(
-                sprintf(
-                  "UPDATE lieferschein 
-                  SET schreibschutz=1, versendet = 1, status='versendet' 
-                  WHERE id = %d
-                  AND status != 'storniert'
-                  LIMIT 1",
-                  $deliveryNoteId
-                )
+              $this->app->DatabaseService->update(
+                "UPDATE lieferschein SET schreibschutz=1, versendet = 1, status='versendet' WHERE id = :id AND status != 'storniert' LIMIT 1",
+                ['id' => $deliveryNoteId]
               );
               $this->app->erp->LieferscheinProtokoll($deliveryNoteId, 'Lieferschein versendet');
               $Brief->GetLieferschein($deliveryNoteId);
@@ -2350,18 +2312,12 @@ class Lieferschein extends GenLieferschein
                 $Brief->ArchiviereDocument();
                 $this->app->printer->Drucken($drucker,$tmpfile);
                 $doctype = 'lieferschein';
-                $adressId = $this->app->DB->Select("SELECT adresse FROM lieferschein WHERE id = '$deliveryNoteId' LIMIT 1");
+                $adressId = $this->app->DatabaseService->selectValue("SELECT adresse FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$deliveryNoteId]);
                 $this->app->erp->RunHook('dokumentsend_ende', 5, $doctype, $deliveryNoteId, $projectId, $adressId, $aktion);
                 $this->app->erp->LieferscheinProtokoll($deliveryNoteId, 'Lieferschein versendet');
-                $this->app->DB->Update(
-                  sprintf(
-                    "UPDATE lieferschein 
-                    SET schreibschutz=1, versendet = 1, status='versendet' 
-                    WHERE id = %d 
-                    AND status != 'storniert'
-                    LIMIT 1",
-                    $deliveryNoteId
-                  )
+                $this->app->DatabaseService->update(
+                  "UPDATE lieferschein SET schreibschutz=1, versendet = 1, status='versendet' WHERE id = :id AND status != 'storniert' LIMIT 1",
+                  ['id' => $deliveryNoteId]
                 );
                 @unlink($tmpfile);
               }
@@ -2410,7 +2366,7 @@ class Lieferschein extends GenLieferschein
             if(!empty($selectedIds)) {
               $this->app->DB->Update(
                 sprintf(
-                  "UPDATE `lieferschein` 
+                  "UPDATE `lieferschein`
                   SET `versand_status` = 1
                   WHERE `id` IN (%s) AND `versand_status` = 0",
                   implode(',' , $selectedIds)
@@ -2419,14 +2375,14 @@ class Lieferschein extends GenLieferschein
             }
           break;
         }
-      }      
+      }
     }
     $speichern = $this->app->Secure->GetPOST("speichern");
     $lieferantenretoureinfo = $this->app->Secure->GetPOST("lieferantenretoureinfo");
     $lieferscheinid = $this->app->Secure->GetPOST("lieferscheinid");
 
     if($lieferantenretoureinfo!="" && $speichern!="" && $lieferscheinid > 0)
-      $this->app->DB->Update("UPDATE lieferschein SET lieferantenretoureinfo='$lieferantenretoureinfo' WHERE id='$lieferscheinid' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE lieferschein SET lieferantenretoureinfo = :info WHERE id = :id LIMIT 1", ['info' => $lieferantenretoureinfo, 'id' => (int)$lieferscheinid]);
 
 
 
@@ -2505,9 +2461,9 @@ class Lieferschein extends GenLieferschein
     //$this->app->YUI->TableSearch('TAB2','lieferscheineoffene', 'show','','',basename(__FILE__), __CLASS__);
     $this->app->YUI->TableSearch('TAB1',"lieferscheine");
     $this->app->YUI->TableSearch('TAB3','lieferscheineinbearbeitung', 'show','','',basename(__FILE__), __CLASS__);
-    
+
     $this->app->Tpl->Set('SELDRUCKER', $this->app->erp->GetSelectDrucker($this->app->User->GetParameter('lieferschein_list_drucker')));
-    
+
     $this->app->Tpl->Parse('PAGE',"lieferscheinuebersicht.tpl");
   }
 
@@ -2517,26 +2473,27 @@ class Lieferschein extends GenLieferschein
     {
       return;
     }
-    $this->app->DB->Delete("DELETE FROM lieferschein_position WHERE lieferschein='$id'");
-    $this->app->DB->Delete("DELETE FROM lieferschein_protokoll WHERE lieferschein='$id'");
-    $this->app->DB->Delete("DELETE FROM lieferschein WHERE id='$id' LIMIT 1");
+    $this->app->DatabaseService->delete("DELETE FROM lieferschein_position WHERE lieferschein = :id", ['id' => $id]);
+    $this->app->DatabaseService->delete("DELETE FROM lieferschein_protokoll WHERE lieferschein = :id", ['id' => $id]);
+    $this->app->DatabaseService->delete("DELETE FROM lieferschein WHERE id = :id LIMIT 1", ['id' => $id]);
   }
 
   public function CreateLieferschein($adresse='')
   {
     $projekt = $this->app->erp->GetCreateProjekt($adresse);
 
-    $standardlager = $this->app->DB->Select("SELECT l.id FROM projekt p INNER JOIN lager l ON p.standardlager = l.id WHERE p.id = '$projekt' LIMIT 1");
+    $standardlager = $this->app->DatabaseService->selectValue("SELECT l.id FROM projekt p INNER JOIN lager l ON p.standardlager = l.id WHERE p.id = :id LIMIT 1", ['id' => (int)$projekt]);
 
     $belegmax = '';
     $ohnebriefpapier = $this->app->erp->Firmendaten('lieferschein_ohnebriefpapier');
-    $this->app->DB->Insert("INSERT INTO lieferschein (datum,bearbeiter,firma,belegnr,adresse,ohne_briefpapier,projekt)
-            VALUES (NOW(),'".$this->app->User->GetName()."','".$this->app->User->GetFirma()."','$belegmax','$adresse','".$ohnebriefpapier."','".$projekt."')");
-    $id = $this->app->DB->GetInsertID();
+    $id = $this->app->DatabaseService->insert(
+      "INSERT INTO lieferschein (datum,bearbeiter,firma,belegnr,adresse,ohne_briefpapier,projekt) VALUES (NOW(), :bearbeiter, :firma, :belegnr, :adresse, :ohnebriefpapier, :projekt)",
+      ['bearbeiter' => $this->app->User->GetName(), 'firma' => $this->app->User->GetFirma(), 'belegnr' => $belegmax, 'adresse' => $adresse, 'ohnebriefpapier' => $ohnebriefpapier, 'projekt' => $projekt]
+    );
 
     $this->app->erp->LieferscheinProtokoll($id,'Lieferschein angelegt');
     if($standardlager){
-      $this->app->DB->Update("UPDATE lieferschein SET standardlager = '$standardlager' WHERE id = '$id' LIMIT 1");
+      $this->app->DatabaseService->update("UPDATE lieferschein SET standardlager = :standardlager WHERE id = :id LIMIT 1", ['standardlager' => $standardlager, 'id' => $id]);
     }
     $type='lieferschein';
     $this->app->erp->ObjektProtokoll($type,$id,$type.'_create',ucfirst($type).' angelegt');
@@ -2545,14 +2502,14 @@ class Lieferschein extends GenLieferschein
     $this->app->erp->EventAPIAdd('EventLieferscheinCreate',$id,'lieferschein','create');
     return $id;
   }
-  
+
   public function LoadLieferscheinStandardwerte($id,$adresse,$lieferantenretoure=false)
   {
-    $arr = $this->app->DB->SelectRow("SELECT * FROM adresse WHERE id='$adresse' AND geloescht=0 LIMIT 1");
+    $arr = $this->app->DatabaseService->selectRow("SELECT * FROM adresse WHERE id = :id AND geloescht = 0 LIMIT 1", ['id' => (int)$adresse]);
     $field = array('anschreiben','name','abteilung','unterabteilung','strasse','adresszusatz','plz','ort','land','bundesstaat','ustid','email','telefon','telefax','kundennummer','projekt','ust_befreit','typ','titel','lieferbedingung','ansprechpartner');
 
 
-    $rolle_projekt = $this->app->DB->Select("SELECT parameter FROM adresse_rolle WHERE adresse='$adresse' AND subjekt='Kunde' AND objekt='Projekt' AND (bis ='0000-00-00' OR bis <= NOW()) LIMIT 1");
+    $rolle_projekt = $this->app->DatabaseService->selectValue("SELECT parameter FROM adresse_rolle WHERE adresse = :adresse AND subjekt='Kunde' AND objekt='Projekt' AND (bis ='0000-00-00' OR bis <= NOW()) LIMIT 1", ['adresse' => (int)$adresse]);
 
     if($rolle_projekt > 0)
     {
@@ -2582,15 +2539,15 @@ class Lieferschein extends GenLieferschein
     $uparr=null;
 
     //liefernantenvorlage
-    $arr = $this->app->DB->SelectRow("SELECT * FROM adresse WHERE id='$adresse' LIMIT 1");
+    $arr = $this->app->DatabaseService->selectRow("SELECT * FROM adresse WHERE id = :id LIMIT 1", ['id' => (int)$adresse]);
 
     // falls von Benutzer projekt ueberladen werden soll
-    $projekt_bevorzugt=$this->app->DB->Select("SELECT projekt_bevorzugen FROM user WHERE id='".$this->app->User->GetID()."' LIMIT 1");
+    $projekt_bevorzugt = $this->app->DatabaseService->selectValue("SELECT projekt_bevorzugen FROM user WHERE id = :id LIMIT 1", ['id' => (int)$this->app->User->GetID()]);
     if($projekt_bevorzugt=='1')
     {
-      $uparr['projekt'] = $this->app->DB->Select("SELECT projekt FROM user WHERE id='".$this->app->User->GetID()."' LIMIT 1");
+      $uparr['projekt'] = $this->app->DatabaseService->selectValue("SELECT projekt FROM user WHERE id = :id LIMIT 1", ['id' => (int)$this->app->User->GetID()]);
       $arr['projekt'] = $uparr['projekt'];
-      $this->app->Secure->POST['projekt']=$this->app->DB->Select("SELECT abkuerzung FROM projekt WHERE id='".$arr['projekt']."' AND id > 0 LIMIT 1");
+      $this->app->Secure->POST['projekt'] = $this->app->DatabaseService->selectValue("SELECT abkuerzung FROM projekt WHERE id = :id AND id > 0 LIMIT 1", ['id' => (int)$arr['projekt']]);
     }
 
     $field = array('versandart');
@@ -2615,14 +2572,12 @@ class Lieferschein extends GenLieferschein
   {
     $this->app->DB->Insert('INSERT INTO lieferschein (id) VALUES (NULL)');
     $newid = $this->app->DB->GetInsertID();
-    $arr = $this->app->DB->SelectRow("SELECT NOW() as datum,projekt,bodyzusatz,freitext,adresse,name,abteilung,unterabteilung,strasse,adresszusatz,plz,ort,land,ustid,email,telefon,telefax,betreff,kundennummer,versandart,bearbeiter,'angelegt' as status,typ,standardlager,ansprechpartner,titel,anschreiben,sprache,kostenstelle,
-            firma,bundesstaat,keinerechnung,ihrebestellnummer,lieferbedingung,internebezeichnung,lieferantenretoure,lieferant FROM lieferschein WHERE id='$id' LIMIT 1");
+    $arr = $this->app->DatabaseService->selectRow("SELECT NOW() as datum,projekt,bodyzusatz,freitext,adresse,name,abteilung,unterabteilung,strasse,adresszusatz,plz,ort,land,ustid,email,telefon,telefax,betreff,kundennummer,versandart,bearbeiter,'angelegt' as status,typ,standardlager,ansprechpartner,titel,anschreiben,sprache,kostenstelle,firma,bundesstaat,keinerechnung,ihrebestellnummer,lieferbedingung,internebezeichnung,lieferantenretoure,lieferant FROM lieferschein WHERE id = :id LIMIT 1", ['id' => (int)$id]);
     $this->app->DB->UpdateArr('lieferschein',$newid,'id',$arr, true);
-    $pos = $this->app->DB->SelectArr("SELECT * FROM lieferschein_position WHERE lieferschein='$id'");
+    $pos = $this->app->DatabaseService->select("SELECT * FROM lieferschein_position WHERE lieferschein = :id", ['id' => (int)$id]);
     $cpos = !empty((!empty($pos)?count($pos):0))?count($pos):0;
     for($i=0;$i<$cpos;$i++){
-      $this->app->DB->Insert("INSERT INTO lieferschein_position (lieferschein) VALUES ($newid)");
-      $newposid = $this->app->DB->GetInsertID();
+      $newposid = $this->app->DatabaseService->insert("INSERT INTO lieferschein_position (lieferschein) VALUES (:newid)", ['newid' => $newid]);
       $altzuneu[$pos[$i]['id']] = $newposid;
       $pos[$i]['lagertext']='';
       $pos[$i]['lieferschein']=$newid;
@@ -2633,7 +2588,7 @@ class Lieferschein extends GenLieferschein
     }
     $this->app->erp->CheckFreifelder('lieferschein',$newid);
     $this->app->erp->CopyBelegZwischenpositionen('lieferschein',$id,'lieferschein',$newid);
-    $this->app->DB->Update("UPDATE lieferschein_position SET geliefert=0, abgerechnet=0 WHERE lieferschein='$newid'");
+    $this->app->DatabaseService->update("UPDATE lieferschein_position SET geliefert=0, abgerechnet=0 WHERE lieferschein = :id", ['id' => $newid]);
 
     $this->app->erp->SchnellFreigabe('lieferschein',$newid);
     $this->app->erp->LieferscheinNeuberechnen($newid);
@@ -2643,32 +2598,36 @@ class Lieferschein extends GenLieferschein
 
   public function AddLieferscheinPosition($lieferschein, $verkauf,$menge,$datum)
   {
-    $artikel = $this->app->DB->Select("SELECT artikel FROM verkaufspreise WHERE id='$verkauf' LIMIT 1");
-    $bezeichnunglieferant = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$artikel' LIMIT 1");
-    $bestellnummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$artikel' LIMIT 1");
-    $projekt = $this->app->DB->Select("SELECT projekt FROM verkaufspreise WHERE id='$verkauf' LIMIT 1");
+    $artikel = $this->app->DatabaseService->selectValue("SELECT artikel FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$verkauf]);
+    $bezeichnunglieferant = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel]);
+    $bestellnummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel]);
+    $projekt = $this->app->DatabaseService->selectValue("SELECT projekt FROM verkaufspreise WHERE id = :id LIMIT 1", ['id' => (int)$verkauf]);
     $vpe = '';
     //$waehrung = $this->app->DB->Select("SELECT waehrung FROM verkaufspreise WHERE id='$verkauf' LIMIT 1");
     //$vpe = $this->app->DB->Select("SELECT vpe FROM verkaufspreise WHERE id='$verkauf' LIMIT 1");
-    $sort = $this->app->DB->Select("SELECT MAX(sort) FROM lieferschein_position WHERE lieferschein='$lieferschein' LIMIT 1");
+    $sort = $this->app->DatabaseService->selectValue("SELECT MAX(sort) FROM lieferschein_position WHERE lieferschein = :id LIMIT 1", ['id' => (int)$lieferschein]);
     $sort++;
-    $this->app->DB->Insert("INSERT INTO lieferschein_position (lieferschein,artikel,bezeichnung,nummer,menge,sort,lieferdatum,status,projekt,vpe)
-            VALUES ('$lieferschein','$artikel','$bezeichnunglieferant','$bestellnummer','$menge','$sort','$datum','angelegt','$projekt','$vpe')");
+    $this->app->DatabaseService->insert(
+      "INSERT INTO lieferschein_position (lieferschein,artikel,bezeichnung,nummer,menge,sort,lieferdatum,status,projekt,vpe) VALUES (:lieferschein,:artikel,:bezeichnung,:nummer,:menge,:sort,:datum,'angelegt',:projekt,:vpe)",
+      ['lieferschein' => $lieferschein, 'artikel' => $artikel, 'bezeichnung' => $bezeichnunglieferant, 'nummer' => $bestellnummer, 'menge' => $menge, 'sort' => $sort, 'datum' => $datum, 'projekt' => $projekt, 'vpe' => $vpe]
+    );
   }
 
   public function AddLieferscheinPositionArtikelID($lieferschein, $artikel,$menge,$bezeichnung,$beschreibung,$datum)
   {
-    $bestellnummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id='$artikel' LIMIT 1");
+    $bestellnummer = $this->app->DatabaseService->selectValue("SELECT nummer FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel]);
 
     if($bezeichnung==''){
-      $bezeichnung = $this->app->DB->Select("SELECT name_de FROM artikel WHERE id='$artikel' LIMIT 1");
+      $bezeichnung = $this->app->DatabaseService->selectValue("SELECT name_de FROM artikel WHERE id = :id LIMIT 1", ['id' => (int)$artikel]);
     }
     $vpe = '';
     $projekt = 0;
-    $sort = $this->app->DB->Select("SELECT MAX(sort) FROM lieferschein_position WHERE lieferschein='$lieferschein' LIMIT 1");
+    $sort = $this->app->DatabaseService->selectValue("SELECT MAX(sort) FROM lieferschein_position WHERE lieferschein = :id LIMIT 1", ['id' => (int)$lieferschein]);
     $sort++;
-    $this->app->DB->Insert("INSERT INTO lieferschein_position (lieferschein,artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum,status,projekt,vpe)
-            VALUES ('$lieferschein','$artikel','$bezeichnung','$beschreibung','$bestellnummer','$menge','$sort','$datum','angelegt','$projekt','$vpe')");
+    $this->app->DatabaseService->insert(
+      "INSERT INTO lieferschein_position (lieferschein,artikel,bezeichnung,beschreibung,nummer,menge,sort,lieferdatum,status,projekt,vpe) VALUES (:lieferschein,:artikel,:bezeichnung,:beschreibung,:nummer,:menge,:sort,:datum,'angelegt',:projekt,:vpe)",
+      ['lieferschein' => $lieferschein, 'artikel' => $artikel, 'bezeichnung' => $bezeichnung, 'beschreibung' => $beschreibung, 'nummer' => $bestellnummer, 'menge' => $menge, 'sort' => $sort, 'datum' => $datum, 'projekt' => $projekt, 'vpe' => $vpe]
+    );
   }
 
   /**
@@ -2687,12 +2646,10 @@ class Lieferschein extends GenLieferschein
     $positionen_vorhanden = null;
     $artikelzaehlen=null;
     if($lieferschein > 0){
-      $artikelarr = $this->app->DB->SelectArr(
-        "SELECT ap.id, ap.artikel, ap.menge, ap.geliefert, art.lagerartikel as artlagerartikel, 
-       ap.nummer,art.chargenverwaltung,art.mindesthaltbarkeitsdatum,art.seriennummern
-      FROM lieferschein_position AS ap 
-      LEFT JOIN artikel AS art ON ap.artikel = art.id 
-      WHERE ap.lieferschein='$lieferschein' AND ap.geliefert < ap.menge ");
+      $artikelarr = $this->app->DatabaseService->select(
+        "SELECT ap.id, ap.artikel, ap.menge, ap.geliefert, art.lagerartikel as artlagerartikel, ap.nummer,art.chargenverwaltung,art.mindesthaltbarkeitsdatum,art.seriennummern FROM lieferschein_position AS ap LEFT JOIN artikel AS art ON ap.artikel = art.id WHERE ap.lieferschein = :lieferschein AND ap.geliefert < ap.menge",
+        ['lieferschein' => (int)$lieferschein]
+      );
     }
     $cartikelarr = !empty($artikelarr)?count($artikelarr):0;
     for($k=0;$k<$cartikelarr; $k++) {
@@ -2702,7 +2659,7 @@ class Lieferschein extends GenLieferschein
       $lagerartikel = $artikelarr[$k]['artlagerartikel'];
       if($lagerartikel==1)
       {
-        $gesamte_menge_im_lieferschein= $this->app->DB->Select("SELECT SUM(menge-geliefert) FROM lieferschein_position WHERE lieferschein='$lieferschein' AND artikel='$artikel'");
+        $gesamte_menge_im_lieferschein = $this->app->DatabaseService->selectValue("SELECT SUM(menge-geliefert) FROM lieferschein_position WHERE lieferschein = :lieferschein AND artikel = :artikel", ['lieferschein' => (int)$lieferschein, 'artikel' => (int)$artikel]);
         if($gesamte_menge_im_lieferschein > $menge) {
           $menge = $gesamte_menge_im_lieferschein;
         }
