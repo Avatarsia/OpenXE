@@ -1,0 +1,72 @@
+<?php
+declare(strict_types=1);
+
+namespace Xentral\Modules\RepairIntegration\Migration;
+
+use Xentral\Components\Database\Database;
+
+final class RepairIntegrationMigration
+{
+    private const string CONFIG_NAMESPACE = 'repair_integration';
+    private const string SCHEMA_VERSION_KEY = 'schema_version';
+    private const string SCHEMA_VERSION = '1.0.0';
+
+    public function __construct(
+        private readonly Database $db,
+    ) {}
+
+    public function install(): void
+    {
+        $this->executeSqlFile(__DIR__ . '/sql/001_create_tables.sql');
+        $this->executeSqlFile(__DIR__ . '/sql/002_seed_status_config.sql');
+        $this->setVersion(self::SCHEMA_VERSION);
+    }
+
+    public function needsInstall(): bool
+    {
+        return $this->getCurrentVersion() === null;
+    }
+
+    public function getCurrentVersion(): ?string
+    {
+        try {
+            $value = $this->db->fetchValue(
+                "SELECT `value` FROM `systemconfig` WHERE `namespace` = :ns AND `key` = :key",
+                ['ns' => self::CONFIG_NAMESPACE, 'key' => self::SCHEMA_VERSION_KEY]
+            );
+            return $value !== false ? (string)$value : null;
+        } catch (\Exception) {
+            return null;
+        }
+    }
+
+    private function setVersion(string $version): void
+    {
+        $this->db->perform(
+            "INSERT INTO `systemconfig` (`namespace`, `key`, `value`)
+             VALUES (:ns, :key, :val)
+             ON DUPLICATE KEY UPDATE `value` = :val2",
+            [
+                'ns' => self::CONFIG_NAMESPACE,
+                'key' => self::SCHEMA_VERSION_KEY,
+                'val' => $version,
+                'val2' => $version,
+            ]
+        );
+    }
+
+    private function executeSqlFile(string $path): void
+    {
+        $sql = file_get_contents($path);
+        if ($sql === false) {
+            throw new \RuntimeException("Cannot read SQL file: {$path}");
+        }
+        $statements = array_filter(
+            array_map('trim', explode(';', $sql)),
+            static fn(string $s): bool => $s !== ''
+        );
+        foreach ($statements as $statement) {
+            $this->db->perform($statement);
+        }
+    }
+}
