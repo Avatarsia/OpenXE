@@ -32,10 +32,10 @@ final class RepairApiController
             $rawBody = $this->readBody();
             $this->authenticate($rawBody);
 
-            if (!json_validate($rawBody)) {
+            $data = json_decode($rawBody, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
                 throw new ValidationException('INVALID_JSON');
             }
-            $data = json_decode($rawBody, true);
             $this->validatePushDetailsSchema($data);
 
             $this->processPushDetails($data);
