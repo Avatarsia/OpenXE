@@ -34,6 +34,7 @@ final class Bootstrap
             'RepairTicketMergeService'  => 'onInitRepairTicketMergeService',
             'RepairConfigService'       => 'onInitRepairConfigService',
             'RepairApiAuth'             => 'onInitRepairApiAuth',
+            'RepairApiController'       => 'onInitRepairApiController',
         ];
     }
 
@@ -121,5 +122,15 @@ final class Bootstrap
     public static function onInitRepairApiAuth(ContainerInterface $container): RepairApiAuth
     {
         return new RepairApiAuth();
+    }
+
+    public static function onInitRepairApiController(ContainerInterface $container): Api\RepairApiController
+    {
+        return new Api\RepairApiController(
+            $container->get('Database'),
+            $container->get('RepairApiAuth'),
+            $container->get('RepairConfigService'),
+            $container->get('RepairDetailsGateway'),
+        );
     }
 }
