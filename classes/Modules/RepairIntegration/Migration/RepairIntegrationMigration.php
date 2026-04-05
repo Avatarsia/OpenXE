@@ -7,9 +7,9 @@ use Xentral\Components\Database\Database;
 
 final class RepairIntegrationMigration
 {
-    private const string CONFIG_NAMESPACE = 'repair_integration';
-    private const string SCHEMA_VERSION_KEY = 'schema_version';
-    private const string SCHEMA_VERSION = '1.0.0';
+    private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
+    private const SCHEMA_VERSION_KEY = 'schema_version'; // @php83: add type string
+    private const SCHEMA_VERSION = '1.0.0'; // @php83: add type string
 
     public function __construct(
         private readonly Database $db,

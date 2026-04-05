@@ -12,8 +12,8 @@ use Xentral\Modules\RepairIntegration\Service\RepairConfigService;
 
 final class RepairApiController
 {
-    private const int MAX_PAYLOAD_SIZE = 65536;
-    private const int MAX_REQUESTS_PER_MINUTE = 60;
+    private const MAX_PAYLOAD_SIZE = 65536; // @php83: add type int
+    private const MAX_REQUESTS_PER_MINUTE = 60; // @php83: add type int
 
     public function __construct(
         private readonly Database $db,

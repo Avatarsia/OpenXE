@@ -12,7 +12,7 @@ use Xentral\Modules\RepairIntegration\Gateway\RepairSyncQueueGateway;
 final class RepairSyncService
 {
     /** @var list<int> Retry delays in seconds */
-    private const array RETRY_DELAYS = [120, 600, 1800, 7200, 28800];
+    private const RETRY_DELAYS = [120, 600, 1800, 7200, 28800]; // @php83: add type array
 
     public function __construct(
         private readonly Database $db,

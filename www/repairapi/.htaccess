@@ -1,0 +1,14 @@
+# RepairIntegration API — Allow access to index.php
+Order Allow,Deny
+Allow from all
+
+<Files "index.php">
+    Order Allow,Deny
+    Allow from all
+</Files>
+
+# Block everything except index.php
+<FilesMatch "^(?!index\.php$)">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>

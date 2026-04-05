@@ -9,8 +9,8 @@ use Xentral\Modules\RepairIntegration\Gateway\RepairDetailsGateway;
 
 final class RepairTicketEnricher
 {
-    private const string REPAIR_DATA_PATTERN = '/<!--REPAIR_DATA_START\s*(\{.*?\})\s*REPAIR_DATA_END-->/s';
-    private const string SUBJECT_TAG_PATTERN = '/\[(REP|WRT|REV|IND)\]/i';
+    private const REPAIR_DATA_PATTERN = '/<!--REPAIR_DATA_START\s*(\{.*?\})\s*REPAIR_DATA_END-->/s'; // @php83: add type string
+    private const SUBJECT_TAG_PATTERN = '/\[(REP|WRT|REV|IND)\]/i'; // @php83: add type string
 
     public function __construct(
         private readonly Database $db,
