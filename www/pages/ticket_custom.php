@@ -29,6 +29,33 @@ class TicketCustom extends Ticket
             return;
         }
 
+        // Save repair diagnosis fields if form was submitted
+        try {
+            if ($this->app->Secure->GetPOST('submit') !== '') {
+                $detailsGw = $this->app->Container->get('RepairDetailsGateway');
+                $existingDetails = $detailsGw->getByTicketId($ticketId);
+                if ($existingDetails !== null) {
+                    $diagnosisResult = $this->app->Secure->GetPOST('repair_diagnosis_result');
+                    $quoteAmount = $this->app->Secure->GetPOST('repair_quote_amount');
+                    $actualCost = $this->app->Secure->GetPOST('repair_actual_cost');
+                    $repairNotes = $this->app->Secure->GetPOST('repair_notes');
+
+                    // Only save if at least one field has content
+                    if ($diagnosisResult !== '' || $quoteAmount !== '' || $actualCost !== '' || $repairNotes !== '') {
+                        $detailsGw->updateDiagnosisFields(
+                            $ticketId,
+                            $diagnosisResult !== '' ? $diagnosisResult : null,
+                            $quoteAmount !== '' ? $quoteAmount : null,
+                            $actualCost !== '' ? $actualCost : null,
+                            $repairNotes !== '' ? $repairNotes : null,
+                        );
+                    }
+                }
+            }
+        } catch (\Exception $e) {
+            // Silently skip if module not available
+        }
+
         // Extend status dropdown with repair-specific statuses
         try {
             $statusService = $this->app->Container->get('RepairStatusService');
