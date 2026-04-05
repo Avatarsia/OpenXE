@@ -7,8 +7,8 @@ use Xentral\Modules\RepairIntegration\Exception\AuthenticationException;
 
 final class RepairApiAuth
 {
-    private const int TIMESTAMP_TOLERANCE = 300;
-    private const string HASH_ALGORITHM = 'sha256';
+    private const TIMESTAMP_TOLERANCE = 300; // @php83: add type int
+    private const HASH_ALGORITHM = 'sha256'; // @php83: add type string
 
     public function validateRequest(
         string $payload,

@@ -10,7 +10,7 @@ use Xentral\Modules\RepairIntegration\Gateway\RepairDetailsGateway;
 
 final class RepairBelegService
 {
-    private const array ALLOWED_BELEG_TYPES = ['angebot', 'auftrag', 'rechnung'];
+    private const ALLOWED_BELEG_TYPES = ['angebot', 'auftrag', 'rechnung']; // @php83: add type array
 
     public function __construct(
         private readonly Database $db,

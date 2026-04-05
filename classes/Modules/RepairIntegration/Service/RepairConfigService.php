@@ -7,7 +7,7 @@ use Xentral\Components\Database\Database;
 
 final class RepairConfigService
 {
-    private const string NAMESPACE = 'repair_integration';
+    private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
 
     public function __construct(
         private readonly Database $db,
@@ -17,7 +17,7 @@ final class RepairConfigService
     {
         $value = $this->db->fetchValue(
             "SELECT `value` FROM `systemconfig` WHERE `namespace` = :ns AND `key` = :key",
-            ['ns' => self::NAMESPACE, 'key' => $key]
+            ['ns' => self::CONFIG_NAMESPACE, 'key' => $key]
         );
         return ($value !== false && $value !== null) ? (string)$value : $default;
     }
@@ -28,7 +28,7 @@ final class RepairConfigService
             "INSERT INTO `systemconfig` (`namespace`, `key`, `value`)
              VALUES (:ns, :key, :val)
              ON DUPLICATE KEY UPDATE `value` = :val2",
-            ['ns' => self::NAMESPACE, 'key' => $key, 'val' => $value, 'val2' => $value]
+            ['ns' => self::CONFIG_NAMESPACE, 'key' => $key, 'val' => $value, 'val2' => $value]
         );
     }
 
