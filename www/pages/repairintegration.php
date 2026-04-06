@@ -143,12 +143,30 @@ class Repairintegration
                 $sql = "SELECT SQL_CALC_FOUND_ROWS
                     t.id,
                     CONCAT('<a href=\"index.php?module=ticket&action=edit&id=', t.id, '\">', t.schluessel, '</a>') as ticket_link,
-                    rd.service_type,
+                    CASE rd.service_type
+                        WHEN 'reparatur' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#639ed4;color:#fff\">', '&#128295; Reparatur', '</span>')
+                        WHEN 'wartung' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#2DCA73;color:#fff\">', '&#128297; Wartung', '</span>')
+                        WHEN 'reverse_engineering' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#5962ec;color:#fff\">', '&#128208; RE', '</span>')
+                        WHEN 'individualisierung' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#ee8667;color:#fff\">', '&#9881;&#65039; Custom', '</span>')
+                        ELSE CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#BBBBBB;color:#fff\">', COALESCE(rd.service_type, '?'), '</span>')
+                    END as service_type,
                     CONCAT(COALESCE(t.kunde,''), ' &lt;', COALESCE(t.mailadresse,''), '&gt;') as customer,
                     CONCAT(COALESCE(rd.manufacturer,''), ' ', COALESCE(rd.model,'')) as device,
-                    COALESCE(sc.label_de, t.status) as status_label,
-                    IF(rd.is_express = 1, '<span style=\"color:#FFB800;font-size:16px\">&#9733;</span> Ja', '') as is_express,
-                    t.zeit,
+                    CASE t.status
+                        WHEN 'neu' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#BBBBBB;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                        WHEN 'offen' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#5991FF;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                        WHEN 'in_diagnose' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#ee8667;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                        WHEN 'warten_teile' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#FDCB56;color:#333\">', COALESCE(sc.label_de, t.status), '</span>')
+                        WHEN 'kv_erstellt' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#3bb8c3;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                        WHEN 'warten_kd' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#3bb8c3;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                        WHEN 'in_reparatur' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#5962ec;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                        WHEN 'qualitaetskontrolle' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#e56eca;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                        WHEN 'versendet' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#2DCA73;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                        WHEN 'abgeschlossen' THEN CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#2DCA73;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                        ELSE CONCAT('<span style=\"display:inline-block;padding:.25em .6em;border-radius:.25rem;font-weight:600;font-size:11px;background:#BBBBBB;color:#fff\">', COALESCE(sc.label_de, t.status), '</span>')
+                    END as status_label,
+                    IF(rd.is_express = 1, '<span style=\"display:inline-block;padding:2px 8px;border-radius:3px;font-weight:600;font-size:11px;background:#F05A5C;color:#fff\">&#9733; EXPRESS</span>', '') as is_express,
+                    DATE_FORMAT(t.zeit, '%d.%m.%Y %H:%i') as zeit,
                     t.id
                 FROM ticket t
                 INNER JOIN ticket_repair_details rd ON rd.ticket_id = t.id
