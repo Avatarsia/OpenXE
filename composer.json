@@ -40,5 +40,8 @@
       "ext-gd": "8.1"
     },
     "optimize-autoloader": true
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.5"
   }
 }
