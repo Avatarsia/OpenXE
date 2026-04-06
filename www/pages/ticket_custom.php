@@ -97,13 +97,13 @@ class TicketCustom extends Ticket
                 $this->app->Tpl->Set('REPAIRSTATUSDROPDOWN', $statusHtml);
             }
 
-            // Repair detail panel (injected INSIDE the form via PORTAL_COMMENTS_BLOCK)
+            // Repair detail panel (injected INSIDE the form via REPAIR_PANEL)
             $repairHtml = $this->renderRepairPanel($ticketId, $details);
-            $this->app->Tpl->Add('PORTAL_COMMENTS_BLOCK', $repairHtml);
+            $this->app->Tpl->Set('REPAIR_PANEL', $repairHtml);
 
             // Beleg buttons in the action column
             $belegButtonsHtml = $this->renderBelegButtons($ticketId);
-            $this->app->Tpl->Set('CREATE_OFFER_BUTTON', $belegButtonsHtml);
+            $this->app->Tpl->Set('REPAIR_BELEG_BUTTONS', $belegButtonsHtml);
 
             // Status change hook
             if ($oldStatus !== '' && $this->app->Secure->GetPOST('status') !== '') {
