@@ -29,6 +29,44 @@ class TicketCustom extends Ticket
         parent::ticket_menu($id);
     }
 
+    function ticket_protokoll()
+    {
+        $id = $this->app->Secure->GetGET('id');
+        $this->ticket_menu($id);
+
+        // Custom rendering that preserves HTML links in protocol entries
+        $rows = $this->app->DB->SelectArr(
+            "SELECT zeit, bearbeiter, grund FROM ticket_protokoll WHERE ticket = '" . (int)$id . "' ORDER BY zeit DESC"
+        );
+
+        $html = '<table cellpadding="0" cellspacing="0" class="mkTable" width="99.9%">';
+        $html .= '<tr><td style="font-weight:bold; background:#555; color:#fff; padding:4px;">Zeit</td>';
+        $html .= '<td style="font-weight:bold; background:#555; color:#fff; padding:4px;">Bearbeiter</td>';
+        $html .= '<td style="font-weight:bold; background:#555; color:#fff; padding:4px;">Grund</td></tr>';
+
+        if (!empty($rows)) {
+            $even = false;
+            foreach ($rows as $row) {
+                $bg = $even ? '#e0e0e0' : '#fff';
+                $html .= '<tr style="background:' . $bg . '">';
+                $html .= '<td style="padding:4px;">' . htmlspecialchars($row['zeit'] ?? '') . '</td>';
+                $html .= '<td style="padding:4px;">' . htmlspecialchars($row['bearbeiter'] ?? '') . '</td>';
+                // Allow <a href> links, strip everything else
+                $grund = strip_tags($row['grund'] ?? '', '<a>');
+                $html .= '<td style="padding:4px;">' . $grund . '</td>';
+                $html .= '</tr>';
+                $even = !$even;
+            }
+        } else {
+            $html .= '<tr><td colspan="3" style="padding:8px;">Keine Eintr&auml;ge</td></tr>';
+        }
+        $html .= '</table>';
+
+        $this->app->Tpl->Set('TAB1', $html);
+        $this->app->Tpl->Set('KURZUEBERSCHRIFT', 'Protokoll');
+        $this->app->Tpl->Parse('PAGE', 'tabview.tpl');
+    }
+
     function ticket_edit()
     {
         $ticketId = (int)$this->app->Secure->GetGET('id');
