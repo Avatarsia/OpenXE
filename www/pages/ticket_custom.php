@@ -31,7 +31,6 @@ class TicketCustom extends Ticket
 
     function ticket_edit()
     {
-        // Store old status before parent processes the form
         $ticketId = (int)$this->app->Secure->GetGET('id');
         $oldStatus = '';
         if ($ticketId > 0) {
@@ -41,93 +40,72 @@ class TicketCustom extends Ticket
             $oldStatus = $row['status'] ?? '';
         }
 
-        // Call parent (handles form submission, status change, email sending)
+        // --- Handle Beleg creation BEFORE parent (so redirect works) ---
+        try {
+            $repairSubmit = $this->app->Secure->GetPOST('repair_submit');
+            if ($ticketId > 0 && $repairSubmit !== '') {
+                $this->handleRepairAction($ticketId, $repairSubmit);
+            }
+        } catch (\Exception $e) {
+            $this->app->Tpl->Set('MESSAGE', '<div class="error">' . htmlspecialchars($e->getMessage()) . '</div>');
+        }
+
+        // --- Call parent (handles ticket form, status change, email) ---
         parent::ticket_edit();
 
         if ($ticketId <= 0) {
             return;
         }
 
-        // Save repair diagnosis fields if form was submitted
+        // --- Save diagnosis fields on form submit ---
         try {
-            if ($this->app->Secure->GetPOST('submit') !== '') {
+            $submit = $this->app->Secure->GetPOST('submit');
+            if ($submit === 'speichern') {
                 $detailsGw = $this->app->Container->get('RepairDetailsGateway');
                 $existingDetails = $detailsGw->getByTicketId($ticketId);
                 if ($existingDetails !== null) {
-                    $diagnosisResult = $this->app->Secure->GetPOST('repair_diagnosis_result');
-                    $quoteAmount = $this->app->Secure->GetPOST('repair_quote_amount');
-                    $actualCost = $this->app->Secure->GetPOST('repair_actual_cost');
-                    $repairNotes = $this->app->Secure->GetPOST('repair_notes');
-
-                    // Only save if at least one field has content
-                    if ($diagnosisResult !== '' || $quoteAmount !== '' || $actualCost !== '' || $repairNotes !== '') {
-                        $detailsGw->updateDiagnosisFields(
-                            $ticketId,
-                            $diagnosisResult !== '' ? $diagnosisResult : null,
-                            $quoteAmount !== '' ? $quoteAmount : null,
-                            $actualCost !== '' ? $actualCost : null,
-                            $repairNotes !== '' ? $repairNotes : null,
-                        );
-                    }
+                    $detailsGw->updateDiagnosisFields(
+                        $ticketId,
+                        $this->app->Secure->GetPOST('repair_diagnosis_result') ?: null,
+                        $this->app->Secure->GetPOST('repair_quote_amount') ?: null,
+                        $this->app->Secure->GetPOST('repair_actual_cost') ?: null,
+                        $this->app->Secure->GetPOST('repair_notes') ?: null,
+                    );
                 }
             }
         } catch (\Exception $e) {
-            // Silently skip if module not available
+            // Silently skip
         }
 
-        // Extend status dropdown with repair-specific statuses
+        // --- Render repair extensions ---
         try {
+            $detailsGateway = $this->app->Container->get('RepairDetailsGateway');
+            $details = $detailsGateway->getByTicketId($ticketId);
+
+            if ($details === null) {
+                return; // Not a repair ticket — no extensions
+            }
+
+            // Status dropdown with repair-specific options
             $statusService = $this->app->Container->get('RepairStatusService');
             $serviceType = $statusService->getServiceTypeForTicket($ticketId);
-
             if ($serviceType !== null) {
-                $category = $serviceType->statusCategory();
                 $ticket = $this->app->DB->SelectRow(
                     "SELECT status FROM ticket WHERE id = '" . (int)$ticketId . "' LIMIT 1"
                 );
-                $currentStatus = $ticket['status'] ?? 'neu';
-                $statusHtml = $statusService->renderStatusDropdown($currentStatus, $category);
+                $statusHtml = $statusService->renderStatusDropdown($ticket['status'] ?? 'neu', $serviceType->statusCategory());
                 $this->app->Tpl->Set('REPAIRSTATUSDROPDOWN', $statusHtml);
             }
 
-            // Load repair details for tab
-            $detailsGateway = $this->app->Container->get('RepairDetailsGateway');
-            $details = $detailsGateway->getByTicketId($ticketId);
-            if ($details !== null) {
-                $this->app->Tpl->Set('REPAIR_TAB_DISPLAY', 'block');
-                $this->app->Tpl->Set('REPAIR_SERVICE_TYPE', htmlspecialchars(ucfirst($details['service_type'] ?? '')));
-                $this->app->Tpl->Set('REPAIR_MANUFACTURER', htmlspecialchars($details['manufacturer'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_MODEL', htmlspecialchars($details['model'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_SERIAL', htmlspecialchars($details['serial_number'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_ISSUE_CAT', htmlspecialchars($details['issue_category'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_ISSUE_DESC', htmlspecialchars($details['issue_description'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_WARRANTY', htmlspecialchars($details['warranty_status'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_COST_LIMIT', htmlspecialchars($details['cost_limit'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_EXPRESS', $details['is_express'] ? 'Ja' : 'Nein');
-                $this->app->Tpl->Set('REPAIR_DIAGNOSIS', htmlspecialchars($details['diagnosis_result'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_QUOTE', htmlspecialchars($details['quote_amount'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_ACTUAL_COST', htmlspecialchars($details['actual_cost'] ?? ''));
-                $this->app->Tpl->Set('REPAIR_NOTES', htmlspecialchars($details['repair_notes'] ?? ''));
-            } else {
-                $this->app->Tpl->Set('REPAIR_TAB_DISPLAY', 'none');
-            }
+            // Repair detail panel (injected INSIDE the form via PORTAL_COMMENTS_BLOCK)
+            $repairHtml = $this->renderRepairPanel($ticketId, $details);
+            $this->app->Tpl->Add('PORTAL_COMMENTS_BLOCK', $repairHtml);
 
-            // Load beleg links
-            $belegGateway = $this->app->Container->get('RepairBelegGateway');
-            $belege = $belegGateway->getByTicketId($ticketId);
-            if (!empty($belege)) {
-                $belegHtml = '';
-                foreach ($belege as $beleg) {
-                    $belegHtml .= '<tr>';
-                    $belegHtml .= '<td>' . htmlspecialchars(ucfirst($beleg['beleg_typ'])) . '</td>';
-                    $belegHtml .= '<td><a href="index.php?module=' . htmlspecialchars($beleg['beleg_typ'], ENT_QUOTES, 'UTF-8') . '&action=edit&id=' . (int)$beleg['beleg_id'] . '">' . htmlspecialchars($beleg['beleg_nr'] ?? '-') . '</a></td>';
-                    $belegHtml .= '<td>' . htmlspecialchars($beleg['created_at'] ?? '') . '</td>';
-                    $belegHtml .= '</tr>';
-                }
-                $this->app->Tpl->Set('REPAIR_BELEGE_ROWS', $belegHtml);
-            }
+            // Beleg buttons in the action column
+            $belegButtonsHtml = $this->renderBelegButtons($ticketId);
+            $this->app->Tpl->Set('CREATE_OFFER_BUTTON', $belegButtonsHtml);
 
-            // Trigger status change hook
+            // Status change hook
             if ($oldStatus !== '' && $this->app->Secure->GetPOST('status') !== '') {
                 $hook = new \Xentral\Modules\RepairIntegration\Hook\TicketStatusChangeHook(
                     $this->app->Container->get('Database'),
@@ -137,7 +115,166 @@ class TicketCustom extends Ticket
                 $hook->onTicketEditAfter($ticketId, $oldStatus);
             }
         } catch (\Exception $e) {
-            // RepairIntegration not installed or not configured -- silently skip
+            // RepairIntegration not installed — silently skip
         }
+    }
+
+    /**
+     * Handle repair-specific POST actions (Beleg creation)
+     */
+    private function handleRepairAction(int $ticketId, string $action): void
+    {
+        $validTypes = ['angebot', 'auftrag', 'rechnung'];
+        if (!in_array($action, $validTypes, true)) {
+            return;
+        }
+
+        $ticket = $this->app->DB->SelectRow(
+            "SELECT id, schluessel, adresse FROM ticket WHERE id = '" . (int)$ticketId . "' LIMIT 1"
+        );
+        if (!$ticket) {
+            throw new \RuntimeException('Ticket nicht gefunden');
+        }
+
+        $adresseId = (int)$ticket['adresse'];
+        if ($adresseId === 0) {
+            throw new \RuntimeException('Ticket hat keine verknuepfte Adresse. Bitte zuerst eine Adresse zuweisen.');
+        }
+
+        // Create the Beleg using OpenXE core methods
+        switch ($action) {
+            case 'angebot':
+                $belegId = $this->app->erp->CreateAngebot($adresseId);
+                $this->app->erp->LoadAngebotStandardwerte($belegId, $adresseId);
+                break;
+            case 'auftrag':
+                $belegId = $this->app->erp->CreateAuftrag($adresseId);
+                $this->app->erp->LoadAuftragStandardwerte($belegId, $adresseId);
+                break;
+            case 'rechnung':
+                $belegId = $this->app->erp->CreateRechnung($adresseId);
+                $this->app->erp->LoadRechnungStandardwerte($belegId, $adresseId);
+                break;
+            default:
+                return;
+        }
+
+        if (empty($belegId)) {
+            throw new \RuntimeException(ucfirst($action) . ' konnte nicht erstellt werden.');
+        }
+
+        // Set Betreff from repair details
+        $detailsGateway = $this->app->Container->get('RepairDetailsGateway');
+        $details = $detailsGateway->getByTicketId($ticketId);
+        if ($details) {
+            $betreff = sprintf(
+                '%s: %s %s (Ticket #%s)',
+                ucfirst($details['service_type'] ?? ''),
+                $details['manufacturer'] ?? '',
+                $details['model'] ?? '',
+                $ticket['schluessel']
+            );
+            $this->app->DB->Update(
+                "UPDATE " . $action . " SET freitext = '" . $this->app->DB->real_escape_string($betreff) . "' WHERE id = '" . (int)$belegId . "'"
+            );
+        }
+
+        // Get Belegnummer
+        $belegNr = $this->app->DB->Select(
+            "SELECT belegnr FROM " . $action . " WHERE id = '" . (int)$belegId . "'"
+        );
+
+        // Link in repair_ticket_beleg
+        $belegService = $this->app->Container->get('RepairBelegService');
+        $belegService->linkBelegToTicket(
+            $ticketId,
+            $ticket['schluessel'],
+            $action,
+            (int)$belegId,
+            $belegNr ?: null,
+            $this->app->User->GetName(),
+        );
+
+        // Bidirectional protocol entries
+        $this->app->erp->TicketProtokoll(
+            $ticketId,
+            ucfirst($action) . ' <a href="index.php?module=' . $action . '&action=edit&id=' . (int)$belegId . '">#' . htmlspecialchars($belegNr ?: (string)$belegId) . '</a> erstellt'
+        );
+
+        $protokollMethode = ucfirst($action) . 'Protokoll';
+        if (method_exists($this->app->erp, $protokollMethode)) {
+            $this->app->erp->$protokollMethode(
+                $belegId,
+                'Erstellt aus Ticket <a href="index.php?module=ticket&action=edit&id=' . $ticketId . '">#' . htmlspecialchars($ticket['schluessel']) . '</a>'
+            );
+        }
+
+        // Redirect back to ticket with success message
+        $this->app->Location("index.php?module=ticket&action=edit&id={$ticketId}&msg=" . urlencode(ucfirst($action) . " #{$belegNr} erstellt"));
+    }
+
+    /**
+     * Render repair detail panel HTML (inside the form)
+     */
+    private function renderRepairPanel(int $ticketId, array $details): string
+    {
+        $html = '<div style="margin-top:15px; padding:10px; border:1px solid #ddd; background:#f9f9f9; border-radius:4px;">';
+        $html .= '<h3 style="margin-top:0;">Reparatur-Details</h3>';
+
+        // Info table
+        $html .= '<table class="mkTableFormular" style="width:100%">';
+        $html .= '<tr><td width="150"><strong>Service-Typ:</strong></td><td>' . htmlspecialchars(ucfirst($details['service_type'] ?? '')) . '</td>';
+        $html .= '<td width="150"><strong>Hersteller:</strong></td><td>' . htmlspecialchars($details['manufacturer'] ?? '') . '</td></tr>';
+        $html .= '<tr><td><strong>Modell:</strong></td><td>' . htmlspecialchars($details['model'] ?? '') . '</td>';
+        $html .= '<td><strong>Seriennummer:</strong></td><td>' . htmlspecialchars($details['serial_number'] ?? '') . '</td></tr>';
+        $html .= '<tr><td><strong>Fehlerkategorie:</strong></td><td>' . htmlspecialchars($details['issue_category'] ?? '') . '</td>';
+        $html .= '<td><strong>Garantie:</strong></td><td>' . htmlspecialchars($details['warranty_status'] ?? '') . '</td></tr>';
+        $html .= '<tr><td><strong>Kostenrahmen:</strong></td><td>' . htmlspecialchars($details['cost_limit'] ?? '') . '</td>';
+        $html .= '<td><strong>Express:</strong></td><td>' . ($details['is_express'] ? '<span style="color:#FFB800;font-size:16px">&#9733;</span> Ja' : 'Nein') . '</td></tr>';
+        if (!empty($details['issue_description'])) {
+            $html .= '<tr><td colspan="4"><strong>Beschreibung:</strong><br>' . nl2br(htmlspecialchars($details['issue_description'])) . '</td></tr>';
+        }
+        $html .= '</table>';
+
+        // Diagnosis fields (editable, saved on "Speichern")
+        $html .= '<h3 style="margin-top:15px;">Diagnose &amp; Kosten (intern)</h3>';
+        $html .= '<table class="mkTableFormular" style="width:100%">';
+        $html .= '<tr><td width="150">Diagnose-Ergebnis:</td><td><textarea name="repair_diagnosis_result" rows="3" style="width:100%">' . htmlspecialchars($details['diagnosis_result'] ?? '') . '</textarea></td></tr>';
+        $html .= '<tr><td>KV-Betrag (EUR):</td><td><input type="text" name="repair_quote_amount" value="' . htmlspecialchars($details['quote_amount'] ?? '') . '" size="10"></td></tr>';
+        $html .= '<tr><td>Tats. Kosten (EUR):</td><td><input type="text" name="repair_actual_cost" value="' . htmlspecialchars($details['actual_cost'] ?? '') . '" size="10"></td></tr>';
+        $html .= '<tr><td>Reparatur-Notizen:</td><td><textarea name="repair_notes" rows="3" style="width:100%">' . htmlspecialchars($details['repair_notes'] ?? '') . '</textarea></td></tr>';
+        $html .= '</table>';
+
+        // Linked Belege
+        $belegGateway = $this->app->Container->get('RepairBelegGateway');
+        $belege = $belegGateway->getByTicketId($ticketId);
+        if (!empty($belege)) {
+            $html .= '<h3 style="margin-top:15px;">Verknuepfte Belege</h3>';
+            $html .= '<table class="mkTable" style="width:100%">';
+            $html .= '<thead><tr><th>Typ</th><th>Nr.</th><th>Datum</th></tr></thead><tbody>';
+            foreach ($belege as $beleg) {
+                $html .= '<tr>';
+                $html .= '<td>' . htmlspecialchars(ucfirst($beleg['beleg_typ'])) . '</td>';
+                $html .= '<td><a href="index.php?module=' . htmlspecialchars($beleg['beleg_typ']) . '&action=edit&id=' . (int)$beleg['beleg_id'] . '">#' . htmlspecialchars($beleg['beleg_nr'] ?? (string)$beleg['beleg_id']) . '</a></td>';
+                $html .= '<td>' . htmlspecialchars($beleg['created_at'] ?? '') . '</td>';
+                $html .= '</tr>';
+            }
+            $html .= '</tbody></table>';
+        }
+
+        $html .= '</div>';
+        return $html;
+    }
+
+    /**
+     * Render Beleg creation buttons for the action column
+     */
+    private function renderBelegButtons(int $ticketId): string
+    {
+        $html = '';
+        $html .= '<td><button name="repair_submit" value="angebot" class="ui-button-icon" style="width:100%;">Angebot erstellen</button></td></tr>';
+        $html .= '<td><button name="repair_submit" value="auftrag" class="ui-button-icon" style="width:100%;">Auftrag erstellen</button></td></tr>';
+        $html .= '<td><button name="repair_submit" value="rechnung" class="ui-button-icon" style="width:100%;">Rechnung erstellen</button></td></tr>';
+        return $html;
     }
 }
