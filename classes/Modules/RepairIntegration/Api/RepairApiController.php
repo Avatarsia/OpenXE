@@ -82,7 +82,21 @@ final class RepairApiController
         $timestamp = $_SERVER['HTTP_X_TIMESTAMP'] ?? '';
         $secret = $this->configService->getInboundSharedSecret();
 
-        $this->auth->validateRequest($rawBody, $signature, $timestamp, $secret);
+        // Support both HMAC-SHA256 (preferred) and Bearer token (WP plugin compat)
+        if ($signature !== '' && $timestamp !== '') {
+            // HMAC authentication
+            $this->auth->validateRequest($rawBody, $signature, $timestamp, $secret);
+        } else {
+            // Bearer token fallback
+            $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? '';
+            if (strpos($authHeader, 'Bearer ') !== 0) {
+                throw new AuthenticationException('MISSING_AUTH');
+            }
+            $token = substr($authHeader, 7);
+            if (!hash_equals($secret, $token)) {
+                throw new AuthenticationException('INVALID_BEARER_TOKEN');
+            }
+        }
     }
 
     private function checkRateLimit(): void
