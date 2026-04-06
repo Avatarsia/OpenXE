@@ -208,10 +208,13 @@ class TicketCustom extends Ticket
             );
         }
 
-        // Get Belegnummer
+        // Get Belegnummer (nach SchnellFreigabe ist die Nummer vergeben)
         $belegNr = $this->app->DB->Select(
-            "SELECT belegnr FROM " . $action . " WHERE id = '" . (int)$belegId . "'"
+            "SELECT belegnr FROM `" . $action . "` WHERE id = '" . (int)$belegId . "' LIMIT 1"
         );
+        if (empty($belegNr) || $belegNr === '0') {
+            $belegNr = (string)$belegId;
+        }
 
         // Link in repair_ticket_beleg
         $belegService = $this->app->Container->get('RepairBelegService');
@@ -279,13 +282,28 @@ class TicketCustom extends Ticket
         $belegGateway = $this->app->Container->get('RepairBelegGateway');
         $belege = $belegGateway->getByTicketId($ticketId);
         if (!empty($belege)) {
+            $belegLabels = ['angebot' => 'Angebot', 'auftrag' => 'Auftrag', 'rechnung' => 'Rechnung', 'lieferschein' => 'Lieferschein', 'gutschrift' => 'Gutschrift', 'verbindlichkeit' => 'Verbindlichkeit'];
             $html .= '<h3 style="margin-top:15px;">Verknuepfte Belege</h3>';
             $html .= '<table class="mkTable" style="width:100%">';
-            $html .= '<thead><tr><th>Typ</th><th>Nr.</th><th>Datum</th></tr></thead><tbody>';
+            $html .= '<thead><tr><th>Typ</th><th>Belegnr.</th><th>Datum</th></tr></thead><tbody>';
             foreach ($belege as $beleg) {
+                // Hole aktuelle Belegnummer live aus der Beleg-Tabelle falls NULL
+                $belegNr = $beleg['beleg_nr'];
+                if (empty($belegNr)) {
+                    $belegNr = $this->app->DB->Select(
+                        "SELECT belegnr FROM `" . $beleg['beleg_typ'] . "` WHERE id = '" . (int)$beleg['beleg_id'] . "' LIMIT 1"
+                    );
+                    // Update in repair_ticket_beleg für nächstes Mal
+                    if (!empty($belegNr)) {
+                        $this->app->DB->Update(
+                            "UPDATE repair_ticket_beleg SET beleg_nr = '" . $this->app->DB->real_escape_string($belegNr) . "' WHERE id = '" . (int)$beleg['id'] . "'"
+                        );
+                    }
+                }
+                $label = $belegLabels[$beleg['beleg_typ']] ?? ucfirst($beleg['beleg_typ']);
                 $html .= '<tr>';
-                $html .= '<td>' . htmlspecialchars(ucfirst($beleg['beleg_typ'])) . '</td>';
-                $html .= '<td><a href="index.php?module=' . htmlspecialchars($beleg['beleg_typ']) . '&action=edit&id=' . (int)$beleg['beleg_id'] . '">#' . htmlspecialchars($beleg['beleg_nr'] ?? (string)$beleg['beleg_id']) . '</a></td>';
+                $html .= '<td>' . htmlspecialchars($label) . '</td>';
+                $html .= '<td><a href="index.php?module=' . htmlspecialchars($beleg['beleg_typ']) . '&action=edit&id=' . (int)$beleg['beleg_id'] . '">' . htmlspecialchars($belegNr ?: '-') . '</a></td>';
                 $html .= '<td>' . htmlspecialchars($beleg['created_at'] ?? '') . '</td>';
                 $html .= '</tr>';
             }
