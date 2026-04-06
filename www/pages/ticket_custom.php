@@ -42,25 +42,19 @@ class TicketCustom extends Ticket
 
         // --- Handle Beleg creation BEFORE parent (so redirect works) ---
         try {
-            $repairSubmit = $this->app->Secure->GetPOST('repair_submit');
-            if ($ticketId > 0 && $repairSubmit !== '') {
-                $this->handleRepairAction($ticketId, $repairSubmit);
+            $submitValue = $this->app->Secure->GetPOST('submit');
+            if ($ticketId > 0 && in_array($submitValue, ['repair_angebot', 'repair_auftrag', 'repair_rechnung'], true)) {
+                $belegTyp = str_replace('repair_', '', $submitValue);
+                $this->handleRepairAction($ticketId, $belegTyp);
             }
         } catch (\Exception $e) {
             $this->app->Tpl->Set('MESSAGE', '<div class="error">' . htmlspecialchars($e->getMessage()) . '</div>');
         }
 
-        // --- Call parent (handles ticket form, status change, email) ---
-        parent::ticket_edit();
-
-        if ($ticketId <= 0) {
-            return;
-        }
-
-        // --- Save diagnosis fields on form submit ---
+        // --- Save diagnosis fields BEFORE parent (so they persist) ---
         try {
-            $submit = $this->app->Secure->GetPOST('submit');
-            if ($submit === 'speichern') {
+            $submitValue = $this->app->Secure->GetPOST('submit');
+            if ($ticketId > 0 && $submitValue === 'speichern') {
                 $detailsGw = $this->app->Container->get('RepairDetailsGateway');
                 $existingDetails = $detailsGw->getByTicketId($ticketId);
                 if ($existingDetails !== null) {
@@ -77,42 +71,39 @@ class TicketCustom extends Ticket
             // Silently skip
         }
 
-        // --- Render repair extensions ---
+        // --- Set repair template placeholders BEFORE parent (parent calls Parse) ---
         try {
-            $detailsGateway = $this->app->Container->get('RepairDetailsGateway');
-            $details = $detailsGateway->getByTicketId($ticketId);
+            if ($ticketId > 0) {
+                $detailsGateway = $this->app->Container->get('RepairDetailsGateway');
+                $details = $detailsGateway->getByTicketId($ticketId);
 
-            if ($details === null) {
-                return; // Not a repair ticket — no extensions
+                if ($details !== null) {
+                    $repairHtml = $this->renderRepairPanel($ticketId, $details);
+                    $this->app->Tpl->Set('REPAIR_PANEL', $repairHtml);
+
+                    $belegButtonsHtml = $this->renderBelegButtons($ticketId);
+                    $this->app->Tpl->Set('REPAIR_BELEG_BUTTONS', $belegButtonsHtml);
+                }
             }
+        } catch (\Exception $e) {
+            // Module not available
+        }
 
-            // Status dropdown with repair-specific options
-            $statusService = $this->app->Container->get('RepairStatusService');
-            $serviceType = $statusService->getServiceTypeForTicket($ticketId);
-            if ($serviceType !== null) {
-                $ticket = $this->app->DB->SelectRow(
-                    "SELECT status FROM ticket WHERE id = '" . (int)$ticketId . "' LIMIT 1"
-                );
-                $statusHtml = $statusService->renderStatusDropdown($ticket['status'] ?? 'neu', $serviceType->statusCategory());
-                $this->app->Tpl->Set('REPAIRSTATUSDROPDOWN', $statusHtml);
-            }
+        // --- Call parent (handles ticket form, status change, email, PARSES TEMPLATE) ---
+        parent::ticket_edit();
 
-            // Repair detail panel (injected INSIDE the form via REPAIR_PANEL)
-            $repairHtml = $this->renderRepairPanel($ticketId, $details);
-            $this->app->Tpl->Set('REPAIR_PANEL', $repairHtml);
-
-            // Beleg buttons in the action column
-            $belegButtonsHtml = $this->renderBelegButtons($ticketId);
-            $this->app->Tpl->Set('REPAIR_BELEG_BUTTONS', $belegButtonsHtml);
-
-            // Status change hook
-            if ($oldStatus !== '' && $this->app->Secure->GetPOST('status') !== '') {
-                $hook = new \Xentral\Modules\RepairIntegration\Hook\TicketStatusChangeHook(
-                    $this->app->Container->get('Database'),
-                    $this->app->Container->get('RepairSyncService'),
-                    $this->app->Container->get('RepairEmailService'),
-                );
-                $hook->onTicketEditAfter($ticketId, $oldStatus);
+        // --- Post-parent: status change hook ---
+        try {
+            if ($ticketId > 0 && $oldStatus !== '' && $this->app->Secure->GetPOST('status') !== '') {
+                $detailsGateway = $this->app->Container->get('RepairDetailsGateway');
+                if ($detailsGateway->getByTicketId($ticketId) !== null) {
+                    $hook = new \Xentral\Modules\RepairIntegration\Hook\TicketStatusChangeHook(
+                        $this->app->Container->get('Database'),
+                        $this->app->Container->get('RepairSyncService'),
+                        $this->app->Container->get('RepairEmailService'),
+                    );
+                    $hook->onTicketEditAfter($ticketId, $oldStatus);
+                }
             }
         } catch (\Exception $e) {
             // RepairIntegration not installed — silently skip
