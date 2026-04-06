@@ -200,8 +200,9 @@ class TicketCustom extends Ticket
             );
         }
 
-        // Redirect back to ticket with success message
-        $this->app->Location("index.php?module=ticket&action=edit&id={$ticketId}&msg=" . urlencode(ucfirst($action) . " #{$belegNr} erstellt"));
+        // Redirect to the Beleg edit page (normal OpenXE workflow)
+        header("Location: index.php?module={$action}&action=edit&id={$belegId}");
+        exit;
     }
 
     /**
