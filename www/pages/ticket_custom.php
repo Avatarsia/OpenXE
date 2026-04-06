@@ -123,7 +123,11 @@ class TicketCustom extends Ticket
                 if ($details !== null) {
                     $repairHtml = $this->renderRepairPanel($ticketId, $details);
                     $timelineHtml = $this->renderMessageTimeline($ticketId);
-                    $this->app->Tpl->Set('REPAIR_PANEL', $repairHtml . $timelineHtml);
+
+                    // Build repair-specific status dropdown override (JS)
+                    $serviceType = $details['service_type'] ?? 'reparatur';
+                    $statusOverrideJs = $this->buildStatusDropdownOverride($ticketId, $serviceType);
+                    $this->app->Tpl->Set('REPAIR_PANEL', $repairHtml . $timelineHtml . $statusOverrideJs);
 
                     $belegButtonsHtml = $this->renderBelegButtons($ticketId);
                     $this->app->Tpl->Set('REPAIR_BELEG_BUTTONS', $belegButtonsHtml);
@@ -711,6 +715,65 @@ class TicketCustom extends Ticket
 
         $html .= '</div>';
         return $html;
+    }
+
+    /**
+     * Build JavaScript to override the status dropdown with repair-specific statuses
+     */
+    private function buildStatusDropdownOverride(int $ticketId, string $serviceType): string
+    {
+        // Get current ticket status
+        $ticketRow = $this->app->DB->SelectRow(
+            "SELECT status FROM ticket WHERE id = '" . (int)$ticketId . "' LIMIT 1"
+        );
+        $currentStatus = $ticketRow['status'] ?? 'neu';
+
+        // Map service type to category
+        $categoryMap = [
+            'reparatur' => 'repair',
+            'wartung' => 'maintenance',
+            'reverse_engineering' => 'reverse_engineering',
+            'individualisierung' => 'individualization',
+        ];
+        $category = $categoryMap[$serviceType] ?? 'repair';
+
+        // Load statuses: general + service-specific
+        $statuses = $this->app->DB->SelectArr(
+            "SELECT slug, label_de FROM ticket_status_config
+             WHERE is_active = 1 AND (category = 'general' OR category = '" . $this->app->DB->real_escape_string($category) . "')
+             ORDER BY sort_order ASC"
+        );
+
+        if (empty($statuses)) {
+            return '';
+        }
+
+        // Build JS options array
+        $jsOptions = [];
+        foreach ($statuses as $s) {
+            $slug = addslashes($s['slug']);
+            $label = addslashes($s['label_de']);
+            $selected = ($s['slug'] === $currentStatus) ? 'true' : 'false';
+            $jsOptions[] = "{v:\"{$slug}\",l:\"{$label}\",s:{$selected}}";
+        }
+        $jsArray = implode(',', $jsOptions);
+
+        $js = '<script>';
+        $js .= 'setTimeout(function() {';
+        $js .= '  var sel = document.querySelector("select[name=status]");';
+        $js .= '  if (!sel) return;';
+        $js .= '  var opts = [' . $jsArray . '];';
+        $js .= '  sel.innerHTML = "";';
+        $js .= '  opts.forEach(function(o) {';
+        $js .= '    var opt = document.createElement("option");';
+        $js .= '    opt.value = o.v; opt.textContent = o.l;';
+        $js .= '    if (o.s) opt.selected = true;';
+        $js .= '    sel.appendChild(opt);';
+        $js .= '  });';
+        $js .= '}, 50);';
+        $js .= '</script>';
+
+        return $js;
     }
 
     /**
