@@ -414,6 +414,10 @@ class erpooSystem extends Application
               'link' => 'index.php?module=wiedervorlage&action=list',
               'counter' => $resubmissionCount,
           ],*/
+          'Reparaturen' => [
+              'link' => 'index.php?module=repairintegration&action=list',
+              'counter' => ''
+          ],
           'Kalender' => [
               'link' => 'index.php?module=kalender&action=list',
               'counter' => $appointmentCount
