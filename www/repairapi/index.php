@@ -43,8 +43,17 @@ $controller = new \Xentral\Modules\RepairIntegration\Api\RepairApiController(
     $detailsGateway
 );
 
-// Route
+// Route — support both ?action=push_details and /repair-status (WP plugin format)
 $action = $_GET['action'] ?? '';
+
+// Parse path-based routing: /repairapi/index.php/repair-status
+$pathInfo = $_SERVER['PATH_INFO'] ?? '';
+if ($action === '' && $pathInfo !== '') {
+    $action = match (trim($pathInfo, '/')) {
+        'repair-status' => 'push_details',
+        default => '',
+    };
+}
 
 switch ($action) {
     case 'push_details':
