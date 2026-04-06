@@ -646,7 +646,7 @@ class TicketCustom extends Ticket
                     $msg = $item['data'];
                     $zeit = $item['ts'] > 0 ? date('d.m.Y H:i', $item['ts']) : '';
                     $verfasser = htmlspecialchars($msg['verfasser'] ?? '');
-                    $rawText = strip_tags($msg['text'] ?? '');
+                    $rawText = html_entity_decode(strip_tags($msg['text'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
                     $rawText = trim($rawText);
                     $fullText = nl2br(htmlspecialchars($rawText));
                     $isLong = mb_strlen($rawText) > 500;
