@@ -146,16 +146,17 @@ final class RepairApiController
     {
         $ticketSchluessel = $data['request_number'];
 
-        // Find or wait for ticket (may not exist yet if email hasn't been imported)
+        // Find existing ticket by schluessel
         $ticket = $this->db->fetchRow(
             'SELECT `id`, `schluessel` FROM `ticket` WHERE `schluessel` = :key',
             ['key' => $ticketSchluessel]
         );
 
         if (!$ticket) {
-            // Ticket not found — could arrive later via email import
-            $this->logInbound($ticketSchluessel, json_encode($data), false, 'TICKET_NOT_FOUND');
-            throw new ValidationException('TICKET_NOT_FOUND');
+            // No ticket found — create one from the WP payload
+            $ticket = $this->createTicketFromPayload($data);
+            $this->createInitialTicketMessage($data, $ticket['schluessel']);
+            $this->logInbound($ticketSchluessel, (string)json_encode($data), true, 'TICKET_CREATED');
         }
 
         $existing = $this->detailsGateway->getByTicketId((int)$ticket['id']);
@@ -171,7 +172,138 @@ final class RepairApiController
             $this->detailsGateway->create($details);
         }
 
-        $this->logInbound($ticketSchluessel, json_encode($data), true);
+        $this->logInbound($ticketSchluessel, (string)json_encode($data), true);
+    }
+
+    /**
+     * Creates a new ticket from the WP API push payload.
+     *
+     * @param array<string, mixed> $data Validated payload from WP
+     * @return array{id: int, schluessel: string} The created ticket row
+     */
+    private function createTicketFromPayload(array $data): array
+    {
+        $ticketSchluessel = $data['request_number'];
+        $serviceType = $data['service_type'];
+        $manufacturer = $data['device']['manufacturer'] ?? '';
+        $model = $data['device']['model'] ?? '';
+        $betreff = $this->buildSubjectLine($serviceType, $ticketSchluessel, $manufacturer, $model);
+
+        $customerName = $data['customer']['name'] ?? '';
+        $customerEmail = $data['customer']['email'] ?? '';
+        $verfasser = $customerName !== '' && $customerEmail !== ''
+            ? "{$customerName} <{$customerEmail}>"
+            : ($customerName !== '' ? $customerName : $customerEmail);
+
+        $companyName = $data['customer']['company'] ?? null;
+
+        $this->db->perform(
+            "INSERT INTO `ticket` (
+                `schluessel`, `zeit`, `projekt`, `quelle`, `status`, `kunde`,
+                `mailadresse`, `prio`, `betreff`, `firma`, `notiz`
+            ) VALUES (
+                :schluessel, NOW(), 0, :quelle, :status, :kunde,
+                :mailadresse, :prio, :betreff, :firma, :notiz
+            )",
+            [
+                'schluessel' => $ticketSchluessel,
+                'quelle' => 'api',
+                'status' => 'neu',
+                'kunde' => $verfasser,
+                'mailadresse' => $customerEmail,
+                'prio' => 3,
+                'betreff' => $betreff,
+                'firma' => $companyName ?? '',
+                'notiz' => "Automatisch erstellt via WP API Push ({$serviceType})",
+            ]
+        );
+        $ticketId = (int)$this->db->lastInsertId();
+
+        return ['id' => $ticketId, 'schluessel' => $ticketSchluessel];
+    }
+
+    /**
+     * Builds a subject line with the appropriate service-type tag prefix.
+     */
+    private function buildSubjectLine(
+        string $serviceType,
+        string $requestNumber,
+        string $manufacturer,
+        string $model,
+    ): string {
+        $tagMap = [
+            'reparatur' => '[REP] Reparaturanfrage',
+            'wartung' => '[WRT] Wartungsanfrage',
+            'reverse_engineering' => '[REV] RE-Anfrage',
+            'individualisierung' => '[IND] Individualisierung',
+        ];
+
+        $prefix = $tagMap[$serviceType] ?? "[{$serviceType}]";
+        $devicePart = trim("{$manufacturer} {$model}");
+        $subject = "{$prefix} Ticket #{$requestNumber}";
+
+        if ($devicePart !== '') {
+            $subject .= " - {$devicePart}";
+        }
+
+        return $subject;
+    }
+
+    /**
+     * Creates the first ticket_nachricht entry with the issue description.
+     *
+     * @param array<string, mixed> $data Validated payload from WP
+     * @param string $ticketSchluessel The ticket schluessel (NOT ticket.id)
+     */
+    private function createInitialTicketMessage(array $data, string $ticketSchluessel): void
+    {
+        $customerName = $data['customer']['name'] ?? '';
+        $customerEmail = $data['customer']['email'] ?? '';
+        $verfasser = $customerName !== '' && $customerEmail !== ''
+            ? "{$customerName} <{$customerEmail}>"
+            : ($customerName !== '' ? $customerName : $customerEmail);
+
+        $issueDescription = $data['service_details']['issue_description'] ?? '';
+        if ($issueDescription === '') {
+            $issueDescription = '(Keine Fehlerbeschreibung uebermittelt)';
+        }
+
+        $serviceType = $data['service_type'];
+        $manufacturer = $data['device']['manufacturer'] ?? '';
+        $model = $data['device']['model'] ?? '';
+        $betreff = $this->buildSubjectLine($serviceType, $ticketSchluessel, $manufacturer, $model);
+
+        $this->db->perform(
+            "INSERT INTO `ticket_nachricht` (
+                `ticket`, `zeit`, `text`, `betreff`, `medium`,
+                `verfasser`, `mail`, `status`
+            ) VALUES (
+                :ticket, NOW(), :text, :betreff, :medium,
+                :verfasser, :mail, :status
+            )",
+            [
+                'ticket' => $ticketSchluessel,
+                'text' => $issueDescription,
+                'betreff' => $betreff,
+                'medium' => 'api',
+                'verfasser' => $verfasser,
+                'mail' => $customerEmail,
+                'status' => 'neu',
+            ]
+        );
+
+        // Update ticket message count
+        $this->db->perform(
+            "UPDATE `ticket` AS t
+             INNER JOIN (
+                 SELECT COUNT(`id`) AS co, `ticket`
+                 FROM `ticket_nachricht`
+                 GROUP BY `ticket`
+             ) AS tn ON t.`schluessel` = tn.`ticket`
+             SET t.`nachrichten_anz` = tn.co
+             WHERE t.`schluessel` = :schluessel",
+            ['schluessel' => $ticketSchluessel]
+        );
     }
 
     private function mapInboundData(array $data): array
