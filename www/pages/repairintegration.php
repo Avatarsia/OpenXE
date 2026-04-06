@@ -130,9 +130,9 @@ class Repairintegration
         switch ($name) {
             case 'repair_list':
                 $allowed['repair_list'] = array('list');
-                $heading = array('Ticket #', 'Typ', 'Hersteller/Modell', 'Kunde', 'Status', 'Express', 'Erstellt', 'Men&uuml;');
+                $heading = array('Ticket #', 'Typ', 'Kunde', 'Hersteller/Modell', 'Status', 'Express', 'Erstellt', 'Men&uuml;');
                 $width = array('5%', '5%', '15%', '15%', '10%', '3%', '8%', '1%');
-                $findcols = array('t.schluessel', 'rd.service_type', 'device', 'customer', 'status_label', 'rd.is_express', 't.zeit');
+                $findcols = array('ticket_link', 'rd.service_type', 'customer', 'device', 'status_label', 'rd.is_express', 't.zeit');
                 $searchsql = array('t.schluessel', 'rd.manufacturer', 'rd.model', 't.kunde', 't.mailadresse', 'rd.serial_number');
 
                 $defaultorder = 6;
@@ -142,10 +142,10 @@ class Repairintegration
 
                 $sql = "SELECT SQL_CALC_FOUND_ROWS
                     t.id,
-                    t.schluessel,
+                    CONCAT('<a href=\"index.php?module=ticket&action=edit&id=', t.id, '\">', t.schluessel, '</a>') as ticket_link,
                     rd.service_type,
+                    CONCAT(COALESCE(t.kunde,''), ' &lt;', COALESCE(t.mailadresse,''), '&gt;') as customer,
                     CONCAT(COALESCE(rd.manufacturer,''), ' ', COALESCE(rd.model,'')) as device,
-                    CONCAT(COALESCE(t.kunde,''), ' <', COALESCE(t.mailadresse,''), '>') as customer,
                     COALESCE(sc.label_de, t.status) as status_label,
                     IF(rd.is_express = 1, '<span style=\"color:#FFB800;font-size:16px\">&#9733;</span> Ja', '') as is_express,
                     t.zeit,

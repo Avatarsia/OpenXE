@@ -10,6 +10,25 @@ class TicketCustom extends Ticket
         parent::__construct($app, $intern);
     }
 
+    function ticket_menu($id)
+    {
+        // Check if this is a repair ticket — if so, link back to repair list
+        try {
+            $detailsGateway = $this->app->Container->get('RepairDetailsGateway');
+            $details = $detailsGateway->getByTicketId((int)$id);
+            if ($details !== null) {
+                $this->app->erp->MenuEintrag("index.php?module=repairintegration&action=list", "Zur&uuml;ck zur Reparatur-&Uuml;bersicht");
+                $this->app->erp->MenuEintrag("index.php?module=ticket&action=edit&id=$id", "Details");
+                $this->app->erp->MenuEintrag("index.php?module=ticket&action=dateien&id=$id", "Dateien");
+                $this->app->erp->MenuEintrag("index.php?module=ticket&action=protokoll&id=$id", "Protokoll");
+                return;
+            }
+        } catch (\Exception $e) {
+            // Module not available
+        }
+        parent::ticket_menu($id);
+    }
+
     function ticket_edit()
     {
         // Store old status before parent processes the form
