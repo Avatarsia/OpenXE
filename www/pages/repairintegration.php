@@ -130,12 +130,12 @@ class Repairintegration
         switch ($name) {
             case 'repair_list':
                 $allowed['repair_list'] = array('list');
-                $heading = array('', 'Ticket #', 'Typ', 'Hersteller/Modell', 'Kunde', 'Status', 'Express', 'Erstellt', 'Men&uuml;');
-                $width = array('1%', '5%', '5%', '15%', '15%', '10%', '3%', '8%', '1%');
-                $findcols = array('t.id', 't.schluessel', 'rd.service_type', 'device', 'customer', 'status_label', 'rd.is_express', 't.zeit');
+                $heading = array('', '', 'Ticket #', 'Typ', 'Hersteller/Modell', 'Kunde', 'Status', 'Express', 'Erstellt', 'Men&uuml;');
+                $width = array('1%', '1%', '5%', '5%', '15%', '15%', '10%', '3%', '8%', '1%');
+                $findcols = array('t.id', 't.id', 't.schluessel', 'rd.service_type', 'device', 'customer', 'status_label', 'rd.is_express', 't.zeit');
                 $searchsql = array('t.schluessel', 'rd.manufacturer', 'rd.model', 't.kunde', 't.mailadresse', 'rd.serial_number');
 
-                $defaultorder = 7;
+                $defaultorder = 8;
                 $defaultorderdesc = 1;
 
                 $menu = "<table><tr><td nowrap><a href=\"index.php?module=ticket&action=edit&id=%value%\"><img src=\"themes/new/images/edit.svg\" border=\"0\"></a></td></tr></table>";
@@ -158,7 +158,7 @@ class Repairintegration
                 $count = "SELECT COUNT(t.id) FROM ticket t INNER JOIN ticket_repair_details rd ON rd.ticket_id = t.id WHERE t.status != 'spam'";
 
                 $moreinfo = true;
-                $menucol = 8;
+                $menucol = 9;
 
                 break;
         }
