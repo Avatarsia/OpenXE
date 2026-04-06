@@ -264,9 +264,9 @@ class TicketCustom extends Ticket
     private function renderBelegButtons(int $ticketId): string
     {
         $html = '';
-        $html .= '<td><button name="repair_submit" value="angebot" class="ui-button-icon" style="width:100%;">Angebot erstellen</button></td></tr>';
-        $html .= '<td><button name="repair_submit" value="auftrag" class="ui-button-icon" style="width:100%;">Auftrag erstellen</button></td></tr>';
-        $html .= '<td><button name="repair_submit" value="rechnung" class="ui-button-icon" style="width:100%;">Rechnung erstellen</button></td></tr>';
+        $html .= '<td><button name="submit" value="repair_angebot" class="ui-button-icon" style="width:100%;">Angebot erstellen</button></td></tr>';
+        $html .= '<td><button name="submit" value="repair_auftrag" class="ui-button-icon" style="width:100%;">Auftrag erstellen</button></td></tr>';
+        $html .= '<td><button name="submit" value="repair_rechnung" class="ui-button-icon" style="width:100%;">Rechnung erstellen</button></td></tr>';
         return $html;
     }
 }
