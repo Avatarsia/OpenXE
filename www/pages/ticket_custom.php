@@ -227,14 +227,14 @@ class TicketCustom extends Ticket
         // Bidirectional protocol entries
         $this->app->erp->TicketProtokoll(
             $ticketId,
-            ucfirst($action) . ' <a href="index.php?module=' . $action . '&action=edit&id=' . (int)$belegId . '">#' . htmlspecialchars($belegNr ?: (string)$belegId) . '</a> erstellt'
+            '<a href="index.php?module=' . $action . '&action=edit&id=' . (int)$belegId . '">' . ucfirst($action) . ' #' . htmlspecialchars($belegNr ?: (string)$belegId) . ' erstellt</a>'
         );
 
         $protokollMethode = ucfirst($action) . 'Protokoll';
         if (method_exists($this->app->erp, $protokollMethode)) {
             $this->app->erp->$protokollMethode(
                 $belegId,
-                'Erstellt aus Ticket <a href="index.php?module=ticket&action=edit&id=' . $ticketId . '">#' . htmlspecialchars($ticket['schluessel']) . '</a>'
+                '<a href="index.php?module=ticket&action=edit&id=' . $ticketId . '">Erstellt aus Ticket #' . htmlspecialchars($ticket['schluessel']) . '</a>'
             );
         }
 
