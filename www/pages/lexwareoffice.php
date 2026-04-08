@@ -15,17 +15,12 @@
 <?php
 
 use Xentral\Modules\LexwareOffice\Exception\LexwareOfficeException;
-use Xentral\Modules\LexwareOffice\Service\LexwareOfficeApiClient;
-use Xentral\Modules\LexwareOffice\Service\LexwareOfficeConfigService;
 use Xentral\Modules\LexwareOffice\Service\LexwareOfficeService;
 
 class Lexwareoffice
 {
   /** @var Application */
   public $app;
-
-  /** @var LexwareOfficeService|null */
-  private $service = null;
 
   public function __construct($app, $intern = false)
   {
@@ -38,6 +33,7 @@ class Lexwareoffice
 
     $this->app->ActionHandlerInit($this);
     $this->app->ActionHandler('edit','LexwareOfficeEdit');
+    $this->app->ActionHandler('upload','LexwareOfficeUpload');
     $this->app->DefaultActionHandler('edit');
 
     $this->app->Tpl->Set('UEBERSCHRIFT','Lexware Office');
@@ -104,17 +100,139 @@ class Lexwareoffice
 
   private function getService(): LexwareOfficeService
   {
-    if($this->service === null) {
-      $this->service = new LexwareOfficeService(
-        $this->app->Container->get('Database'),
-        new LexwareOfficeConfigService($this->app->Container->get('SystemConfigModule')),
-        new LexwareOfficeApiClient(),
-        $this->app->Container->get('Logger'),
-        $this->app->erp
-      );
+    return $this->app->Container->get('LexwareOfficeService');
+  }
+
+  /**
+   * Wird einmalig vom OpenXE-Installer aufgerufen.
+   * Registriert die Hook-Listener fuer das Rechnungs-Aktionsmenue.
+   */
+  public function Install()
+  {
+    $this->app->erp->RegisterHook(
+      'Rechnung_Aktion_option',
+      'lexwareoffice',
+      'LexwareOfficeAktionOption'
+    );
+    $this->app->erp->RegisterHook(
+      'Rechnung_Aktion_case',
+      'lexwareoffice',
+      'LexwareOfficeAktionCase'
+    );
+  }
+
+  /**
+   * Hook-Listener: haengt den Dropdown-Eintrag an die Rechnungs-Aktionsliste.
+   *
+   * @param int    $id
+   * @param string $projectStatus
+   * @param string $option
+   */
+  public function LexwareOfficeAktionOption($id, $projectStatus, &$option)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $option .= '<option value="lexwareofficeupload">An Lexware Office senden</option>';
+  }
+
+  /**
+   * Hook-Listener: haengt den zugehoerigen JS-Case an das Rechnungs-Aktionsmenue.
+   *
+   * Hinweis zum Selector: das aktive Haupt-Dropdown in rechnung.php verwendet
+   * id="aktion$prefix" mit default $prefix='', folglich ist die effektive ID
+   * schlicht "aktion". Der Null-Check haelt den Handler robust, falls das
+   * DOM-Element spaeter umbenannt wird.
+   *
+   * @param int    $id
+   * @param string $projectStatus
+   * @param string $case
+   */
+  public function LexwareOfficeAktionCase($id, $projectStatus, &$case)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $case .= "case 'lexwareofficeupload':"
+      ." if(!confirm('Rechnung an Lexware Office senden?')) {"
+      ."   var el = document.getElementById('aktion'); if(el) el.selectedIndex = 0;"
+      ."   return;"
+      ." }"
+      ." window.location.href='index.php?module=lexwareoffice&action=upload&id=%value%';"
+      ." break;";
+  }
+
+  /**
+   * Prueft, ob ein Lexware-Office-API-Key hinterlegt ist.
+   * Nutzt den im Bootstrap registrierten Container-Service.
+   */
+  private function hasLexwareOfficeApiKey(): bool
+  {
+    try {
+      $config = $this->app->Container->get('LexwareOfficeConfigService');
+      return $config->hasApiKey();
+    } catch (\Throwable $e) {
+      return false;
+    }
+  }
+
+  /**
+   * Action-Handler: nimmt die Rechnungs-ID aus dem Dropdown entgegen und
+   * uebergibt sie dem LexwareOfficeService. Mirrors the old
+   * RechnungLexwareOfficeUpload-Controller aus rechnung.php.
+   */
+  public function LexwareOfficeUpload()
+  {
+    $id = (int)$this->app->Secure->GetGET('id');
+    if($id <= 0) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Rechnung wurde nicht gefunden.</div>');
+      $this->app->Location->execute('index.php?module=rechnung&action=list&msg='.$msg);
+      return;
     }
 
-    return $this->service;
+    if(!$this->app->erp->RechteVorhanden('rechnung','edit')) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Keine Berechtigung f&uuml;r diese Aktion.</div>');
+      $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id.'&msg='.$msg);
+      return;
+    }
+
+    try {
+      $result = $this->getService()->pushInvoice($id);
+      $lexwareId = !empty($result['invoiceId']) ? $result['invoiceId'] : '';
+      $contactId = !empty($result['contactId']) ? $result['contactId'] : '';
+      $text = 'Rechnung wurde an Lexware Office &uuml;bergeben.';
+      if($lexwareId !== '') {
+        $text .= ' Beleg-ID: '.htmlspecialchars($lexwareId);
+      }
+      if($contactId !== '') {
+        $text .= ' Kontakt-ID: '.htmlspecialchars($contactId);
+      }
+      $message = '<div class="success">'.$text.'</div>';
+      $this->app->erp->RechnungProtokoll($id, 'Lexware Office: '.$text);
+    } catch (LexwareOfficeException $exception) {
+      $errorText = htmlspecialchars($exception->getMessage());
+      $message = '<div class="error">'.$errorText.'</div>';
+      $this->app->erp->RechnungProtokoll($id, 'Lexware Office Fehler: '.$errorText);
+    } catch (\Throwable $exception) {
+      // Generischer Fallback fuer alles was nicht domain-spezifisch ist:
+      // DB-Ausfall, TypeError im Mapper, JSON-Encode-Fehler etc.
+      $errorText = htmlspecialchars('Interner Fehler beim Lexware Office Upload: '.$exception->getMessage());
+      $message = '<div class="error">'.$errorText.'</div>';
+      $this->app->erp->RechnungProtokoll($id, 'Lexware Office Fehler (intern): '.$errorText);
+    }
+
+    $msg = $this->app->erp->base64_url_encode($message);
+    $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id.'&msg='.$msg);
+  }
+
+  /**
+   * Modul-weiter Rechte-Check: nur Admins duerfen Settings verwalten oder
+   * manuelle Uploads triggern. Adminrechte() existiert auf class.erpapi.php
+   * nicht, daher direkter User->GetType() Check wie in artikel.php/welcome.php.
+   */
+  public function CheckRights()
+  {
+    return $this->app->User->GetType() === 'admin';
   }
 
   private function ensureSuperSearchIndex(): void
