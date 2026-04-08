@@ -16,8 +16,10 @@
  *   3) hook_register-Eintraege fuer module='lexwareoffice' loeschen.
  *   4) Optional (--drop-columns): Bootstrap::removeSchema() - droppt
  *      die drei Lexware-Spalten aus rechnung/adresse.
- *   5) Optional (--delete-api-key): system_config-Eintraege mit
- *      namespace='lexwareoffice' loeschen.
+ *   5) Optional (--delete-api-key): konfiguration-Eintraege mit
+ *      name LIKE 'lexwareoffice__%' loeschen (SystemConfig legt
+ *      Keys als "{namespace}__{key}" in der Tabelle `konfiguration`
+ *      ab, siehe SystemConfigHelper::getConfigurationKey()).
  */
 
 declare(strict_types=1);
@@ -130,14 +132,16 @@ try {
 echo "[5/5] API-Key entfernen ... ";
 try {
     if ($deleteApiKey) {
+        // SystemConfig speichert Keys als "{namespace}__{key}" in `konfiguration`.`name`
+        // (siehe classes/Modules/SystemConfig/Helper/SystemConfigHelper.php).
         $db->perform(
-            "DELETE FROM `system_config` WHERE `namespace` = :namespace",
-            ['namespace' => 'lexwareoffice']
+            "DELETE FROM `konfiguration` WHERE `name` LIKE :pattern",
+            ['pattern' => 'lexwareoffice\\_\\_%']
         );
-        echo "OK (system_config-Eintraege entfernt)\n";
+        echo "OK (konfiguration-Eintraege entfernt)\n";
     } else {
         echo "uebersprungen\n";
-        echo "  Hinweis: der verschluesselte API-Key in system_config bleibt erhalten.\n";
+        echo "  Hinweis: der verschluesselte API-Key in `konfiguration` bleibt erhalten.\n";
         echo "           Flag --delete-api-key nutzen um ihn zu entfernen.\n";
     }
 } catch (\Throwable $e) {
