@@ -7,6 +7,7 @@ namespace Xentral\Modules\LexwareOffice\Service;
 use erpAPI;
 use Xentral\Components\Database\Database;
 use Xentral\Components\Logger\Logger;
+use Xentral\Modules\LexwareOffice\Bootstrap;
 use Xentral\Modules\LexwareOffice\Exception\LexwareOfficeException;
 
 final class LexwareOfficeService
@@ -36,6 +37,11 @@ final class LexwareOfficeService
 
     public function saveApiKey(string $apiKey): void
     {
+        // Lazy-Migration: beim ersten Speichern eines API-Keys stellen wir sicher,
+        // dass die Idempotenz-Spalten (lexware_contact_id, lexware_invoice_id,
+        // lexware_uploaded_at) existieren. ensureSchema() ist idempotent via
+        // SHOW COLUMNS-Check, also unbedenklich bei wiederholten Saves.
+        Bootstrap::ensureSchema($this->db);
         $this->config->saveApiKey($apiKey);
     }
 
