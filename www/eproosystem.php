@@ -358,7 +358,14 @@ class erpooSystem extends Application
       $activeModule = $this->Secure->GetGET('module');
       $activeAction = $this->Secure->GetGET('action');
 
-      $navigation = $this->Page->CreateNavigation($this->erp->Navigation(), true, $activeModule, $activeAction);
+      $rawNavigation = $this->erp->Navigation();
+      if (isset($this->Container) && $this->Container->has('MenuConfiguratorService')
+          && isset($this->User) && method_exists($this->User, 'GetID')) {
+          /** @var \Xentral\Modules\MenuConfigurator\Service\MenuConfiguratorService $menuConfigurator */
+          $menuConfigurator = $this->Container->get('MenuConfiguratorService');
+          $rawNavigation = $menuConfigurator->apply($rawNavigation, null, (int)$this->User->GetID());
+      }
+      $navigation = $this->Page->CreateNavigation($rawNavigation, true, $activeModule, $activeAction);
 
       $activeCategory = $appstore->GetCategoryByModule($activeModule, $this->Secure->GetGET('id'));
 
