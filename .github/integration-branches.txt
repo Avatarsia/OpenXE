@@ -38,3 +38,9 @@ feature/row-highlight-clean
 fix/woocommerce-variation-support
 feature/paid-marking-clean
 mwst_korrektion
+
+# Upstream bug-fix PRs (single-file patches, also live as open PRs on openxe-org)
+fix/250-wiedervorlage-sidebar-counter
+fix/dateien-stichwoerter-245
+fix/versandpakete-247
+fix/player-custom-module-support
