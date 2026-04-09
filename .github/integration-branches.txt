@@ -1,0 +1,32 @@
+# Integration branch manifest for the nightly production build.
+#
+# One branch per line. Lines starting with # or blank lines are ignored.
+# The workflow merges these branches in order on top of upstream/master
+# (https://github.com/openxe-org/openxe master).
+#
+# Order matters when branches have dependencies between each other.
+# Put foundational branches first, mini-patches last.
+#
+# To add a new integration branch:
+#   1. Push the branch to this fork
+#   2. Append its name to this file
+#   3. Commit + push on feature/ci-workflow
+#
+# The next nightly run (or manual workflow_dispatch) will pick it up.
+# The ci-workflow branch itself is listed below so the workflow files
+# are automatically reintegrated into production on every rebuild.
+
+# CI/CD — keep first so the workflow files are always present on production
+feature/ci-workflow
+
+# Core feature modules (full Bootstrap + hook integration)
+feature/lexwareoffice-module
+feature/network-printer-module
+feature/supersearch-enhancement
+
+# Mini-patches (small core touches, kept as patch branches without Bootstrap)
+feature/plz-clean
+feature/row-highlight-clean
+fix/woocommerce-variation-support
+feature/paid-marking-clean
+mwst_korrektion
