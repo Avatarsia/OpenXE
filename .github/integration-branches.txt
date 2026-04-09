@@ -27,7 +27,10 @@ feature/menu-configurator-module
 
 # Larger feature branches (file-based import, some core touch)
 feature/upgrader-ui-module
-feature/ticketportal-module
+# feature/ticketportal-module  -- temporarily disabled: the portal_*
+#   core touch in www/pages/ticket.php is a merge-conflict risk against
+#   upstream and the refactor into a dedicated TicketPortalService is
+#   still pending. Re-enable once the refactor lands.
 
 # Mini-patches (small core touches, kept as patch branches without Bootstrap)
 feature/plz-clean
