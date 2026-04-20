@@ -105,7 +105,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
    */
   public function ImportGetAuftraegeAnzahl()
   {
-    $configuredStatuses = array_map('trim', explode(';', $this->statusPending));
+    $configuredStatuses = array_map('trim', explode(';', (string) $this->statusPending));
 
     try {
       $this->client->get('orders', [
@@ -158,7 +158,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       // persistLastImportTimestamp() updated $this->lastImportTimestamp already.
     }
 
-    $configuredStatuses = array_map('trim', explode(';', $this->statusPending));
+    $configuredStatuses = array_map('trim', explode(';', (string) $this->statusPending));
+    $runStartTimestamp = $this->lastImportTimestamp;
     $page = 1;
     $result = [];
 
@@ -166,7 +167,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       try {
         $pageOrders = $this->client->get('orders', [
           'status'   => $configuredStatuses,
-          'after'    => $this->lastImportTimestamp,
+          'after'    => $runStartTimestamp,
           'per_page' => self::ORDERS_PER_PAGE,
           'page'     => $page,
           'orderby'  => 'date',
@@ -239,7 +240,11 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       return null;
     }
 
-    return (string) $order->date_created_gmt;
+    $ts = strtotime((string) $order->date_created_gmt);
+    if ($ts === false) {
+      return null;
+    }
+    return gmdate('Y-m-d\TH:i:s', $ts - 1);
   }
 
   // This function searches the wcOrder for the specified WC Meta key
