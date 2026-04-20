@@ -1597,11 +1597,24 @@ class WCResponse
   /**
    * Get headers.
    *
-   * @return array $headers WCResponse headers.
+   * @return array $headers WCResponse headers (keys normalized to lowercase).
    */
   public function getHeaders()
   {
     return $this->headers;
+  }
+
+  /**
+   * Get a single response header by name (case-insensitive).
+   *
+   * @param string $name Header name (e.g. 'x-wp-totalpages').
+   *
+   * @return string|null Header value or null if not present.
+   */
+  public function getHeader($name)
+  {
+    $key = strtolower($name);
+    return isset($this->headers[$key]) ? $this->headers[$key] : null;
   }
 
   /**
@@ -2489,6 +2502,7 @@ class WCHttpClient
 
       list($key, $value) = explode(': ', $line);
 
+      $key = strtolower($key);
       $headers[$key] = isset($headers[$key]) ? $headers[$key] . ', ' . trim($value) : trim($value);
     }
 
