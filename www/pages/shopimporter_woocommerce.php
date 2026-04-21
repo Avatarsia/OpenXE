@@ -18,6 +18,8 @@ use Xentral\Modules\Onlineshop\Data\ArticleExportResult;
 use Xentral\Modules\Onlineshop\Data\OrderStatus;
 use Xentral\Modules\Onlineshop\Data\OrderStatusUpdateRequest;
 use Xentral\Components\Logger\Logger;
+use Xentral\Components\WooCommerce\ClientWrapper;
+use Automattic\WooCommerce\HttpClient\HttpClientException;
 
 class Shopimporter_Woocommerce extends ShopimporterBase
 {
@@ -27,12 +29,10 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public $shopid;
   public $data;
 
-  const TIMEOUT = 30;
-
   /**
-   * @var $client WCClient $client
+   * @var ClientWrapper $client
    */
-  public WCClient $client;
+  public $client;
   public $url;
 
   /** These variables hold the status strings WooCommerce is using to represent
@@ -59,15 +59,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   protected $app;
   protected $dump;
 
-  /*
-   * Variables for wordpress API
-   */
-  private $ImportWordpressUserName;
-  private $ImportWordpressApplicationPassword;
-  private $wordpress_api_path = "wp-json/wp/v2/";
-  private $dateienuebertragen;
-
-/** @var Logger $logger */
+  /** @var Logger $logger */
   public $logger;
 
   /** @var bool $ssl_ignore Whether to ignore SSL certificate validation */
@@ -515,7 +507,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
    * Updates the order status once payment and shipping are set to ok.
    * Also updates the order with the shipping tracking code
    * @return string
-   * @throws WCHttpClientException
+   * @throws HttpClientException
    */
   public function ImportUpdateAuftrag()
   {
@@ -574,14 +566,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
    * roughly ceil(n/100) + ceil(n/100) requests.
    *
    * @return int Number of articles successfully synced
-   * @throws WCHttpClientException
+   * @throws HttpClientException
    */
   public function ImportSendListLager()
   {
     $tmp = $this->CatchRemoteCommand('data');
     $anzahl = 0;
     $ctmp = (!empty($tmp) ? count($tmp) : 0);
-    $this->logger->debug("WooCommerce ImportSendListLager ".$ctmp." entries");
 
     // --- Step 1: Collect all SKUs and compute desired stock params ---
 
@@ -784,84 +775,9 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $tmp = $this->catchRemoteCommand('data');
     $anzahl = 0;
     $return = [];
-    $ctmp = (!empty($tmp) ? count($tmp) : 0);
-    $this->logger->debug("WooCommerce ImportSendList ".$ctmp." entries");
-
-    // Prepare files
-    $alle_dateien = array(); // pfad, dateiname
-    if ($this->dateienuebertragen) {
-        for ($i = 0; $i < $ctmp; $i++) {
-            $dateien_artikel = array();
-            if (isset($tmp[$i]['Dateien'])) {
-                // apply naming
-                foreach ($tmp[$i]['Dateien'] as $key => $datei) {
-                    if (!empty($this->filenamesmarty)) {
-                        $smarty = new Smarty;
-                        $directory = $this->app->erp->GetTMP().'/smarty/templates';
-                        $smarty->setCompileDir($directory);
-                        $dateidata = $datei;
-                        $dateidata['dateiname'] = pathinfo($dateidata['filename'] , PATHINFO_FILENAME);
-                        $dateidata['endung'] = pathinfo($dateidata['filename'], PATHINFO_EXTENSION);
-                        $dateidata['artikel'] = (object) $datei['artikeldata'];
-                        $smarty->assign('artikel', (object) $tmp[$i]);
-                        $smarty->assign('datei', (object) $dateidata);
-                        $transformed = $smarty->fetch('string:'.$this->filenamesmarty);
-                        if (!empty($transformed)) {
-                            $basename = pathinfo($transformed, PATHINFO_FILENAME);
-                            $ext = pathinfo($transformed, PATHINFO_EXTENSION);
-                            if (empty($ext)) {
-                                $ext = $datei['dateiendung'];
-                            }
-                            $datei['filename'] = $basename.".".$ext;
-                        }
-                    }
-                    // Ensure unique names
-                    if (in_array($datei['filename'],array_column($dateien_artikel,'filename'))) {
-                        $filecount = 0;
-                        $base = pathinfo($datei['filename'], PATHINFO_FILENAME);
-                        $extension = pathinfo($datei['filename'], PATHINFO_EXTENSION);
-                        do {
-                            $filecount++;
-                            $filename = $base.$this->fileunique.$filecount.'.'.$extension;
-                        } while (in_array($filename,array_column($dateien_artikel,'filename')));
-                        $datei['filename'] = $filename;
-                    }
-                    unset($datei['artikeldata']);
-                    $dateien_artikel[] = $datei;
-                }
-                $alle_dateien = array_merge($alle_dateien,$dateien_artikel);
-            }
-        } // Artikel loop files
-
-        // Each filename only once
-        $unique_filename = array_unique(array_column($alle_dateien, 'filename'));
-        $alle_dateien = array_intersect_key($alle_dateien, $unique_filename);
-        $this->logger->debug("WooCommerce ImportSendList ".count($alle_dateien)." files", $alle_dateien);
-
-        // Upload all the files and save wordpress id
-        $uploaded_files = $this->uploadFiles($alle_dateien);
-        $this->logger->debug("WooCommerce ImportSendList uploaded " .count($uploaded_files)." files", $uploaded_files);
-    }
-    // Files
-
-    for ($i = 0; $i < $ctmp; $i++) {
+    for ($i = 0; $i < (!empty($tmp) ? count($tmp) : 0); $i++) {
       $return[$i] = new ArticleExportResult();
-      $return[$i]->success = true;
       $artikel = $tmp[$i]['artikel'];
-
-        if (!empty($this->productsmarty)) {
-            $smarty = new Smarty;
-            $directory = $this->app->erp->GetTMP().'/smarty/templates';
-            $smarty->setCompileDir($directory);
-            $smarty->assign('artikel', (object) $tmp[$i]);
-            $smarty_array = json_decode($this->productsmarty, true);
-            if (empty($smarty_array)) {
-                throw new Exception("Smarty template JSON decode error! ".print_r(json_last_error_msg(),true));
-            }
-            $transformed = json_decode($smarty->fetch('string:'.$this->productsmarty),true);
-            $tmp[$i] = array_merge((array) $tmp[$i], $transformed);
-        }
-
       $return[$i]->articleId = intval($artikel);
       $nummer = $tmp[$i]['nummer'];
       if (!empty($tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'])) {
@@ -874,11 +790,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $hersteller = $tmp[$i]['hersteller'];
       $herstellerlink = $tmp[$i]['herstellerlink'];
 
-      $name_de = html_entity_decode($tmp[$i]['name_de']);
-      $name_en = html_entity_decode($tmp[$i]['name_en']);
-
-//        print_r($tmp[$i]); exit();
-
+      $name_de = $tmp[$i]['name_de'];
+      $name_en = $tmp[$i]['name_en'];
       $description = html_entity_decode($tmp[$i]['uebersicht_de']);
       $description_en = html_entity_decode($tmp[$i]['uebersicht_en']);
       $preis = $tmp[$i]['preis'];
@@ -907,7 +820,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $meta_desc = $tmp[$i]['metadescription_de'];
       $meta_title = $tmp[$i]['metatitle_de'];
 
-      $pseudopreis = $tmp[$i]['pseudopreis'];// *1.19;
+      $pseudopreis = $tmp[$i]['pseudopreis'];//*1.19;
       if ($pseudopreis <= $preis)
         $pseudopreis = $preis;
       $steuersatz = $tmp[$i]['steuersatz'];
@@ -946,9 +859,6 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         ['key' => '_yoast_wpseo_title', 'value' => $meta_title],
       ];
 
-        foreach ($tmp[$i]['meta_data'] as $key => $value) {
-            $commonMetaData[] = ['key' => $this->metadataprefix.$key, 'value' => $value];
-        }
 
       // Attributes that are used for both updating an existing product as well as creating a new one
       $commonProductAtts = [
@@ -964,7 +874,6 @@ class Shopimporter_Woocommerce extends ShopimporterBase
           'width' => $dim_width,
           'height' => $dim_height
         ],
-        'global_unique_id' => $tmp[$i]['ean'],
         'meta_data' => $commonMetaData,
       ];
 
@@ -983,44 +892,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         $commonProductAtts['stock_quantity'] = (int) $lageranzahl;
       }
 
-      if (isset($tmp[$i]['Dateien'])) {
-        if (!empty($uploaded_files)) {
-            $attachments = array();
-
-            foreach ($tmp[$i]['Dateien'] as $datei) {
-                // find file in uploaded_files
-                $key = array_search($datei['dateipfad'], array_column($uploaded_files, 'dateipfad'));
-                if ($key !== false) {
-                    $uploaded_file = $uploaded_files[$key];
-                    if ($uploaded_file['type'] == 'shopbild') {
-                        $commonProductAtts['images'][] = [
-                            'id' => $uploaded_file['wordpressid']
-                        ];
-                    }
-                    else if (in_array(strtolower($uploaded_file['type']),$this->dateienuebertragen)) {
-                        $attachments[] = array('name' => $uploaded_file['name'], 'wp_media_id' => $uploaded_file['wordpressid'], 'typ' => $uploaded_file['type']);
-                    }
-                } else {
-                    $return[$i]->message .= "Datei wurde nicht exportiert: ".$datei['filename'];
-                }
-            }
-
-            array_multisort(
-                array_column($attachments, 'name'),
-                SORT_ASC,
-                SORT_NATURAL,
-                $attachments
-            );
-
-            if (!empty($attachments)) {
-                $commonProductAtts['meta_data'][] = array('key' => 'openxe_product_attachments', 'value' => $attachments);
-            }
-        }
-      }
-
       if (!is_null($product_id)) {
         // Product exists - check if it's a variation or regular product
-        $this->logger->debug("WooCommerce ImportSendList update product");
         if ($isVariant && !empty($parent_id)) {
           // This is a VARIATION - use the variations endpoint
           // Variations don't support certain attributes (they inherit from parent)
@@ -1042,105 +915,110 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
           $this->client->put('products/' . $parent_id . '/variations/' . $product_id, $variationAtts);
 
-          $this->logger->info("WooCommerce Variante geändert für Artikel: $nummer / Variation: $product_id (Parent: $parent_id), noch ".($ctmp - $i -1 )." Artikel");
+          $this->logger->info("WooCommerce Variante geändert für Artikel: $nummer / Variation: $product_id (Parent: $parent_id)");
         } else {
           // This is a regular product
           $this->client->put('products/' . $product_id, array_merge([
 
           ], $commonProductAtts));
 
-          $this->logger->info("WooCommerce Artikel geändert für Artikel: $nummer / $product_id, noch ".($ctmp - $i -1 )." Artikel");
+          $this->logger->info("WooCommerce Artikel geändert für Artikel: $nummer / $product_id");
         }
       } else {
         // create a new product
-        $this->logger->debug("WooCommerce ImportSendList create product");
         $product_id = $this->client->post('products/', array_merge([
           'sku' => $nummer,
         ], $commonProductAtts))->id;
-        $this->logger->info("WooCommerce neuer Artikel angelegt: $nummer, noch ".($ctmp - $i - 1)." Artikel");
+        $this->logger->info("WooCommerce neuer Artikel angelegt: $nummer");
       }
 
-      // TODO: Kategoriebaum wird noch nicht uebertragen
+      // TODO: Kategoriebaum und Bilder werden noch nicht uebertragen
 
       // if(isset($tmp[$i]['kompletter_kategorienbaum'])){
       //   $baum = $tmp[$i]['kompletter_kategorienbaum'];
       //   $this->updateKategorieBaum($baum);
       // }
 
+      // if(isset($tmp[$i]['Dateien'])){
+      //   $dateien = $tmp[$i]['Dateien'];
+      //   $this->save_images($dateien, $product_id);
+      // }
+
       // Update the associated product categories
 
-      if ($this->kategorienuebertragen) {
-          $chosenCats = array();
-          if (isset($tmp[$i]['kategorien']) || isset($tmp[$i]['kategoriename'])) {
-            $kategorien = $tmp[$i]['kategorien'];
-            if (!($kategorien) && !self::emptyString($tmp[$i]['kategoriename'])) {
-              $kategorien = array(
-                array(
-                  'name' => $tmp[$i]['kategoriename'],
-                )
-              );
+      $chosenCats = array();
+      if (isset($tmp[$i]['kategorien']) || isset($tmp[$i]['kategoriename'])) {
+        $kategorien = $tmp[$i]['kategorien'];
+        if (!($kategorien) && !self::emptyString($tmp[$i]['kategoriename'])) {
+          $kategorien = array(
+            array(
+              'name' => $tmp[$i]['kategoriename'],
+            )
+          );
+        }
+        if ((!empty($kategorien) ? count($kategorien) : 0) > 0) {
+          // Retrive all WC categories via API
+          $allWooCommerceCategories = $this->client->get('products/categories', ['per_page' => '100']);
+
+          $searchWpCategories = [];
+          foreach ($allWooCommerceCategories as $a) {
+            $searchWpCategories[$a->id] = $a->name;
+          }
+          // searchWPCategories is an assoc array of type WCCatId(Int) -> WCCatName(string)
+
+          // Iterate over the categories that are choosen in xentral
+          foreach ($kategorien as $k => $v) {
+            $wawi_cat_name = $v['name'];
+
+            $wcCatId = null;
+
+            // If WC has a matching category. We match based on name!
+            if (array_search($wawi_cat_name, array_values($searchWpCategories)) !== false) {
+              // get  id of that WC Category
+              $wcCatId = array_search($wawi_cat_name, $searchWpCategories);
+
+            } else {
+              // No matching category exists
+              $wcCatId = $this->client->post('products/categories', [
+                'name' => $wawi_cat_name,
+              ])->id;
+
             }
-            if ((!empty($kategorien) ? count($kategorien) : 0) > 0) {
-              // Retrive all WC categories via API
-              $allWooCommerceCategories = $this->client->get('products/categories', ['per_page' => '100']);
 
-              $searchWpCategories = [];
-              foreach ($allWooCommerceCategories as $a) {
-                $searchWpCategories[$a->id] = $a->name;
+            if ($wcCatId) {
+              // update category. We first retrieve the product and append the new product category, not replace the entire category array.
+              $alreadyAssignedWCCats = $this->client->get('products/' . $product_id, [
+                'per_page' => 1,
+              ])->categories;
+
+              // Get ids of existing categories
+              $existingCategoryIds = [];
+              foreach ($alreadyAssignedWCCats as $cat) {
+                $existingCategoryIds[] = $cat->id;
               }
-              // searchWPCategories is an assoc array of type WCCatId(Int) -> WCCatName(string)
 
-              // Iterate over the categories that are choosen in xentral
-              foreach ($kategorien as $k => $v) {
-                $wawi_cat_name = $v['name'];
+              $allCatIds = array_merge($existingCategoryIds, array($wcCatId));
 
-                $wcCatId = null;
-
-                // If WC has a matching category. We match based on name!
-                if (array_search($wawi_cat_name, array_values($searchWpCategories)) !== false) {
-                  // get  id of that WC Category
-                  $wcCatId = array_search($wawi_cat_name, $searchWpCategories);
-
-                } else {
-                  // No matching category exists
-                  $wcCatId = $this->client->post('products/categories', [
-                    'name' => $wawi_cat_name,
-                  ])->id;
-
-                }
-
-                if ($wcCatId) {
-                  // update category. We first retrieve the product and append the new product category, not replace the entire category array.
-                  $alreadyAssignedWCCats = $this->client->get('products/' . $product_id, [
-                    'per_page' => 1,
-                  ])->categories;
-
-                  // Get ids of existing categories
-                  $existingCategoryIds = [];
-                  foreach ($alreadyAssignedWCCats as $cat) {
-                    $existingCategoryIds[] = $cat->id;
-                  }
-
-                  $allCatIds = array_merge($existingCategoryIds, array($wcCatId));
-
-                  // prepare data to be in correct format for WC api. should be individual items with key 'id' and id as value
-                  $allCatIdsWCAPIRep = array();
-                  foreach ($allCatIds as $id) {
-                    $allCatIdsWCAPIRep[] = ['id' => $id];
-                  }
-
-                  // Update category assignment
-                  $this->client->put('products/' . $product_id, [
-                    'categories' => $allCatIdsWCAPIRep,
-                  ]);
-
-                  $chosenCats[] = $wcCatId;
-                }
+              // prepare data to be in correct format for WC api. should be individual items with key 'id' and id as value
+              $allCatIdsWCAPIRep = array();
+              foreach ($allCatIds as $id) {
+                $allCatIdsWCAPIRep[] = ['id' => $id];
               }
+
+              // Update category assignment
+              $this->client->put('products/' . $product_id, [
+                'categories' => $allCatIdsWCAPIRep,
+              ]);
+
+              $chosenCats[] = $wcCatId;
             }
-        } // kategorienuebertragen
+          }
+        }
       }
+
+      $return[$i]->success = true;
     }
+
     return $return;
     // return array($product_id,$anzahl,$nummer,$steuersatz, $preis);
   }
@@ -1154,17 +1032,10 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   {
     try {
       $orders = $this->client->get('orders', ['per_page' => '1']);
+      return 'success';
     } catch (Exception $e) {
       return 'failed: Keine Verbindung zur API - ' . $e->getMessage();
     }
-
-    if (!empty($this->ImportWordpressUserName)) {
-        $result = $this->wordpress_request('users/me', debug: true, ssl_ignore: true);
-        if ($result['status'] != 1) {
-            return 'failed: Verbindung zur Wordpress API '.$result['message'];
-        }
-    }
-    return 'success';
   }
 
   /**
@@ -1172,7 +1043,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
    * @param  [type] $shopid [description]
    * @param  [type] $data   [description]
    * @return [type]         [description]
-   * @throws WCHttpClientException
+   * @throws HttpClientException
    */
   public function getKonfig($shopid, $data)
   {
@@ -1193,37 +1064,21 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ImportWooCommerceApiKey = $felder['ImportWoocommerceApiKey'] ?? '';
     $ImportWooCommerceApiUrl = $felder['ImportWoocommerceApiUrl'] ?? '';
 
-    $this->ImportWordpressUserName = $felder['ImportWordpressUserName'];
-    $this->ImportWordpressApplicationPassword = $felder['ImportWordpressApplicationPassword'];
-
-    $this->filenamesmarty = $felder['filenamesmarty'];
-    $this->productsmarty = $felder['productsmarty'];
-    $this->fileunique = $felder['fileunique'];
-    $this->metadataprefix = $felder['metadataprefix'];
-
-    $shopexportArr =  $this->app->DB->SelectRow("SELECT * FROM shopexport WHERE id = '$this->shopid' LIMIT 1");
-
-    $dateienuebertragen = $shopexportArr['dateienuebertragen'];
-    $this->kategorienuebertragen = $shopexportArr['kategorienuebertragen'];
-
-    $this->dateienuebertragen = explode(',',str_replace(' ','',strtolower($dateienuebertragen)));
-
     $this->statusPending = $felder['statusPending'] ?? 'pending';
     $this->statusProcessing = $felder['statusProcessing'] ?? 'processing';
     $this->statusCompleted = $felder['statusCompleted'] ?? 'completed';
-    $this->timeout = (int) $felder['timeout'] ?? SELF::TIMEOUT;
 
     $this->priceType = $felder['priceType'] ?? null;
 
     $this->url = $ImportWooCommerceApiUrl;
-    $this->client = new WCClient(
+    $this->client = new ClientWrapper(
       //URL des WooCommerce Rest Servers
       $ImportWooCommerceApiUrl,
       //WooCommerce API Key
       $ImportWooCommerceApiKey,
       //WooCommerce API Secret
       $ImportWooCommerceApiSecret,
-      ["query_string_auth" => true, 'timeout' => $this->timeout],
+      ["query_string_auth" => true],
       $this->logger,
       $this->ssl_ignore
     );
@@ -1365,7 +1220,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if (empty($ImportWooCommerceApiSecret)) {
       return new JsonResponse(['error' => 'Bitte das API-Secret angeben'], JsonResponse::HTTP_BAD_REQUEST);
     }
-    $this->client = new WCClient(
+    $this->client = new ClientWrapper(
       $ImportWooCommerceApiUrl,
       $ImportWooCommerceApiKey,
       $ImportWooCommerceApiSecret,
@@ -1434,7 +1289,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
    * @param string $sku Artikelnummer
    *
    * @return array|null The WooCommerce product id of the given product, null if such a product does not exist
-   * @throws WCHttpClientException
+   * @throws HttpClientException
    */
   private function getShopIdBySKU($sku)
   {
@@ -1474,37 +1329,15 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         'ausblenden' => array('abholmodus' => array('zeitbereich')),
         'archiv' => array('ab_nummer'),
         'felder' => array(
-        //          'protokoll'=>array('typ'=>'checkbox','bezeichnung'=>'Protokollierung im Logfile:'),
-        'ssl_ignore' => array('typ' => 'checkbox', 'bezeichnung' => 'SSL-Prüfung abschalten:', 'info' => 'Nur für Testzwecke!'),
-        'ImportWoocommerceApiKey' => array('typ' => 'text', 'bezeichnung' => '{|API Key:', 'size' => 60),
-        'ImportWoocommerceApiSecret' => array('typ' => 'text', 'bezeichnung' => '{|API Secret|}:', 'size' => 60),
-        'ImportWoocommerceApiUrl' => array('typ' => 'text', 'bezeichnung' => '{|API Url|}:', 'size' => 40),
-        'ImportWordpressUserName' => array('typ' => 'text', 'bezeichnung' => '{|Wordpress Benutzername:', 'size' => 60, 'info' => 'Für Dateiuploads'),
-        'ImportWordpressApplicationPassword' => array('typ' => 'text', 'bezeichnung' => '{|Wordpress Anwendungspasswort:', 'size' => 60, 'info' => 'Für Dateiuploads'),
-        'statusPending' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung offen|}:', 'size' => 40, 'default' => 'pending', 'info' => '({|ggfs. getrennt durch ";": pending;on-hold|})'),
-        'statusProcessing' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung in Bearbeitung|}:', 'size' => 10, 'default' => 'processing'),
-        'statusCompleted' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung fertig|}:', 'size' => 10, 'default' => 'completed'),
-        'priceType' => array('typ' => 'select', 'bezeichnung' => '{|Preisberechnungsgrundlage bei Auftragsimport|}', 'optionen' => array('netcalculated' => '{|Nettopreis zurückrechnen (Standard)|}', 'grosscalculated' => '{|Bruttopreis zurückrechnen|}')),
-        'timeout' => array('typ' => 'text', 'bezeichnung' => '{|Timeout in Sekunden|}:', 'size' => 40, 'default' => '30', 'info' => ''),
-        'metadataprefix' => array('typ' => 'text', 'bezeichnung' => '{|Präfix für Metadaten|}:', 'size' => 40, 'default' => 'openxe_meta_', 'info' => ''),
-        'productsmarty' => [
-            'typ' => 'textarea',
-            'cols' => 80,
-            'rows' => 5,
-            'bezeichnung' => '{|Smarty-Template JSON|}:',
-            'info' => 'Beispiel:<br>{<br />&nbsp; &nbsp; "name_de": "{$artikel-&gt;name_en}",<br />&nbsp; &nbsp; "meta_data": {<br />&nbsp; &nbsp; &nbsp; &nbsp; "mpn": "{$artikel-&gt;herstellernummer}",<br />&nbsp; &nbsp; &nbsp; &nbsp; "manufacturer": "{$artikel-&gt;hersteller}"<br />&nbsp; &nbsp; }<br />}',
-            'size' => 120,
-        ],
-        'filenamesmarty' => [
-            'typ' => 'textarea',
-            'cols' => 80,
-            'rows' => 5,
-            'bezeichnung' => '{|Smarty-Template f&uuml;r Benennung der Dateien|}:',
-            'info' => 'Beispiel:{$artikel->hersteller}-{$artikel->herstellernummer}-{$artikel->stichwort}-{$datei->titel}.{$datei->endung}<br>Dateifelder: dateiname, endung, mimetype, titel, beschreibung, id, version, stichwort, extid',
-            'size' => 120,
-        ],
-        'fileunique' => array('typ' => 'text', 'bezeichnung' => '{|Trennzeichen für Mehrfachdateinamen|}:', 'size' => 11, 'default' => '-'),
-        'dateienuebertragen' => array('typ' => 'info', 'bezeichnung' => '{|Datei&uuml;bertragung|}', 'info' => 'Dateien werden &uuml;ber Wordpress API hochgeladen und im Produkt in den Metadaten als Array "product_attachments" mit Präfix (s.o.) hinterlegt. Diese k&ouml;nnen dann z.B. mit einem Snippet angezeigt werden. Felder: "typ", "wp_media_id", "name". Der URL kann mit wp_get_attachment_url($wp_media_id) ermittelt werden.'),
+          //          'protokoll'=>array('typ'=>'checkbox','bezeichnung'=>'Protokollierung im Logfile:'),
+          'ssl_ignore' => array('typ' => 'checkbox', 'bezeichnung' => 'SSL-Prüfung abschalten:', 'info' => 'Nur für Testzwecke!'),
+          'ImportWoocommerceApiKey' => array('typ' => 'text', 'bezeichnung' => '{|API Key:', 'size' => 60),
+          'ImportWoocommerceApiSecret' => array('typ' => 'text', 'bezeichnung' => '{|API Secret|}:', 'size' => 60),
+          'ImportWoocommerceApiUrl' => array('typ' => 'text', 'bezeichnung' => '{|API Url|}:', 'size' => 40),
+          'statusPending' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung offen|}:', 'size' => 40, 'default' => 'pending', 'info' => '({|ggfs. getrennt durch ";": pending;on-hold|})'),
+          'statusProcessing' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung in Bearbeitung|}:', 'size' => 10, 'default' => 'processing'),
+          'statusCompleted' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung fertig|}:', 'size' => 10, 'default' => 'completed'),
+          'priceType' => array('typ' => 'select', 'bezeichnung' => '{|Preisberechnungsgrundlage bei Auftragsimport|}', 'optionen' => array('netcalculated' => '{|Nettopreis zurückrechnen (Standard)|}', 'grosscalculated' => '{|Bruttopreis zurückrechnen|}')),
         )
       );
   }
@@ -1540,1577 +1373,4 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     return (strlen(trim($string)) == 0);
   }
 
-  function wordpress_request(string $endpoint, $postdata = null, $method = null, $getdata = null, string $content_disposition = null, string $content_type = null, $debug = false, $debugurl = null, bool $ssl_ignore = false, int $timeout_seconds = 30) {
-    $ch = curl_init();
-    $url_addition = "";
-
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-    curl_setopt($ch, CURLOPT_USERPWD, $this->ImportWordpressUserName . ":" . $this->ImportWordpressApplicationPassword);
-
-    if (!empty($getdata)) {
-        $url_addition = "?";
-        $ampersand = "";
-        foreach ($getdata as $key => $value) {
-            $url_addition .= $ampersand . $key . "=" . $value;
-            $ampersand = "&";
-        }
-    }
-    if (!empty($postdata)) {
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $postdata);
-        $headers[] = 'Content-Type: ' . $content_type;
-        if (!empty($content_disposition)) {
-            $headers[] = 'Content-Disposition: '.$content_disposition;
-        }
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    }
-
-    if ($debugurl) {
-        $url = $debugurl;
-    } else {
-        $url = $this->shopUrl;
-    }
-
-    curl_setopt($ch, CURLOPT_URL, $url . $this->url. $this->wordpress_api_path . $endpoint . $url_addition);
-
-    curl_setopt($ch, CURLINFO_HEADER_OUT, true);
-    curl_setopt($ch, CURLOPT_VERBOSE, true);
-
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, !$ssl_ignore);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, !$ssl_ignore);
-
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout_seconds);
-    curl_setopt($ch, CURLOPT_TIMEOUT, $timeout_seconds);
-
-    $response = curl_exec($ch);
-    if (curl_error($ch)) {
-        $this->error[] = curl_error($ch);
-    } else {
-        $response = json_decode($response, associative: true);
-    }
-    curl_close($ch);
-
-    $information = curl_getinfo($ch);
-
-    $result = [
-        'status' => ($information['http_code'] >= 200  && $information['http_code'] <= 299),
-        'response' => $response,
-        'message' => $response['message']
-    ];
-
-    if ($debug) {
-        $result['curl_getinfo'] = $information;
-        $result['curl_postdata_500_bytes'] = mb_substr($postdata,0,500);
-        $this->logger->debug(
-                'Woocommerce Wordpress debug',
-                $result
-        );
-    }
-
-    return $result;
-  }
-
-      /*
-     * Upload files to wordpress API
-     * Returns list of files with url
-     */
-
-    function uploadFiles($dateien) {
-
-        $uploadFilesResult = array();
-
-        foreach ($dateien as $datei) {
-
-            $fileResult = [
-                            'success' => true,
-                            'name'=> $datei['filename'],
-                            'type' => strtolower($datei['stichwort'])
-                        ];
-
-            $postdata = file_get_contents($datei['dateipfad']);
-
-            $result = $this->wordpress_request(
-                    endpoint: 'media',
-                    getdata: [
-                        'search' => urlencode($datei['filename'])
-                    ],
-                    debug: true,
-                    ssl_ignore: true
-            );
-
-            if ($result['status'] == 1) {
-                $response = $result['response'];
-
-                $file_wordpress_id = $response[0]['id'];
-
-                if (is_numeric($file_wordpress_id)) { // File exists -> update
-                    $result = $this->wordpress_request(
-                            endpoint: 'media/' . $file_wordpress_id,
-                            postdata: $postdata,
-                            method: 'POST',
-                            content_disposition: 'attachment; filename="' . $datei['filename'] . '"',
-                            content_type: $datei['mimetype'] ?: 'application:octet-stream',
-                            debug: true,
-                            ssl_ignore: true
-                    );
-
-                    $response = $result['response'];
-
-                    if ($result['status'] != 1 || $response['id'] != $file_wordpress_id) {
-                        $fileResult['success'] = false;
-                        $fileResult['status'] = 'file update failed';
-                    } else {
-                        $fileResult['status'] = 'updated';
-                        $fileResult['wordpressid'] = $response['id'];
-                        $fileResult['url'] = $response['guid']['rendered'];
-                    }
-                } else { // New file
-                    $result = $this->wordpress_request(
-                            endpoint: 'media',
-                            postdata: $postdata,
-                            method: 'POST',
-                            content_disposition: 'attachment; filename="' . $datei['filename'] . '"',
-                            content_type: $datei['mimetype'] ?: 'application:octet-stream',
-                            debug: true,
-                            ssl_ignore: true
-                    );
-                    if ($result['http_code'] >= 200 && $result['http_code'] <= 299) {
-                        $fileResult['status'] = 'created';
-                        $fileResult['wordpressid'] = $response['id'];
-                        $fileResult['url'] = $response['guid']['rendered'];
-                    } else {
-                        $fileResult['success'] = false;
-                        $fileResult['status'] = 'file creation failed'.$result['http_code']?(" http code".$result['http_code']):'';
-                    }
-                }
-            } else {
-                $fileResult['success'] = false;
-                $fileResult['status'] = 'media search failed';
-            }
-            $fileResult['dateipfad'] = $datei['dateipfad'];
-            $uploadFilesResult[] = $fileResult;
-        }
-        $this->logger->debug(
-                'WooCommerce upload files',
-                $uploadFilesResult
-        );
-
-        return($uploadFilesResult);
-    }
-}
-
-
-class WCClient
-{
-  /**
-   * WooCommerce REST API WCClient version.
-   */
-  const VERSION = '3.0.0';
-
-  /**
-   * HttpClient instance.
-   *
-   * @var WCHttpClient
-   */
-  public $http;
-
-  /** @var Logger $logger */
-  public $logger;
-
-  public $ssl_ignore = false;
-
-  /**
-   * Initialize client.
-   *
-   * @param string $url            Store URL.
-   * @param string $consumerKey    Consumer key.
-   * @param string $consumerSecret Consumer secret.
-   * @param array  $options        WCOptions (version, timeout, verify_ssl).
-   *
-   * @throws WCHttpClientException
-   */
-  public function __construct($url, $consumerKey, $consumerSecret, $options = [], $logger, $ssl_ignore)
-  {
-    $this->http = new WCHttpClient($url, $consumerKey, $consumerSecret, $options, $logger, $ssl_ignore);
-    $this->logger = $logger;
-  }
-
-  /**
-   * POST method.
-   *
-   * @param string $endpoint API endpoint.
-   * @param array  $data     WCRequest data.
-   *
-   * @throws WCHttpClientException
-   *
-   * @return array
-   */
-  public function post($endpoint, $data)
-  {
-    return $this->http->request($endpoint, 'POST', $data);
-  }
-
-  /**
-   * PUT method.
-   *
-   * @param string $endpoint API endpoint.
-   * @param array  $data     WCRequest data.
-   *
-   * @throws WCHttpClientException
-   *
-   * @return array
-   */
-  public function put($endpoint, $data)
-  {
-    return $this->http->request($endpoint, 'PUT', $data);
-  }
-
-  /**
-   * GET method.
-   *
-   * @param string $endpoint   API endpoint.
-   * @param array  $parameters WCRequest parameters.
-   *
-   * @throws WCHttpClientException
-   *
-   * @return array
-   */
-  public function get($endpoint, $parameters = [])
-  {
-    return $this->http->request($endpoint, 'GET', [], $parameters);
-  }
-
-  /**
-   * DELETE method.
-   *
-   * @param string $endpoint   API endpoint.
-   * @param array  $parameters WCRequest parameters.
-   *
-   * @throws WCHttpClientException
-   *
-   * @return array
-   */
-  public function delete($endpoint, $parameters = [])
-  {
-    return $this->http->request($endpoint, 'DELETE', [], $parameters);
-  }
-
-  /**
-   * OPTIONS method.
-   *
-   * @param string $endpoint API endpoint.
-   *
-   * @throws WCHttpClientException
-   *
-   * @return array
-   */
-  public function options($endpoint)
-  {
-    return $this->http->request($endpoint, 'OPTIONS');
-  }
-
-  /**
-   * Get the WCResponse from the most recent HTTP request.
-   *
-   * @return WCResponse|null
-   */
-  public function getLastResponse()
-  {
-    return $this->http->getResponse();
-  }
-}
-
-class WCResponse
-{
-  /**
-   * WCResponse code.
-   *
-   * @var int
-   */
-  private $code;
-
-  /**
-   * WCResponse headers.
-   *
-   * @var array
-   */
-  private $headers;
-
-  /**
-   * WCResponse body.
-   *
-   * @var string
-   */
-  private $body;
-
-  /**
-   * Initialize response.
-   *
-   * @param int    $code    WCResponse code.
-   * @param array  $headers WCResponse headers.
-   * @param string $body    WCResponse body.
-   */
-  public function __construct($code = 0, $headers = [], $body = '')
-  {
-    $this->code = $code;
-    $this->headers = $headers;
-    $this->body = $body;
-  }
-
-  /**
-   * Set code.
-   *
-   * @param int $code WCResponse code.
-   */
-  public function setCode($code)
-  {
-    $this->code = (int) $code;
-  }
-
-  /**
-   * Set headers.
-   *
-   * @param array $headers WCResponse headers.
-   */
-  public function setHeaders($headers)
-  {
-    $this->headers = $headers;
-  }
-
-  /**
-   * Set body.
-   *
-   * @param string $body WCResponse body.
-   */
-  public function setBody($body)
-  {
-    $this->body = $body;
-  }
-
-  /**
-   * Get code.
-   *
-   * @return int
-   */
-  public function getCode()
-  {
-    return $this->code;
-  }
-
-  /**
-   * Get headers.
-   *
-   * @return array $headers WCResponse headers (keys normalized to lowercase).
-   */
-  public function getHeaders()
-  {
-    return $this->headers;
-  }
-
-  /**
-   * Get a single response header by name (case-insensitive).
-   *
-   * @param string $name Header name (e.g. 'x-wp-totalpages').
-   *
-   * @return string|null Header value or null if not present.
-   */
-  public function getHeader($name)
-  {
-    $key = strtolower($name);
-    return isset($this->headers[$key]) ? $this->headers[$key] : null;
-  }
-
-  /**
-   * Get body.
-   *
-   * @return string $body WCResponse body.
-   */
-  public function getBody()
-  {
-    return $this->body;
-  }
-}
-
-class WCOptions
-{
-  /**
-   * Default WooCommerce REST API version.
-   */
-  const VERSION = 'wc/v3';
-
-  /**
-   * Default request timeout.
-   */
-  const TIMEOUT = 30;
-
-  /**
-   * Default WP API prefix.
-   * Including leading and trailing slashes.
-   */
-  const WP_API_PREFIX = '/wp-json/';
-
-  /**
-   * Default User Agent.
-   * No version number.
-   */
-  const USER_AGENT = 'WooCommerce API Client-PHP';
-
-  /**
-   * WCOptions.
-   *
-   * @var array
-   */
-  private $options;
-
-  /**
-   * Initialize HTTP client options.
-   *
-   * @param array $options Client options.
-   */
-  public function __construct($options)
-  {
-    $this->options = $options;
-  }
-
-  /**
-   * Get API version.
-   *
-   * @return string
-   */
-  public function getVersion()
-  {
-    return isset($this->options['version']) ? $this->options['version'] : self::VERSION;
-  }
-
-  /**
-   * Check if need to verify SSL.
-   *
-   * @return bool
-   */
-  public function verifySsl()
-  {
-    return isset($this->options['verify_ssl']) ? (bool) $this->options['verify_ssl'] : true;
-  }
-
-  /**
-   * Get timeout.
-   *
-   * @return int
-   */
-  public function getTimeout()
-  {
-    return isset($this->options['timeout']) ? (int) $this->options['timeout'] : self::TIMEOUT;
-  }
-
-  /**
-   * Basic Authentication as query string.
-   * Some old servers are not able to use CURLOPT_USERPWD.
-   *
-   * @return bool
-   */
-  public function isQueryStringAuth()
-  {
-    return isset($this->options['query_string_auth']) ? (bool) $this->options['query_string_auth'] : false;
-  }
-
-  /**
-   * Check if is WP REST API.
-   *
-   * @return bool
-   */
-  public function isWPAPI()
-  {
-    return isset($this->options['wp_api']) ? (bool) $this->options['wp_api'] : true;
-  }
-
-  /**
-   * Custom API Prefix for WP API.
-   *
-   * @return string
-   */
-  public function apiPrefix()
-  {
-    return isset($this->options['wp_api_prefix']) ? $this->options['wp_api_prefix'] : self::WP_API_PREFIX;
-  }
-
-  /**
-   * oAuth timestamp.
-   *
-   * @return string
-   */
-  public function oauthTimestamp()
-  {
-    return isset($this->options['oauth_timestamp']) ? $this->options['oauth_timestamp'] : \time();
-  }
-
-  /**
-   * Custom user agent.
-   *
-   * @return string
-   */
-  public function userAgent()
-  {
-    return isset($this->options['user_agent']) ? $this->options['user_agent'] : self::USER_AGENT;
-  }
-
-  /**
-   * Get follow redirects
-   *
-   * @return bool
-   */
-  public function getFollowRedirects()
-  {
-    return isset($this->options['follow_redirects']) ? (bool) $this->options['follow_redirects'] : false;
-  }
-}
-
-class WCRequest
-{
-  /**
-   * WCRequest url.
-   *
-   * @var string
-   */
-  private $url;
-
-  /**
-   * WCRequest method.
-   *
-   * @var string
-   */
-  private $method;
-
-  /**
-   * WCRequest paramenters.
-   *
-   * @var array
-   */
-  private $parameters;
-
-  /**
-   * WCRequest headers.
-   *
-   * @var array
-   */
-  private $headers;
-
-  /**
-   * WCRequest body.
-   *
-   * @var string
-   */
-  private $body;
-
-  /**
-   * Initialize request.
-   *
-   * @param string $url        WCRequest url.
-   * @param string $method     WCRequest method.
-   * @param array  $parameters WCRequest paramenters.
-   * @param array  $headers    WCRequest headers.
-   * @param string $body       WCRequest body.
-   */
-  public function __construct($url = '', $method = 'POST', $parameters = [], $headers = [], $body = '')
-  {
-    $this->url = $url;
-    $this->method = $method;
-    $this->parameters = $parameters;
-    $this->headers = $headers;
-    $this->body = $body;
-  }
-
-  /**
-   * Set url.
-   *
-   * @param string $url WCRequest url.
-   */
-  public function setUrl($url)
-  {
-    $this->url = $url;
-  }
-
-  /**
-   * Set method.
-   *
-   * @param string $method WCRequest method.
-   */
-  public function setMethod($method)
-  {
-    $this->method = $method;
-  }
-
-  /**
-   * Set parameters.
-   *
-   * @param array $parameters WCRequest paramenters.
-   */
-  public function setParameters($parameters)
-  {
-    $this->parameters = $parameters;
-  }
-
-  /**
-   * Set headers.
-   *
-   * @param array $headers WCRequest headers.
-   */
-  public function setHeaders($headers)
-  {
-    $this->headers = $headers;
-  }
-
-  /**
-   * Set body.
-   *
-   * @param string $body WCRequest body.
-   */
-  public function setBody($body)
-  {
-    $this->body = $body;
-  }
-
-  /**
-   * Get url.
-   *
-   * @return string
-   */
-  public function getUrl()
-  {
-    return $this->url;
-  }
-
-  /**
-   * Get method.
-   *
-   * @return string
-   */
-  public function getMethod()
-  {
-    return $this->method;
-  }
-
-  /**
-   * Get parameters.
-   *
-   * @return array
-   */
-  public function getParameters()
-  {
-    return $this->parameters;
-  }
-
-  /**
-   * Get headers.
-   *
-   * @return array
-   */
-  public function getHeaders()
-  {
-    return $this->headers;
-  }
-
-  /**
-   * Get raw headers.
-   *
-   * @return array
-   */
-  public function getRawHeaders()
-  {
-    $headers = [];
-
-    foreach ($this->headers as $key => $value) {
-      $headers[] = $key . ': ' . $value;
-    }
-
-    return $headers;
-  }
-
-  /**
-   * Get body.
-   *
-   * @return string
-   */
-  public function getBody()
-  {
-    return $this->body;
-  }
-}
-
-class WCOAuth
-{
-  /**
-   * OAuth signature method algorithm.
-   */
-  const HASH_ALGORITHM = 'SHA256';
-
-  /**
-   * API endpoint URL.
-   *
-   * @var string
-   */
-  protected $url;
-
-  /**
-   * Consumer key.
-   *
-   * @var string
-   */
-  protected $consumerKey;
-
-  /**
-   * Consumer secret.
-   *
-   * @var string
-   */
-  protected $consumerSecret;
-
-  /**
-   * API version.
-   *
-   * @var string
-   */
-  protected $apiVersion;
-
-  /**
-   * WCRequest method.
-   *
-   * @var string
-   */
-  protected $method;
-
-  /**
-   * WCRequest parameters.
-   *
-   * @var array
-   */
-  protected $parameters;
-
-  /**
-   * Timestamp.
-   *
-   * @var string
-   */
-  protected $timestamp;
-
-  /**
-   * Initialize oAuth class.
-   *
-   * @param string $url            Store URL.
-   * @param string $consumerKey    Consumer key.
-   * @param string $consumerSecret Consumer Secret.
-   * @param string $method         WCRequest method.
-   * @param string $apiVersion     API version.
-   * @param array  $parameters     WCRequest parameters.
-   * @param string $timestamp      Timestamp.
-   */
-  public function __construct(
-    $url,
-    $consumerKey,
-    $consumerSecret,
-    $apiVersion,
-    $method,
-    $parameters = [],
-    $timestamp = ''
-  ) {
-    $this->url = $url;
-    $this->consumerKey = $consumerKey;
-    $this->consumerSecret = $consumerSecret;
-    $this->apiVersion = $apiVersion;
-    $this->method = $method;
-    $this->parameters = $parameters;
-    $this->timestamp = $timestamp;
-  }
-
-  /**
-   * Encode according to RFC 3986.
-   *
-   * @param string|array $value Value to be normalized.
-   *
-   * @return string
-   */
-  //TODO Rückgbabetyp prüfen
-  protected function encode($value)
-  {
-    if (is_array($value)) {
-      return array_map([$this, 'encode'], $value);
-    } else {
-      return str_replace(['+', '%7E'], [' ', '~'], rawurlencode($value));
-    }
-  }
-
-  /**
-   * Normalize parameters.
-   *
-   * @param array $parameters Parameters to normalize.
-   *
-   * @return array
-   */
-  protected function normalizeParameters($parameters)
-  {
-    $normalized = [];
-
-    foreach ($parameters as $key => $value) {
-      // Percent symbols (%) must be double-encoded.
-      $key = $this->encode($key);
-      $value = $this->encode($value);
-
-      $normalized[$key] = $value;
-    }
-
-    return $normalized;
-  }
-
-  /**
-   * Process filters.
-   *
-   * @param array $parameters WCRequest parameters.
-   *
-   * @return array
-   */
-  protected function processFilters($parameters)
-  {
-    if (isset($parameters['filter'])) {
-      $filters = $parameters['filter'];
-      unset($parameters['filter']);
-      foreach ($filters as $filter => $value) {
-        $parameters['filter[' . $filter . ']'] = $value;
-      }
-    }
-
-    return $parameters;
-  }
-
-  /**
-   * Get secret.
-   *
-   * @return string
-   */
-  protected function getSecret()
-  {
-    $secret = $this->consumerSecret;
-
-    // Fix secret for v3 or later.
-    if (!\in_array($this->apiVersion, ['v1', 'v2'])) {
-      $secret .= '&';
-    }
-
-    return $secret;
-  }
-
-  /**
-   * Generate oAuth1.0 signature.
-   *
-   * @param array $parameters WCRequest parameters including oauth.
-   *
-   * @return string
-   */
-  protected function generateOauthSignature($parameters)
-  {
-    $baseRequestUri = rawurlencode($this->url);
-
-    // Extract filters.
-    $parameters = $this->processFilters($parameters);
-
-    // Normalize parameter key/values and sort them.
-    $parameters = $this->normalizeParameters($parameters);
-    uksort($parameters, 'strcmp');
-
-    // Set query string.
-    $queryString = implode('%26', $this->joinWithEqualsSign($parameters)); // Join with ampersand.
-    $stringToSign = $this->method . '&' . $baseRequestUri . '&' . $queryString;
-    $secret = $this->getSecret();
-
-    return base64_encode(hash_hmac(self::HASH_ALGORITHM, $stringToSign, $secret, true));
-  }
-
-  /**
-   * Creates an array of urlencoded strings out of each array key/value pairs.
-   *
-   * @param  array  $params      Array of parameters to convert.
-   * @param  array  $queryParams Array to extend.
-   * @param  string $key         Optional Array key to append
-   * @return string              Array of urlencoded strings
-   */
-  protected function joinWithEqualsSign($params, $queryParams = [], $key = '')
-  {
-    foreach ($params as $paramKey => $paramValue) {
-      if ($key) {
-        $paramKey = $key . '%5B' . $paramKey . '%5D'; // Handle multi-dimensional array.
-      }
-
-      if (is_array($paramValue)) {
-        //TODO Typ prüfen
-        $queryParams = $this->joinWithEqualsSign($paramValue, $queryParams, $paramKey);
-      } else {
-        $string = $paramKey . '=' . $paramValue; // Join with equals sign.
-        $queryParams[] = $this->encode($string);
-      }
-    }
-
-    return $queryParams;
-  }
-
-  /**
-   * Sort parameters.
-   *
-   * @param array $parameters Parameters to sort in byte-order.
-   *
-   * @return array
-   */
-  protected function getSortedParameters($parameters)
-  {
-    uksort($parameters, 'strcmp');
-
-    foreach ($parameters as $key => $value) {
-      if (is_array($value)) {
-        uksort($parameters[$key], 'strcmp');
-      }
-    }
-
-    return $parameters;
-  }
-
-  /**
-   * Get oAuth1.0 parameters.
-   *
-   * @return string
-   */
-  public function getParameters()
-  {
-    $parameters = \array_merge($this->parameters, [
-      'oauth_consumer_key' => $this->consumerKey,
-      'oauth_timestamp' => $this->timestamp,
-      'oauth_nonce' => \sha1(\microtime()),
-      'oauth_signature_method' => 'HMAC-' . self::HASH_ALGORITHM,
-    ]);
-
-    // The parameters above must be included in the signature generation.
-    $parameters['oauth_signature'] = $this->generateOauthSignature($parameters);
-
-    //TODO Typ prüfen
-    return $this->getSortedParameters($parameters);
-  }
-}
-
-class WCHttpClientException extends \Exception
-{
-  /**
-   * WCRequest.
-   *
-   * @var WCRequest
-   */
-  private $request;
-
-  /**
-   * WCResponse.
-   *
-   * @var WCResponse
-   */
-  private $response;
-
-  /**
-   * Initialize exception.
-   *
-   * @param string   $message  Error message.
-   * @param int      $code     Error code.
-   * @param WCRequest  $request  Request data.
-   * @param WCResponse $response Response data.
-   */
-  public function __construct($message, $code, WCRequest $request, WCResponse $response)
-  {
-    parent::__construct($message, $code);
-
-    $this->request = $request;
-    $this->response = $response;
-  }
-
-  /**
-   * Get request data.
-   *
-   * @return WCRequest
-   */
-  public function getRequest()
-  {
-    return $this->request;
-  }
-
-  /**
-   * Get response data.
-   *
-   * @return WCResponse
-   */
-  public function getResponse()
-  {
-    return $this->response;
-  }
-}
-
-class WCHttpClient
-{
-  /**
-   * cURL handle.
-   *
-   * @var resource
-   */
-  protected $ch;
-
-  /**
-   * Store API URL.
-   *
-   * @var string
-   */
-  protected $url;
-
-  /**
-   * Consumer key.
-   *
-   * @var string
-   */
-  protected $consumerKey;
-
-  /**
-   * Consumer secret.
-   *
-   * @var string
-   */
-  protected $consumerSecret;
-
-  /**
-   * WCClient options.
-   *
-   * @var WCOptions
-   */
-  protected $options;
-
-  /**
-   * WCRequest.
-   *
-   * @var WCRequest
-   */
-  private $request;
-
-  /**
-   * WCResponse.
-   *
-   * @var WCResponse
-   */
-  private $response;
-
-  /**
-   * WCResponse headers.
-   *
-   * @var string
-   */
-  private $responseHeaders;
-
-  /** @var Logger $logger */
-  public $logger;
-
-  public $ssl_ignore = false;
-
-  /**
-   * Initialize HTTP client.
-   *
-   * @param string $url            Store URL.
-   * @param string $consumerKey    Consumer key.
-   * @param string $consumerSecret Consumer Secret.
-   * @param array  $options        WCClient options.
-   *
-   * @throws WCHttpClientException
-   */
-  public function __construct($url, $consumerKey, $consumerSecret, $options, $logger, $ssl_ignore)
-  {
-    if (!function_exists('curl_version')) {
-      throw new WCHttpClientException('cURL is NOT installed on this server', -1, new WCRequest(), new WCResponse());
-    }
-
-    $this->options = new WCOptions($options);
-    $this->url = $this->buildApiUrl($url);
-    $this->consumerKey = $consumerKey;
-    $this->consumerSecret = $consumerSecret;
-    $this->logger = $logger;
-    $this->ssl_ignore = $ssl_ignore;
-  }
-
-  /**
-   * Check if is under SSL.
-   *
-   * @return bool
-   */
-  protected function isSsl()
-  {
-    return strpos($this->url, 'https://') === 0;
-
-  }
-
-  /**
-   * Build API URL.
-   *
-   * @param string $url Store URL.
-   *
-   * @return string
-   */
-  protected function buildApiUrl($url)
-  {
-    $api = $this->options->isWPAPI() ? $this->options->apiPrefix() : '/wc-api/';
-
-    return rtrim($url, '/') . $api . $this->options->getVersion() . '/';
-  }
-
-  /**
-   * Build URL.
-   *
-   * @param string $url        URL.
-   * @param array  $parameters Query string parameters.
-   *
-   * @return string
-   */
-  protected function buildUrlQuery($url, $parameters = [])
-  {
-    if (!empty($parameters)) {
-      $url .= '?' . http_build_query($parameters);
-    }
-
-    return $url;
-  }
-
-  /**
-   * Authenticate.
-   *
-   * @param string $url        WCRequest URL.
-   * @param string $method     WCRequest method.
-   * @param array  $parameters WCRequest parameters.
-   *
-   * @return array
-   */
-  protected function authenticate($url, $method, $parameters = [])
-  {
-    // Setup authentication.
-    if ($this->isSsl()) {
-      $basicAuth = new WCBasicAuth(
-        $this->ch,
-        $this->consumerKey,
-        $this->consumerSecret,
-        $this->options->isQueryStringAuth(),
-        $parameters
-      );
-      $parameters = $basicAuth->getParameters();
-    } else {
-      $oAuth = new WCOAuth(
-        $url,
-        $this->consumerKey,
-        $this->consumerSecret,
-        $this->options->getVersion(),
-        $method,
-        $parameters,
-        $this->options->oauthTimestamp()
-      );
-      //TODO Typ prüfen
-      $parameters = $oAuth->getParameters();
-    }
-
-    return $parameters;
-  }
-
-  /**
-   * Setup method.
-   *
-   * @param string $method WCRequest method.
-   */
-  protected function setupMethod($method)
-  {
-    if ('POST' === $method) {
-      curl_setopt($this->ch, CURLOPT_POST, true);
-    } elseif (in_array($method, ['PUT', 'DELETE', 'OPTIONS'])) {
-      curl_setopt($this->ch, CURLOPT_CUSTOMREQUEST, $method);
-    }
-  }
-
-  /**
-   * Get request headers.
-   *
-   * @param  bool $sendData If request send data or not.
-   *
-   * @return array
-   */
-  protected function getRequestHeaders($sendData = false)
-  {
-    $headers = [
-      'Accept' => 'application/json',
-      'User-Agent' => $this->options->userAgent() . '/' . WCClient::VERSION,
-    ];
-
-    if ($sendData) {
-      $headers['Content-Type'] = 'application/json;charset=utf-8';
-    }
-
-    return $headers;
-  }
-
-  /**
-   * Create request.
-   *
-   * @param string $endpoint   WCRequest endpoint.
-   * @param string $method     WCRequest method.
-   * @param array  $data       WCRequest data.
-   * @param array  $parameters WCRequest parameters.
-   *
-   * @return WCRequest
-   */
-  protected function createRequest($endpoint, $method, $data = [], $parameters = [])
-  {
-    $body = '';
-    $url = $this->url . $endpoint;
-    $hasData = !empty($data);
-
-    // Setup authentication.
-    $parameters = $this->authenticate($url, $method, $parameters);
-
-    // Setup method.
-    $this->setupMethod($method);
-
-    // Include post fields.
-    if ($hasData) {
-      $body = json_encode($data);
-      curl_setopt($this->ch, CURLOPT_POSTFIELDS, $body);
-    }
-
-    $this->request = new WCRequest(
-      $this->buildUrlQuery($url, $parameters),
-      $method,
-      $parameters,
-      $this->getRequestHeaders($hasData),
-      $body
-    );
-
-    return $this->getRequest();
-  }
-
-  /**
-   * Get response headers.
-   *
-   * @return array
-   */
-  protected function getResponseHeaders()
-  {
-    $headers = [];
-    $lines = explode("\n", $this->responseHeaders);
-    $lines = array_filter($lines, 'trim');
-
-    foreach ($lines as $index => $line) {
-      // Remove HTTP/xxx params.
-      if (strpos($line, ': ') === false) {
-        continue;
-      }
-
-      list($key, $value) = explode(': ', $line);
-
-      $key = strtolower($key);
-      $headers[$key] = isset($headers[$key]) ? $headers[$key] . ', ' . trim($value) : trim($value);
-    }
-
-    return $headers;
-  }
-
-  /**
-   * Create response.
-   *
-   * @return WCResponse
-   */
-  protected function createResponse()
-  {
-    // Set response headers.
-    $this->responseHeaders = '';
-    curl_setopt($this->ch, CURLOPT_HEADERFUNCTION, function ($_, $headers) {
-      $this->responseHeaders .= $headers;
-      return strlen($headers);
-    });
-
-    $this->curl_debug = true;
-    if ($this->curl_debug) {
-        // Verbose debugging
-        ob_start();
-        $out = fopen('php://output', 'w');
-        curl_setopt($this->ch, CURLOPT_VERBOSE, true);
-        curl_setopt($this->ch, CURLOPT_STDERR, $out);
-        // Verbose debugging
-    }
-
-    // Get response data.
-    $body = curl_exec($this->ch);
-    $code = curl_getinfo($this->ch, CURLINFO_HTTP_CODE);
-    $headers = $this->getResponseHeaders();
-
-    if ($this->curl_debug) {
-        // Verbose debugging
-        fclose($out);
-        $debug = ob_get_clean();
-        $result['postdata_500_bytes'] = mb_substr($postdata,0,500);
-        $result['debug'] = $debug;
-        $curlinfo = curl_getinfo($this->ch);
-        // Verbose debugging
-
-        $this->logger->debug(
-        'WooCommerce debug',
-        [
-          'request' => $this->request,
-          'response' => $this->response,
-          'curlinfo' => $curlinfo,
-          'result' => $result
-        ]
-      );
-    }
-
-    // Register response.
-    $this->response = new WCResponse($code, $headers, $body);
-
-    return $this->getResponse();
-  }
-
-  /**
-   * Set default cURL settings.
-   */
-  protected function setDefaultCurlSettings()
-  {
-    if (!$this->ssl_ignore) {
-      $verifySsl = $this->options->verifySsl();
-    }
-
-    $timeout = $this->options->getTimeout();
-    $followRedirects = $this->options->getFollowRedirects();
-
-    curl_setopt($this->ch, CURLOPT_SSL_VERIFYPEER, $verifySsl);
-    if (!$verifySsl) {
-      curl_setopt($this->ch, CURLOPT_SSL_VERIFYHOST, $verifySsl);
-    }
-    if ($followRedirects) {
-      curl_setopt($this->ch, CURLOPT_FOLLOWLOCATION, true);
-    }
-    curl_setopt($this->ch, CURLOPT_CONNECTTIMEOUT, $timeout);
-    curl_setopt($this->ch, CURLOPT_TIMEOUT, $timeout);
-    curl_setopt($this->ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($this->ch, CURLOPT_HTTPHEADER, $this->request->getRawHeaders());
-    curl_setopt($this->ch, CURLOPT_URL, $this->request->getUrl());
-  }
-
-  /**
-   * Look for errors in the request.
-   *
-   * @throws WCHttpClientException
-   *
-   * @param array $parsedResponse Parsed body response.
-   */
-  protected function lookForErrors($parsedResponse)
-  {
-    // Any non-200/201/202 response code indicates an error.
-    if (!in_array($this->response->getCode(), ['200', '201', '202'])) {
-      $errors = isset($parsedResponse->errors) ? $parsedResponse->errors : $parsedResponse;
-      $errorMessage = '';
-      $errorCode = '';
-
-      if (is_array($errors)) {
-        $errorMessage = $errors[0]->message;
-        $errorCode = $errors[0]->code;
-      } elseif (isset($errors->message, $errors->code)) {
-        $errorMessage = $errors->message;
-        $errorCode = $errors->code;
-      }
-
-      $this->logger->error(
-        'WooCommerce Error',
-        [
-          'request' => $this->request,
-          'response' => $this->response
-        ]
-      );
-
-      throw new WCHttpClientException(
-        sprintf('Error: %s [%s]', $errorMessage, $errorCode),
-        $this->response->getCode(),
-        $this->request,
-        $this->response
-      );
-    }
-  }
-
-  /**
-   * Process response.
-   *
-   * @throws WCHttpClientException
-   * @return array
-   */
-
-  protected function processResponse()
-  {
-    $body = $this->response->getBody();
-
-    // Look for UTF-8 BOM and remove.
-    if (0 === strpos(bin2hex(substr($body, 0, 4)), 'efbbbf')) {
-      $body = substr($body, 3);
-    }
-
-    $parsedResponse = json_decode($body);
-
-    // Test if return a valid JSON.
-    if (JSON_ERROR_NONE !== json_last_error()) {
-      $message = function_exists('json_last_error_msg') ? json_last_error_msg() : 'Invalid JSON returned';
-      // Log the problematic body for debugging
-      if (isset($this->logger)) {
-        $this->logger->error('JSON Parse Error - Raw Body', [
-          'body_preview' => substr($body, 0, 1000),
-          'body_length' => strlen($body),
-          'json_error' => $message
-        ]);
-      }
-      throw new WCHttpClientException(
-        sprintf('JSON ERROR: %s', $message),
-        $this->response->getCode(),
-        $this->request,
-        $this->response
-      );
-    }
-
-    $this->lookForErrors($parsedResponse);
-
-    return $parsedResponse;
-  }
-
-  /**
-   * Make requests.
-   *
-   * @param string $endpoint   WCRequest endpoint.
-   * @param string $method     WCRequest method.
-   * @param array  $data       WCRequest data.
-   * @param array  $parameters WCRequest parameters.
-   *
-   * @throws WCHttpClientException
-   *
-   * @return array
-   */
-  public function request($endpoint, $method, $data = [], $parameters = [])
-  {
-
-    // Initialize cURL.
-    $this->ch = curl_init();
-
-    // Set request args.
-    $request = $this->createRequest($endpoint, $method, $data, $parameters);
-
-    // Default cURL settings.
-    $this->setDefaultCurlSettings();
-
-    // Get response.
-    $response = $this->createResponse();
-
-    // Check for cURL errors.
-    if (curl_errno($this->ch)) {
-      throw new WCHttpClientException('cURL Error: ' . \curl_error($this->ch), 0, $request, $response);
-    }
-
-    curl_close($this->ch);
-
-    return $this->processResponse();
-  }
-
-  /**
-   * Get request data.
-   *
-   * @return WCRequest
-   */
-  public function getRequest()
-  {
-    return $this->request;
-  }
-
-  /**
-   * Get response data.
-   *
-   * @return WCResponse
-   */
-  public function getResponse()
-  {
-    return $this->response;
-  }
-}
-
-class WCBasicAuth
-{
-  /**
-   * cURL handle.
-   *
-   * @var resource
-   */
-  protected $ch;
-
-  /**
-   * Consumer key.
-   *
-   * @var string
-   */
-  protected $consumerKey;
-
-  /**
-   * Consumer secret.
-   *
-   * @var string
-   */
-  protected $consumerSecret;
-
-  /**
-   * Do query string auth.
-   *
-   * @var bool
-   */
-  protected $doQueryString;
-
-  /**
-   * WCRequest parameters.
-   *
-   * @var array
-   */
-  protected $parameters;
-
-  /**
-   * Initialize Basic Authentication class.
-   *
-   * @param resource $ch             cURL handle.
-   * @param string   $consumerKey    Consumer key.
-   * @param string   $consumerSecret Consumer Secret.
-   * @param bool     $doQueryString  Do or not query string auth.
-   * @param array    $parameters     WCRequest parameters.
-   */
-  public function __construct($ch, $consumerKey, $consumerSecret, $doQueryString, $parameters = [])
-  {
-    $this->ch = $ch;
-    $this->consumerKey = $consumerKey;
-    $this->consumerSecret = $consumerSecret;
-    $this->doQueryString = $doQueryString;
-    $this->parameters = $parameters;
-
-    $this->processAuth();
-  }
-
-  /**
-   * Process auth.
-   */
-  protected function processAuth()
-  {
-    if ($this->doQueryString) {
-      $this->parameters['consumer_key'] = $this->consumerKey;
-      $this->parameters['consumer_secret'] = $this->consumerSecret;
-    } else {
-      \curl_setopt($this->ch, CURLOPT_USERPWD, $this->consumerKey . ':' . $this->consumerSecret);
-    }
-  }
-
-  /**
-   * Get parameters.
-   *
-   * @return array
-   */
-  public function getParameters()
-  {
-    return $this->parameters;
-  }
 }
