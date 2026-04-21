@@ -44,3 +44,11 @@ fix/250-wiedervorlage-sidebar-counter
 fix/dateien-stichwoerter-245
 fix/versandpakete-247
 fix/player-custom-module-support
+
+# WooCommerce hardening (open PRs on openxe-org, stacked)
+# #265 Pagination-Fix — foundation for #267
+fix/woocommerce-order-import-pagination
+# #266 Batch stock sync — independent
+feature/woocommerce-batch-stock-sync
+# #267 Composer-based WC SDK — stacked on #265, must follow it
+refactor/woocommerce-composer-sdk
