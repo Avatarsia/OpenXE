@@ -35,7 +35,9 @@ feature/upgrader-ui-module
 # Mini-patches (small core touches, kept as patch branches without Bootstrap)
 feature/plz-clean
 feature/row-highlight-clean
-fix/woocommerce-variation-support
+# fix/woocommerce-variation-support -- superseded by #266 (feature/woocommerce-batch-stock-sync),
+#   which replaces ImportSendListLager with products/batch + variations/batch and therefore
+#   already covers the variation support. Upstream PR #238 was closed for the same reason.
 feature/paid-marking-clean
 mwst_korrektion
 
