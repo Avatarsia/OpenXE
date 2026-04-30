@@ -46,6 +46,8 @@ fix/250-wiedervorlage-sidebar-counter
 fix/dateien-stichwoerter-245
 fix/versandpakete-247
 fix/player-custom-module-support
+# #271 Mahnwesen template placeholders ({FRIST}, {DATUMRECHNUNG}, {MAHNDATUM}, {TAGE})
+mahnfenster
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
