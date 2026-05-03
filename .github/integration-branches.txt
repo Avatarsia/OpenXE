@@ -48,6 +48,8 @@ fix/versandpakete-247
 fix/player-custom-module-support
 # #271 Mahnwesen template placeholders ({FRIST}, {DATUMRECHNUNG}, {MAHNDATUM}, {TAGE})
 mahnfenster
+# Backup module PHP 8 compat — onInitBackupTask must be static
+fix/backup-bootstrap-static
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
