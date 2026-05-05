@@ -39,7 +39,12 @@ feature/row-highlight-clean
 #   which replaces ImportSendListLager with products/batch + variations/batch and therefore
 #   already covers the variation support. Upstream PR #238 was closed for the same reason.
 feature/paid-marking-clean
-mwst_korrektion
+# mwst_korrektion -- superseded by upstream b57f8461 (eu_steuersatz_zielland_vermerk
+#   from 2026-05-04), which solves the same EU B2C VAT-by-destination problem
+#   natively via $objSteuersaetze->getTaxesByCountry() and additionally sets
+#   steuersatz_zielland=true as a marker. Both implementations patch the same block
+#   in www/lib/class.erpapi.php and now conflict. Local 62-line patch became
+#   redundant -- re-enable only if upstream's behaviour proves insufficient.
 
 # Upstream bug-fix PRs (single-file patches, also live as open PRs on openxe-org)
 fix/250-wiedervorlage-sidebar-counter
