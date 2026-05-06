@@ -1,7 +1,9 @@
 name: Build Production
 
-# Nightly rebuild of the production branch from upstream/master plus
+# Manual rebuild of the production branch from upstream/master plus
 # all integration branches listed in .github/integration-branches.txt.
+#
+# Trigger via:  gh workflow run build-production.yml --repo Avatarsia/OpenXE
 #
 # Strategy: three passes, all-or-nothing.
 #   Pass 1 - isolated merge test against upstream/master for each branch
@@ -13,9 +15,6 @@ name: Build Production
 # force-pushes to origin/production.
 
 on:
-  schedule:
-    # Nightly at 04:00 UTC (06:00 CEST / 05:00 CET)
-    - cron: '0 4 * * *'
   workflow_dispatch:
 
 concurrency:
