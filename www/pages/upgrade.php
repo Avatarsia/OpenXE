@@ -240,14 +240,6 @@ class upgrade {
                 $remote_hash = trim(strtok($remote_line, "\t "));
                 $remote_hash_short = substr($remote_hash, 0, 8);
 
-                // Logging für Debug
-                $this->app->erp->LogFile(
-                    'Remote hash retrieved',
-                    ['remote_hash_short' => $remote_hash_short, 'local_hash_short' => $local_hash_short],
-                    'upgrade',
-                    'remote_check'
-                );
-
                 if ($local_hash !== "" && $local_hash === $remote_hash) {
                     $update_status_text = "Alles aktuell";
                     $update_status_class = "pill-success";
@@ -259,13 +251,6 @@ class upgrade {
                     $update_status_class = "pill-warning";
                 }
             } else {
-                // Log Fehler
-                $this->app->erp->LogFile(
-                    'Remote check failed',
-                    ['command' => $remote_cmd, 'output' => $remote_line, 'remote_host' => $remote_host, 'remote_branch' => $remote_branch],
-                    'upgrade',
-                    'remote_check_error'
-                );
                 $update_status_text = "Remote nicht erreichbar";
                 $update_status_class = "pill-warning";
             }
@@ -331,12 +316,6 @@ class upgrade {
                     if ($tag_exit_code === 0) {
                         // Tag erfolgreich erstellt
                         $_SESSION['last_rollback_tag'] = $tag_name;
-                        $this->app->erp->LogFile(
-                            'Rollback tag created successfully',
-                            ['tag_name' => $tag_name],
-                            'upgrade',
-                            'rollback_tag_created'
-                        );
 
                         // Cleanup: Behalte nur die neuesten 10 pre-upgrade Tags
                         $list_tags_cmd = 'git -C '.escapeshellarg($git_root).' tag -l "pre-upgrade-*" --sort=-creatordate 2>&1';
@@ -350,22 +329,7 @@ class upgrade {
                                 $delete_cmd = 'git -C '.escapeshellarg($git_root).' tag -d '.escapeshellarg(trim($old_tag)).' 2>&1';
                                 exec($delete_cmd);
                             }
-
-                            $this->app->erp->LogFile(
-                                'Cleaned up old rollback tags',
-                                ['deleted_count' => count($tags_to_delete), 'kept' => 10],
-                                'upgrade',
-                                'rollback_cleanup'
-                            );
                         }
-                    } else {
-                        // Tag-Erstellung fehlgeschlagen - loggen aber fortfahren
-                        $this->app->erp->LogFile(
-                            'Rollback tag creation failed',
-                            ['tag_name' => $tag_name, 'exit_code' => $tag_exit_code, 'output' => implode("\n", $tag_output)],
-                            'upgrade',
-                            'rollback_tag_error'
-                        );
                     }
                 }
 
@@ -448,13 +412,6 @@ class upgrade {
 
                         file_put_contents($logfile, "=== Rollback to tag: $rollback_tag ===\n");
                         file_put_contents($logfile, $checkout_output, FILE_APPEND);
-
-                        $this->app->erp->LogFile(
-                            'Rollback performed',
-                            ['tag' => $rollback_tag, 'user' => $this->app->User->GetName()],
-                            'upgrade',
-                            'rollback'
-                        );
 
                         $status_headline = "Rollback durchgeführt";
                         $status_level = "info";
