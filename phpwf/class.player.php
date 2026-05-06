@@ -54,7 +54,14 @@ class Player {
       return;
     }
 
-    $this->app->Page->CreateNavigation($this->app->erp->Navigation());
+    $navigation = $this->app->erp->Navigation();
+    if (isset($this->app->Container) && $this->app->Container->has('MenuConfiguratorService')
+        && isset($this->app->User) && method_exists($this->app->User, 'GetID')) {
+      /** @var \Xentral\Modules\MenuConfigurator\Service\MenuConfiguratorService $menuConfigurator */
+      $menuConfigurator = $this->app->Container->get('MenuConfiguratorService');
+      $navigation = $menuConfigurator->apply($navigation, null, (int)$this->app->User->GetID());
+    }
+    $this->app->Page->CreateNavigation($navigation);
   }
 
   public function Run($sessionObj)
