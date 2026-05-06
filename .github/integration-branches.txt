@@ -53,8 +53,12 @@ fix/versandpakete-247
 fix/player-custom-module-support
 # #271 Mahnwesen template placeholders ({FRIST}, {DATUMRECHNUNG}, {MAHNDATUM}, {TAGE})
 mahnfenster
-# Backup module PHP 8 compat — onInitBackupTask must be static
-fix/backup-bootstrap-static
+# PHP 8 compat — 5 Bootstrap onInit*() methods need `static` keyword
+# Supersedes the earlier fix/backup-bootstrap-static (which only fixed BackupTask)
+fix/bootstrap-static-cross-check
+# Cronjob crashes — guard cleanup() in catch against use-before-define
+# (amainvoice, supersearch_index_full/diff)
+fix/supersearch-cronjob-undef
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
