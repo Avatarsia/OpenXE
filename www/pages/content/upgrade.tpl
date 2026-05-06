@@ -37,10 +37,19 @@
 .force-wrap {margin-top:6px;font-size:12px;color:#0b3c68;}
 .force-highlight {border:2px solid #b52b27;background:#fff4e5;border-radius:6px;padding:8px;}
 .force-highlight label {font-weight:700;}
-.card {border:1px solid #dbe3ef;border-radius:6px;background:#fff;padding:14px;margin-bottom:12px;}
-.card legend {padding:0;margin-bottom:10px;font-size:14px;color:#0b3c68;}
-.status-meta {padding:4px 0;font-size:13px;color:#222;}
-.status-meta + .status-meta {border-top:1px dashed #eef1f6;}
+.card {border:1px solid #dbe3ef;border-radius:6px;background:#fff;padding:16px;margin-bottom:12px;display:flex;flex-direction:column;}
+.card-title {margin:0 0 12px 0;padding:0 0 10px 0;font-size:14px;font-weight:700;color:#0b3c68;border-bottom:1px solid #eef1f6;letter-spacing:0.02em;text-transform:uppercase;}
+.card-body {flex:1 1 auto;}
+.card-footer {margin-top:12px;padding-top:12px;border-top:1px solid #eef1f6;}
+.kv-grid {display:grid;grid-template-columns:max-content 1fr;column-gap:14px;row-gap:8px;font-size:13px;align-items:baseline;}
+.kv-grid dt {color:#5b6675;font-weight:600;white-space:nowrap;}
+.kv-grid dd {margin:0;color:#1a2433;word-break:break-word;}
+.kv-grid dd .hint {color:#7a8696;font-family:Consolas,monospace;font-size:12px;}
+.form-stack {display:flex;flex-direction:column;gap:10px;}
+.form-row {display:flex;flex-direction:column;gap:4px;}
+.form-row label {font-size:12px;font-weight:600;color:#5b6675;letter-spacing:0.02em;text-transform:uppercase;}
+.tag-select-wrap {margin:6px 0 12px 0;}
+.tag-select-wrap select {width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;background:#fff;}
 .log-box {background:#0f1720;color:#e5e7eb;border-radius:6px;padding:12px;max-height:420px;overflow:auto;font-family:Consolas,monospace;font-size:13px;line-height:1.5;}
 .log-header {display:flex;align-items:center;gap:10px;margin-bottom:10px;}
 .log-header .log-title {font-weight:700;color:#0b3c68;flex-shrink:0;}
@@ -116,25 +125,39 @@ button.action-btn.btn-rollback:hover {background:#b87810 !important;}
             <div class="compare-row">
                 <div class="status-col" style="flex:1;min-width:320px;">
                     <div class="card" style="height:100%;">
-                        <legend><strong>{|Versionsabgleich|}</strong></legend>
-                        <div class="status-meta"><strong>OpenXE-Version:</strong> [APP_VERSION]</div>
-                        <div class="status-meta"><strong>Code-Stand (Git):</strong> <span [LOCAL_BRANCH_VISIBLE]>[LOCAL_BRANCH]&nbsp;</span><span class="hint">[LOCAL_HASH_SHORT]</span> <span class="hint">[LOCAL_COMMIT]</span></div>
-                        <div class="status-meta"><strong>Upgrade-Quelle:</strong> [REMOTE_HOST] (<strong>[REMOTE_BRANCH]</strong>) <span class="hint">[REMOTE_HASH_SHORT]</span></div>
-                        <div class="status-meta"><strong>Status:</strong> <span class="pill [UPDATE_STATUS_CLASS]">[UPDATE_STATUS]</span></div>
-                        <div class="status-meta" style="margin-top:6px;border-top:none;">
+                        <h3 class="card-title">{|Versionsabgleich|}</h3>
+                        <div class="card-body">
+                            <dl class="kv-grid">
+                                <dt>OpenXE-Version</dt><dd>[APP_VERSION]</dd>
+                                <dt>Code-Stand (Git)</dt><dd><span [LOCAL_BRANCH_VISIBLE]>[LOCAL_BRANCH]&nbsp;</span><span class="hint">[LOCAL_HASH_SHORT]</span> <span class="hint">[LOCAL_COMMIT]</span></dd>
+                                <dt>Upgrade-Quelle</dt><dd>[REMOTE_HOST] (<strong>[REMOTE_BRANCH]</strong>) <span class="hint">[REMOTE_HASH_SHORT]</span></dd>
+                                <dt>Status</dt><dd><span class="pill [UPDATE_STATUS_CLASS]">[UPDATE_STATUS]</span></dd>
+                            </dl>
+                        </div>
+                        <div class="card-footer">
                             <button name="submit" value="reset_remote_origin" class="action-btn btn-primary">Quelle auf Original zurücksetzen</button>
                         </div>
                     </div>
                 </div>
                 <div class="status-col" style="flex:1;min-width:320px;">
                     <div class="card" style="height:100%;">
-                        <legend><strong>{|Upgrade-Quelle (Git)|}</strong></legend>
-                        <table width="100%" border="0" class="mkTableFormular">
-                            <tr><td colspan=2><div class="hint">Passe Remote-URL und Branch an, wenn du auf einen anderen Stand updaten willst.</div></td></tr>
-                            <tr><td>Remote-URL:</td><td><input class="input-inline" type="text" name="remote_host" value="[REMOTE_HOST]" autocomplete="off"></td></tr>
-                            <tr><td>Branch:</td><td><input class="input-inline" type="text" name="remote_branch" value="[REMOTE_BRANCH]" autocomplete="off"></td></tr>
-                            <tr><td colspan=2><button name="submit" value="save_remote" class="action-btn btn-primary">Quelle speichern</button></td></tr>
-                        </table>
+                        <h3 class="card-title">{|Upgrade-Quelle (Git)|}</h3>
+                        <div class="card-body">
+                            <div class="hint" style="margin-bottom:12px;">Passe Remote-URL und Branch an, wenn du auf einen anderen Stand updaten willst.</div>
+                            <div class="form-stack">
+                                <div class="form-row">
+                                    <label for="remote_host">Remote-URL</label>
+                                    <input id="remote_host" class="input-inline" type="text" name="remote_host" value="[REMOTE_HOST]" autocomplete="off">
+                                </div>
+                                <div class="form-row">
+                                    <label for="remote_branch">Branch</label>
+                                    <input id="remote_branch" class="input-inline" type="text" name="remote_branch" value="[REMOTE_BRANCH]" autocomplete="off">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <button name="submit" value="save_remote" class="action-btn btn-primary">Quelle speichern</button>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -142,13 +165,19 @@ button.action-btn.btn-rollback:hover {background:#b87810 !important;}
             <div class="compare-row" [ROLLBACK_VISIBLE]>
                 <div class="status-col" style="flex:1;min-width:320px;">
                     <div class="card rollback-card" style="height:100%;">
-                        <legend><strong>{|Rollback & Wiederherstellung|}</strong></legend>
-                        <div class="hint" style="margin-bottom:12px;color:#8a4b0f;">
-                            ⚠️ <strong>Vorsicht:</strong> Rollback setzt nur den Code zurück. Datenbank-Änderungen werden NICHT rückgängig gemacht!
+                        <h3 class="card-title">{|Rollback & Wiederherstellung|}</h3>
+                        <div class="card-body">
+                            <div class="hint" style="margin-bottom:12px;color:#8a4b0f;">
+                                ⚠️ <strong>Vorsicht:</strong> Rollback setzt nur den Code zurück. Datenbank-Änderungen werden NICHT rückgängig gemacht!
+                            </div>
+                            <div class="form-row">
+                                <label>Verfügbarer Wiederherstellungspunkt</label>
+                                <div class="tag-select-wrap">[ROLLBACK_TAGS_SELECT]</div>
+                            </div>
                         </div>
-                        <div style="margin-bottom:8px;"><strong>Verfügbare Wiederherstellungspunkte:</strong></div>
-                        [ROLLBACK_TAGS_SELECT]
-                        <button name="submit" value="rollback_to_tag" class="action-btn btn-rollback" onclick="return confirm('Wirklich auf diesen Stand zurücksetzen? Code wird überschrieben!');">🔙 Rollback durchführen</button>
+                        <div class="card-footer">
+                            <button name="submit" value="rollback_to_tag" class="action-btn btn-rollback" onclick="return confirm('Wirklich auf diesen Stand zurücksetzen? Code wird überschrieben!');">🔙 Rollback durchführen</button>
+                        </div>
                     </div>
                 </div>
             </div>
