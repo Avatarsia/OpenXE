@@ -19,10 +19,10 @@
 .status-col {display:flex;}
 .steps-col {display:flex;}
 .steps-stack {display:flex;flex-direction:column;gap:14px;width:100%;justify-content:space-between;}
-.compare-row {display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:stretch;margin:0 0 20px 0;}
-.compare-row .card {height:100%;margin-bottom:0;}
-.secondary-row {display:grid;grid-template-columns:minmax(360px, 1fr) 2fr;gap:20px;align-items:stretch;margin:0 0 20px 0;}
-.secondary-row .card {height:100%;margin-bottom:0;}
+.compare-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:stretch;margin:0 0 20px 0;}
+.compare-row .card {height:100%;margin-bottom:0;min-width:0;}
+.secondary-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:20px;align-items:stretch;margin:0 0 20px 0;}
+.secondary-row .card {height:100%;margin-bottom:0;min-width:0;}
 .log-section {margin-top:50px;clear:both;position:relative;z-index:0;}
 .stepper {display:flex;flex-direction:column;gap:12px;margin-bottom:12px;}
 .step-card {border:1px solid #dbe3ef;border-radius:6px;background:#f6f8fb;padding:16px;display:flex;flex-direction:column;gap:10px;}
@@ -43,9 +43,9 @@
 .card-title {margin:0 0 12px 0;padding:0 0 10px 0;font-size:14px;font-weight:700;color:#0b3c68;border-bottom:1px solid #eef1f6;letter-spacing:0.02em;text-transform:uppercase;}
 .card-body {flex:1 1 auto;}
 .card-footer {margin-top:12px;padding-top:12px;border-top:1px solid #eef1f6;}
-.kv-grid {display:grid;grid-template-columns:max-content 1fr;column-gap:14px;row-gap:10px;font-size:13px;align-items:baseline;}
+.kv-grid {display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:14px;row-gap:10px;font-size:13px;align-items:baseline;}
 .kv-grid dt {color:#5b6675;font-weight:600;white-space:nowrap;}
-.kv-grid dd {margin:0;color:#1a2433;word-break:break-word;}
+.kv-grid dd {margin:0;color:#1a2433;overflow-wrap:anywhere;min-width:0;}
 .kv-grid dd .hint {color:#7a8696;font-family:Consolas,monospace;font-size:12px;}
 .form-stack {display:flex;flex-direction:column;gap:10px;}
 .form-row {display:flex;flex-direction:column;gap:4px;}
