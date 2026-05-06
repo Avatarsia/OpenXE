@@ -37,11 +37,26 @@
 .force-wrap {margin-top:6px;font-size:12px;color:#0b3c68;}
 .force-highlight {border:2px solid #b52b27;background:#fff4e5;border-radius:6px;padding:8px;}
 .force-highlight label {font-weight:700;}
-.card {border:1px solid #dbe3ef;border-radius:6px;background:#fff;padding:12px;margin-bottom:12px;}
-.log-box {background:#0f1720;color:#e5e7eb;border-radius:6px;padding:10px;max-height:420px;overflow:auto;font-family:Consolas,monospace;font-size:13px;}
-.hint {color:#555;font-size:13px;}
-.input-inline {width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;}
-.action-btn {width:100%;margin-top:6px;}
+.card {border:1px solid #dbe3ef;border-radius:6px;background:#fff;padding:14px;margin-bottom:12px;}
+.card legend {padding:0;margin-bottom:10px;font-size:14px;color:#0b3c68;}
+.status-meta {padding:4px 0;font-size:13px;color:#222;}
+.status-meta + .status-meta {border-top:1px dashed #eef1f6;}
+.log-box {background:#0f1720;color:#e5e7eb;border-radius:6px;padding:12px;max-height:420px;overflow:auto;font-family:Consolas,monospace;font-size:13px;line-height:1.5;}
+.log-header {display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.log-header .log-title {font-weight:700;color:#0b3c68;flex-shrink:0;}
+.log-header .log-search {flex:1 1 auto;max-width:280px;padding:6px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;}
+.log-header .log-download {margin-left:auto;background:#0b3c68;color:#fff;border:none;border-radius:4px;padding:7px 12px;font-size:12px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;}
+.log-header .log-download:hover {background:#0a325a;}
+.hint {color:#555;font-size:13px;line-height:1.5;}
+.input-inline {width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;}
+.action-btn {width:100%;margin-top:6px;padding:9px 14px;font-weight:700;border-radius:4px;cursor:pointer;font-size:13px;}
+button.action-btn.btn-primary {background:#0b3c68 !important;background-image:none !important;color:#fff !important;border:1px solid #0a325a !important;}
+button.action-btn.btn-primary:hover {background:#0a325a !important;}
+button.action-btn.btn-rollback {background:#d89216 !important;background-image:none !important;color:#fff !important;border:1px solid #8a4b0f !important;}
+button.action-btn.btn-rollback:hover {background:#b87810 !important;}
+.rollback-card {border:2px solid #d89216 !important;background:#fffaf2;}
+.rollback-card legend {color:#8a4b0f;}
+.upgrade-lock {background:#fff4e5;border:1px solid #d89216;border-radius:4px;padding:10px 12px;margin-bottom:10px;color:#8a4b0f;font-size:13px;}
 </style>
 
 <div id="tabs">
@@ -106,8 +121,8 @@
                         <div class="status-meta"><strong>Code-Stand (Git):</strong> <span [LOCAL_BRANCH_VISIBLE]>[LOCAL_BRANCH]&nbsp;</span><span class="hint">[LOCAL_HASH_SHORT]</span> <span class="hint">[LOCAL_COMMIT]</span></div>
                         <div class="status-meta"><strong>Upgrade-Quelle:</strong> [REMOTE_HOST] (<strong>[REMOTE_BRANCH]</strong>) <span class="hint">[REMOTE_HASH_SHORT]</span></div>
                         <div class="status-meta"><strong>Status:</strong> <span class="pill [UPDATE_STATUS_CLASS]">[UPDATE_STATUS]</span></div>
-                        <div class="status-meta" style="margin-top:6px;">
-                            <button name="submit" value="reset_remote_origin" class="ui-button-icon action-btn" style="width:100%;">Quelle auf Original zurücksetzen</button>
+                        <div class="status-meta" style="margin-top:6px;border-top:none;">
+                            <button name="submit" value="reset_remote_origin" class="action-btn btn-primary">Quelle auf Original zurücksetzen</button>
                         </div>
                     </div>
                 </div>
@@ -118,7 +133,7 @@
                             <tr><td colspan=2><div class="hint">Passe Remote-URL und Branch an, wenn du auf einen anderen Stand updaten willst.</div></td></tr>
                             <tr><td>Remote-URL:</td><td><input class="input-inline" type="text" name="remote_host" value="[REMOTE_HOST]" autocomplete="off"></td></tr>
                             <tr><td>Branch:</td><td><input class="input-inline" type="text" name="remote_branch" value="[REMOTE_BRANCH]" autocomplete="off"></td></tr>
-                            <tr><td colspan=2><button name="submit" value="save_remote" class="ui-button-icon action-btn">Quelle speichern</button></td></tr>
+                            <tr><td colspan=2><button name="submit" value="save_remote" class="action-btn btn-primary">Quelle speichern</button></td></tr>
                         </table>
                     </div>
                 </div>
@@ -126,26 +141,26 @@
 
             <div class="compare-row" [ROLLBACK_VISIBLE]>
                 <div class="status-col" style="flex:1;min-width:320px;">
-                    <div class="card" style="height:100%;border:2px solid #d89216;">
+                    <div class="card rollback-card" style="height:100%;">
                         <legend><strong>{|Rollback & Wiederherstellung|}</strong></legend>
                         <div class="hint" style="margin-bottom:12px;color:#8a4b0f;">
                             ⚠️ <strong>Vorsicht:</strong> Rollback setzt nur den Code zurück. Datenbank-Änderungen werden NICHT rückgängig gemacht!
                         </div>
                         <div style="margin-bottom:8px;"><strong>Verfügbare Wiederherstellungspunkte:</strong></div>
                         [ROLLBACK_TAGS_SELECT]
-                        <button name="submit" value="rollback_to_tag" class="ui-button-icon action-btn" style="background:#d89216;border-color:#8a4b0f;" onclick="return confirm('Wirklich auf diesen Stand zurücksetzen? Code wird überschrieben!');">🔙 Rollback durchführen</button>
+                        <button name="submit" value="rollback_to_tag" class="action-btn btn-rollback" onclick="return confirm('Wirklich auf diesen Stand zurücksetzen? Code wird überschrieben!');">🔙 Rollback durchführen</button>
                     </div>
                 </div>
             </div>
 
             <div class="log-section">
                 <div class="card">
-                    <legend>
-                        <strong>{|Protokoll|}</strong>
-                        <a href="?module=upgrade&action=list&ajax=download_log" class="banner-btn" style="float:right;margin-left:10px;padding:4px 10px;font-size:12px;" download>📥 Log herunterladen</a>
-                        <input type="text" id="log-search" placeholder="Log durchsuchen..." style="float:right;width:200px;padding:4px 8px;margin-left:10px;border:1px solid #ccc;border-radius:4px;" />
-                    </legend>
-                    <div id="upgrade-lock-status" style="display:none;background:#fff4e5;border:1px solid #d89216;border-radius:4px;padding:8px;margin-bottom:8px;color:#8a4b0f;">
+                    <div class="log-header">
+                        <span class="log-title">{|Protokoll|}</span>
+                        <input type="text" id="log-search" class="log-search" placeholder="Log durchsuchen…" />
+                        <a href="?module=upgrade&action=list&ajax=download_log" class="log-download" download>📥 Log herunterladen</a>
+                    </div>
+                    <div id="upgrade-lock-status" class="upgrade-lock" style="display:none;">
                         <strong>⚠️ Upgrade läuft gerade:</strong> Gestartet von <span id="lock-user">-</span> um <span id="lock-time">-</span>
                     </div>
                     <div class="log-box" id="log-box">[OUTPUT_FROM_CLI]</div>
