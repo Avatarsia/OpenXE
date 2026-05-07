@@ -55,7 +55,7 @@ class Lexwareoffice
 
     /** @var \Xentral\Components\Http\Session\Session $session */
     $session = $this->app->Container->get('Session');
-    $csrfTokenKey = 'lexwareoffice.edit';
+    $csrfTokenKey = 'lexwareoffice_edit';
     $isAdmin = ($this->app->User->GetType() === 'admin');
 
     $hasIncomingPost = ($this->app->Secure->GetPOST('save') !== ''
