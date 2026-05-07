@@ -20,7 +20,13 @@
 feature/ci-workflow
 
 # Core feature modules (full Bootstrap + hook integration)
-feature/lexwareoffice-module
+# feature/lexwareoffice-module -- replaced by feature/lexwareoffice-only:
+#   schlanker Cherry-Pick-Branch, der ausschliesslich das LexwareOffice-Modul
+#   enthaelt (kein Kommissionierung-/Zahlungsverkehr-/Lieferschwelle-Beifang)
+#   plus Init-Setup-Button auf der Settings-Seite, Admin+CSRF-Guard auf allen
+#   POST-Pfaden und filesystem-basiertem Master-Key fuer die API-Key-
+#   Verschluesselung (V2-Schema mit smooth migration vom Legacy-DB-Salt).
+feature/lexwareoffice-only
 feature/network-printer-module
 feature/supersearch-enhancement
 feature/menu-configurator-module
