@@ -138,25 +138,43 @@ final class Bootstrap
             }
         }
 
-        $key = bin2hex(random_bytes(32));
-        // Atomar: in temp-Datei schreiben, dann rename. Verhindert teilweise
-        // geschriebene Datei bei Crash mid-write.
-        $tmp = $path . '.tmp.' . bin2hex(random_bytes(4));
-        if (file_put_contents($tmp, $key, LOCK_EX) === false) {
+        // Race-safe via O_EXCL ('x' fopen-mode): fopen schlaegt fehl, wenn
+        // die Datei bereits existiert. Kein TOCTOU-Loch zwischen is_file()
+        // und Erzeugung, auch nicht bei parallelen PHP-FPM-Workern.
+        $fp = @fopen($path, 'xb');
+        if ($fp === false) {
+            // Verlorenes Rennen: anderer Worker hat die Datei in der
+            // Zwischenzeit erstellt -> dessen Key ist autoritativ.
+            if (is_file($path)) {
+                return false;
+            }
             throw new \RuntimeException(sprintf(
-                'Master-Key konnte nicht geschrieben werden: %s',
-                $tmp
-            ));
-        }
-        @chmod($tmp, 0600);
-        if (!@rename($tmp, $path)) {
-            @unlink($tmp);
-            throw new \RuntimeException(sprintf(
-                'Master-Key konnte nicht final verschoben werden: %s -> %s',
-                $tmp,
+                'Master-Key-Datei konnte nicht erzeugt werden: %s',
                 $path
             ));
         }
+
+        // Permissions VOR dem Schreiben des Secrets setzen, damit waehrend
+        // des kurzen Schreib-Fensters keine 0644-Datei mit Klartext existiert.
+        if (!@chmod($path, 0600)) {
+            fclose($fp);
+            @unlink($path);
+            throw new \RuntimeException(sprintf(
+                'chmod 0600 fehlgeschlagen fuer: %s',
+                $path
+            ));
+        }
+
+        $key = bin2hex(random_bytes(32));
+        if (fwrite($fp, $key) === false) {
+            fclose($fp);
+            @unlink($path);
+            throw new \RuntimeException(sprintf(
+                'Master-Key konnte nicht geschrieben werden: %s',
+                $path
+            ));
+        }
+        fclose($fp);
 
         return true;
     }

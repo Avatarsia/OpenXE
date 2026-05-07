@@ -132,7 +132,11 @@ final class LexwareOfficeConfigService
             throw new LexwareOfficeException('API-Schlüssel konnte nicht verschlüsselt werden.');
         }
 
-        $hmac = hash_hmac('sha256', $ciphertext, $key, true);
+        // Encrypt-then-MAC ueber IV+ciphertext: ohne IV im HMAC-Input
+        // koennte ein Angreifer mit DB-Schreibzugriff den IV manipulieren
+        // und via CBC-Bit-Flipping den ersten Plaintext-Block kippen,
+        // ohne den MAC zu invalidieren.
+        $hmac = hash_hmac('sha256', $iv . $ciphertext, $key, true);
 
         return self::SCHEMA_V2_PREFIX . base64_encode($iv . $hmac . $ciphertext);
     }
@@ -156,7 +160,8 @@ final class LexwareOfficeConfigService
         $hmac = substr($payload, $ivLength, 32);
         $ciphertext = substr($payload, $ivLength + 32);
 
-        $calcHmac = hash_hmac('sha256', $ciphertext, $key, true);
+        // Symmetrisch zu encryptV2: HMAC deckt IV+ciphertext ab.
+        $calcHmac = hash_hmac('sha256', $iv . $ciphertext, $key, true);
         if (!hash_equals($hmac, $calcHmac)) {
             return null;
         }
@@ -211,7 +216,10 @@ final class LexwareOfficeConfigService
             return null;
         }
         $contents = trim($contents);
-        if (strlen($contents) < 32 || !ctype_xdigit($contents)) {
+        // Mind. 32 Hex-Zeichen (= 16 Byte Entropie); even-length, weil
+        // hex2bin() sonst lautlos scheitert. ctype_xdigit deckt 0-9a-fA-F ab.
+        $len = strlen($contents);
+        if ($len < 32 || ($len % 2) !== 0 || !ctype_xdigit($contents)) {
             return null;
         }
         return $contents;
