@@ -14,6 +14,7 @@
 ?>
 <?php
 
+use Xentral\Components\Http\Session\SessionHandler;
 use Xentral\Modules\LexwareOffice\Bootstrap as LexwareOfficeBootstrap;
 use Xentral\Modules\LexwareOffice\Exception\LexwareOfficeException;
 use Xentral\Modules\LexwareOffice\Service\LexwareOfficeService;
@@ -126,6 +127,11 @@ class Lexwareoffice
     }
 
     $csrfToken = $session->createCsrfToken($csrfTokenKey);
+    // OpenXE persistiert die Session NICHT automatisch am Request-Ende; ohne
+    // expliziten commitSession-Aufruf landet der frisch erzeugte CSRF-Token
+    // nur im in-memory Manager und nicht in $_SESSION, sodass die Validation
+    // beim naechsten POST fehlschlaegt ("Sicherheits-Token ungueltig").
+    SessionHandler::commitSession($session);
     $csrfTokenField = '<input type="hidden" name="csrf_token" value="'.htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8').'">';
 
     $apiKeyPlaceholder = $hasApiKey ? '******** (gespeichert)' : '';
