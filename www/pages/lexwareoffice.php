@@ -74,15 +74,26 @@ class Lexwareoffice
       }
     }
 
+    /** @var \Xentral\Components\Http\Session\Session $session */
+    $session = $this->app->Container->get('Session');
+    $csrfTokenKey = 'lexwareoffice.init';
+    $isAdmin = ($this->app->User->GetType() === 'admin');
+
     if($this->app->Secure->GetPOST('init') !== '') {
-      try {
-        /** @var \Xentral\Components\Database\Database $db */
-        $db = $this->app->Container->get('Database');
-        LexwareOfficeBootstrap::ensureSchema($db);
-        $this->Install();
-        $message = '<div class="success">Initial Setup ausgef&uuml;hrt: Datenbank-Spalten gepr&uuml;ft, Hooks registriert. Mehrfachausf&uuml;hrung ist unsch&auml;dlich.</div>';
-      } catch (\Throwable $exception) {
-        $message = '<div class="error">Setup fehlgeschlagen: '.htmlspecialchars($exception->getMessage()).'</div>';
+      if(!$isAdmin) {
+        $message = '<div class="error">Initial Setup ist Administratoren vorbehalten.</div>';
+      } elseif(!$session->isCsrfTokenValid($csrfTokenKey, (string)$this->app->Secure->GetPOST('csrf_token'), true)) {
+        $message = '<div class="error">Sicherheits-Token ung&uuml;ltig oder abgelaufen. Bitte Seite neu laden und erneut versuchen.</div>';
+      } else {
+        try {
+          /** @var \Xentral\Components\Database\Database $db */
+          $db = $this->app->Container->get('Database');
+          LexwareOfficeBootstrap::ensureSchema($db);
+          $this->Install();
+          $message = '<div class="success">Initial Setup ausgef&uuml;hrt: Datenbank-Spalten gepr&uuml;ft, Hooks registriert. Mehrfachausf&uuml;hrung ist unsch&auml;dlich.</div>';
+        } catch (\Throwable $exception) {
+          $message = '<div class="error">Setup fehlgeschlagen: '.htmlspecialchars($exception->getMessage()).'</div>';
+        }
       }
     }
 
@@ -94,17 +105,22 @@ class Lexwareoffice
     $this->app->Tpl->Set('API_KEY_PLACEHOLDER', $apiKeyPlaceholder);
     $this->app->Tpl->Set('API_KEY_HINT', 'Der API-Schl&uuml;ssel wird verschl&uuml;sselt in der Systemkonfiguration abgelegt.');
 
-    $initSection = '
+    $initSection = '';
+    if($isAdmin) {
+      $csrfToken = $session->createCsrfToken($csrfTokenKey);
+      $initSection = '
         <form method="post" action="">
           <fieldset>
             <legend>Initial Setup</legend>
             <p>F&uuml;hrt einmalig die Datenbank-Migration aus (Spalten <code>lexware_*</code> in <code>adresse</code>, <code>rechnung</code>, <code>gutschrift</code>) und registriert die Hooks f&uuml;r das Aktionsmen&uuml; in Rechnungs- und Gutschriftslisten. Idempotent &mdash; mehrfaches Ausf&uuml;hren ist unsch&auml;dlich.</p>
+            <input type="hidden" name="csrf_token" value="'.htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8').'">
             <p>
               <input type="submit" class="btnGrey" name="init" value="Initial Setup ausf&uuml;hren">
             </p>
           </fieldset>
         </form>
       ';
+    }
     $this->app->Tpl->Set('INIT_SECTION', $initSection);
 
     $deleteSection = '';
