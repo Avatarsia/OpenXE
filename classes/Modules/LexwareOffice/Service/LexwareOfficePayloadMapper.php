@@ -168,6 +168,11 @@ final class LexwareOfficePayloadMapper
                 'shippingDate' => $voucherDateTime->format(DATE_RFC3339_EXTENDED),
             ],
             'paymentConditions' => [
+                // Lexware verlangt paymentTermLabel als non-null Pflichtfeld.
+                // Default ohne Skonto: einfaches "X Tage netto"; bei Skonto
+                // weiter unten mit der erweiterten Skonto-Beschreibung
+                // ueberschrieben.
+                'paymentTermLabel' => sprintf('%d Tage netto', $paymentTerm),
                 'paymentTermDuration' => $paymentTerm,
             ],
         ];
@@ -397,11 +402,21 @@ private function isKleinunternehmer(): bool
 
         foreach ($positions as $position) {
             $tax = $position['steuersatz'] ?? $defaultTax;
+            $tax = (float)$tax;
+            // Lexware verlangt taxRatePercentage >= 0. OpenXE verwendet bei
+            // bestimmten "nicht steuerpflichtig"-Konstellationen einen
+            // negativen Marker (typischerweise -1) auf der Position; in dem
+            // Fall ist 0 die korrekte Repraesentation Richtung Lexware.
+            // Der USt-Befreit-Status wird ohnehin separat ueber
+            // taxConditions.taxType (resolveTaxType) abgebildet.
+            if ($tax < 0) {
+                $tax = 0.0;
+            }
             $currency = $this->normalizeCurrency($position['waehrung'] ?? $defaultCurrency);
             $unitPrice = [
                 'currency' => $currency,
                 'netAmount' => (float)$position['preis'],
-                'taxRatePercentage' => (float)$tax,
+                'taxRatePercentage' => $tax,
             ];
             $items[] = array_filter([
                 'type' => 'custom',
