@@ -152,6 +152,11 @@ final class LexwareOfficeService
             $this->persistContactMapping((int)$invoice['adresse'], $contactId);
         }
 
+        // PDF an den Voucher anhaengen. Best-Effort: ein Fehler beim Upload
+        // soll die persistierte Invoice-ID NICHT verlieren — der Voucher
+        // existiert in Lexware bereits, das PDF kann nachgeholt werden.
+        $pdfUploadError = $this->tryUploadInvoicePdf($apiKey, $invoiceId, $lexwareInvoiceId, $invoice);
+
         // B1/D5: notice enthaelt nur IDs, damit im Produktions-Logfile keine
         // Kunden-PII (Name, Adresse, Email, Telefon, Rechnungsposten) landen.
         // Troubleshooting-Details liegen im debug-Kanal und koennen temporaer
@@ -178,7 +183,186 @@ final class LexwareOfficeService
             'invoiceId' => $lexwareInvoiceId,
             'contactId' => $contactId,
             'response' => $invoiceResponse,
+            'pdfUploadError' => $pdfUploadError,
         ];
+    }
+
+    /**
+     * Sucht das aktuellste, schreibgeschuetzte PDF zu einer OpenXE-Rechnung
+     * im pdfarchiv und laedt es als File an den Lexware-Voucher.
+     *
+     * Liefert NULL bei Erfolg und ansonsten eine Fehlermeldung als String,
+     * damit der Caller den Status in das UI-Echo aufnehmen kann ohne den
+     * Upload-Vorgang abzubrechen.
+     */
+    private function tryUploadInvoicePdf(
+        string $apiKey,
+        int $invoiceId,
+        string $lexwareInvoiceId,
+        array $invoice
+    ): ?string {
+        try {
+            $pdfPath = $this->resolveArchivedPdfPath('rechnung', $invoiceId);
+            if ($pdfPath === null) {
+                $this->logger->warning(
+                    'Lexware Office: Keine archivierte PDF zur Rechnung gefunden, Upload uebersprungen',
+                    [
+                        'invoice_id' => $invoiceId,
+                        'lexware_invoice_id' => $lexwareInvoiceId,
+                    ]
+                );
+
+                return 'Es wurde keine archivierte PDF-Datei zur Rechnung gefunden. '
+                    .'Bitte die Rechnung einmal in OpenXE archivieren und den Upload erneut ausloesen.';
+            }
+
+            $this->client->uploadFileToVoucher($apiKey, $lexwareInvoiceId, $pdfPath);
+            $this->persistInvoicePdfUploadedAt($invoiceId);
+            $this->logger->notice(
+                'Lexware Office: PDF erfolgreich an Voucher angehaengt',
+                [
+                    'invoice_id' => $invoiceId,
+                    'lexware_invoice_id' => $lexwareInvoiceId,
+                ]
+            );
+
+            return null;
+        } catch (LexwareOfficeException $e) {
+            $this->logger->error(
+                'Lexware Office: PDF-Upload fehlgeschlagen (Voucher bleibt ohne Anhang)',
+                [
+                    'invoice_id' => $invoiceId,
+                    'lexware_invoice_id' => $lexwareInvoiceId,
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return 'PDF-Upload nach Lexware Office fehlgeschlagen: '.$e->getMessage();
+        } catch (\Throwable $e) {
+            $this->logger->error(
+                'Lexware Office: Interner Fehler beim PDF-Upload',
+                [
+                    'invoice_id' => $invoiceId,
+                    'lexware_invoice_id' => $lexwareInvoiceId,
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return 'PDF-Upload nach Lexware Office fehlgeschlagen (intern): '.$e->getMessage();
+        }
+    }
+
+    /**
+     * Sucht den absoluten Pfad zur juengsten, schreibgeschuetzten PDF
+     * im pdfarchiv fuer den uebergebenen OpenXE-Beleg.
+     *
+     * Spiegelt die Logik aus Briefpapier::inlineDocument() / getArchivByID():
+     * pdfarchiv-Eintraege fuehren table_name + table_id, Datei liegt unter
+     * userdata/pdfarchiv/{dbname}/{table_name}/[evtl. genestete tableid-Splits]/dateiname.
+     */
+    private function resolveArchivedPdfPath(string $tableName, int $tableId): ?string
+    {
+        $row = $this->db->fetchRow(
+            'SELECT `dateiname`, `table_name`, `table_id`
+                 FROM `pdfarchiv`
+                WHERE `table_name` = :tn
+                  AND `table_id`   = :tid
+                  AND `schreibschutz` = 1
+                  AND `dateiname` IS NOT NULL
+                  AND `dateiname` <> ""
+              ORDER BY `zeitstempel` DESC
+              LIMIT 1',
+            ['tn' => $tableName, 'tid' => $tableId]
+        );
+        if (empty($row) || empty($row['dateiname'])) {
+            // Fallback: ohne schreibschutz-Filter, falls noch nicht final archiviert.
+            $row = $this->db->fetchRow(
+                'SELECT `dateiname`, `table_name`, `table_id`
+                     FROM `pdfarchiv`
+                    WHERE `table_name` = :tn
+                      AND `table_id`   = :tid
+                      AND `dateiname` IS NOT NULL
+                      AND `dateiname` <> ""
+                  ORDER BY `zeitstempel` DESC
+                  LIMIT 1',
+                ['tn' => $tableName, 'tid' => $tableId]
+            );
+        }
+        if (empty($row) || empty($row['dateiname'])) {
+            return null;
+        }
+
+        $userdata = $this->resolveUserdataDir();
+        $dbname   = $this->resolveDbName();
+        if ($userdata === '' || $dbname === '') {
+            return null;
+        }
+        $baseDir = rtrim($userdata, '/\\').'/pdfarchiv/'.$dbname.'/'.$tableName;
+        $dateiname = (string)$row['dateiname'];
+
+        // 1) Direkter Pfad — alte/Flat-Layout-Dateien.
+        $direct = $baseDir.'/'.$dateiname;
+        if (is_file($direct)) {
+            return $direct;
+        }
+
+        // 2) Genestetes Layout: getPDFfolder() spaltet die tableId zeichenweise
+        // in Unterordner ("12345" -> "1/2/3/4/5/dateiname").
+        $tableIdStr = (string)$tableId;
+        $nestedSegments = $tableIdStr === '' ? [] : str_split($tableIdStr, 1);
+        if (!empty($nestedSegments)) {
+            $nested = $baseDir.'/'.implode('/', $nestedSegments).'/'.$dateiname;
+            if (is_file($nested)) {
+                return $nested;
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveUserdataDir(): string
+    {
+        // Die Conf wird vom Legacy-erpAPI bereitgestellt. Ohne erpAPI gibt es
+        // keinen sinnvollen Standard — dann liefern wir leer und der Aufrufer
+        // ueberspringt den Upload mit Warning.
+        if ($this->erp === null || !isset($this->erp->app, $this->erp->app->Conf)) {
+            return '';
+        }
+        $conf = $this->erp->app->Conf;
+        return isset($conf->WFuserdata) ? (string)$conf->WFuserdata : '';
+    }
+
+    private function resolveDbName(): string
+    {
+        if ($this->erp === null || !isset($this->erp->app, $this->erp->app->Conf)) {
+            return '';
+        }
+        $conf = $this->erp->app->Conf;
+        return isset($conf->WFdbname) ? (string)$conf->WFdbname : '';
+    }
+
+    /**
+     * Persistiert den Zeitpunkt des erfolgreichen PDF-Uploads. Loggt bei Fehlern,
+     * blockiert aber den Upload-Erfolg nicht (PDF liegt dann zwar in Lexware,
+     * OpenXE weiss es aber nicht — naechster Upload-Klick triggert ggf. ein
+     * harmloses zweites File-Upload).
+     */
+    private function persistInvoicePdfUploadedAt(int $invoiceId): void
+    {
+        try {
+            $this->db->perform(
+                'UPDATE `rechnung` SET `lexware_pdf_uploaded_at` = NOW() WHERE `id` = :id',
+                ['id' => $invoiceId]
+            );
+        } catch (\Throwable $e) {
+            $this->logger->error(
+                'Lexware Office: Persist von lexware_pdf_uploaded_at fehlgeschlagen',
+                [
+                    'invoice_id' => $invoiceId,
+                    'error' => $e->getMessage(),
+                ]
+            );
+        }
     }
 
     private function extractInvoiceId(array $invoiceResponse): ?string
