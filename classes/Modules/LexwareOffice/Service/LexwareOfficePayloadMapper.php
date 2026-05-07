@@ -226,9 +226,12 @@ final class LexwareOfficePayloadMapper
      *                                    abgleich auf.
      *   - 'vatfree'                   -> ust_befreit = 3 oder alle Positionen
      *                                    fuehren umsatzsteuer = 'befreit'.
-     *   - 'intraCommunitySupply'      -> ust_befreit = 1 (EU-B2B mit USt-ID,
-     *                                    Empfaenger-Land != Mandanten-Land).
-     *   - 'thirdPartyCountryDelivery' -> ust_befreit = 2 (Drittland-Export).
+     *   - 'intraCommunitySupply'      -> ust_befreit = 1, ODER (Heuristik)
+     *                                    Empfaenger-Land in EU + Empfaenger-Land
+     *                                    != Mandanten-Land + USt-IdNr. vorhanden.
+     *   - 'thirdPartyCountryDelivery' -> ust_befreit = 2, ODER (Heuristik)
+     *                                    Empfaenger-Land ausserhalb EU und
+     *                                    != Mandanten-Land.
      *   - 'net' (Default)             -> Inland-B2B/B2C mit Standardsteuersatz.
      *
      * Annahmen:
@@ -264,6 +267,28 @@ final class LexwareOfficePayloadMapper
             return 'vatfree';
         }
 
+        // Stufe 1.5: Land/USt-ID-Heuristik wenn ust_befreit nicht explizit gesetzt.
+        // Greift z.B. wenn der Beleg ueber einen anderen Kanal angelegt wurde
+        // (Import, Custom-Modul) und ust_befreit nicht durch IstEU()/Steuerbefreit()
+        // gesetzt wurde. Fuer normalen OpenXE-Workflow ist Stufe 1 bereits gesetzt.
+        $land = trim((string)($invoice['land'] ?? ''));
+        if ($land !== '') {
+            $mandatLand = $this->getMandantLand();
+            if ($mandatLand !== '' && strcasecmp($land, $mandatLand) !== 0) {
+                if ($this->isEuCountry($land)) {
+                    $ustid = trim((string)($invoice['ustid'] ?? ''));
+                    if ($ustid !== '') {
+                        return 'intraCommunitySupply';
+                    }
+                    // EU-B2C ohne USt-IdNr.: bleibt im Default-Pfad (net mit
+                    // positionsbezogenen Steuersaetzen).
+                } else {
+                    // Drittland != Mandanten-Land.
+                    return 'thirdPartyCountryDelivery';
+                }
+            }
+        }
+
         // Stufe 2: alle Positionen sind als 'befreit' markiert.
         if ($this->allPositionsTaxFree($positions)) {
             return 'vatfree';
@@ -271,6 +296,40 @@ final class LexwareOfficePayloadMapper
 
         // Default: Netto.
         return 'net';
+    }
+
+    private function getMandantLand(): string
+    {
+        if ($this->erp === null) {
+            return '';
+        }
+        try {
+            $value = $this->erp->Firmendaten('land');
+        } catch (\Throwable $e) {
+            $this->logger->warning(
+                'Lexware Office: Firmendaten-Abruf "land" fehlgeschlagen',
+                ['error' => $e->getMessage()]
+            );
+            return '';
+        }
+
+        return trim((string)$value);
+    }
+
+    private function isEuCountry(string $land): bool
+    {
+        if ($this->erp === null) {
+            return false;
+        }
+        try {
+            return (bool)$this->erp->IstEU($land);
+        } catch (\Throwable $e) {
+            $this->logger->warning(
+                'Lexware Office: IstEU-Lookup fehlgeschlagen',
+                ['error' => $e->getMessage(), 'land' => $land]
+            );
+            return false;
+        }
     }
 
     private function isKleinunternehmer(): bool
