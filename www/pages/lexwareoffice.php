@@ -579,17 +579,29 @@ class Lexwareoffice
 (function(){
   var ids = '.$idsJson.';
   if(!ids.length) return;
+  console.log("[lexware-bulk] re-selecting ids:", ids);
+  var pending = ids.slice();
   var tries = 0;
   var iv = setInterval(function(){
     tries++;
-    var $tbl = (typeof jQuery !== "undefined") ? jQuery("#rechnungen") : null;
-    var hasRows = $tbl && $tbl.find("input[type=checkbox]").length > 0;
-    if(hasRows || tries > 50) {
+    var stillPending = [];
+    pending.forEach(function(id){
+      var cb = document.querySelector(
+        \'input[type="checkbox"][name="auswahl[]"][value="\' + id + \'"]\'
+      );
+      if(cb) {
+        cb.checked = true;
+      } else {
+        stillPending.push(id);
+      }
+    });
+    pending = stillPending;
+    if(pending.length === 0) {
+      console.log("[lexware-bulk] all checkboxes restored");
       clearInterval(iv);
-      if(!hasRows) return;
-      ids.forEach(function(id){
-        $tbl.find("input[type=checkbox][value=\"" + id + "\"]").prop("checked", true);
-      });
+    } else if(tries > 75) {
+      console.log("[lexware-bulk] timeout, still missing:", pending);
+      clearInterval(iv);
     }
   }, 200);
 })();
