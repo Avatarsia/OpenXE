@@ -34,6 +34,7 @@ class Lexwareoffice
     $this->app->ActionHandlerInit($this);
     $this->app->ActionHandler('edit','LexwareOfficeEdit');
     $this->app->ActionHandler('upload','LexwareOfficeUpload');
+    $this->app->ActionHandler('upload_creditnote','LexwareOfficeUploadCreditNote');
     $this->app->DefaultActionHandler('edit');
 
     $this->app->Tpl->Set('UEBERSCHRIFT','Lexware Office');
@@ -119,6 +120,16 @@ class Lexwareoffice
       'lexwareoffice',
       'LexwareOfficeAktionCase'
     );
+    $this->app->erp->RegisterHook(
+      'Gutschrift_Aktion_option',
+      'lexwareoffice',
+      'LexwareOfficeGutschriftAktionOption'
+    );
+    $this->app->erp->RegisterHook(
+      'Gutschrift_Aktion_case',
+      'lexwareoffice',
+      'LexwareOfficeGutschriftAktionCase'
+    );
   }
 
   /**
@@ -159,6 +170,42 @@ class Lexwareoffice
       ."   return;"
       ." }"
       ." window.location.href='index.php?module=lexwareoffice&action=upload&id=%value%';"
+      ." break;";
+  }
+
+  /**
+   * Hook-Listener: Dropdown-Eintrag in der Gutschrifts-Aktionsliste.
+   *
+   * @param int    $id
+   * @param string $projectStatus
+   * @param string $option
+   */
+  public function LexwareOfficeGutschriftAktionOption($id, $projectStatus, &$option)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $option .= '<option value="lexwareofficeuploadcreditnote">An Lexware Office senden</option>';
+  }
+
+  /**
+   * Hook-Listener: JS-Case fuer Gutschrifts-Aktionsmenue.
+   *
+   * @param int    $id
+   * @param string $projectStatus
+   * @param string $case
+   */
+  public function LexwareOfficeGutschriftAktionCase($id, $projectStatus, &$case)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $case .= "case 'lexwareofficeuploadcreditnote':"
+      ." if(!confirm('Gutschrift an Lexware Office senden?')) {"
+      ."   var el = document.getElementById('aktion'); if(el) el.selectedIndex = 0;"
+      ."   return;"
+      ." }"
+      ." window.location.href='index.php?module=lexwareoffice&action=upload_creditnote&id=%value%';"
       ." break;";
   }
 
@@ -230,6 +277,59 @@ class Lexwareoffice
 
     $msg = $this->app->erp->base64_url_encode($message);
     $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id.'&msg='.$msg);
+  }
+
+  /**
+   * Action-Handler fuer den Gutschrifts-Upload. Spiegelt
+   * LexwareOfficeUpload(), nutzt aber LexwareOfficeService::pushCreditNote()
+   * und kehrt zur Gutschrifts-Detailseite zurueck.
+   */
+  public function LexwareOfficeUploadCreditNote()
+  {
+    $id = (int)$this->app->Secure->GetGET('id');
+    if($id <= 0) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Gutschrift wurde nicht gefunden.</div>');
+      $this->app->Location->execute('index.php?module=gutschrift&action=list&msg='.$msg);
+      return;
+    }
+
+    if(!$this->app->erp->RechteVorhanden('gutschrift','edit')) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Keine Berechtigung f&uuml;r diese Aktion.</div>');
+      $this->app->Location->execute('index.php?module=gutschrift&action=edit&id='.$id.'&msg='.$msg);
+      return;
+    }
+
+    try {
+      $result = $this->getService()->pushCreditNote($id);
+      $lexwareId = !empty($result['creditNoteId']) ? $result['creditNoteId'] : '';
+      $contactId = !empty($result['contactId']) ? $result['contactId'] : '';
+      $pdfErr = isset($result['pdfUploadError']) ? (string)$result['pdfUploadError'] : '';
+      $text = 'Gutschrift wurde an Lexware Office &uuml;bergeben.';
+      if($lexwareId !== '') {
+        $text .= ' Beleg-ID: '.htmlspecialchars($lexwareId);
+      }
+      if($contactId !== '') {
+        $text .= ' Kontakt-ID: '.htmlspecialchars($contactId);
+      }
+      if($pdfErr !== '') {
+        $message = '<div class="info">'.$text.'<br>Hinweis: '.htmlspecialchars($pdfErr).'</div>';
+        $this->app->erp->GutschriftProtokoll($id, 'Lexware Office: '.$text.' | PDF-Hinweis: '.$pdfErr);
+      } else {
+        $message = '<div class="success">'.$text.'</div>';
+        $this->app->erp->GutschriftProtokoll($id, 'Lexware Office: '.$text);
+      }
+    } catch (LexwareOfficeException $exception) {
+      $errorText = htmlspecialchars($exception->getMessage());
+      $message = '<div class="error">'.$errorText.'</div>';
+      $this->app->erp->GutschriftProtokoll($id, 'Lexware Office Fehler: '.$errorText);
+    } catch (\Throwable $exception) {
+      $errorText = htmlspecialchars('Interner Fehler beim Lexware Office Upload (Gutschrift): '.$exception->getMessage());
+      $message = '<div class="error">'.$errorText.'</div>';
+      $this->app->erp->GutschriftProtokoll($id, 'Lexware Office Fehler (intern): '.$errorText);
+    }
+
+    $msg = $this->app->erp->base64_url_encode($message);
+    $this->app->Location->execute('index.php?module=gutschrift&action=edit&id='.$id.'&msg='.$msg);
   }
 
   /**
