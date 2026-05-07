@@ -14,6 +14,7 @@
 ?>
 <?php
 
+use Xentral\Modules\LexwareOffice\Bootstrap as LexwareOfficeBootstrap;
 use Xentral\Modules\LexwareOffice\Exception\LexwareOfficeException;
 use Xentral\Modules\LexwareOffice\Service\LexwareOfficeService;
 
@@ -73,6 +74,18 @@ class Lexwareoffice
       }
     }
 
+    if($this->app->Secure->GetPOST('init') !== '') {
+      try {
+        /** @var \Xentral\Components\Database\Database $db */
+        $db = $this->app->Container->get('Database');
+        LexwareOfficeBootstrap::ensureSchema($db);
+        $this->Install();
+        $message = '<div class="success">Initial Setup ausgef&uuml;hrt: Datenbank-Spalten gepr&uuml;ft, Hooks registriert. Mehrfachausf&uuml;hrung ist unsch&auml;dlich.</div>';
+      } catch (\Throwable $exception) {
+        $message = '<div class="error">Setup fehlgeschlagen: '.htmlspecialchars($exception->getMessage()).'</div>';
+      }
+    }
+
     if($message !== '') {
       $this->app->Tpl->Set('MESSAGE',$message);
     }
@@ -80,6 +93,20 @@ class Lexwareoffice
     $apiKeyPlaceholder = $hasApiKey ? '******** (gespeichert)' : '';
     $this->app->Tpl->Set('API_KEY_PLACEHOLDER', $apiKeyPlaceholder);
     $this->app->Tpl->Set('API_KEY_HINT', 'Der API-Schl&uuml;ssel wird verschl&uuml;sselt in der Systemkonfiguration abgelegt.');
+
+    $initSection = '
+        <form method="post" action="">
+          <fieldset>
+            <legend>Initial Setup</legend>
+            <p>F&uuml;hrt einmalig die Datenbank-Migration aus (Spalten <code>lexware_*</code> in <code>adresse</code>, <code>rechnung</code>, <code>gutschrift</code>) und registriert die Hooks f&uuml;r das Aktionsmen&uuml; in Rechnungs- und Gutschriftslisten. Idempotent &mdash; mehrfaches Ausf&uuml;hren ist unsch&auml;dlich.</p>
+            <p>
+              <input type="submit" class="btnGrey" name="init" value="Initial Setup ausf&uuml;hren">
+            </p>
+          </fieldset>
+        </form>
+      ';
+    $this->app->Tpl->Set('INIT_SECTION', $initSection);
+
     $deleteSection = '';
     if($hasApiKey) {
       $deleteSection = '

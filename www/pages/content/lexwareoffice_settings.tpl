@@ -17,6 +17,8 @@
       </fieldset>
     </form>
 
+    [INIT_SECTION]
+
     [DELETE_SECTION]
   </div>
 </div>
