@@ -563,5 +563,38 @@ class Lexwareoffice
       'MESSAGE',
       '<div class="'.$cssClass.'">'.htmlspecialchars($summary).'</div>'
     );
+
+    // UX: Auswahl-Haken nach dem Bulk wieder setzen, damit der User direkt
+    // eine Folge-Aktion (z.B. "als bezahlt markieren") auf dieselben
+    // Rechnungen anwenden kann. Tabellenbody wird vom YUI-TableSearch
+    // asynchron nachgeladen, daher kurzes Polling auf das Erscheinen der
+    // Checkboxen.
+    $reselectIds = array_values(array_filter(
+      array_map('intval', $auswahl),
+      static fn($i) => $i > 0
+    ));
+    if (!empty($reselectIds)) {
+      $idsJson = json_encode($reselectIds);
+      $script = '<script>
+(function(){
+  var ids = '.$idsJson.';
+  if(!ids.length) return;
+  var tries = 0;
+  var iv = setInterval(function(){
+    tries++;
+    var $tbl = (typeof jQuery !== "undefined") ? jQuery("#rechnungen") : null;
+    var hasRows = $tbl && $tbl.find("input[type=checkbox]").length > 0;
+    if(hasRows || tries > 50) {
+      clearInterval(iv);
+      if(!hasRows) return;
+      ids.forEach(function(id){
+        $tbl.find("input[type=checkbox][value=\"" + id + "\"]").prop("checked", true);
+      });
+    }
+  }, 200);
+})();
+</script>';
+      $this->app->Tpl->Add('SCRIPT', $script);
+    }
   }
 }
