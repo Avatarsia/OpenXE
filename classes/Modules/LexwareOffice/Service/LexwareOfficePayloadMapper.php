@@ -416,16 +416,19 @@ private function isKleinunternehmer(): bool
                 $defaultTax
             );
             $currency = $this->normalizeCurrency($position['waehrung'] ?? $defaultCurrency);
+            // Lexware Number-Format-Limit: <17 digits>.<4 digits>. PHP-Floats
+            // erzeugen sonst gerne mehr Nachkommastellen (0.1+0.2 = 0.300...004),
+            // was als "Wert ausserhalb des gueltigen Bereichs" abgelehnt wird.
             $unitPrice = [
                 'currency' => $currency,
-                'netAmount' => (float)$position['preis'],
-                'taxRatePercentage' => $tax,
+                'netAmount' => round((float)$position['preis'], 4),
+                'taxRatePercentage' => round($tax, 4),
             ];
             $items[] = array_filter([
                 'type' => 'custom',
                 'name' => $position['bezeichnung'] ?? $position['nummer'] ?? 'Position',
                 'description' => $position['beschreibung'] ?? '',
-                'quantity' => (float)$position['menge'],
+                'quantity' => round((float)$position['menge'], 4),
                 'unitName' => $position['einheit'] ?: 'Stück',
                 'unitPrice' => $unitPrice,
                 'discountPercentage' => $this->getDiscount($position),
@@ -442,12 +445,12 @@ private function isKleinunternehmer(): bool
      */
     private function getDiscount(array $position): ?float
     {
-        $discount = $position['rabatt'] ?? 0.0;
-        if ((float)$discount <= 0.0) {
+        $discount = (float)($position['rabatt'] ?? 0.0);
+        if ($discount <= 0.0) {
             return null;
         }
 
-        return (float)$discount;
+        return round($discount, 4);
     }
 
     /**
