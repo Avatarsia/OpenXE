@@ -161,7 +161,7 @@ final class LexwareOfficePayloadMapper
                 'currency' => $defaultCurrency,
             ],
             'taxConditions' => [
-                'taxType' => 'net',
+                'taxType' => $this->resolveTaxType($invoice, $positions),
             ],
             'shippingConditions' => [
                 'shippingType' => 'delivery',
@@ -186,6 +186,100 @@ final class LexwareOfficePayloadMapper
         }
 
         return $payload;
+    }
+
+    /**
+     * Leitet den Lexware-taxType aus dem OpenXE-Belegkontext ab.
+     *
+     * Mapping (orientiert sich an OpenXE-erpAPI::AdresseUSTCheck und der
+     * GetSteuersatz-Logik in class.erpapi.php):
+     *
+     *   - 'gross'                     -> Mandant ist Kleinunternehmer
+     *                                    (firmendaten.kleinunternehmer = '1').
+     *                                    Lexware verlangt fuer Kleinunternehmer
+     *                                    eine Gross-Erfassung — andernfalls
+     *                                    laufen die Belege im Buchhaltungs-
+     *                                    abgleich auf.
+     *   - 'vatfree'                   -> ust_befreit = 3 oder alle Positionen
+     *                                    fuehren umsatzsteuer = 'befreit'.
+     *   - 'intraCommunitySupply'      -> ust_befreit = 1 (EU-B2B mit USt-ID,
+     *                                    Empfaenger-Land != Mandanten-Land).
+     *   - 'thirdPartyCountryDelivery' -> ust_befreit = 2 (Drittland-Export).
+     *   - 'net' (Default)             -> Inland-B2B/B2C mit Standardsteuersatz.
+     *
+     * Annahmen:
+     *   - "Drittlandservice" vs. "ThirdPartyCountryDelivery" wird nicht
+     *     unterschieden — OpenXE hat keinen klaren Marker fuer
+     *     Service-vs-Lieferung. Voreinstellung: thirdPartyCountryDelivery.
+     *   - constructionService13b/externalService13b werden NICHT abgebildet,
+     *     da OpenXE dafuer kein Standardfeld fuehrt; ein expliziter
+     *     ust_befreit-Override durch das jeweilige Modul (z.B. Bauleistung)
+     *     wird als 'vatfree' erfasst — fuer paragraph-13b-Buchungen waere
+     *     eine Mandanten-spezifische Erweiterung noetig.
+     *
+     * @param array $invoice   Rechnungs-Row inkl. JOIN auf adresse.
+     * @param array $positions Rechnungs-Positionen (rechnung_position).
+     */
+    public function resolveTaxType(array $invoice, array $positions): string
+    {
+        // Stufe 0: Kleinunternehmer auf Mandantenebene -> gross.
+        // Wir benutzen erp->Firmendaten() (gecached) als kanonische Quelle.
+        if ($this->isKleinunternehmer()) {
+            return 'gross';
+        }
+
+        // Stufe 1: explizite Steuerbefreiung am Beleg.
+        $ustBefreit = isset($invoice['ust_befreit']) ? (int)$invoice['ust_befreit'] : 0;
+        if ($ustBefreit === 1) {
+            return 'intraCommunitySupply';
+        }
+        if ($ustBefreit === 2) {
+            return 'thirdPartyCountryDelivery';
+        }
+        if ($ustBefreit === 3) {
+            return 'vatfree';
+        }
+
+        // Stufe 2: alle Positionen sind als 'befreit' markiert.
+        if ($this->allPositionsTaxFree($positions)) {
+            return 'vatfree';
+        }
+
+        // Default: Netto.
+        return 'net';
+    }
+
+    private function isKleinunternehmer(): bool
+    {
+        if ($this->erp === null) {
+            return false;
+        }
+        try {
+            $value = $this->erp->Firmendaten('kleinunternehmer');
+        } catch (\Throwable $e) {
+            $this->logger->warning(
+                'Lexware Office: Firmendaten-Abruf "kleinunternehmer" fehlgeschlagen',
+                ['error' => $e->getMessage()]
+            );
+            return false;
+        }
+
+        return (string)$value === '1' || $value === 1 || $value === true;
+    }
+
+    private function allPositionsTaxFree(array $positions): bool
+    {
+        if (empty($positions)) {
+            return false;
+        }
+        foreach ($positions as $position) {
+            $marker = strtolower(trim((string)($position['umsatzsteuer'] ?? '')));
+            if ($marker !== 'befreit') {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
