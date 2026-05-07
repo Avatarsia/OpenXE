@@ -398,20 +398,23 @@ private function isKleinunternehmer(): bool
     {
         $items = [];
         $defaultCurrency = $this->normalizeCurrency($invoice['waehrung'] ?? 'EUR');
-        $defaultTax = (float)($invoice['steuersatz_normal'] ?? self::DEFAULT_TAX_RATE);
+        // OpenXE verwendet auf Beleg- und Positions-Ebene einen negativen
+        // Marker (typischerweise -1 bei rechnung.steuersatz_normal /
+        // rechnung_position.steuersatz), der "kein expliziter Override,
+        // nutze den naechsthoeheren Default" bedeutet — NICHT "0%".
+        // Daher mehrstufiger Fallback: Position-Wert -> Beleg-Default ->
+        // hartkodierter DE-Standard. Lexware bekommt am Ende einen
+        // numerischen Steuersatz >= 0.
+        $defaultTax = self::resolveTaxRate(
+            $invoice['steuersatz_normal'] ?? null,
+            self::DEFAULT_TAX_RATE
+        );
 
         foreach ($positions as $position) {
-            $tax = $position['steuersatz'] ?? $defaultTax;
-            $tax = (float)$tax;
-            // Lexware verlangt taxRatePercentage >= 0. OpenXE verwendet bei
-            // bestimmten "nicht steuerpflichtig"-Konstellationen einen
-            // negativen Marker (typischerweise -1) auf der Position; in dem
-            // Fall ist 0 die korrekte Repraesentation Richtung Lexware.
-            // Der USt-Befreit-Status wird ohnehin separat ueber
-            // taxConditions.taxType (resolveTaxType) abgebildet.
-            if ($tax < 0) {
-                $tax = 0.0;
-            }
+            $tax = self::resolveTaxRate(
+                $position['steuersatz'] ?? null,
+                $defaultTax
+            );
             $currency = $this->normalizeCurrency($position['waehrung'] ?? $defaultCurrency);
             $unitPrice = [
                 'currency' => $currency,
@@ -490,5 +493,28 @@ private function isKleinunternehmer(): bool
     private function formatNumber(float $value): string
     {
         return rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');
+    }
+
+    /**
+     * Liefert einen Lexware-tauglichen Steuersatz (>= 0) aus einem rohen
+     * OpenXE-Wert. Behandelt drei Eingabefaelle:
+     *
+     *   - null / leerer String  -> $fallback
+     *   - negativer Wert (-1)   -> $fallback   (OpenXE-"use default"-Marker)
+     *   - >= 0                  -> Wert selbst
+     *
+     * @param mixed $raw      Position- oder Beleg-Wert aus der DB.
+     * @param float $fallback Default-Steuersatz, der bei Marker/Null greift.
+     */
+    private static function resolveTaxRate($raw, float $fallback): float
+    {
+        if ($raw === null || $raw === '') {
+            return $fallback;
+        }
+        $value = (float)$raw;
+        if ($value < 0) {
+            return $fallback;
+        }
+        return $value;
     }
 }
