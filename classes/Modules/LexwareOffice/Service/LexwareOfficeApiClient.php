@@ -23,6 +23,8 @@ final class LexwareOfficeApiClient
     // koennte ein hostiler oder defekter Server (Retry-After: 86400) einen
     // Worker fuer MAX_RETRIES * 24h blockieren.
     private const MAX_RETRY_AFTER_SECONDS = 60;
+    // Lexware-Limit fuer Voucher-File-Uploads: 5 MB pro Datei (PDF/JPG/PNG/XML).
+    private const MAX_UPLOAD_FILE_BYTES = 5 * 1024 * 1024;
 
     public function __construct(private ?Client $client = null)
     {
@@ -123,6 +125,80 @@ final class LexwareOfficeApiClient
         }
 
         return $this->request('POST', 'invoices', $apiKey, $options);
+    }
+
+    /**
+     * Laedt eine Datei (PDF/JPG/PNG/XML, max. 5 MB) zu einem bestehenden Voucher hoch.
+     *
+     * Lexware behandelt Sales-Invoices und Sales-Credit-Notes intern als Voucher,
+     * darum kann hier sowohl eine Invoice-ID als auch eine CreditNote-ID
+     * uebergeben werden — der File-Endpoint haengt am gemeinsamen
+     * /vouchers/{id}/files-Pfad.
+     *
+     * Multipart-Feldname ist 'file' (Lexware-Vorgabe). Die bestehende
+     * Retry-/429-Mechanik aus dem Konstruktor greift auch hier.
+     *
+     * @param string $apiKey
+     * @param string $voucherId
+     * @param string $filePath  Absoluter Pfad zur lokalen Datei.
+     *
+     * @return array Geparste Lexware-Response (mind. 'id').
+     */
+    public function uploadFileToVoucher(string $apiKey, string $voucherId, string $filePath): array
+    {
+        if ($voucherId === '') {
+            throw new LexwareOfficeException('Voucher-ID fuer File-Upload ist leer.');
+        }
+        if (!is_file($filePath) || !is_readable($filePath)) {
+            throw new LexwareOfficeException(
+                sprintf('PDF-Datei fuer Lexware-Upload nicht gefunden oder nicht lesbar: %s', $filePath)
+            );
+        }
+        $size = @filesize($filePath);
+        if ($size === false) {
+            throw new LexwareOfficeException(
+                sprintf('Dateigroesse von "%s" konnte nicht ermittelt werden.', $filePath)
+            );
+        }
+        if ($size <= 0) {
+            throw new LexwareOfficeException(
+                sprintf('Datei "%s" ist leer und kann nicht hochgeladen werden.', $filePath)
+            );
+        }
+        if ($size > self::MAX_UPLOAD_FILE_BYTES) {
+            throw new LexwareOfficeException(sprintf(
+                'Datei ist zu gross fuer Lexware Office (max. 5 MB, vorhanden: %.2f MB).',
+                $size / (1024 * 1024)
+            ));
+        }
+
+        $stream = @fopen($filePath, 'rb');
+        if ($stream === false) {
+            throw new LexwareOfficeException(
+                sprintf('PDF-Datei "%s" konnte nicht geoeffnet werden.', $filePath)
+            );
+        }
+
+        try {
+            return $this->request(
+                'POST',
+                sprintf('vouchers/%s/files', rawurlencode($voucherId)),
+                $apiKey,
+                [
+                    'multipart' => [
+                        [
+                            'name' => 'file',
+                            'contents' => $stream,
+                            'filename' => basename($filePath),
+                        ],
+                    ],
+                ]
+            );
+        } finally {
+            if (is_resource($stream)) {
+                @fclose($stream);
+            }
+        }
     }
 
     /**
