@@ -189,6 +189,30 @@ final class LexwareOfficePayloadMapper
     }
 
     /**
+     * Baut den CreditNote-POST-Payload fuer /v1/credit-notes.
+     *
+     * Lexware verwendet fuer credit-notes die exakt gleiche Payload-Struktur
+     * wie /v1/invoices (lineItems, taxConditions, address.contactId,
+     * voucherDate, paymentConditions, shippingConditions). Wir delegieren
+     * darum an mapInvoicePayload() und tauschen lediglich den Title aus,
+     * damit "Gutschrift {belegnr}" statt "Rechnung {belegnr}" am Voucher
+     * steht.
+     *
+     * @param array  $creditNote      gutschrift-Row inkl. JOIN-Felder.
+     * @param array  $positions       gutschrift_position-Rows.
+     * @param string $contactId       Bereits aufgeloeste Lexware-Contact-ID.
+     */
+    public function mapCreditNotePayload(array $creditNote, array $positions, string $contactId): array
+    {
+        $payload = $this->mapInvoicePayload($creditNote, $positions, $contactId);
+        $payload['title'] = !empty($creditNote['belegnr'])
+            ? sprintf('Gutschrift %s', $creditNote['belegnr'])
+            : 'Gutschrift';
+
+        return $payload;
+    }
+
+    /**
      * Leitet den Lexware-taxType aus dem OpenXE-Belegkontext ab.
      *
      * Mapping (orientiert sich an OpenXE-erpAPI::AdresseUSTCheck und der
