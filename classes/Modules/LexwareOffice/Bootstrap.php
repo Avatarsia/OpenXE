@@ -37,8 +37,29 @@ final class Bootstrap
     public static function onInitLexwareOfficeConfigService(ContainerInterface $container): LexwareOfficeConfigService
     {
         return new LexwareOfficeConfigService(
-            $container->get('SystemConfigModule')
+            $container->get('SystemConfigModule'),
+            self::resolveMasterKeyPath($container)
         );
+    }
+
+    /**
+     * Liefert den absoluten Pfad zur Master-Key-Datei.
+     *
+     * Konvention: {WFuserdata}/lexwareoffice.master.key. Liegt bewusst
+     * ausserhalb des Code-Trees, damit die Datei nicht versehentlich
+     * deployed/ueberschrieben wird, und ausserhalb der DB, damit ein
+     * DB-Dump alleine den API-Schluessel nicht entschluesselbar macht.
+     */
+    public static function resolveMasterKeyPath(ContainerInterface $container): string
+    {
+        /** @var ApplicationCore $app */
+        $app = $container->get('LegacyApplication');
+        $userdata = isset($app->Conf->WFuserdata) ? (string)$app->Conf->WFuserdata : '';
+        if ($userdata === '') {
+            throw new \RuntimeException('LexwareOffice: WFuserdata ist nicht konfiguriert; Master-Key-Pfad nicht aufloesbar.');
+        }
+
+        return rtrim($userdata, '/\\') . DIRECTORY_SEPARATOR . 'lexwareoffice.master.key';
     }
 
     public static function onInitLexwareOfficeApiClient(ContainerInterface $container): LexwareOfficeApiClient
@@ -88,6 +109,56 @@ final class Bootstrap
         self::addColumnIfMissing($db, 'gutschrift','lexware_creditnote_id',  'VARCHAR(36) DEFAULT NULL');
         self::addColumnIfMissing($db, 'gutschrift','lexware_uploaded_at',    'DATETIME DEFAULT NULL');
         self::addColumnIfMissing($db, 'gutschrift','lexware_pdf_uploaded_at','DATETIME DEFAULT NULL');
+    }
+
+    /**
+     * Erzeugt idempotent eine Master-Key-Datei, mit der der API-Schluessel
+     * verschluesselt wird. Liegt ausserhalb der DB, damit ein DB-Dump
+     * alleine den API-Key nicht entschluesselbar macht.
+     *
+     * Returnt true, wenn die Datei neu erstellt wurde; false, wenn sie
+     * bereits existierte. Wirft RuntimeException bei Schreib-/chmod-Fehlern.
+     *
+     * Datei-Inhalt: 64 Hex-Zeichen (= 32 Bytes Entropie aus random_bytes).
+     * Datei-Permissions: 0600. Verzeichnis wird bei Bedarf mit 0700 angelegt.
+     */
+    public static function ensureMasterKeyFile(string $path): bool
+    {
+        if (is_file($path)) {
+            return false;
+        }
+
+        $dir = dirname($path);
+        if (!is_dir($dir)) {
+            if (!@mkdir($dir, 0700, true) && !is_dir($dir)) {
+                throw new \RuntimeException(sprintf(
+                    'Master-Key-Verzeichnis konnte nicht erstellt werden: %s',
+                    $dir
+                ));
+            }
+        }
+
+        $key = bin2hex(random_bytes(32));
+        // Atomar: in temp-Datei schreiben, dann rename. Verhindert teilweise
+        // geschriebene Datei bei Crash mid-write.
+        $tmp = $path . '.tmp.' . bin2hex(random_bytes(4));
+        if (file_put_contents($tmp, $key, LOCK_EX) === false) {
+            throw new \RuntimeException(sprintf(
+                'Master-Key konnte nicht geschrieben werden: %s',
+                $tmp
+            ));
+        }
+        @chmod($tmp, 0600);
+        if (!@rename($tmp, $path)) {
+            @unlink($tmp);
+            throw new \RuntimeException(sprintf(
+                'Master-Key konnte nicht final verschoben werden: %s -> %s',
+                $tmp,
+                $path
+            ));
+        }
+
+        return true;
     }
 
     /**

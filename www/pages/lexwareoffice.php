@@ -95,7 +95,19 @@ class Lexwareoffice
         $db = $this->app->Container->get('Database');
         LexwareOfficeBootstrap::ensureSchema($db);
         $this->Install();
-        $message = '<div class="success">Initial Setup ausgef&uuml;hrt: Datenbank-Spalten gepr&uuml;ft, Hooks registriert. Mehrfachausf&uuml;hrung ist unsch&auml;dlich.</div>';
+
+        /** @var \Xentral\Modules\LexwareOffice\Service\LexwareOfficeConfigService $configService */
+        $configService = $this->app->Container->get('LexwareOfficeConfigService');
+        $masterKeyPath = $configService->getMasterKeyPath();
+        $masterKeyCreated = LexwareOfficeBootstrap::ensureMasterKeyFile($masterKeyPath);
+
+        if($masterKeyCreated) {
+          $masterKeyMessage = ' Master-Key neu angelegt unter <code>'.htmlspecialchars($masterKeyPath, ENT_QUOTES, 'UTF-8').'</code>. <strong>Diese Datei muss in dein Backup mit aufgenommen werden &mdash; bei Verlust ist der gespeicherte API-Schl&uuml;ssel nicht mehr entschl&uuml;sselbar.</strong>';
+        } else {
+          $masterKeyMessage = ' Master-Key bereits vorhanden unter <code>'.htmlspecialchars($masterKeyPath, ENT_QUOTES, 'UTF-8').'</code>.';
+        }
+
+        $message = '<div class="success">Initial Setup ausgef&uuml;hrt: Datenbank-Spalten gepr&uuml;ft, Hooks registriert. Mehrfachausf&uuml;hrung ist unsch&auml;dlich.'.$masterKeyMessage.'</div>';
       } catch (\Throwable $exception) {
         $message = '<div class="error">Setup fehlgeschlagen: '.htmlspecialchars($exception->getMessage()).'</div>';
       }
@@ -140,7 +152,13 @@ class Lexwareoffice
         <form method="post" action="">
           <fieldset>
             <legend>Initial Setup</legend>
-            <p>F&uuml;hrt einmalig die Datenbank-Migration aus (Spalten <code>lexware_*</code> in <code>adresse</code>, <code>rechnung</code>, <code>gutschrift</code>) und registriert die Hooks f&uuml;r das Aktionsmen&uuml; in Rechnungs- und Gutschriftslisten. Idempotent &mdash; mehrfaches Ausf&uuml;hren ist unsch&auml;dlich.</p>
+            <p>F&uuml;hrt einmalig drei Schritte aus:</p>
+            <ul>
+              <li>Datenbank-Migration: Spalten <code>lexware_*</code> in <code>adresse</code>, <code>rechnung</code>, <code>gutschrift</code></li>
+              <li>Hook-Registrierung: Aktionsmen&uuml; in Rechnungs- und Gutschriftslisten</li>
+              <li>Master-Key-Datei f&uuml;r die Verschl&uuml;sselung des API-Schl&uuml;ssels (au&szlig;erhalb der Datenbank)</li>
+            </ul>
+            <p>Idempotent &mdash; mehrfaches Ausf&uuml;hren ist unsch&auml;dlich. <strong>Hinweis:</strong> Die Master-Key-Datei muss in dein Backup mit aufgenommen werden &mdash; bei Verlust ist ein gespeicherter API-Schl&uuml;ssel nicht mehr entschl&uuml;sselbar.</p>
             '.$csrfTokenField.'
             <p>
               <input type="submit" class="btnGrey" name="init" value="Initial Setup ausf&uuml;hren">

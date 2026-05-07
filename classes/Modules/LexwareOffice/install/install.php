@@ -16,6 +16,9 @@
  *      SHOW COLUMNS.
  *   4) Lexwareoffice::Install() aufrufen - registriert die
  *      Rechnungs-Dropdown-Hooks persistent in hook_register.
+ *   5) Bootstrap::ensureMasterKeyFile() - erzeugt idempotent eine
+ *      Master-Key-Datei in {WFuserdata}, die zur Verschluesselung
+ *      des API-Schluessels genutzt wird (chmod 0600).
  */
 
 declare(strict_types=1);
@@ -35,7 +38,7 @@ echo "=== LexwareOffice Install ===\n\n";
 // 1) Service-Cache invalidieren VOR dem Bootstrap, damit der Installer
 //    die neue LexwareOffice/Bootstrap.php auto-discoverd.
 // ---------------------------------------------------------------------
-echo "[1/4] Invalidiere Service-Cache ... ";
+echo "[1/5] Invalidiere Service-Cache ... ";
 try {
     require_once $projectRoot . '/vendor/autoload.php';
     require_once $projectRoot . '/conf/main.conf.php';
@@ -66,7 +69,7 @@ try {
 //    seinem Konstruktor classes/bootstrap.php included und $this->Container
 //    setzt. $app->erp liefert die Legacy-erpAPI mit RegisterHook().
 // ---------------------------------------------------------------------
-echo "[2/4] Lade OpenXE-Bootstrap ... ";
+echo "[2/5] Lade OpenXE-Bootstrap ... ";
 try {
     require_once $projectRoot . '/xentral_autoloader.php';
     require_once $projectRoot . '/phpwf/class.application_core.php';
@@ -88,7 +91,7 @@ try {
 // ---------------------------------------------------------------------
 // 3) Schema-Migration: idempotent, haengt die drei Lexware-Spalten an.
 // ---------------------------------------------------------------------
-echo "[3/4] Pruefe Datenbank-Schema ... ";
+echo "[3/5] Pruefe Datenbank-Schema ... ";
 try {
     /** @var \Xentral\Components\Database\Database $db */
     $db = $app->Container->get('Database');
@@ -104,7 +107,7 @@ try {
 //    Rechnungs-Dropdown-Hooks in hook_register ein. RegisterHook()
 //    in erpAPI ist idempotent (UPDATE wenn vorhanden, sonst INSERT).
 // ---------------------------------------------------------------------
-echo "[4/4] Registriere Rechnungs-Dropdown-Hooks ... ";
+echo "[4/5] Registriere Rechnungs-Dropdown-Hooks ... ";
 try {
     require_once $projectRoot . '/www/pages/lexwareoffice.php';
 
@@ -118,7 +121,30 @@ try {
     exit(1);
 }
 
+// ---------------------------------------------------------------------
+// 5) Master-Key-Datei: Erzeugt idempotent die Datei in {WFuserdata}, die
+//    zur Verschluesselung des API-Schluessels genutzt wird. Liegt
+//    bewusst ausserhalb der DB.
+// ---------------------------------------------------------------------
+echo "[5/5] Pruefe Master-Key-Datei ... ";
+$masterKeyPath = null;
+$masterKeyCreated = false;
+try {
+    $masterKeyPath = \Xentral\Modules\LexwareOffice\Bootstrap::resolveMasterKeyPath($app->Container);
+    $masterKeyCreated = \Xentral\Modules\LexwareOffice\Bootstrap::ensureMasterKeyFile($masterKeyPath);
+    echo $masterKeyCreated ? "neu erstellt\n" : "bereits vorhanden\n";
+} catch (\Throwable $e) {
+    echo "FAIL\n  " . $e->getMessage() . "\n";
+    exit(1);
+}
+
 echo "\nLexwareOffice-Modul installiert.\n";
-echo "Naechster Schritt: index.php?module=lexwareoffice&action=edit aufrufen\n";
+if ($masterKeyCreated && $masterKeyPath !== null) {
+    echo "\nWICHTIG: Master-Key wurde neu erstellt unter\n";
+    echo "  " . $masterKeyPath . "\n";
+    echo "Diese Datei muss in dein Backup mit aufgenommen werden.\n";
+    echo "Bei Verlust ist der gespeicherte API-Schluessel nicht mehr entschluesselbar.\n";
+}
+echo "\nNaechster Schritt: index.php?module=lexwareoffice&action=edit aufrufen\n";
 echo "und den Lexware-API-Schluessel hinterlegen.\n";
 exit(0);
