@@ -365,6 +365,274 @@ final class LexwareOfficeService
         }
     }
 
+    /**
+     * Schiebt eine OpenXE-Gutschrift als Sales-Credit-Note nach Lexware Office.
+     *
+     * Spiegelt pushInvoice():
+     *   - Idempotency-Pre-Check via gutschrift.lexware_creditnote_id
+     *   - Contact-Resolve identisch zu Rechnungs-Pfad
+     *   - createCreditNote() mit finalize=true
+     *   - PDF-Upload via uploadFileToVoucher() (Best-Effort)
+     *   - Persistierung in gutschrift-Tabelle
+     *
+     * @param int $creditNoteId OpenXE gutschrift.id
+     */
+    public function pushCreditNote(int $creditNoteId): array
+    {
+        $apiKey = $this->config->getApiKey();
+        if (empty($apiKey)) {
+            throw new LexwareOfficeException('Es ist kein Lexware Office API-Schlüssel hinterlegt.');
+        }
+
+        $creditNote = $this->fetchCreditNote($creditNoteId);
+        if (empty($creditNote)) {
+            throw new LexwareOfficeException('Gutschrift wurde nicht gefunden.');
+        }
+
+        // Idempotency-Pre-Check (gleiches Race-Window wie pushInvoice; akzeptiert
+        // fuer den manuellen UI-Trigger).
+        if (!empty($creditNote['lexware_creditnote_id'])) {
+            throw new LexwareOfficeException(
+                sprintf(
+                    'Gutschrift wurde bereits an Lexware Office uebertragen (Beleg-ID: %s, am %s).',
+                    $creditNote['lexware_creditnote_id'],
+                    $creditNote['lexware_uploaded_at'] ?? 'unbekannt'
+                )
+            );
+        }
+
+        $positions = $this->fetchCreditNotePositions($creditNoteId);
+        if (empty($positions)) {
+            throw new LexwareOfficeException('Die Gutschrift enthält keine Positionen.');
+        }
+
+        // resolveContact() arbeitet ausschliesslich mit gemeinsamen Feldnamen
+        // (adresse, kundennummer, name, email, lookupCustomerNumber,
+        // adresse_lexware_contact_id) — die in fetchCreditNote() identisch
+        // bereitgestellt werden. Kein Code-Duplikat noetig.
+        $contactId = $this->resolveContact($apiKey, $creditNote);
+        $payload   = $this->mapper->mapCreditNotePayload($creditNote, $positions, $contactId);
+
+        // Idempotency-Key nach gleichem Schema wie Rechnung, aber mit
+        // 'gutschrift'-Praefix damit Server-seitig keine Kollision droht.
+        $idempotencyKey = sprintf('openxe-gutschrift-%d-%s', $creditNoteId, $creditNote['belegnr'] ?? '');
+
+        try {
+            $cnResponse = $this->client->createCreditNote($apiKey, $payload, true, $idempotencyKey);
+        } catch (LexwareOfficeException $e) {
+            // Self-Heal bei toter persistierter contactId — gleiches Muster wie pushInvoice().
+            $persistedContactId = trim((string)($creditNote['adresse_lexware_contact_id'] ?? ''));
+            $status = $e->getCode();
+            if ($persistedContactId !== '' && in_array($status, [400, 404], true)) {
+                $this->logger->warning(
+                    'Lexware Office: persistierte Contact-ID abgelehnt (Gutschrift), Self-Heal-Versuch',
+                    [
+                        'creditnote_id' => $creditNoteId,
+                        'stale_contact_id' => $persistedContactId,
+                        'status' => $status,
+                        'error' => $e->getMessage(),
+                    ]
+                );
+                if (!empty($creditNote['adresse'])) {
+                    try {
+                        $this->db->perform(
+                            'UPDATE `adresse` SET `lexware_contact_id` = NULL WHERE `id` = :id',
+                            ['id' => (int)$creditNote['adresse']]
+                        );
+                    } catch (\Throwable $dbError) {
+                        $this->logger->warning(
+                            'Lexware Office: Konnte stale contact-ID (Gutschrift) nicht loeschen',
+                            [
+                                'adresse_id' => $creditNote['adresse'],
+                                'error' => $dbError->getMessage(),
+                            ]
+                        );
+                    }
+                }
+                $creditNote['adresse_lexware_contact_id'] = '';
+                $contactId = $this->resolveContact($apiKey, $creditNote);
+                $payload   = $this->mapper->mapCreditNotePayload($creditNote, $positions, $contactId);
+                $cnResponse = $this->client->createCreditNote($apiKey, $payload, true, $idempotencyKey);
+            } else {
+                throw $e;
+            }
+        }
+
+        $lexwareCreditNoteId = $this->assertCreditNoteCreated($cnResponse);
+
+        $this->persistCreditNoteMapping($creditNoteId, $lexwareCreditNoteId);
+        if (!empty($creditNote['adresse']) && empty($creditNote['adresse_lexware_contact_id'])) {
+            $this->persistContactMapping((int)$creditNote['adresse'], $contactId);
+        }
+
+        // PDF-Upload an den selben Voucher (Lexware fuehrt Gutschriften und
+        // Rechnungen unter einer gemeinsamen voucher-Resource).
+        $pdfUploadError = $this->tryUploadCreditNotePdf($apiKey, $creditNoteId, $lexwareCreditNoteId);
+
+        $this->logger->notice(
+            'Gutschrift an Lexware Office gesendet',
+            [
+                'creditnote_id' => $creditNoteId,
+                'lexware_creditnote_id' => $lexwareCreditNoteId,
+                'contact_id' => $contactId,
+            ]
+        );
+        $this->logger->debug(
+            'Lexware Office payload details (Gutschrift)',
+            [
+                'creditnote_id' => $creditNoteId,
+                'lexware_creditnote_id' => $lexwareCreditNoteId,
+                'lexware_response' => $cnResponse,
+                'lexware_payload' => $payload,
+            ]
+        );
+
+        return [
+            'creditNoteId' => $lexwareCreditNoteId,
+            'contactId'    => $contactId,
+            'response'     => $cnResponse,
+            'pdfUploadError' => $pdfUploadError,
+        ];
+    }
+
+    private function fetchCreditNote(int $creditNoteId): ?array
+    {
+        return $this->db->fetchRow(
+            'SELECT
+                g.*,
+                COALESCE(g.kundennummer, adr.kundennummer) AS lookupCustomerNumber,
+                adr.email AS adresse_email,
+                adr.telefon AS adresse_telefon,
+                adr.typ AS adresse_typ,
+                adr.name AS adresse_name,
+                adr.vorname AS adresse_vorname,
+                adr.ansprechpartner AS adresse_ansprechpartner,
+                adr.lexware_contact_id AS adresse_lexware_contact_id
+            FROM `gutschrift` AS `g`
+            LEFT JOIN `adresse` AS `adr` ON adr.id = g.adresse
+            WHERE g.id = :id',
+            ['id' => $creditNoteId]
+        );
+    }
+
+    private function fetchCreditNotePositions(int $creditNoteId): array
+    {
+        return $this->db->fetchAll(
+            'SELECT * FROM `gutschrift_position` WHERE `gutschrift` = :id ORDER BY `sort`',
+            ['id' => $creditNoteId]
+        );
+    }
+
+    private function assertCreditNoteCreated(array $response): string
+    {
+        $id = $this->extractInvoiceId($response);
+        if ($id === null || $id === '') {
+            $message = $response['message'] ?? $response['error'] ?? '';
+            if ($message === '' && !empty($response)) {
+                $message = json_encode($response, JSON_UNESCAPED_UNICODE) ?: '';
+            }
+            throw new LexwareOfficeException(
+                sprintf(
+                    'Gutschrift wurde nicht in Lexware Office angelegt. %s',
+                    $message !== '' ? $message : 'Keine Beleg-ID erhalten.'
+                )
+            );
+        }
+
+        return $id;
+    }
+
+    private function persistCreditNoteMapping(int $creditNoteId, string $lexwareCreditNoteId): void
+    {
+        try {
+            $this->db->perform(
+                'UPDATE `gutschrift` SET `lexware_creditnote_id` = :lexware_id, `lexware_uploaded_at` = NOW() WHERE `id` = :id',
+                ['lexware_id' => $lexwareCreditNoteId, 'id' => $creditNoteId]
+            );
+        } catch (\Throwable $e) {
+            $this->logger->error(
+                'Lexware Office: Mapping-Persist fuer Gutschrift fehlgeschlagen',
+                [
+                    'creditnote_id' => $creditNoteId,
+                    'lexware_creditnote_id' => $lexwareCreditNoteId,
+                    'error' => $e->getMessage(),
+                    'consequence' => 'duplicate_upload_possible',
+                ]
+            );
+        }
+    }
+
+    private function tryUploadCreditNotePdf(string $apiKey, int $creditNoteId, string $lexwareCreditNoteId): ?string
+    {
+        try {
+            $pdfPath = $this->resolveArchivedPdfPath('gutschrift', $creditNoteId);
+            if ($pdfPath === null) {
+                $this->logger->warning(
+                    'Lexware Office: Keine archivierte PDF zur Gutschrift gefunden, Upload uebersprungen',
+                    [
+                        'creditnote_id' => $creditNoteId,
+                        'lexware_creditnote_id' => $lexwareCreditNoteId,
+                    ]
+                );
+
+                return 'Es wurde keine archivierte PDF-Datei zur Gutschrift gefunden. '
+                    .'Bitte die Gutschrift einmal in OpenXE archivieren und den Upload erneut ausloesen.';
+            }
+
+            $this->client->uploadFileToVoucher($apiKey, $lexwareCreditNoteId, $pdfPath);
+            $this->persistCreditNotePdfUploadedAt($creditNoteId);
+            $this->logger->notice(
+                'Lexware Office: PDF erfolgreich an Gutschrift-Voucher angehaengt',
+                [
+                    'creditnote_id' => $creditNoteId,
+                    'lexware_creditnote_id' => $lexwareCreditNoteId,
+                ]
+            );
+
+            return null;
+        } catch (LexwareOfficeException $e) {
+            $this->logger->error(
+                'Lexware Office: PDF-Upload fuer Gutschrift fehlgeschlagen',
+                [
+                    'creditnote_id' => $creditNoteId,
+                    'lexware_creditnote_id' => $lexwareCreditNoteId,
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return 'PDF-Upload nach Lexware Office fehlgeschlagen: '.$e->getMessage();
+        } catch (\Throwable $e) {
+            $this->logger->error(
+                'Lexware Office: Interner Fehler beim PDF-Upload (Gutschrift)',
+                [
+                    'creditnote_id' => $creditNoteId,
+                    'lexware_creditnote_id' => $lexwareCreditNoteId,
+                    'error' => $e->getMessage(),
+                ]
+            );
+
+            return 'PDF-Upload nach Lexware Office fehlgeschlagen (intern): '.$e->getMessage();
+        }
+    }
+
+    private function persistCreditNotePdfUploadedAt(int $creditNoteId): void
+    {
+        try {
+            $this->db->perform(
+                'UPDATE `gutschrift` SET `lexware_pdf_uploaded_at` = NOW() WHERE `id` = :id',
+                ['id' => $creditNoteId]
+            );
+        } catch (\Throwable $e) {
+            $this->logger->error(
+                'Lexware Office: Persist von gutschrift.lexware_pdf_uploaded_at fehlgeschlagen',
+                [
+                    'creditnote_id' => $creditNoteId,
+                    'error' => $e->getMessage(),
+                ]
+            );
+        }
+    }
+
     private function extractInvoiceId(array $invoiceResponse): ?string
     {
         foreach ([$invoiceResponse['id'] ?? null, $invoiceResponse['voucherId'] ?? null] as $id) {
