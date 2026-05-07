@@ -63,6 +63,10 @@ fix/supersearch-cronjob-undef
 # so the in-app upgrade button works even when the remote (production) branch
 # is force-pushed by CI.
 fix/upgrader-allow-force-pushed-source
+# Restore erpAPI::LoadZahlungsweiseModul() — removed by upstream 91e603d
+# (PSR-3 logger cleanup) but still called from www/pages/zahlungsweisen.php
+# and www/pages/zahlungsverkehr.php, causing a fatal in Zahlungsweisen-Edit.
+fix/restore-loadzahlungsweisemodul
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
