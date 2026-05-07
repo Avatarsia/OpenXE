@@ -281,7 +281,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 return(-1);
             }
 
-            echo_out("--------------- Pulling files... ---------------\n");
+            echo_out("--------------- Fetching files... ---------------\n");
 
             if ($force) {
                 $retval = git("reset --hard",$output,$verbose,$verbose,"Error while resetting modified files!");
@@ -291,13 +291,17 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 }
             }
 
-            $retval = git("pull ".$remote_info['host']." ".$remote_info['branch'],$output,$verbose,$verbose,"Error while pulling files!");
+            // Fetch + reset --hard FETCH_HEAD instead of pull/merge so the
+            // upgrade still works when the remote branch was force-pushed
+            // (e.g. CI-built integration branches with rewritten history).
+            // Local edits are already guarded above by the modified-files check.
+            $retval = git("fetch ".$remote_info['host']." ".$remote_info['branch'],$output,$verbose,$verbose,"Error while fetching files!");
             if ($retval != 0) {
                  abort("");
                 return(-1);
             }
 
-            $retval = git("reset --hard",$output,$verbose,$verbose,"Error while applying files!");
+            $retval = git("reset --hard FETCH_HEAD",$output,$verbose,$verbose,"Error while applying files!");
             if ($retval != 0) {
                  abort("");
                 return(-1);
