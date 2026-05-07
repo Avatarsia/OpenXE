@@ -81,9 +81,13 @@ final class Bootstrap
      */
     public static function ensureSchema(Database $db): void
     {
-        self::addColumnIfMissing($db, 'adresse',  'lexware_contact_id',  'VARCHAR(36) DEFAULT NULL');
-        self::addColumnIfMissing($db, 'rechnung', 'lexware_invoice_id',  'VARCHAR(36) DEFAULT NULL');
-        self::addColumnIfMissing($db, 'rechnung', 'lexware_uploaded_at', 'DATETIME DEFAULT NULL');
+        self::addColumnIfMissing($db, 'adresse',   'lexware_contact_id',     'VARCHAR(36) DEFAULT NULL');
+        self::addColumnIfMissing($db, 'rechnung',  'lexware_invoice_id',     'VARCHAR(36) DEFAULT NULL');
+        self::addColumnIfMissing($db, 'rechnung',  'lexware_uploaded_at',    'DATETIME DEFAULT NULL');
+        self::addColumnIfMissing($db, 'rechnung',  'lexware_pdf_uploaded_at','DATETIME DEFAULT NULL');
+        self::addColumnIfMissing($db, 'gutschrift','lexware_creditnote_id',  'VARCHAR(36) DEFAULT NULL');
+        self::addColumnIfMissing($db, 'gutschrift','lexware_uploaded_at',    'DATETIME DEFAULT NULL');
+        self::addColumnIfMissing($db, 'gutschrift','lexware_pdf_uploaded_at','DATETIME DEFAULT NULL');
     }
 
     /**
@@ -92,10 +96,14 @@ final class Bootstrap
      */
     public static function removeSchema(Database $db): void
     {
-        // Reverse-Reihenfolge, damit rechnung-Spalten zuerst weg sind
-        self::dropColumnIfExists($db, 'rechnung', 'lexware_uploaded_at');
-        self::dropColumnIfExists($db, 'rechnung', 'lexware_invoice_id');
-        self::dropColumnIfExists($db, 'adresse',  'lexware_contact_id');
+        // Reverse-Reihenfolge: gutschrift zuerst, dann rechnung, zum Schluss adresse.
+        self::dropColumnIfExists($db, 'gutschrift','lexware_pdf_uploaded_at');
+        self::dropColumnIfExists($db, 'gutschrift','lexware_uploaded_at');
+        self::dropColumnIfExists($db, 'gutschrift','lexware_creditnote_id');
+        self::dropColumnIfExists($db, 'rechnung',  'lexware_pdf_uploaded_at');
+        self::dropColumnIfExists($db, 'rechnung',  'lexware_uploaded_at');
+        self::dropColumnIfExists($db, 'rechnung',  'lexware_invoice_id');
+        self::dropColumnIfExists($db, 'adresse',   'lexware_contact_id');
     }
 
     /**
