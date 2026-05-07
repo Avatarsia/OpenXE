@@ -267,25 +267,14 @@ final class LexwareOfficePayloadMapper
             return 'vatfree';
         }
 
-        // Stufe 1.5: Land/USt-ID-Heuristik wenn ust_befreit nicht explizit gesetzt.
+        // Stufe 1.5: Land/USt-ID-Heuristik wenn ust_befreit explizit 0 ist.
         // Greift z.B. wenn der Beleg ueber einen anderen Kanal angelegt wurde
         // (Import, Custom-Modul) und ust_befreit nicht durch IstEU()/Steuerbefreit()
         // gesetzt wurde. Fuer normalen OpenXE-Workflow ist Stufe 1 bereits gesetzt.
-        $land = trim((string)($invoice['land'] ?? ''));
-        if ($land !== '') {
-            $mandatLand = $this->getMandantLand();
-            if ($mandatLand !== '' && strcasecmp($land, $mandatLand) !== 0) {
-                if ($this->isEuCountry($land)) {
-                    $ustid = trim((string)($invoice['ustid'] ?? ''));
-                    if ($ustid !== '') {
-                        return 'intraCommunitySupply';
-                    }
-                    // EU-B2C ohne USt-IdNr.: bleibt im Default-Pfad (net mit
-                    // positionsbezogenen Steuersaetzen).
-                } else {
-                    // Drittland != Mandanten-Land.
-                    return 'thirdPartyCountryDelivery';
-                }
+        if ($ustBefreit === 0) {
+            $heuristic = $this->resolveTaxTypeHeuristic($invoice);
+            if ($heuristic !== null) {
+                return $heuristic;
             }
         }
 
@@ -296,6 +285,51 @@ final class LexwareOfficePayloadMapper
 
         // Default: Netto.
         return 'net';
+    }
+
+    /**
+     * Heuristik fuer taxType wenn ust_befreit nicht explizit gesetzt ist.
+     * Liefert null wenn keine sichere Aussage moeglich ist (Inland, fehlendes
+     * Land, fehlender Mandant, IstEU-Exception, EU-B2C ohne USt-IdNr.) — der
+     * Aufrufer faellt dann auf den naechsten Schritt (Position-Check / net).
+     */
+    private function resolveTaxTypeHeuristic(array $invoice): ?string
+    {
+        if ($this->erp === null) {
+            return null;
+        }
+
+        $land = trim((string)($invoice['land'] ?? ''));
+        if ($land === '') {
+            return null;
+        }
+
+        $mandatLand = $this->getMandantLand();
+        if ($mandatLand === '' || strcasecmp($land, $mandatLand) === 0) {
+            return null;
+        }
+
+        try {
+            $isEu = (bool)$this->erp->IstEU($land);
+        } catch (\Throwable $e) {
+            $this->logger->warning(
+                'Lexware Office: IstEU-Lookup fehlgeschlagen, Tax-Heuristik uebersprungen',
+                ['error' => $e->getMessage(), 'land' => $land]
+            );
+            return null;
+        }
+
+        if ($isEu) {
+            $ustid = trim((string)($invoice['ustid'] ?? ''));
+            if ($ustid !== '') {
+                return 'intraCommunitySupply';
+            }
+            // EU-B2C ohne USt-IdNr.: kein sicherer Marker fuer
+            // intraCommunitySupply — Default-Pfad uebernimmt.
+            return null;
+        }
+
+        return 'thirdPartyCountryDelivery';
     }
 
     private function getMandantLand(): string
@@ -316,23 +350,7 @@ final class LexwareOfficePayloadMapper
         return trim((string)$value);
     }
 
-    private function isEuCountry(string $land): bool
-    {
-        if ($this->erp === null) {
-            return false;
-        }
-        try {
-            return (bool)$this->erp->IstEU($land);
-        } catch (\Throwable $e) {
-            $this->logger->warning(
-                'Lexware Office: IstEU-Lookup fehlgeschlagen',
-                ['error' => $e->getMessage(), 'land' => $land]
-            );
-            return false;
-        }
-    }
-
-    private function isKleinunternehmer(): bool
+private function isKleinunternehmer(): bool
     {
         if ($this->erp === null) {
             return false;
