@@ -200,6 +200,7 @@ class Lexwareoffice
       $result = $this->getService()->pushInvoice($id);
       $lexwareId = !empty($result['invoiceId']) ? $result['invoiceId'] : '';
       $contactId = !empty($result['contactId']) ? $result['contactId'] : '';
+      $pdfErr = isset($result['pdfUploadError']) ? (string)$result['pdfUploadError'] : '';
       $text = 'Rechnung wurde an Lexware Office &uuml;bergeben.';
       if($lexwareId !== '') {
         $text .= ' Beleg-ID: '.htmlspecialchars($lexwareId);
@@ -207,8 +208,14 @@ class Lexwareoffice
       if($contactId !== '') {
         $text .= ' Kontakt-ID: '.htmlspecialchars($contactId);
       }
-      $message = '<div class="success">'.$text.'</div>';
-      $this->app->erp->RechnungProtokoll($id, 'Lexware Office: '.$text);
+      if($pdfErr !== '') {
+        // Voucher steht, PDF fehlt: Warnung statt Erfolgsmeldung.
+        $message = '<div class="info">'.$text.'<br>Hinweis: '.htmlspecialchars($pdfErr).'</div>';
+        $this->app->erp->RechnungProtokoll($id, 'Lexware Office: '.$text.' | PDF-Hinweis: '.$pdfErr);
+      } else {
+        $message = '<div class="success">'.$text.'</div>';
+        $this->app->erp->RechnungProtokoll($id, 'Lexware Office: '.$text);
+      }
     } catch (LexwareOfficeException $exception) {
       $errorText = htmlspecialchars($exception->getMessage());
       $message = '<div class="error">'.$errorText.'</div>';
