@@ -128,6 +128,32 @@ final class LexwareOfficeApiClient
     }
 
     /**
+     * Legt eine Sales-Gutschrift in Lexware Office an.
+     *
+     * Gleiche Payload-Struktur wie createInvoice() (lineItems, taxConditions,
+     * address.contactId, voucherDate). Einziger Unterschied: Endpoint
+     * /v1/credit-notes und ?finalize=true als Query.
+     *
+     * @param string      $apiKey
+     * @param array       $payload
+     * @param bool        $finalize
+     * @param string|null $idempotencyKey Wie createInvoice(): optionaler
+     *                                    deterministischer Idempotency-Key.
+     *
+     * @return array
+     */
+    public function createCreditNote(string $apiKey, array $payload, bool $finalize = true, ?string $idempotencyKey = null): array
+    {
+        $query = $finalize ? ['finalize' => 'true'] : [];
+        $options = ['json' => $payload, 'query' => $query];
+        if ($idempotencyKey !== null && $idempotencyKey !== '') {
+            $options['headers'] = ['Idempotency-Key' => $idempotencyKey];
+        }
+
+        return $this->request('POST', 'credit-notes', $apiKey, $options);
+    }
+
+    /**
      * Laedt eine Datei (PDF/JPG/PNG/XML, max. 5 MB) zu einem bestehenden Voucher hoch.
      *
      * Lexware behandelt Sales-Invoices und Sales-Credit-Notes intern als Voucher,
