@@ -72,14 +72,10 @@ fix/upgrader-allow-force-pushed-source
 # Restore erpAPI::LoadZahlungsweiseModul() — removed by upstream 91e603d
 # (PSR-3 logger cleanup) but still called from www/pages/zahlungsweisen.php
 # and www/pages/zahlungsverkehr.php, causing a fatal in Zahlungsweisen-Edit.
-#
-# fix/restore-loadzahlungsweisemodul -- replaced by ...-only:
-#   Original branch was a production-snapshot with `integrate: ...`
-#   merge commits and therefore carried older copies of the LexwareOffice
-#   files; that caused a Pass 2 cross-feature conflict against
-#   feature/lexwareoffice-only. The slim cherry-pick branch contains
-#   exactly the one-file fix (www/lib/class.erpapi.php) on upstream/master.
-fix/restore-loadzahlungsweisemodul-only
+# Branch was rebased onto upstream/master so it now contains only the
+# 29-line fix in www/lib/class.erpapi.php (no production-snapshot beifang
+# that previously collided with feature/lexwareoffice-only).
+fix/restore-loadzahlungsweisemodul
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
