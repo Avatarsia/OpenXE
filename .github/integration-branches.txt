@@ -59,6 +59,10 @@ fix/bootstrap-static-cross-check
 # Cronjob crashes — guard cleanup() in catch against use-before-define
 # (amainvoice, supersearch_index_full/diff)
 fix/supersearch-cronjob-undef
+# Upgrader UI: replace `git pull` with `git fetch + reset --hard FETCH_HEAD`
+# so the in-app upgrade button works even when the remote (production) branch
+# is force-pushed by CI.
+fix/upgrader-allow-force-pushed-source
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
