@@ -80,9 +80,7 @@ class Lexwareoffice
       } catch (LexwareOfficeException $exception) {
         $message = '<div class="error">'.htmlspecialchars($exception->getMessage()).'</div>';
       }
-    }
-
-    if($postAllowed && $this->app->Secure->GetPOST('save') !== '') {
+    } elseif($postAllowed && $this->app->Secure->GetPOST('save') !== '') {
       try {
         $apiKey = (string)$this->app->Secure->GetPOST('api_key');
         $service->saveApiKey($apiKey);
@@ -91,9 +89,7 @@ class Lexwareoffice
       } catch (LexwareOfficeException $exception) {
         $message = '<div class="error">'.htmlspecialchars($exception->getMessage()).'</div>';
       }
-    }
-
-    if($postAllowed && $this->app->Secure->GetPOST('init') !== '') {
+    } elseif($postAllowed && $this->app->Secure->GetPOST('init') !== '') {
       try {
         /** @var \Xentral\Components\Database\Database $db */
         $db = $this->app->Container->get('Database');
