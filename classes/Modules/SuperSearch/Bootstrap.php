@@ -11,6 +11,7 @@ use Xentral\Modules\SuperSearch\SearchIndex\Provider\AppProvider;
 use Xentral\Modules\SuperSearch\SearchIndex\Provider\ArticleProvider;
 use Xentral\Modules\SuperSearch\SearchIndex\Provider\CreditNoteProvider;
 use Xentral\Modules\SuperSearch\SearchIndex\Provider\InvoiceProvider;
+use Xentral\Modules\SuperSearch\SearchIndex\Provider\LexwareOfficeProvider;
 use Xentral\Modules\SuperSearch\SearchIndex\Provider\OfferProvider;
 use Xentral\Modules\SuperSearch\SearchIndex\Provider\OrderProvider;
 use Xentral\Modules\SuperSearch\SearchIndex\Provider\DeliveryNoteProvider;
@@ -123,6 +124,10 @@ final class Bootstrap
                 return new AppProvider($appstoreModule);
             }
         );
+        $factory->registerProviderFactory(
+            'lexwareoffice', static function (ContainerInterface $container) {
+            return new LexwareOfficeProvider();
+        });
 
         return $factory;
     }
