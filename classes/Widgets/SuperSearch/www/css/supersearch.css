@@ -44,9 +44,8 @@
 
 #supersearch-overlay .result-wrapper {
     overflow-y: auto;
-    flex: 0 1 70%;
+    flex: 1 1 auto;
     min-width: 900px;
-    max-width: 1300px;
     height: auto;
     max-height: calc(100vh - 140px);
     background-color: var(--body-background);
@@ -55,7 +54,7 @@
 }
 #supersearch-overlay .result-columns {
     display: grid;
-    grid-template-columns: repeat(3, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
     align-items: start;
     width: 100%;
     gap: 16px;
@@ -77,7 +76,7 @@
     display: block;
 }
 #supersearch-overlay.has-detail .result-wrapper {
-    flex: 0 1 65%;
+    flex: 1 1 auto;
 }
 
 #supersearch-overlay .search {
@@ -283,12 +282,14 @@
     }
 }
 
-/** Overlay um 200 Pixel verbreitern, wenn genug Platz vorhanden  */
-@media screen and (min-width: 1200px) {
-    #supersearch-overlay.has-detail {
-        width: 1090px;
+/** Detail-Pane bekommt feste Breite, Overlay selbst bleibt viewport-breit */
+@media screen and (min-width: 1000px) and (max-width: 1199.98px) {
+    #supersearch-overlay.has-detail .detail-wrapper {
+        flex: 0 0 320px;
     }
-    #supersearch-overlay .detail-wrapper {
-        width: 840px;
+}
+@media screen and (min-width: 1200px) {
+    #supersearch-overlay.has-detail .detail-wrapper {
+        flex: 0 0 840px;
     }
 }

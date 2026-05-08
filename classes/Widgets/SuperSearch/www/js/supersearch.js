@@ -251,8 +251,13 @@ var SuperSearch = (function ($) {
             }
 
             me.storage.$details.html('');
-            var columns = me.buildResultColumns(searchResults);
+            var wrapperWidth = $resultContainer.width();
+            var columns = me.buildResultColumns(searchResults, wrapperWidth);
             var $columnsWrapper = $('<div class="result-columns">');
+            $columnsWrapper.css(
+                'grid-template-columns',
+                'repeat(' + columns.length + ', minmax(280px, 1fr))'
+            );
 
             columns.forEach(function (column) {
                 var $column = $('<div class="result-column">');
@@ -316,54 +321,91 @@ var SuperSearch = (function ($) {
         /**
          * Ordnet Suchergebnis-Gruppen dynamisch in Spalten an.
          *
+         * Strategie:
+         *   - Apps-Gruppen landen immer als letzte Spalte (rechts).
+         *   - Bei breitem Layout (>=3 Result-Spalten) wird die alte Avatarsia-
+         *     Semantik beibehalten: Spalte 0 = offer/order, Spalte 1 =
+         *     deliverynote/invoice, restliche Spalten = uebrige Gruppen
+         *     round-robin verteilt. Leere semantische Spalten werden
+         *     herausgefiltert.
+         *   - Bei schmalem Layout (<3 Result-Spalten) werden alle Gruppen
+         *     round-robin auf einer prioritaetssortierten Liste verteilt.
+         *   - Die Spaltenanzahl wird an die verfuegbare Breite gekoppelt.
+         *
          * @param {object} searchResults
+         * @param {number} [wrapperWidth] Verfuegbare Breite des Result-Containers in px
          * @returns {Array}
          */
-        buildResultColumns: function (searchResults) {
-            var prioritizedColumns = [
-                {slot: 'left', keys: ['offer', 'order']},
-                {slot: 'middle', keys: ['deliverynote', 'invoice']},
-                {slot: 'right', keys: ['app', 'apps']}
-            ];
+        buildResultColumns: function (searchResults, wrapperWidth) {
+            var leftKeys = ['offer', 'order'];
+            var middleKeys = ['deliverynote', 'invoice'];
 
-            var columns = {left: [], middle: [], right: []};
-            var remaining = [];
+            var leftGroups = [];
+            var middleGroups = [];
+            var otherGroups = [];
+            var appGroups = [];
 
             Object.keys(searchResults).forEach(function (group) {
                 var groupResult = searchResults[group];
-                var assigned = false;
+                if (groupResult.key === 'app' || groupResult.key === 'apps') {
+                    appGroups.push(groupResult);
+                } else if (leftKeys.indexOf(groupResult.key) !== -1) {
+                    leftGroups.push(groupResult);
+                } else if (middleKeys.indexOf(groupResult.key) !== -1) {
+                    middleGroups.push(groupResult);
+                } else {
+                    otherGroups.push(groupResult);
+                }
+            });
 
-                prioritizedColumns.forEach(function (config) {
-                    if (assigned) {
-                        return;
-                    }
-                    if (config.keys.indexOf(groupResult.key) !== -1) {
-                        columns[config.slot].push(groupResult);
-                        assigned = true;
-                    }
+            var minColumnWidth = 296; // 280px Spalte + 16px Gap
+            var availableWidth = (wrapperWidth > 0 ? wrapperWidth : 900) + 16;
+            var maxColumns = Math.max(1, Math.floor(availableWidth / minColumnWidth));
+            var hasApps = appGroups.length > 0;
+            var resultColumnBudget = hasApps ? Math.max(1, maxColumns - 1) : maxColumns;
+
+            var orderedGroups = leftGroups.concat(middleGroups).concat(otherGroups);
+
+            if (orderedGroups.length === 0) {
+                return hasApps ? [appGroups] : [];
+            }
+
+            var resultColumnCount = Math.min(resultColumnBudget, orderedGroups.length);
+            var columns = [];
+
+            if (resultColumnCount >= 3 && (leftGroups.length > 0 || middleGroups.length > 0)) {
+                columns.push(leftGroups.slice());
+                columns.push(middleGroups.slice());
+
+                var otherSlotCount = Math.max(1, resultColumnCount - 2);
+                var otherSlots = [];
+                for (var i = 0; i < otherSlotCount; i++) {
+                    otherSlots.push([]);
+                }
+                otherGroups.forEach(function (groupResult, idx) {
+                    otherSlots[idx % otherSlotCount].push(groupResult);
+                });
+                otherSlots.forEach(function (slot) {
+                    columns.push(slot);
                 });
 
-                if (!assigned) {
-                    remaining.push(groupResult);
-                }
-            });
-
-            remaining.forEach(function (groupResult) {
-                if (groupResult.key === 'app' || groupResult.key === 'apps') {
-                    columns.right.push(groupResult);
-                    return;
-                }
-                var targetSlot = columns.left.length <= columns.middle.length ? 'left' : 'middle';
-                columns[targetSlot].push(groupResult);
-            });
-
-            return ['left', 'middle', 'right']
-                .map(function (slot) {
-                    return columns[slot];
-                })
-                .filter(function (column) {
+                columns = columns.filter(function (column) {
                     return column.length > 0;
                 });
+            } else {
+                for (var j = 0; j < resultColumnCount; j++) {
+                    columns.push([]);
+                }
+                orderedGroups.forEach(function (groupResult, idx) {
+                    columns[idx % resultColumnCount].push(groupResult);
+                });
+            }
+
+            if (hasApps) {
+                columns.push(appGroups);
+            }
+
+            return columns;
         },
 
         /**
