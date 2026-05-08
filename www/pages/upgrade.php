@@ -266,11 +266,15 @@ class upgrade {
         $this->app->Tpl->Set('LOCAL_HASH_SHORT', $local_hash_short);
         $this->app->Tpl->Set('REMOTE_HASH_SHORT', $remote_hash_short);
         $this->app->Tpl->Set('LOCAL_COMMIT', $git_commit);
+        // Avatarsia: Branch-Label fest auf "Avatarsia production" festziehen.
+        // Der Live-Server checkt per detached HEAD (git fetch + reset --hard FETCH_HEAD)
+        // aus, daher wuerde git rev-parse --abbrev-ref HEAD nur "HEAD" liefern und der
+        // urspruengliche Sichtbarkeits-Check (local === remote) wuerde das Label verstecken.
+        $git_branch = "Avatarsia production";
+
         $this->app->Tpl->Set('LOCAL_BRANCH', $git_branch);
-        $this->app->Tpl->Set('LOCAL_BRANCH_VISIBLE', !empty($git_branch) ? "" : "hidden");
+        $this->app->Tpl->Set('LOCAL_BRANCH_VISIBLE', "");
         $this->app->Tpl->Set('SHOW_SYNC_REMOTE', "hidden");
-        $show_local_branch = ($git_branch !== "" && $remote_branch !== "" && $git_branch === $remote_branch);
-        $this->app->Tpl->Set('LOCAL_BRANCH_VISIBLE', $show_local_branch ? "" : "hidden");
 
         $directory = dirname(getcwd())."/upgrade";
         $result_code = null;
