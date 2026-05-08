@@ -84,3 +84,8 @@ fix/woocommerce-order-import-pagination
 feature/woocommerce-batch-stock-sync
 # #267 Composer-based WC SDK — stacked on #265, must follow it
 refactor/woocommerce-composer-sdk
+# Avatarsia branding — MUSS zuletzt gemerged werden, damit kein anderer
+# Branch das Branch-Label in www/pages/upgrade.php wieder ueberschreibt.
+# Setzt LOCAL_BRANCH dauerhaft auf 'Avatarsia production' (Live-Server
+# checkt detached HEAD aus, daher liefert git rev-parse nur 'HEAD').
+feature/avatarsia-branch-label
