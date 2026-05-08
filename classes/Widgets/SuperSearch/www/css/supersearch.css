@@ -284,6 +284,9 @@
 
 /** Detail-Pane bekommt feste Breite, Overlay selbst bleibt viewport-breit */
 @media screen and (min-width: 1000px) and (max-width: 1199.98px) {
+    #supersearch-overlay.has-detail .result-wrapper {
+        min-width: 0;
+    }
     #supersearch-overlay.has-detail .detail-wrapper {
         flex: 0 0 320px;
     }
