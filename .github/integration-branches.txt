@@ -62,9 +62,6 @@ mahnfenster
 # PHP 8 compat — 5 Bootstrap onInit*() methods need `static` keyword
 # Supersedes the earlier fix/backup-bootstrap-static (which only fixed BackupTask)
 fix/bootstrap-static-cross-check
-# Cronjob crashes — guard cleanup() in catch against use-before-define
-# (amainvoice, supersearch_index_full/diff)
-fix/supersearch-cronjob-undef
 # Upgrader UI: replace `git pull` with `git fetch + reset --hard FETCH_HEAD`
 # so the in-app upgrade button works even when the remote (production) branch
 # is force-pushed by CI.
