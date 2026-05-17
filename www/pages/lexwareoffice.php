@@ -130,6 +130,16 @@ class Lexwareoffice
       'lexwareoffice',
       'LexwareOfficeGutschriftAktionCase'
     );
+    $this->app->erp->RegisterHook(
+      'Rechnung_Stapel_option',
+      'lexwareoffice',
+      'LexwareOfficeStapelOption'
+    );
+    $this->app->erp->RegisterHook(
+      'Rechnung_Stapel_case',
+      'lexwareoffice',
+      'LexwareOfficeStapelCase'
+    );
   }
 
   /**
@@ -367,5 +377,93 @@ class Lexwareoffice
     if($count === 0) {
       $indexer->updateIndexFull($indexName);
     }
+  }
+
+  /**
+   * Hook-Listener: ergaenzt das Stapelverarbeitungs-Dropdown auf der
+   * Rechnungs-Liste um den Eintrag "An Lexware Office senden". Wird nur
+   * angezeigt, wenn ein API-Key hinterlegt ist.
+   *
+   * @param string $option
+   */
+  public function LexwareOfficeStapelOption(&$option)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $option .= '<option value="lexwareofficeupload">An Lexware Office senden</option>';
+  }
+
+  /**
+   * Hook-Listener: fuehrt den Bulk-Upload an Lexware Office aus. Iteriert
+   * ueber die ausgewaehlten Rechnungs-IDs, ruft pro Rechnung pushInvoice()
+   * auf und protokolliert Erfolg/Fehler pro Rechnung im Rechnungsprotokoll.
+   * Eine Sammelmeldung wird zusaetzlich oben auf der Liste angezeigt.
+   *
+   * @param string $aktion
+   * @param array  $auswahl Array von Rechnungs-IDs.
+   */
+  public function LexwareOfficeStapelCase($aktion, $auswahl)
+  {
+    if($aktion !== 'lexwareofficeupload') {
+      return;
+    }
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    if(!is_array($auswahl) || empty($auswahl)) {
+      return;
+    }
+
+    $service = $this->app->Container->get('LexwareOfficeService');
+    $okCount = 0;
+    $failCount = 0;
+    $errors = [];
+    foreach($auswahl as $invoiceId) {
+      $invoiceId = (int)$invoiceId;
+      if($invoiceId <= 0) {
+        continue;
+      }
+      try {
+        $result = $service->pushInvoice($invoiceId);
+        $okCount++;
+        $protMsg = 'Lexware Office (Bulk): Rechnung &uuml;bergeben.';
+        if(!empty($result['invoiceId'])) {
+          $protMsg .= ' Beleg-ID: '.$result['invoiceId'];
+        }
+        if(!empty($result['pdfUploadError'])) {
+          $protMsg .= ' | PDF-Hinweis: '.$result['pdfUploadError'];
+        }
+        $this->app->erp->RechnungProtokoll($invoiceId, $protMsg);
+      } catch (LexwareOfficeException $e) {
+        $failCount++;
+        $errors[] = sprintf('Rechnung %d: %s', $invoiceId, $e->getMessage());
+        $this->app->erp->RechnungProtokoll($invoiceId, 'Lexware Office Fehler (Bulk): '.$e->getMessage());
+      } catch (\Throwable $e) {
+        $failCount++;
+        $errors[] = sprintf('Rechnung %d: %s', $invoiceId, $e->getMessage());
+        $this->app->erp->RechnungProtokoll($invoiceId, 'Lexware Office Fehler (Bulk, intern): '.$e->getMessage());
+      }
+    }
+
+    $summary = sprintf(
+      'Lexware Office Bulk-Upload: %d erfolgreich, %d fehlgeschlagen.',
+      $okCount,
+      $failCount
+    );
+    if($failCount > 0) {
+      // Erste 3 Fehler in die UI-Message; alle stehen ohnehin im
+      // jeweiligen Rechnungsprotokoll.
+      $summary .= ' Fehler: '.implode(' / ', array_slice($errors, 0, 3));
+      if(count($errors) > 3) {
+        $summary .= sprintf(' (+%d weitere im Protokoll)', count($errors) - 3);
+      }
+    }
+
+    $cssClass = $failCount === 0 ? 'success' : ($okCount === 0 ? 'error' : 'info');
+    $this->app->Tpl->Add(
+      'MESSAGE',
+      '<div class="'.$cssClass.'">'.htmlspecialchars($summary).'</div>'
+    );
   }
 }
