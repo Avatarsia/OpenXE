@@ -4,7 +4,18 @@ var SuperSearch = (function ($) {
     var me = {
 
         config: {
-            inputBuffer: 300 // in milliseconds
+            inputBuffer: 300, // in milliseconds
+
+            // Layout-Defaults — sollten ueblicherweise aus den CSS-Custom-Properties
+            // auf #supersearch-overlay gelesen werden (siehe me.readMinColumnWidth).
+            // Diese Werte greifen nur, wenn das Overlay-Element noch nicht im DOM
+            // ist oder die Custom-Property nicht aufgeloest werden kann.
+            defaultMinColumnWidth: 280,
+            defaultColumnGap: 16,
+            defaultWrapperWidth: 900,
+            // Viewport-Offset (Sidebar + Padding) — Fallback fuer M4-Reflow-Problem,
+            // wenn der Container beim Init noch display:none ist.
+            viewportSidebarOffset: 60
         },
 
         storage: {
@@ -15,7 +26,10 @@ var SuperSearch = (function ($) {
             $lastUpdate: null,
             debounceBuffer: null,
             hasResults: false,
-            isOpen: false
+            isOpen: false,
+            // K3: aktuell laufender Such-XHR, damit veraltete Antworten
+            // beim Folge-Tippen abgebrochen werden koennen.
+            currentSearchXhr: null
         },
 
         init: function () {
@@ -33,8 +47,8 @@ var SuperSearch = (function ($) {
             // Overlay anzeigen bei Focus in das Such-Eingabefeld; nur wenn es schon mal geöffnet war
             me.storage.$input.on('focus.SuperSearch', me.onFocusSearchInput);
 
-            // Overlay mit ESC schließen
-            $(document).bind('keydown', function(e) {
+            // Overlay mit ESC schließen — Document-Level, mit Namespace fuer sauberen Cleanup.
+            $(document).off('keydown.SuperSearch').on('keydown.SuperSearch', function (e) {
                 if (me.storage.$overlay === null) {
                     return;
                 }
@@ -73,6 +87,12 @@ var SuperSearch = (function ($) {
         hideOverlay: function () {
             me.getOverlay().hide();
             me.storage.isOpen = false;
+            // Accessibility: Focus zurueck zum Such-Eingabefeld, das das Overlay
+            // geoeffnet hat. Damit landet der Keyboard-Nutzer nach ESC wieder
+            // an einem sinnvollen Punkt.
+            if (me.storage.$input !== null && me.storage.$input.length > 0) {
+                me.storage.$input.trigger('focus');
+            }
         },
 
         /**
@@ -85,7 +105,8 @@ var SuperSearch = (function ($) {
             }
 
             var overlayTemplate =
-                '<span id="supersearch-icon-close" class="icon icon-close"></span>' +
+                // Close-Icon: role=button + tabindex=0 + aria-label fuer Keyboard-Bedienung.
+                '<span id="supersearch-icon-close" class="icon icon-close" role="button" tabindex="0" aria-label="Suche schliessen"></span>' +
                 '<div class="result-wrapper">' +
                 '<section class="empty-message">Keine Suchergebnisse gefunden</section>' +
                 '<section class="error-message"></section>' +
@@ -97,12 +118,72 @@ var SuperSearch = (function ($) {
                 '</div>';
 
             var overlayIdAttr = overlaySelector.substr(1);
-            var $overlay = $('<div>').attr('id', overlayIdAttr).addClass('supersearch-overlay').html(overlayTemplate);
+            var $overlay = $('<div>')
+                .attr('id', overlayIdAttr)
+                .addClass('supersearch-overlay')
+                // Accessibility: pragmatische ARIA-Annotation als Dialog.
+                .attr('role', 'dialog')
+                .attr('aria-modal', 'true')
+                .attr('aria-label', 'Globale Suche')
+                .html(overlayTemplate);
 
             $overlay.off('click.SuperSearch', '#supersearch-icon-close');
             $overlay.on('click.SuperSearch', '#supersearch-icon-close', function (event) {
                 event.preventDefault();
                 me.hideOverlay();
+            });
+            // Keyboard-Aktivierung des Close-Icons (Enter/Space).
+            $overlay.off('keydown.SuperSearchClose', '#supersearch-icon-close');
+            $overlay.on('keydown.SuperSearchClose', '#supersearch-icon-close', function (event) {
+                if (event.keyCode === 13 || event.keyCode === 32) {
+                    event.preventDefault();
+                    me.hideOverlay();
+                }
+            });
+
+            // K4: Delegiertes Click-Binding fuer alle Result-Items.
+            // Item-Daten haengen via .data('supersearchItem', item) am LI-Element
+            // (siehe buildDefaultItemResult).
+            $overlay.off('click.SuperSearch', '.result-item a');
+            $overlay.on('click.SuperSearch', '.result-item a', function (event) {
+                event.preventDefault();
+                var item = $(event.currentTarget).closest('.result-item').data('supersearchItem');
+                if (typeof item === 'undefined' || item === null) {
+                    return;
+                }
+                me.renderItemDetails(item);
+            });
+
+            // Accessibility: Focus-Trap. Tab innerhalb des Overlays zirkulieren
+            // lassen, damit Keyboard-Nutzer nicht ausserhalb landen waehrend
+            // das Overlay als modaler Dialog offen ist. Suchfeld ist
+            // ausserhalb des Overlays und gilt als erstes fokussierbares
+            // Element (vor dem ersten Overlay-Element).
+            $overlay.off('keydown.SuperSearchTrap');
+            $overlay.on('keydown.SuperSearchTrap', function (event) {
+                if (event.key !== 'Tab' && event.keyCode !== 9) {
+                    return;
+                }
+                var $focusable = me.getFocusableElements($overlay);
+                if ($focusable.length === 0) {
+                    return;
+                }
+                var first = $focusable.first()[0];
+                var last = $focusable.last()[0];
+                var active = document.activeElement;
+
+                if (event.shiftKey) {
+                    if (active === first || active === me.storage.$input[0]) {
+                        event.preventDefault();
+                        last.focus();
+                    }
+                } else {
+                    if (active === last) {
+                        event.preventDefault();
+                        // Schleife zurueck zum Such-Eingabefeld (logischer Anfang).
+                        me.storage.$input.trigger('focus');
+                    }
+                }
             });
 
             $overlay.hide();
@@ -168,7 +249,14 @@ var SuperSearch = (function ($) {
                 searchQuery = '';
             }
 
-            return $.ajax({
+            // K3: vorherigen XHR abbrechen, damit eine alte Antwort eine
+            // neuere nicht ueberschreibt (Race-Condition beim Tippen).
+            if (me.storage.currentSearchXhr !== null &&
+                typeof me.storage.currentSearchXhr.abort === 'function') {
+                me.storage.currentSearchXhr.abort();
+            }
+
+            var xhr = $.ajax({
                 url: 'index.php?module=supersearch&action=ajax&cmd=search',
                 method: 'post',
                 dataType: 'json',
@@ -176,6 +264,11 @@ var SuperSearch = (function ($) {
                     search_query: searchQuery
                 },
                 error: function (jqXHR, textStatus, errorThrown) {
+                    // Vom Folge-Request abgebrochen — kein Fehler-Alert zeigen.
+                    if (textStatus === 'abort') {
+                        return;
+                    }
+
                     var errorMessage = 'SuperSearch - Unbekannter Fehler #31: ' + errorThrown;
 
                     // PHP-Skript hat Fehler geliefert (z.b. 404)
@@ -199,18 +292,31 @@ var SuperSearch = (function ($) {
                     alert(errorMessage);
                 }
             });
+
+            me.storage.currentSearchXhr = xhr;
+            xhr.always(function () {
+                if (me.storage.currentSearchXhr === xhr) {
+                    me.storage.currentSearchXhr = null;
+                }
+            });
+
+            return xhr;
         },
 
         /**
-         * @param {Array} rawResult
+         * @param {Object} rawResult Server-Response (JsonResponse mit shape
+         *   {success: bool, data: ResultCollection|null|"index-empty"}).
          */
         renderSearchResults: function (rawResult) {
             var $overlay = me.getOverlay();
             var $resultContainer = $overlay.find('section.result');
-            $resultContainer.html('');
+            $resultContainer.empty();
 
-            if (rawResult.length === 0 || !rawResult.hasOwnProperty('data')) {
-                $resultContainer.html('Fehler: Suche hat fehlerhaftes Ergebnis geliefert.');
+            // Defensive: Server liefert immer ein Object mit 'data'-Property.
+            // Wenn das nicht der Fall ist, ist die Response korrupt.
+            if (typeof rawResult !== 'object' || rawResult === null ||
+                !rawResult.hasOwnProperty('data')) {
+                $resultContainer.text('Fehler: Suche hat fehlerhaftes Ergebnis geliefert.');
                 me.storage.hasResults = false;
                 me.hideResults();
                 return;
@@ -250,12 +356,30 @@ var SuperSearch = (function ($) {
                 return;
             }
 
-            me.storage.$details.html('');
-            Object.keys(searchResults).forEach(function (group) {
-                var groupResult = searchResults[group];
-                var $groupHtml = me.buildGroupResult(groupResult.key, groupResult.title, groupResult.items);
-                $resultContainer.append($groupHtml);
+            me.storage.$details.empty();
+            var wrapperWidth = me.measureResultWrapperWidth($resultContainer);
+            var columns = me.buildResultColumns(searchResults, wrapperWidth);
+            var $columnsWrapper = $('<div class="result-columns">');
+            var minColPx = me.readMinColumnWidth();
+            $columnsWrapper.css(
+                'grid-template-columns',
+                'repeat(' + columns.length + ', minmax(' + minColPx + 'px, 1fr))'
+            );
+
+            columns.forEach(function (column) {
+                var $column = $('<div class="result-column">');
+                column.forEach(function (groupResult) {
+                    var $groupHtml = me.buildGroupResult(groupResult.key, groupResult.title, groupResult.items);
+                    if (typeof $groupHtml !== 'undefined') {
+                        $column.append($groupHtml);
+                    }
+                });
+                if ($column.children().length > 0) {
+                    $columnsWrapper.append($column);
+                }
             });
+
+            $resultContainer.append($columnsWrapper);
 
             me.storage.hasResults = true;
             me.showResults();
@@ -279,7 +403,9 @@ var SuperSearch = (function ($) {
 
             var $resultWrapper = $('<div class="result-group">');
             var $resultList = $('<ul class="result-list">');
-            var $listHead = $('<li class="result-head">').html(groupTitle);
+            // XSS-Hardening: groupTitle stammt aus Server-Konfiguration (ResultGroup),
+            // wird sicherheitshalber als Text gerendert.
+            var $listHead = $('<li class="result-head">').text(groupTitle);
 
             $resultList.append($listHead);
             items.forEach(function (item) {
@@ -302,6 +428,130 @@ var SuperSearch = (function ($) {
         },
 
         /**
+         * Klassifiziert Suchergebnis-Gruppen in vier semantische Buckets.
+         *
+         * @param {object} searchResults
+         * @returns {{leftGroups: Array, middleGroups: Array, otherGroups: Array, appGroups: Array}}
+         */
+        classifyResultGroups: function (searchResults) {
+            var leftKeys = ['offer', 'order'];
+            var middleKeys = ['deliverynote', 'invoice'];
+            var leftGroups = [];
+            var middleGroups = [];
+            var otherGroups = [];
+            var appGroups = [];
+
+            Object.keys(searchResults).forEach(function (group) {
+                var groupResult = searchResults[group];
+                if (groupResult.key === 'app' || groupResult.key === 'apps') {
+                    appGroups.push(groupResult);
+                } else if (leftKeys.indexOf(groupResult.key) !== -1) {
+                    leftGroups.push(groupResult);
+                } else if (middleKeys.indexOf(groupResult.key) !== -1) {
+                    middleGroups.push(groupResult);
+                } else {
+                    otherGroups.push(groupResult);
+                }
+            });
+
+            return {
+                leftGroups: leftGroups,
+                middleGroups: middleGroups,
+                otherGroups: otherGroups,
+                appGroups: appGroups
+            };
+        },
+
+        /**
+         * Ordnet Suchergebnis-Gruppen dynamisch in Spalten an.
+         *
+         * Strategie:
+         *   - Apps-Gruppen landen immer als letzte Spalte (rechts).
+         *   - Bei breitem Layout (>=3 Result-Spalten) wird die alte Avatarsia-
+         *     Semantik beibehalten: Spalte 0 = offer/order, Spalte 1 =
+         *     deliverynote/invoice, restliche Spalten = uebrige Gruppen
+         *     round-robin verteilt. Leere semantische Spalten werden
+         *     herausgefiltert.
+         *   - Bei schmalem Layout (<3 Result-Spalten) werden alle Gruppen
+         *     round-robin auf einer prioritaetssortierten Liste verteilt.
+         *   - Die Spaltenanzahl wird an die verfuegbare Breite gekoppelt.
+         *
+         * @param {object} searchResults
+         * @param {number} [wrapperWidth] Verfuegbare Breite des Result-Containers in px
+         * @returns {Array}
+         */
+        buildResultColumns: function (searchResults, wrapperWidth) {
+            var buckets = me.classifyResultGroups(searchResults);
+            return me.layoutResultColumns(buckets, wrapperWidth);
+        },
+
+        /**
+         * Layout-Engine: nimmt klassifizierte Buckets + verfuegbare Breite
+         * und liefert die fertige Spalten-Struktur.
+         *
+         * @param {{leftGroups: Array, middleGroups: Array, otherGroups: Array, appGroups: Array}} buckets
+         * @param {number} wrapperWidth
+         * @returns {Array}
+         */
+        layoutResultColumns: function (buckets, wrapperWidth) {
+            var leftGroups = buckets.leftGroups;
+            var middleGroups = buckets.middleGroups;
+            var otherGroups = buckets.otherGroups;
+            var appGroups = buckets.appGroups;
+
+            var colGap = me.readColumnGap();
+            var minColumnWidth = me.readMinColumnWidth() + colGap;
+            var fallbackWidth = me.config.defaultWrapperWidth;
+            var availableWidth = (wrapperWidth > 0 ? wrapperWidth : fallbackWidth) + colGap;
+            var maxColumns = Math.max(1, Math.floor(availableWidth / minColumnWidth));
+            var hasApps = appGroups.length > 0;
+            var resultColumnBudget = hasApps ? Math.max(1, maxColumns - 1) : maxColumns;
+
+            var orderedGroups = leftGroups.concat(middleGroups).concat(otherGroups);
+
+            if (orderedGroups.length === 0) {
+                return hasApps ? [appGroups] : [];
+            }
+
+            var resultColumnCount = Math.min(resultColumnBudget, orderedGroups.length);
+            var columns = [];
+
+            if (resultColumnCount >= 3 && (leftGroups.length > 0 || middleGroups.length > 0)) {
+                columns.push(leftGroups.slice());
+                columns.push(middleGroups.slice());
+
+                var otherSlotCount = Math.max(1, resultColumnCount - 2);
+                var otherSlots = [];
+                for (var i = 0; i < otherSlotCount; i++) {
+                    otherSlots.push([]);
+                }
+                otherGroups.forEach(function (groupResult, idx) {
+                    otherSlots[idx % otherSlotCount].push(groupResult);
+                });
+                otherSlots.forEach(function (slot) {
+                    columns.push(slot);
+                });
+
+                columns = columns.filter(function (column) {
+                    return column.length > 0;
+                });
+            } else {
+                for (var j = 0; j < resultColumnCount; j++) {
+                    columns.push([]);
+                }
+                orderedGroups.forEach(function (groupResult, idx) {
+                    columns[idx % resultColumnCount].push(groupResult);
+                });
+            }
+
+            if (hasApps) {
+                columns.push(appGroups);
+            }
+
+            return columns;
+        },
+
+        /**
          * @param {object} item
          *
          * @return {jQuery}
@@ -313,26 +563,29 @@ var SuperSearch = (function ($) {
                 typeof item.additionalInfos === 'object' &&
                 item.additionalInfos !== null;
 
-            var mainTitle = '<span class="title-main">' + item.title + '</span>';
-            var subTitle = hasSubtitle ? '<span class="title-sub">' + item.subtitle + '</span>' : '';
-            var titleString = '<span class="title">' + mainTitle + subTitle + '</span>';
-
-            if (hasAdditionalInfos) {
-                titleString += '<span class="caption">';
-                $.each(item.additionalInfos, function (index, additionalInfo) {
-                    titleString += '<span class="additional">' + additionalInfo + '</span>';
-                });
-                titleString += '</span>';
+            // XSS-Hardening: title, subtitle und additionalInfos werden ausschliesslich
+            // ueber DOM-Building mit .text() gerendert. KEIN String-Konkat mit .html().
+            var $title = $('<span>').addClass('title');
+            $('<span>').addClass('title-main').text(item.title).appendTo($title);
+            if (hasSubtitle) {
+                $('<span>').addClass('title-sub').text(item.subtitle).appendTo($title);
             }
 
             var $listItem = $('<li>').addClass('result-item');
-            var $itemLink = $('<a>').attr('href', item.link).html(titleString);
-            $itemLink.appendTo($listItem);
+            var $itemLink = $('<a>').attr('href', item.link);
+            $itemLink.append($title);
 
-            $itemLink.on('click', function (e) {
-                e.preventDefault();
-                me.renderItemDetails(item);
-            });
+            if (hasAdditionalInfos) {
+                var $caption = $('<span>').addClass('caption');
+                $.each(item.additionalInfos, function (index, additionalInfo) {
+                    $('<span>').addClass('additional').text(additionalInfo).appendTo($caption);
+                });
+                $itemLink.append($caption);
+            }
+
+            $itemLink.appendTo($listItem);
+            // Item-Daten ans Element haengen fuer delegierten Click-Handler in createOverlay().
+            $listItem.data('supersearchItem', item);
 
             return $listItem;
         },
@@ -377,9 +630,9 @@ var SuperSearch = (function ($) {
             var detail = detailResult.data;
             var $details = me.storage.$details;
 
-            // Überschrift rendern
-            var $headline = $('<h1>').html(detail.title);
-            $details.html('').append($headline);
+            // Überschrift rendern — XSS-Hardening: detail.title als Text rendern.
+            var $headline = $('<h1>').text(detail.title);
+            $details.empty().append($headline);
 
             // Attachments (z.B. Buttons) rendern
             if (detail.hasOwnProperty('attachments')) {
@@ -509,6 +762,12 @@ var SuperSearch = (function ($) {
          * @param {Object} data
          *
          * @return {jQuery} jQuery-Element
+         *
+         * Hinweis: Attachment-Typ "content_static" wird vom Server bewusst als
+         * vorgerendertes HTML-Snippet geliefert (z.B. Tabellen, Listen). Dieser
+         * Pfad gibt das Markup absichtlich roh via .html() aus. Der Server MUSS
+         * sicherstellen, dass dieses Snippet keine user-kontrollierten Inhalte
+         * enthaelt. Alle anderen Render-Pfade verwenden .text() (XSS-Hardening).
          */
         generateDetailAttachmentTypeStaticContent: function (data) {
             return  $('<p>').html(data.content);
@@ -526,6 +785,8 @@ var SuperSearch = (function ($) {
                 me.fetchMiniDetailContent(data.url, data.params)
                   .then(
                       function (htmlContent) {
+                          // Mini-Detail-URL liefert per Definition vorgerendertes
+                          // HTML vom Server (analog content_static). Bewusst .html().
                           $dynamicContent.html(htmlContent);
                           me.storage.$details.append($dynamicContent);
                       },
@@ -613,13 +874,94 @@ var SuperSearch = (function ($) {
         },
 
         /**
+         * Zeigt eine Fehlermeldung im Overlay. Verwendet bewusst `.text()`
+         * statt `.html()`, weil errorMessage ein normaler Klartext-String
+         * ist (z.B. responseJSON.error vom Server) — Konsistenz zur
+         * XSS-Hardening-Disziplin im Result-Rendering.
+         *
          * @param {string} errorMessage
          */
         showErrorMessage: function (errorMessage) {
             me.showOverlay();
             me.hideDetails();
             me.getOverlay().find('section.empty-message').hide();
-            me.getOverlay().find('section.error-message').html(errorMessage).show();
+            me.getOverlay().find('section.error-message').text(errorMessage).show();
+        },
+
+        /**
+         * Liefert fokussierbare Elemente innerhalb des Overlays in DOM-Reihenfolge.
+         *
+         * @param {jQuery} $container
+         *
+         * @return {jQuery}
+         */
+        getFocusableElements: function ($container) {
+            var selector = [
+                'a[href]',
+                'button:not([disabled])',
+                'input:not([disabled]):not([type="hidden"])',
+                'select:not([disabled])',
+                'textarea:not([disabled])',
+                '[tabindex]:not([tabindex="-1"])'
+            ].join(',');
+            return $container.find(selector).filter(':visible');
+        },
+
+        /**
+         * Liest --ssr-min-col-width vom Overlay-Element. Fallback aus config.
+         *
+         * @return {number} Mindestbreite pro Result-Spalte in Pixel
+         */
+        readMinColumnWidth: function () {
+            return me.readCssLengthVar('--ssr-min-col-width', me.config.defaultMinColumnWidth);
+        },
+
+        /**
+         * Liest --ssr-col-gap vom Overlay-Element. Fallback aus config.
+         *
+         * @return {number} Gap zwischen Result-Spalten in Pixel
+         */
+        readColumnGap: function () {
+            return me.readCssLengthVar('--ssr-col-gap', me.config.defaultColumnGap);
+        },
+
+        /**
+         * @param {string} propName    CSS-Custom-Property-Name inkl. '--'
+         * @param {number} fallbackPx  Numerischer Fallback in Pixel
+         *
+         * @return {number}
+         */
+        readCssLengthVar: function (propName, fallbackPx) {
+            var $overlay = me.storage.$overlay;
+            if ($overlay === null || $overlay.length === 0) {
+                return fallbackPx;
+            }
+            var raw = getComputedStyle($overlay[0]).getPropertyValue(propName);
+            if (typeof raw !== 'string') {
+                return fallbackPx;
+            }
+            var parsed = parseFloat(raw);
+            return isNaN(parsed) ? fallbackPx : parsed;
+        },
+
+        /**
+         * Misst die Result-Container-Breite robust gegen display:none-Reflow-Probleme.
+         *
+         * @param {jQuery} $container
+         *
+         * @return {number} Breite in Pixel
+         */
+        measureResultWrapperWidth: function ($container) {
+            if ($container.length === 0) {
+                return 0;
+            }
+            var rect = $container[0].getBoundingClientRect();
+            if (rect.width > 0) {
+                return rect.width;
+            }
+            // Fallback: Viewport-basierter Wert. Greift wenn der Container
+            // beim Init noch ausgeblendet ist.
+            return Math.max(0, window.innerWidth - me.config.viewportSidebarOffset);
         },
 
         /**
