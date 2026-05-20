@@ -33,8 +33,8 @@ var SuperSearch = (function ($) {
             // Overlay anzeigen bei Focus in das Such-Eingabefeld; nur wenn es schon mal geöffnet war
             me.storage.$input.on('focus.SuperSearch', me.onFocusSearchInput);
 
-            // Overlay mit ESC schließen
-            $(document).bind('keydown', function(e) {
+            // Overlay mit ESC schließen — Document-Level, mit Namespace fuer sauberen Cleanup.
+            $(document).off('keydown.SuperSearch').on('keydown.SuperSearch', function (e) {
                 if (me.storage.$overlay === null) {
                     return;
                 }
@@ -103,6 +103,19 @@ var SuperSearch = (function ($) {
             $overlay.on('click.SuperSearch', '#supersearch-icon-close', function (event) {
                 event.preventDefault();
                 me.hideOverlay();
+            });
+
+            // K4: Delegiertes Click-Binding fuer alle Result-Items.
+            // Item-Daten haengen via .data('supersearchItem', item) am LI-Element
+            // (siehe buildDefaultItemResult).
+            $overlay.off('click.SuperSearch', '.result-item a');
+            $overlay.on('click.SuperSearch', '.result-item a', function (event) {
+                event.preventDefault();
+                var item = $(event.currentTarget).closest('.result-item').data('supersearchItem');
+                if (typeof item === 'undefined' || item === null) {
+                    return;
+                }
+                me.renderItemDetails(item);
             });
 
             $overlay.hide();
