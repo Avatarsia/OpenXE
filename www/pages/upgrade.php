@@ -213,7 +213,7 @@ class upgrade {
         // statt zu hängen. Auth/AJAX-Pfade laufen bereits oben via exit
         // raus, danach gibt es kein exit/die mehr in dieser Funktion,
         // daher reicht ein einfaches Release am Ende (kein try/finally).
-        $writing_submits = ['do_upgrade', 'do_db_upgrade', 'do_git_upgrade', 'rollback_to_tag', 'save_remote', 'reset_remote_origin'];
+        $writing_submits = ['do_upgrade', 'do_db_upgrade', 'rollback_to_tag', 'save_remote', 'reset_remote_origin'];
         $needs_lock = in_array($submit, $writing_submits, true);
         $lock_handle = null;
         if ($needs_lock && $git_root !== "") {
@@ -423,23 +423,33 @@ class upgrade {
 
             // Engine-Output deterministisch in englischer Locale halten —
             // die RESULT_*-Konstanten matchen englische git-Strings.
+            // Vorherige Werte sichern und nach dem Call restoren, damit
+            // nachgelagerter Code (z.B. weitere Module im selben Request)
+            // die konfigurierte Locale nicht verliert.
+            $prev_lc_all = getenv('LC_ALL');
+            $prev_lang = getenv('LANG');
             putenv('LC_ALL=C');
             putenv('LANG=C');
 
-            $result_code = upgrade_main(
-                directory: $directory,
-                verbose: $cfg['verbose'],
-                check_git: $cfg['check_git'],
-                do_git: $cfg['do_git'],
-                export_db: false,
-                check_db: $cfg['check_db'],
-                strict_db: false,
-                do_db: $cfg['do_db'],
-                force: $force,
-                connection: false,
-                origin: false,
-                drop_keys: false
-            );
+            try {
+                $result_code = upgrade_main(
+                    directory: $directory,
+                    verbose: $cfg['verbose'],
+                    check_git: $cfg['check_git'],
+                    do_git: $cfg['do_git'],
+                    export_db: false,
+                    check_db: $cfg['check_db'],
+                    strict_db: false,
+                    do_db: $cfg['do_db'],
+                    force: $force,
+                    connection: false,
+                    origin: false,
+                    drop_keys: false
+                );
+            } finally {
+                putenv($prev_lc_all === false ? 'LC_ALL' : 'LC_ALL='.$prev_lc_all);
+                putenv($prev_lang === false ? 'LANG' : 'LANG='.$prev_lang);
+            }
         } elseif ($submit === 'refresh') {
             $last_action = "Anzeige aktualisiert";
         } elseif ($submit === 'save_remote') {
