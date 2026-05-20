@@ -11,7 +11,11 @@ try {
 
 } catch (\Exception $exception) {
   if ($supersearchDiffIndexTask !== null) {
-    $supersearchDiffIndexTask->cleanup();
+    try {
+      $supersearchDiffIndexTask->cleanup();
+    } catch (\Throwable $cleanupError) {
+      error_log('SuperSearchDiffIndexTask cleanup failed: ' . $cleanupError->getMessage());
+    }
   }
   throw $exception;
 }
