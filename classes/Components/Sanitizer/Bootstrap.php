@@ -21,7 +21,7 @@ final class Bootstrap
      *
      * @return HtmlMailSanitizer
      */
-    public function onInitHtmlMailSanitizer(ContainerInterface $container)
+    public static function onInitHtmlMailSanitizer(ContainerInterface $container)
     {
         /** @var \Application $app */
         $app = $container->get('LegacyApplication');
