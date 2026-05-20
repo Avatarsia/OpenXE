@@ -20,13 +20,7 @@
 feature/ci-workflow
 
 # Core feature modules (full Bootstrap + hook integration)
-# feature/lexwareoffice-module -- replaced by feature/lexwareoffice-only:
-#   schlanker Cherry-Pick-Branch, der ausschliesslich das LexwareOffice-Modul
-#   enthaelt (kein Kommissionierung-/Zahlungsverkehr-/Lieferschwelle-Beifang)
-#   plus Init-Setup-Button auf der Settings-Seite, Admin+CSRF-Guard auf allen
-#   POST-Pfaden und filesystem-basiertem Master-Key fuer die API-Key-
-#   Verschluesselung (V2-Schema mit smooth migration vom Legacy-DB-Salt).
-feature/lexwareoffice-only
+feature/lexwareoffice-module
 feature/network-printer-module
 feature/supersearch-enhancement
 feature/menu-configurator-module
@@ -62,17 +56,6 @@ mahnfenster
 # PHP 8 compat — 5 Bootstrap onInit*() methods need `static` keyword
 # Supersedes the earlier fix/backup-bootstrap-static (which only fixed BackupTask)
 fix/bootstrap-static-cross-check
-# Upgrader UI: replace `git pull` with `git fetch + reset --hard FETCH_HEAD`
-# so the in-app upgrade button works even when the remote (production) branch
-# is force-pushed by CI.
-fix/upgrader-allow-force-pushed-source
-# Restore erpAPI::LoadZahlungsweiseModul() — removed by upstream 91e603d
-# (PSR-3 logger cleanup) but still called from www/pages/zahlungsweisen.php
-# and www/pages/zahlungsverkehr.php, causing a fatal in Zahlungsweisen-Edit.
-# Branch was rebased onto upstream/master so it now contains only the
-# 29-line fix in www/lib/class.erpapi.php (no production-snapshot beifang
-# that previously collided with feature/lexwareoffice-only).
-fix/restore-loadzahlungsweisemodul
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
@@ -81,8 +64,3 @@ fix/woocommerce-order-import-pagination
 feature/woocommerce-batch-stock-sync
 # #267 Composer-based WC SDK — stacked on #265, must follow it
 refactor/woocommerce-composer-sdk
-# Avatarsia branding — MUSS zuletzt gemerged werden, damit kein anderer
-# Branch das Branch-Label in www/pages/upgrade.php wieder ueberschreibt.
-# Setzt LOCAL_BRANCH dauerhaft auf 'Avatarsia production' (Live-Server
-# checkt detached HEAD aus, daher liefert git rev-parse nur 'HEAD').
-feature/avatarsia-branch-label
