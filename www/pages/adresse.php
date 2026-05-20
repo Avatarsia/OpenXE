@@ -602,13 +602,17 @@ class Adresse extends GenAdresse {
     if (!empty($adresse['ansprechpartner'])) {
       $title .= ' ' . $adresse['ansprechpartner'];
     }
+    $subtitleParts = [];
     if (!empty($adresse['kundennummer'])) {
-      $title .= ' <small>Kunde ' . $adresse['kundennummer'] . '</small>';
+      $subtitleParts[] = 'Kunde ' . $adresse['kundennummer'];
     }
     if (!empty($adresse['lieferantennummer'])) {
-      $title .= ' <small>Lieferant ' . $adresse['lieferantennummer'] . '</small>';
+      $subtitleParts[] = 'Lieferant ' . $adresse['lieferantennummer'];
     }
     $detailResult->setTitle($title);
+    if (!empty($subtitleParts)) {
+      $detailResult->setSubtitle(implode(' ', $subtitleParts));
+    }
     $detailResult->addButton('Adresse Details', sprintf('index.php?module=adresse&action=edit&id=%s', $adresse['id']));
     $detailResult->setMiniDetailUrl(sprintf('index.php?module=adresse&action=minidetailadr&id=%s', $adresse['id']));
   }
