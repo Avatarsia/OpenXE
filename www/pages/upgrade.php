@@ -8,6 +8,27 @@ use Xentral\Components\Database\Exception\QueryFailureException;
 
 class upgrade {
 
+    /**
+     * Validation-Patterns für Remote-Eingabe.
+     * Host: erlaubt Wort-Zeichen, @, Punkte, Doppelpunkt, Slash, Dash
+     * (deckt SSH-URLs und HTTPS-URLs ab). `..` wird absichtlich nicht
+     * separat blockiert — alle git-Aufrufe nutzen escapeshellarg(),
+     * eine Path-Traversal über den Host-Wert ist daher nicht möglich.
+     */
+    const REMOTE_HOST_PATTERN = '/^[\\w@.:\\/-]+$/';
+    const BRANCH_NAME_PATTERN = '/^[A-Za-z0-9._\\/-]+$/';
+    const ROLLBACK_TAG_PATTERN = '/^pre-upgrade-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$/';
+
+    /**
+     * Match-Strings aus der upstream Engine (upgrade/data/upgrade.php).
+     * Bei Engine-Updates müssen diese mit den dort produzierten Outputs
+     * abgeglichen werden.
+     */
+    const RESULT_ABORTED = 'Aborted';
+    const RESULT_UP_TO_DATE = 'Already up to date';
+    const RESULT_MODIFIED_FILES = 'There are modified files';
+    const RESULT_NEEDS_FORCE = 'Clear modified files or use -f';
+
     function __construct($app, $intern = false) {
         $this->app = $app;
         if ($intern)
@@ -34,6 +55,42 @@ class upgrade {
             return false;
         }
         return $this->app->User->GetType() === 'admin';
+    }
+
+    /**
+     * Erzeugt einen pre-upgrade-Tag im lokalen Git-Repo und entfernt
+     * Tags jenseits der 10 jüngsten Einträge. Schlägt die Tag-Erstellung
+     * fehl, wird das in der Session nicht vermerkt — der Aufrufer kann
+     * sich dann nicht auf einen Rollback verlassen.
+     */
+    private function createRollbackTag(string $git_root): void
+    {
+        $tag_name = 'pre-upgrade-'.date('Y-m-d-H-i-s');
+        $tag_cmd = 'git -C '.escapeshellarg($git_root).' tag '.escapeshellarg($tag_name).' 2>&1';
+
+        $tag_output = [];
+        $tag_exit_code = 0;
+        exec($tag_cmd, $tag_output, $tag_exit_code);
+
+        if ($tag_exit_code !== 0) {
+            return;
+        }
+
+        $_SESSION['last_rollback_tag'] = $tag_name;
+
+        // Cleanup: Behalte nur die neuesten 10 pre-upgrade Tags
+        $list_tags_cmd = 'git -C '.escapeshellarg($git_root).' tag -l "pre-upgrade-*" --sort=-creatordate 2>&1';
+        $all_tags_output = [];
+        $list_exit_code = 0;
+        exec($list_tags_cmd, $all_tags_output, $list_exit_code);
+
+        if ($list_exit_code === 0 && count($all_tags_output) > 10) {
+            $tags_to_delete = array_slice($all_tags_output, 10);
+            foreach ($tags_to_delete as $old_tag) {
+                $delete_cmd = 'git -C '.escapeshellarg($git_root).' tag -d '.escapeshellarg(trim($old_tag)).' 2>&1';
+                exec($delete_cmd);
+            }
+        }
     }
 
     function upgrade_overview() {
@@ -148,12 +205,10 @@ class upgrade {
             if ($remote_branch_input === '') {
                 $remote_errors[] = "Branch darf nicht leer sein.";
             }
-            $allowed_host_pattern = '/^[\\w@.:\\/-]+$/';
-            if ($remote_host_input !== '' && !preg_match($allowed_host_pattern, $remote_host_input)) {
+            if ($remote_host_input !== '' && !preg_match(self::REMOTE_HOST_PATTERN, $remote_host_input)) {
                 $remote_errors[] = "Git-Remote enthält ungültige Zeichen.";
             }
-            $allowed_branch_pattern = '/^[A-Za-z0-9._\\/-]+$/';
-            if ($remote_branch_input !== '' && !preg_match($allowed_branch_pattern, $remote_branch_input)) {
+            if ($remote_branch_input !== '' && !preg_match(self::BRANCH_NAME_PATTERN, $remote_branch_input)) {
                 $remote_errors[] = "Branch enthält ungültige Zeichen.";
             }
 
@@ -180,8 +235,8 @@ class upgrade {
                 }
             } else {
                 $status_headline = "Eingabefehler";
-                    $status_level = "error";
-                    $status_message = implode(" ", $remote_errors);
+                $status_level = "error";
+                $status_message = implode(" ", $remote_errors);
             }
         } elseif ($submit === 'reset_remote_origin') {
             if ($original_remote_host === "" || $original_remote_branch === "") {
@@ -223,14 +278,14 @@ class upgrade {
                 $remote_hash = trim(strtok($remote_line, "\t "));
                 $remote_hash_short = substr($remote_hash, 0, 8);
 
-                if ($local_hash !== "" && $local_hash === $remote_hash) {
+                if ($local_hash === "") {
+                    $update_status_text = "Lokaler Stand unbekannt";
+                    $update_status_class = "pill-warning";
+                } elseif ($local_hash === $remote_hash) {
                     $update_status_text = "Alles aktuell";
                     $update_status_class = "pill-success";
-                } elseif ($local_hash !== "" && $local_hash !== $remote_hash) {
-                    $update_status_text = "Update verfügbar";
-                    $update_status_class = "pill-warning";
                 } else {
-                    $update_status_text = "Lokaler Stand unbekannt";
+                    $update_status_text = "Update verfügbar";
                     $update_status_class = "pill-warning";
                 }
             } else {
@@ -250,7 +305,6 @@ class upgrade {
         $this->app->Tpl->Set('REMOTE_HASH_SHORT', $remote_hash_short);
         $this->app->Tpl->Set('LOCAL_COMMIT', $git_commit);
         $this->app->Tpl->Set('LOCAL_BRANCH', $git_branch);
-        $this->app->Tpl->Set('LOCAL_BRANCH_VISIBLE', !empty($git_branch) ? "" : "hidden");
         $this->app->Tpl->Set('SHOW_SYNC_REMOTE', "hidden");
         $show_local_branch = ($git_branch !== "" && $remote_branch !== "" && $git_branch === $remote_branch);
         $this->app->Tpl->Set('LOCAL_BRANCH_VISIBLE', $show_local_branch ? "" : "hidden");
@@ -258,164 +312,134 @@ class upgrade {
         $directory = dirname(getcwd())."/upgrade";
         $result_code = null;
 
-        switch ($submit) {
-            case 'check_upgrade':
-                $last_action = "System-Check (Dateien & Datenbank)";
+        // Lookup-Tabelle für die Engine-Aktionen. Jede Action mapped auf
+        // ein Set Flags, das nahezu 1:1 an upgrade_main() durchgereicht
+        // wird. Andere Submits (refresh, save_remote, rollback_to_tag)
+        // sind UI-only und werden separat behandelt.
+        $actions = [
+            'check_upgrade' => [
+                'label' => "System-Check (Dateien & Datenbank)",
+                'verbose' => $verbose,
+                'check_git' => true,
+                'do_git' => false,
+                'check_db' => true,
+                'do_db' => false,
+                'sets_upgrade_visible' => true,
+                'sets_upgrade_db_visible' => false,
+            ],
+            'do_upgrade' => [
+                'label' => "Upgrade (Dateien & Datenbank)",
+                'verbose' => $verbose,
+                'check_git' => true,
+                'do_git' => true,
+                'check_db' => true,
+                'do_db' => true,
+                'sets_upgrade_visible' => false,
+                'sets_upgrade_db_visible' => false,
+            ],
+            'check_db' => [
+                'label' => "Datenbank-Check",
+                'verbose' => $db_verbose,
+                'check_git' => false,
+                'do_git' => false,
+                'check_db' => true,
+                'do_db' => false,
+                'sets_upgrade_visible' => false,
+                'sets_upgrade_db_visible' => true,
+            ],
+            'do_db_upgrade' => [
+                'label' => "Datenbank-Upgrade",
+                'verbose' => $db_verbose,
+                'check_git' => false,
+                'do_git' => false,
+                'check_db' => true,
+                'do_db' => true,
+                'sets_upgrade_visible' => false,
+                'sets_upgrade_db_visible' => true,
+            ],
+        ];
+
+        if (isset($actions[$submit])) {
+            $cfg = $actions[$submit];
+            $last_action = $cfg['label'];
+            if ($cfg['sets_upgrade_visible']) {
                 $this->app->Tpl->Set('UPGRADE_VISIBLE', "");
                 $upgrade_available = true;
-                if (file_exists($logfile)) {
-                    unlink($logfile);
-                }
-                $result_code = upgrade_main(   directory: $directory,
-                                               verbose: $verbose,
-                                               check_git: true,
-                                               do_git: false,
-                                               export_db: false,
-                                               check_db: true,
-                                               strict_db: false,
-                                               do_db: false,
-                                               force: $force,
-                                               connection: false,
-                                               origin: false,
-                                               drop_keys: false
-                );
-            break;
-            case 'do_upgrade':
-                $last_action = "Upgrade (Dateien & Datenbank)";
-                if (file_exists($logfile)) {
-                    unlink($logfile);
-                }
-
-                // Erstelle Rollback-Tag vor Upgrade
-                if ($git_root !== "") {
-                    $tag_name = 'pre-upgrade-'.date('Y-m-d-H-i-s');
-                    $tag_cmd = 'git -C '.escapeshellarg($git_root).' tag '.escapeshellarg($tag_name).' 2>&1';
-
-                    // Verwende exec() statt shell_exec() um Exit-Code zu prüfen
-                    $tag_output = [];
-                    $tag_exit_code = 0;
-                    exec($tag_cmd, $tag_output, $tag_exit_code);
-
-                    if ($tag_exit_code === 0) {
-                        // Tag erfolgreich erstellt
-                        $_SESSION['last_rollback_tag'] = $tag_name;
-
-                        // Cleanup: Behalte nur die neuesten 10 pre-upgrade Tags
-                        $list_tags_cmd = 'git -C '.escapeshellarg($git_root).' tag -l "pre-upgrade-*" --sort=-creatordate 2>&1';
-                        $all_tags_output = [];
-                        exec($list_tags_cmd, $all_tags_output, $list_exit_code);
-
-                        if ($list_exit_code === 0 && count($all_tags_output) > 10) {
-                            // Lösche alle Tags ab Index 10 (die ältesten)
-                            $tags_to_delete = array_slice($all_tags_output, 10);
-                            foreach ($tags_to_delete as $old_tag) {
-                                $delete_cmd = 'git -C '.escapeshellarg($git_root).' tag -d '.escapeshellarg(trim($old_tag)).' 2>&1';
-                                exec($delete_cmd);
-                            }
-                        }
-                    }
-                }
-
-                $result_code = upgrade_main(   directory: $directory,
-                                               verbose: $verbose,
-                                               check_git: true,
-                                               do_git: true,
-                                               export_db: false,
-                                               check_db: true,
-                                               strict_db: false,
-                                               do_db: true,
-                                               force: $force,
-                                               connection: false,
-                                               origin: false,
-                                               drop_keys: false
-                );
-            break;
-            case 'check_db':
-                $last_action = "Datenbank-Check";
+            }
+            if ($cfg['sets_upgrade_db_visible']) {
                 $this->app->Tpl->Set('UPGRADE_DB_VISIBLE', "");
                 $upgrade_db_available = true;
-                if (file_exists($logfile)) {
-                    unlink($logfile);
-                }
-                $result_code = upgrade_main(   directory: $directory,
-                                               verbose: $db_verbose,
-                                               check_git: false,
-                                               do_git: false,
-                                               export_db: false,
-                                               check_db: true,
-                                               strict_db: false,
-                                               do_db: false,
-                                               force: $force,
-                                               connection: false,
-                                               origin: false,
-                                               drop_keys: false
-                );
-            break;
-            case 'do_db_upgrade':
-                $last_action = "Datenbank-Upgrade";
-                $this->app->Tpl->Set('UPGRADE_DB_VISIBLE', "");
-                $upgrade_db_available = true;
-                if (file_exists($logfile)) {
-                    unlink($logfile);
-                }
-                $result_code = upgrade_main(   directory: $directory,
-                                               verbose: $db_verbose,
-                                               check_git: false,
-                                               do_git: false,
-                                               export_db: false,
-                                               check_db: true,
-                                               strict_db: false,
-                                               do_db: true,
-                                               force: $force,
-                                               connection: false,
-                                               origin: false,
-                                               drop_keys: false
-                );
-            break;
-            case 'refresh':
-                $last_action = "Anzeige aktualisiert";
-            break;
-            case 'save_remote':
-                $last_action = "Upgrade-Quelle speichern";
-            break;
-            case 'rollback_to_tag':
-                $last_action = "Rollback durchgeführt";
-                $rollback_tag = $this->app->Secure->GetPOST('rollback_tag');
+            }
+            if (file_exists($logfile)) {
+                unlink($logfile);
+            }
 
-                if ($git_root !== "" && !empty($rollback_tag)) {
-                    // Validiere Tag-Name (nur pre-upgrade-* Tags erlauben)
-                    if (preg_match('/^pre-upgrade-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$/', $rollback_tag)) {
-                        if (file_exists($logfile)) {
-                            unlink($logfile);
-                        }
+            // Rollback-Tag setzen, bevor irgendetwas am Working-Tree
+            // verändert wird. Auch für do_db_upgrade gesetzt: ein DB-
+            // Upgrade modifiziert den Tree zwar nicht direkt, aber bei
+            // gemischten Fehler-Szenarien hilft der Tag, einen späteren
+            // manuellen Git-Reset auf einen bekannten Stand zu fahren.
+            // ACHTUNG: Der Tag rollt nur Code zurück — DB-Schema-
+            // Migrationen müssen separat behandelt werden.
+            if (($cfg['do_git'] || $cfg['do_db']) && $git_root !== "") {
+                $this->createRollbackTag($git_root);
+            }
 
-                        // Checkout zum Tag
-                        $checkout_cmd = 'git -C '.escapeshellarg($git_root).' checkout '.escapeshellarg($rollback_tag).' -f 2>&1';
-                        $checkout_output = shell_exec($checkout_cmd);
+            $result_code = upgrade_main(
+                directory: $directory,
+                verbose: $cfg['verbose'],
+                check_git: $cfg['check_git'],
+                do_git: $cfg['do_git'],
+                export_db: false,
+                check_db: $cfg['check_db'],
+                strict_db: false,
+                do_db: $cfg['do_db'],
+                force: $force,
+                connection: false,
+                origin: false,
+                drop_keys: false
+            );
+        } elseif ($submit === 'refresh') {
+            $last_action = "Anzeige aktualisiert";
+        } elseif ($submit === 'save_remote') {
+            $last_action = "Upgrade-Quelle speichern";
+        } elseif ($submit === 'rollback_to_tag') {
+            $last_action = "Rollback durchgeführt";
+            $rollback_tag = $this->app->Secure->GetPOST('rollback_tag');
 
-                        file_put_contents($logfile, "=== Rollback to tag: $rollback_tag ===\n");
-                        file_put_contents($logfile, $checkout_output, FILE_APPEND);
-
-                        $status_headline = "Rollback durchgeführt";
-                        $status_level = "info";
-                        $status_message = "System auf Stand von Tag $rollback_tag zurückgesetzt.";
-                        $guidance_title = "Wichtig";
-                        $guidance_message = "Code wurde zurückgesetzt. DB-Änderungen wurden NICHT rückgängig gemacht!";
-                    } else {
-                        $status_headline = "Ungültiger Tag";
-                        $status_level = "error";
-                        $status_message = "Nur pre-upgrade-* Tags können für Rollback verwendet werden.";
+            if ($git_root !== "" && !empty($rollback_tag)) {
+                // Validiere Tag-Name (nur pre-upgrade-* Tags erlauben)
+                if (preg_match(self::ROLLBACK_TAG_PATTERN, $rollback_tag)) {
+                    if (file_exists($logfile)) {
+                        unlink($logfile);
                     }
+
+                    // Checkout zum Tag
+                    $checkout_cmd = 'git -C '.escapeshellarg($git_root).' checkout '.escapeshellarg($rollback_tag).' -f 2>&1';
+                    $checkout_output = shell_exec($checkout_cmd);
+
+                    file_put_contents($logfile, "=== Rollback to tag: $rollback_tag ===\n");
+                    file_put_contents($logfile, $checkout_output, FILE_APPEND);
+
+                    $status_headline = "Rollback durchgeführt";
+                    $status_level = "info";
+                    $status_message = "System auf Stand von Tag $rollback_tag zurückgesetzt.";
+                    $guidance_title = "Wichtig";
+                    $guidance_message = "Code wurde zurückgesetzt. DB-Änderungen wurden NICHT rückgängig gemacht!";
+                } else {
+                    $status_headline = "Ungültiger Tag";
+                    $status_level = "error";
+                    $status_message = "Nur pre-upgrade-* Tags können für Rollback verwendet werden.";
                 }
-            break;
+            }
         }
 
         // Read results
         $result = file_exists($logfile) ? file_get_contents($logfile) : "";
-        $highlight_force = (!$force && str_contains($result, "Clear modified files or use -f"));
+        $highlight_force = (!$force && str_contains($result, self::RESULT_NEEDS_FORCE));
 
         if ($result_code === 0 && $result !== "") {
-            if (str_contains($result, "Aborted")) {
+            if (str_contains($result, self::RESULT_ABORTED)) {
                 $result_code = -1;
             }
         }
@@ -427,12 +451,12 @@ class upgrade {
                 $diff_count = (int)$matches[1];
             }
 
-            $has_modified_files = str_contains($result, "There are modified files");
+            $has_modified_files = str_contains($result, self::RESULT_MODIFIED_FILES);
 
             if ($result_code === 0) {
                 $status_headline = "Aktion erfolgreich";
                 $status_level = "success";
-                if (str_contains($result, "Already up to date")) {
+                if (str_contains($result, self::RESULT_UP_TO_DATE)) {
                     $status_message = "Keine neuen Updates verfügbar. System ist aktuell.";
                 } else {
                     $status_message = "Der Durchlauf wurde ohne Fehler abgeschlossen.";
@@ -524,7 +548,11 @@ class upgrade {
         $this->app->Tpl->Set('UPGRADE_DB_BUTTON_LABEL', $upgrade_db_available ? "DB-Upgrade" : "DB prüfen");
         $this->app->Tpl->Set('UPGRADE_DB_FORCE_VISIBLE', "hidden");
 
-        // Rollback-Tags laden
+        // Rollback-Tags laden. Der OpenXE-Template-Parser kennt nur
+        // [VARIABLE]-Platzhalter (kein Smarty-foreach), daher wird das
+        // <select>-Markup hier gebaut und als String an die Vorlage
+        // übergeben. Inline-Styles werden vermieden — siehe CSS-Klasse
+        // .rollback-tag-select.
         $rollback_tags = [];
         $rollback_tags_html = "";
         if ($git_root !== "") {
@@ -534,9 +562,10 @@ class upgrade {
                 $rollback_tags = array_slice($tags, 0, 10); // Nur letzte 10 Tags
 
                 if (!empty($rollback_tags)) {
-                    $rollback_tags_html .= '<select name="rollback_tag" class="input-inline" style="margin-bottom:8px;">';
+                    $rollback_tags_html .= '<select name="rollback_tag" class="input-inline rollback-tag-select">';
                     foreach ($rollback_tags as $tag) {
-                        $rollback_tags_html .= '<option value="'.htmlspecialchars($tag).'">'.htmlspecialchars($tag).'</option>';
+                        $escaped = htmlspecialchars($tag, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                        $rollback_tags_html .= '<option value="'.$escaped.'">'.$escaped.'</option>';
                     }
                     $rollback_tags_html .= '</select>';
                 }
@@ -546,7 +575,6 @@ class upgrade {
         $has_rollback_tags = !empty($rollback_tags);
         $this->app->Tpl->Set('ROLLBACK_TAGS_SELECT', $rollback_tags_html);
         $this->app->Tpl->Set('ROLLBACK_VISIBLE', $has_rollback_tags ? "" : "hidden");
-        $this->app->Tpl->Set('LAST_ROLLBACK_TAG', $_SESSION['last_rollback_tag'] ?? '');
 
         $this->app->Tpl->Set('CURRENT', $this->app->erp->Revision());
         $revision_raw = (string)$this->app->erp->Revision();
