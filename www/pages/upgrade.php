@@ -365,11 +365,9 @@ class upgrade {
             $cfg = $actions[$submit];
             $last_action = $cfg['label'];
             if ($cfg['sets_upgrade_visible']) {
-                $this->app->Tpl->Set('UPGRADE_VISIBLE', "");
                 $upgrade_available = true;
             }
             if ($cfg['sets_upgrade_db_visible']) {
-                $this->app->Tpl->Set('UPGRADE_DB_VISIBLE', "");
                 $upgrade_db_available = true;
             }
             if (file_exists($logfile)) {
