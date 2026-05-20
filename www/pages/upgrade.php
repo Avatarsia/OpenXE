@@ -311,10 +311,10 @@ class upgrade {
         $this->app->Tpl->Set('UPDATE_STATUS', $update_status_text);
         $this->app->Tpl->Set('UPDATE_STATUS_CLASS', $update_status_class);
         $this->app->Tpl->Set('LOCAL_HASH', $local_hash);
-        $this->app->Tpl->Set('LOCAL_HASH_SHORT', $local_hash_short);
-        $this->app->Tpl->Set('REMOTE_HASH_SHORT', $remote_hash_short);
-        $this->app->Tpl->Set('LOCAL_COMMIT', $git_commit);
-        $this->app->Tpl->Set('LOCAL_BRANCH', $git_branch);
+        $this->app->Tpl->Set('LOCAL_HASH_SHORT', $this->esc($local_hash_short));
+        $this->app->Tpl->Set('REMOTE_HASH_SHORT', $this->esc($remote_hash_short));
+        $this->app->Tpl->Set('LOCAL_COMMIT', $this->esc($git_commit));
+        $this->app->Tpl->Set('LOCAL_BRANCH', $this->esc($git_branch));
         $this->app->Tpl->Set('SHOW_SYNC_REMOTE', "hidden");
         $show_local_branch = ($git_branch !== "" && $remote_branch !== "" && $git_branch === $remote_branch);
         $this->app->Tpl->Set('LOCAL_BRANCH_VISIBLE', $show_local_branch ? "" : "hidden");
