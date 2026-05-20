@@ -430,18 +430,32 @@ class upgrade {
                         unlink($logfile);
                     }
 
-                    // Checkout zum Tag
+                    // Checkout zum Tag. Exit-Code MUSS geprüft werden:
+                    // bei Failure darf der User nicht denken, der Rollback
+                    // sei durchgelaufen.
                     $checkout_cmd = 'git -C '.escapeshellarg($git_root).' checkout '.escapeshellarg($rollback_tag).' -f 2>&1';
-                    $checkout_output = shell_exec($checkout_cmd);
+                    $checkout_output = [];
+                    $checkout_exit_code = 0;
+                    exec($checkout_cmd, $checkout_output, $checkout_exit_code);
 
                     file_put_contents($logfile, "=== Rollback to tag: $rollback_tag ===\n");
-                    file_put_contents($logfile, $checkout_output, FILE_APPEND);
+                    file_put_contents($logfile, implode("\n", $checkout_output)."\n", FILE_APPEND);
+                    file_put_contents($logfile, "exit code: $checkout_exit_code\n", FILE_APPEND);
 
-                    $status_headline = "Rollback durchgeführt";
-                    $status_level = "info";
-                    $status_message = "System auf Stand von Tag $rollback_tag zurückgesetzt.";
-                    $guidance_title = "Wichtig";
-                    $guidance_message = "Code wurde zurückgesetzt. DB-Änderungen wurden NICHT rückgängig gemacht!";
+                    if ($checkout_exit_code === 0) {
+                        $status_headline = "Rollback durchgeführt";
+                        $status_level = "info";
+                        $status_message = "System auf Stand von Tag $rollback_tag zurückgesetzt.";
+                        $guidance_title = "Wichtig";
+                        $guidance_message = "Code wurde zurückgesetzt. DB-Änderungen wurden NICHT rückgängig gemacht!";
+                    } else {
+                        $status_headline = "Rollback fehlgeschlagen";
+                        $status_level = "error";
+                        $status_message = "Rollback fehlgeschlagen (Exit-Code $checkout_exit_code). Working-Tree wurde NICHT zurückgesetzt. Siehe Protokoll.";
+                        $guidance_title = "Fehlerbehebung";
+                        $guidance_message = "Protokoll prüfen, lokale Änderungen oder Konflikte beheben und Rollback erneut versuchen.";
+                        $last_action = "Rollback fehlgeschlagen";
+                    }
                 } else {
                     $status_headline = "Ungültiger Tag";
                     $status_level = "error";
