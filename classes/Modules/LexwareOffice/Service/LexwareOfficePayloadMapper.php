@@ -26,6 +26,20 @@ final class LexwareOfficePayloadMapper
      */
     private const DEFAULT_TAX_RATE = 19.0;
 
+    /**
+     * Lexware-taxTypes, bei denen unitPrice.taxRatePercentage zwingend 0 sein muss.
+     * Sendet man hier den OpenXE-Steuersatz (z.B. 19%), antwortet die API mit HTTP 400.
+     * Quelle: Lexware-Office-API-Doku zu taxConditions/lineItems.
+     */
+    private const TAX_EXEMPT_TAX_TYPES = [
+        'vatfree',
+        'intraCommunitySupply',
+        'constructionService13b',
+        'externalService13b',
+        'thirdPartyCountryService',
+        'thirdPartyCountryDelivery',
+    ];
+
     private LoggerInterface $logger;
 
     public function __construct(
@@ -144,6 +158,11 @@ final class LexwareOfficePayloadMapper
         $discountDays = (int)($invoice['zahlungszieltageskonto'] ?? 0);
         $discountPercent = (float)($invoice['zahlungszielskonto'] ?? 0);
         $title = !empty($invoice['belegnr']) ? sprintf('Rechnung %s', $invoice['belegnr']) : 'Rechnung';
+        // taxType einmal aufloesen und an mapLineItems durchreichen, damit Position-Mapper
+        // und taxConditions denselben Wert sehen. Lexware verlangt fuer steuerfreie taxTypes
+        // (vatfree, intraCommunitySupply, ...) zwingend unitPrice.taxRatePercentage = 0 —
+        // sonst HTTP 400.
+        $taxType = $this->resolveTaxType($invoice, $positions);
 
         $payload = [
             // Lexware voucherDate: RFC3339 extended (mit Millisekunden & Zeitzone)
@@ -156,18 +175,19 @@ final class LexwareOfficePayloadMapper
             'address' => [
                 'contactId' => $contactId,
             ],
-            'lineItems' => $this->mapLineItems($positions, $invoice),
+            'lineItems' => $this->mapLineItems($positions, $invoice, $taxType),
             'totalPrice' => [
                 'currency' => $defaultCurrency,
             ],
             'taxConditions' => [
-                'taxType' => $this->resolveTaxType($invoice, $positions),
+                'taxType' => $taxType,
             ],
             'shippingConditions' => [
                 'shippingType' => 'delivery',
                 'shippingDate' => $voucherDateTime->format(DATE_RFC3339_EXTENDED),
             ],
             'paymentConditions' => [
+                'paymentTermLabel' => $this->buildPaymentTermLabel($paymentTerm),
                 'paymentTermDuration' => $paymentTerm,
             ],
         ];
@@ -177,12 +197,13 @@ final class LexwareOfficePayloadMapper
                 'discountPercentage' => $discountPercent,
                 'discountRange' => $discountDays,
             ];
-            $payload['paymentConditions']['paymentTermLabel'] = sprintf(
+            // Skonto-Label ueberschreibt das Default-Label mit der ausfuehrlicheren Variante.
+            $payload['paymentConditions']['paymentTermLabel'] = $this->truncatePaymentTermLabel(sprintf(
                 '%d Tage - %s%%, %d Tage netto',
                 $discountDays,
                 $this->formatNumber($discountPercent),
                 $paymentTerm
-            );
+            ));
         }
 
         return $payload;
@@ -384,23 +405,53 @@ private function isKleinunternehmer(): bool
     }
 
     /**
-     * @param array $positions
-     * @param array $invoice
+     * @param array       $positions
+     * @param array       $invoice
+     * @param string|null $taxType  Aufloesender Lexware-taxType (siehe resolveTaxType).
+     *                              Bei steuerfreien taxTypes (TAX_EXEMPT_TAX_TYPES) wird
+     *                              unitPrice.taxRatePercentage hart auf 0 gesetzt — Lexware
+     *                              lehnt jeden anderen Wert mit HTTP 400 ab. Default null
+     *                              fuer Backward-Compat (Verhalten dann wie bisher).
      *
      * @return array
      */
-    private function mapLineItems(array $positions, array $invoice): array
+    private function mapLineItems(array $positions, array $invoice, ?string $taxType = null): array
     {
         $items = [];
         $defaultCurrency = $this->normalizeCurrency($invoice['waehrung'] ?? 'EUR');
+        // Defensiv: negative oder leere $defaultTax-Werte auf DE-Standard zwingen.
+        // OpenXE liefert in seltenen Fallkonstellationen (Mandantenwechsel, leere
+        // firmendaten.steuersatz_normal) einen 0/leeren Wert; Lexware verlangt aber
+        // einen sinnvollen Steuersatz pro Position.
         $defaultTax = (float)($invoice['steuersatz_normal'] ?? self::DEFAULT_TAX_RATE);
+        if ($defaultTax <= 0.0) {
+            $defaultTax = self::DEFAULT_TAX_RATE;
+        }
+
+        // Steuerfreie taxTypes erzwingen taxRatePercentage = 0 fuer ALLE Positionen,
+        // unabhaengig davon was OpenXE in position.steuersatz liefert. Lexware
+        // validiert das strikt (HTTP 400 bei Mismatch).
+        $forceZeroTax = $taxType !== null && in_array($taxType, self::TAX_EXEMPT_TAX_TYPES, true);
 
         foreach ($positions as $position) {
-            $tax = $position['steuersatz'] ?? $defaultTax;
+            // OpenXE-Sentinel: steuersatz = -1 bedeutet "keinen Steuersatz erzwingen"
+            // (vgl. www/lib/class.erpapi.php:5105). Lexware lehnt negative Werte ab,
+            // darum auf $defaultTax zurueckfallen wenn null/<0.
+            $rawTax = $position['steuersatz'] ?? null;
+            $tax = ($rawTax !== null && (float)$rawTax >= 0.0) ? (float)$rawTax : $defaultTax;
+            // Hard-Override: bei steuerfreien taxTypes ueberschreibt 0.0 jede vorherige
+            // Logik (Sentinel-Clamp, Position-Steuersatz, Default-Tax).
+            if ($forceZeroTax) {
+                $tax = 0.0;
+            }
             $currency = $this->normalizeCurrency($position['waehrung'] ?? $defaultCurrency);
+            // Lexware unitPrice.netAmount: bis zu 4 Nachkommastellen (Doku-Constraint).
+            // is_finite-Guard gegen NaN/Inf aus fehlerhaften OpenXE-Importen.
+            $netAmount = (float)$position['preis'];
+            $netAmount = is_finite($netAmount) ? round($netAmount, 4) : 0.0;
             $unitPrice = [
                 'currency' => $currency,
-                'netAmount' => (float)$position['preis'],
+                'netAmount' => $netAmount,
                 'taxRatePercentage' => (float)$tax,
             ];
             $items[] = array_filter([
@@ -475,5 +526,40 @@ private function isKleinunternehmer(): bool
     private function formatNumber(float $value): string
     {
         return rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');
+    }
+
+    /**
+     * Baut das Default-Label fuer paymentConditions.paymentTermLabel.
+     *
+     * Lexware fordert das Feld als String; wir setzen es immer (auch ohne Skonto),
+     * weil die API sonst die Default-Bezeichnung des Lexware-Mandanten zieht und
+     * der Beleg-Footer dadurch unterschiedlich aussieht je nach Mandant.
+     */
+    private function buildPaymentTermLabel(int $paymentTerm): string
+    {
+        if ($paymentTerm <= 0) {
+            return 'Zahlbar sofort';
+        }
+
+        return $this->truncatePaymentTermLabel(sprintf(
+            'Zahlbar innerhalb von %d Tagen netto',
+            $paymentTerm
+        ));
+    }
+
+    /**
+     * Kuerzt paymentTermLabel defensiv auf 255 Zeichen. Lexware dokumentiert die
+     * Max-Laenge nicht hart, branchenueblich sind 255 — wir schneiden statt 4xx-Fehler.
+     */
+    private function truncatePaymentTermLabel(string $label): string
+    {
+        if (function_exists('mb_strlen') && mb_strlen($label) > 255) {
+            return mb_substr($label, 0, 255);
+        }
+        if (strlen($label) > 255) {
+            return substr($label, 0, 255);
+        }
+
+        return $label;
     }
 }
