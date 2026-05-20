@@ -4,7 +4,18 @@ var SuperSearch = (function ($) {
     var me = {
 
         config: {
-            inputBuffer: 300 // in milliseconds
+            inputBuffer: 300, // in milliseconds
+
+            // Layout-Defaults — sollten ueblicherweise aus den CSS-Custom-Properties
+            // auf #supersearch-overlay gelesen werden (siehe me.readMinColumnWidth).
+            // Diese Werte greifen nur, wenn das Overlay-Element noch nicht im DOM
+            // ist oder die Custom-Property nicht aufgeloest werden kann.
+            defaultMinColumnWidth: 280,
+            defaultColumnGap: 16,
+            defaultWrapperWidth: 900,
+            // Viewport-Offset (Sidebar + Padding) — Fallback fuer M4-Reflow-Problem,
+            // wenn der Container beim Init noch display:none ist.
+            viewportSidebarOffset: 60
         },
 
         storage: {
@@ -287,13 +298,14 @@ var SuperSearch = (function ($) {
                 return;
             }
 
-            me.storage.$details.html('');
-            var wrapperWidth = $resultContainer.width();
+            me.storage.$details.empty();
+            var wrapperWidth = me.measureResultWrapperWidth($resultContainer);
             var columns = me.buildResultColumns(searchResults, wrapperWidth);
             var $columnsWrapper = $('<div class="result-columns">');
+            var minColPx = me.readMinColumnWidth();
             $columnsWrapper.css(
                 'grid-template-columns',
-                'repeat(' + columns.length + ', minmax(280px, 1fr))'
+                'repeat(' + columns.length + ', minmax(' + minColPx + 'px, 1fr))'
             );
 
             columns.forEach(function (column) {
@@ -397,8 +409,9 @@ var SuperSearch = (function ($) {
                 }
             });
 
-            var minColumnWidth = 296; // 280px Spalte + 16px Gap
-            var availableWidth = (wrapperWidth > 0 ? wrapperWidth : 900) + 16;
+            var minColumnWidth = me.readMinColumnWidth() + me.readColumnGap();
+            var fallbackWidth = me.config.defaultWrapperWidth;
+            var availableWidth = (wrapperWidth > 0 ? wrapperWidth : fallbackWidth) + me.readColumnGap();
             var maxColumns = Math.max(1, Math.floor(availableWidth / minColumnWidth));
             var hasApps = appGroups.length > 0;
             var resultColumnBudget = hasApps ? Math.max(1, maxColumns - 1) : maxColumns;
@@ -777,6 +790,63 @@ var SuperSearch = (function ($) {
             me.hideDetails();
             me.getOverlay().find('section.empty-message').hide();
             me.getOverlay().find('section.error-message').html(errorMessage).show();
+        },
+
+        /**
+         * Liest --ssr-min-col-width vom Overlay-Element. Fallback aus config.
+         *
+         * @return {number} Mindestbreite pro Result-Spalte in Pixel
+         */
+        readMinColumnWidth: function () {
+            return me.readCssLengthVar('--ssr-min-col-width', me.config.defaultMinColumnWidth);
+        },
+
+        /**
+         * Liest --ssr-col-gap vom Overlay-Element. Fallback aus config.
+         *
+         * @return {number} Gap zwischen Result-Spalten in Pixel
+         */
+        readColumnGap: function () {
+            return me.readCssLengthVar('--ssr-col-gap', me.config.defaultColumnGap);
+        },
+
+        /**
+         * @param {string} propName    CSS-Custom-Property-Name inkl. '--'
+         * @param {number} fallbackPx  Numerischer Fallback in Pixel
+         *
+         * @return {number}
+         */
+        readCssLengthVar: function (propName, fallbackPx) {
+            var $overlay = me.storage.$overlay;
+            if ($overlay === null || $overlay.length === 0) {
+                return fallbackPx;
+            }
+            var raw = getComputedStyle($overlay[0]).getPropertyValue(propName);
+            if (typeof raw !== 'string') {
+                return fallbackPx;
+            }
+            var parsed = parseFloat(raw);
+            return isNaN(parsed) ? fallbackPx : parsed;
+        },
+
+        /**
+         * Misst die Result-Container-Breite robust gegen display:none-Reflow-Probleme.
+         *
+         * @param {jQuery} $container
+         *
+         * @return {number} Breite in Pixel
+         */
+        measureResultWrapperWidth: function ($container) {
+            if ($container.length === 0) {
+                return 0;
+            }
+            var rect = $container[0].getBoundingClientRect();
+            if (rect.width > 0) {
+                return rect.width;
+            }
+            // Fallback: Viewport-basierter Wert. Greift wenn der Container
+            // beim Init noch ausgeblendet ist.
+            return Math.max(0, window.innerWidth - me.config.viewportSidebarOffset);
         },
 
         /**
