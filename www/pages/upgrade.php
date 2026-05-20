@@ -138,7 +138,10 @@ class upgrade {
 
         $this->app->Tpl->Set('ERZWINGEN', $force ? "checked" : "");
 
-        include("../upgrade/data/upgrade.php");
+        // Pfadstabil relativ zu __FILE__: getcwd() kann sich durch
+        // OpenXE-Frontcontroller ändern. require_once verhindert
+        // Reentry bei künftigen Refactorings.
+        require_once(__DIR__ . '/../../upgrade/data/upgrade.php');
 
         $logfile = "../upgrade/data/upgrade.log";
         $remote_config_file = "../upgrade/data/remote.json";
