@@ -23,7 +23,6 @@ feature/ci-workflow
 feature/lexwareoffice-module
 feature/network-printer-module
 feature/supersearch-enhancement
-feature/menu-configurator-module
 
 # Larger feature branches (file-based import, some core touch)
 feature/upgrader-ui-module
