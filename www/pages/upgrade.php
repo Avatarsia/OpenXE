@@ -45,6 +45,16 @@ class upgrade {
     }
 
     /**
+     * Escape-Helper für HTML-Kontext. Setzt explizit Flags und Charset,
+     * damit auch invalid encoded Bytes über ENT_SUBSTITUTE behandelt
+     * werden und Single-Quotes (Attribut-Kontext) escaped sind.
+     */
+    private function esc(string $s): string
+    {
+        return htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+    }
+
+    /**
      * Berechtigungs-Guard für Upgrader-Endpoints (UI und AJAX).
      * Der Upgrader führt git-Operationen und DB-Migrationen aus —
      * daher ist Admin-Login Voraussetzung.
@@ -294,10 +304,10 @@ class upgrade {
             }
         }
 
-        $this->app->Tpl->Set('REMOTE_HOST', htmlspecialchars($remote_host));
-        $this->app->Tpl->Set('REMOTE_BRANCH', htmlspecialchars($remote_branch));
-        $this->app->Tpl->Set('REMOTE_ORIGINAL_HOST', htmlspecialchars($original_remote_host));
-        $this->app->Tpl->Set('REMOTE_ORIGINAL_BRANCH', htmlspecialchars($original_remote_branch));
+        $this->app->Tpl->Set('REMOTE_HOST', $this->esc($remote_host));
+        $this->app->Tpl->Set('REMOTE_BRANCH', $this->esc($remote_branch));
+        $this->app->Tpl->Set('REMOTE_ORIGINAL_HOST', $this->esc($original_remote_host));
+        $this->app->Tpl->Set('REMOTE_ORIGINAL_BRANCH', $this->esc($original_remote_branch));
         $this->app->Tpl->Set('UPDATE_STATUS', $update_status_text);
         $this->app->Tpl->Set('UPDATE_STATUS_CLASS', $update_status_class);
         $this->app->Tpl->Set('LOCAL_HASH', $local_hash);
@@ -564,7 +574,7 @@ class upgrade {
                 if (!empty($rollback_tags)) {
                     $rollback_tags_html .= '<select name="rollback_tag" class="input-inline rollback-tag-select">';
                     foreach ($rollback_tags as $tag) {
-                        $escaped = htmlspecialchars($tag, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                        $escaped = $this->esc($tag);
                         $rollback_tags_html .= '<option value="'.$escaped.'">'.$escaped.'</option>';
                     }
                     $rollback_tags_html .= '</select>';
@@ -582,8 +592,12 @@ class upgrade {
         if ($app_version === '') {
             $app_version = $revision_raw;
         }
-        $this->app->Tpl->Set('APP_VERSION', htmlspecialchars($app_version));
-        $this->app->Tpl->Set('OUTPUT_FROM_CLI',nl2br($result));
+        $this->app->Tpl->Set('APP_VERSION', $this->esc($app_version));
+        // Log-Output wird escaped als reiner Text ausgegeben. Die
+        // log-box-CSS-Regel `white-space:pre-wrap` sorgt für die
+        // Zeilenumbrüche — kein nl2br nötig, damit auch das JS-Filter
+        // (textContent-basiert) konsistent bleibt.
+        $this->app->Tpl->Set('OUTPUT_FROM_CLI', $this->esc($result));
         $this->app->Tpl->Parse('PAGE', "upgrade.tpl");
     }
 
