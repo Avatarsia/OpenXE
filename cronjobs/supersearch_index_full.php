@@ -11,7 +11,11 @@ try {
 
 } catch (\Exception $exception) {
   if ($supersearchFullIndexTask !== null) {
-    $supersearchFullIndexTask->cleanup();
+    try {
+      $supersearchFullIndexTask->cleanup();
+    } catch (\Throwable $cleanupError) {
+      error_log('SuperSearchFullIndexTask cleanup failed: ' . $cleanupError->getMessage());
+    }
   }
   throw $exception;
 }

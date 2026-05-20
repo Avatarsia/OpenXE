@@ -12,7 +12,11 @@ try {
 
 } catch (\Exception $exception) {
   if ($amaInvoiceTask !== null) {
-    $amaInvoiceTask->cleanup();
+    try {
+      $amaInvoiceTask->cleanup();
+    } catch (\Throwable $cleanupError) {
+      error_log('AmaInvoiceTask cleanup failed: ' . $cleanupError->getMessage());
+    }
   }
   throw $exception;
 }
