@@ -304,15 +304,19 @@ var SuperSearch = (function ($) {
         },
 
         /**
-         * @param {Array} rawResult
+         * @param {Object} rawResult Server-Response (JsonResponse mit shape
+         *   {success: bool, data: ResultCollection|null|"index-empty"}).
          */
         renderSearchResults: function (rawResult) {
             var $overlay = me.getOverlay();
             var $resultContainer = $overlay.find('section.result');
-            $resultContainer.html('');
+            $resultContainer.empty();
 
-            if (rawResult.length === 0 || !rawResult.hasOwnProperty('data')) {
-                $resultContainer.html('Fehler: Suche hat fehlerhaftes Ergebnis geliefert.');
+            // Defensive: Server liefert immer ein Object mit 'data'-Property.
+            // Wenn das nicht der Fall ist, ist die Response korrupt.
+            if (typeof rawResult !== 'object' || rawResult === null ||
+                !rawResult.hasOwnProperty('data')) {
+                $resultContainer.text('Fehler: Suche hat fehlerhaftes Ergebnis geliefert.');
                 me.storage.hasResults = false;
                 me.hideResults();
                 return;
