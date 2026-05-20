@@ -1,0 +1,65 @@
+# Integration branch manifest for the nightly production build.
+#
+# One branch per line. Lines starting with # or blank lines are ignored.
+# The workflow merges these branches in order on top of upstream/master
+# (https://github.com/openxe-org/openxe master).
+#
+# Order matters when branches have dependencies between each other.
+# Put foundational branches first, mini-patches last.
+#
+# To add a new integration branch:
+#   1. Push the branch to this fork
+#   2. Append its name to this file
+#   3. Commit + push on feature/ci-workflow
+#
+# The next nightly run (or manual workflow_dispatch) will pick it up.
+# The ci-workflow branch itself is listed below so the workflow files
+# are automatically reintegrated into production on every rebuild.
+
+# CI/CD — keep first so the workflow files are always present on production
+feature/ci-workflow
+
+# Core feature modules (full Bootstrap + hook integration)
+feature/lexwareoffice-module
+feature/network-printer-module
+feature/supersearch-enhancement
+
+# Larger feature branches (file-based import, some core touch)
+feature/upgrader-ui-module
+# feature/ticketportal-module  -- temporarily disabled: the portal_*
+#   core touch in www/pages/ticket.php is a merge-conflict risk against
+#   upstream and the refactor into a dedicated TicketPortalService is
+#   still pending. Re-enable once the refactor lands.
+
+# Mini-patches (small core touches, kept as patch branches without Bootstrap)
+feature/plz-clean
+feature/row-highlight-clean
+# fix/woocommerce-variation-support -- superseded by #266 (feature/woocommerce-batch-stock-sync),
+#   which replaces ImportSendListLager with products/batch + variations/batch and therefore
+#   already covers the variation support. Upstream PR #238 was closed for the same reason.
+feature/paid-marking-clean
+# mwst_korrektion -- superseded by upstream b57f8461 (eu_steuersatz_zielland_vermerk
+#   from 2026-05-04), which solves the same EU B2C VAT-by-destination problem
+#   natively via $objSteuersaetze->getTaxesByCountry() and additionally sets
+#   steuersatz_zielland=true as a marker. Both implementations patch the same block
+#   in www/lib/class.erpapi.php and now conflict. Local 62-line patch became
+#   redundant -- re-enable only if upstream's behaviour proves insufficient.
+
+# Upstream bug-fix PRs (single-file patches, also live as open PRs on openxe-org)
+fix/250-wiedervorlage-sidebar-counter
+fix/dateien-stichwoerter-245
+fix/versandpakete-247
+fix/player-custom-module-support
+# #271 Mahnwesen template placeholders ({FRIST}, {DATUMRECHNUNG}, {MAHNDATUM}, {TAGE})
+mahnfenster
+# PHP 8 compat — 5 Bootstrap onInit*() methods need `static` keyword
+# Supersedes the earlier fix/backup-bootstrap-static (which only fixed BackupTask)
+fix/bootstrap-static-cross-check
+
+# WooCommerce hardening (open PRs on openxe-org, stacked)
+# #265 Pagination-Fix — foundation for #267
+fix/woocommerce-order-import-pagination
+# #266 Batch stock sync — independent
+feature/woocommerce-batch-stock-sync
+# #267 Composer-based WC SDK — stacked on #265, must follow it
+refactor/woocommerce-composer-sdk
