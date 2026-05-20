@@ -874,13 +874,18 @@ var SuperSearch = (function ($) {
         },
 
         /**
+         * Zeigt eine Fehlermeldung im Overlay. Verwendet bewusst `.text()`
+         * statt `.html()`, weil errorMessage ein normaler Klartext-String
+         * ist (z.B. responseJSON.error vom Server) — Konsistenz zur
+         * XSS-Hardening-Disziplin im Result-Rendering.
+         *
          * @param {string} errorMessage
          */
         showErrorMessage: function (errorMessage) {
             me.showOverlay();
             me.hideDetails();
             me.getOverlay().find('section.empty-message').hide();
-            me.getOverlay().find('section.error-message').html(errorMessage).show();
+            me.getOverlay().find('section.error-message').text(errorMessage).show();
         },
 
         /**
