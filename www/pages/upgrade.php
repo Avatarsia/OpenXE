@@ -281,9 +281,17 @@ class upgrade {
         if ($git_root !== "" && $remote_host !== "" && $remote_branch !== "") {
             $remote_ref = "refs/heads/".$remote_branch;
             $remote_cmd = 'git -C '.escapeshellarg($git_root).' ls-remote '.escapeshellarg($remote_host).' '.escapeshellarg($remote_ref).' 2>&1';
-            $remote_line = trim((string)shell_exec($remote_cmd));
+            $remote_output = [];
+            $remote_exit_code = 0;
+            exec($remote_cmd, $remote_output, $remote_exit_code);
+            $remote_line = trim((string)($remote_output[0] ?? ''));
 
-            if ($remote_line !== "") {
+            if ($remote_exit_code !== 0) {
+                // Remote-Probe fehlgeschlagen: exec liefert genauen Exit-Code,
+                // shell_exec hätte hier nur `null` zurückgegeben.
+                $update_status_text = "Remote-Probe fehlgeschlagen (Exit-Code ".$remote_exit_code.")";
+                $update_status_class = "pill-warning";
+            } elseif ($remote_line !== "") {
                 $remote_hash = trim(strtok($remote_line, "\t "));
                 $remote_hash_short = substr($remote_hash, 0, 8);
 
@@ -561,9 +569,14 @@ class upgrade {
         $rollback_tags = [];
         $rollback_tags_html = "";
         if ($git_root !== "") {
-            $tags_output = shell_exec('git -C '.escapeshellarg($git_root).' tag -l "pre-upgrade-*" --sort=-creatordate 2>&1');
-            if ($tags_output !== null) {
-                $tags = array_filter(explode("\n", trim($tags_output)));
+            // Konsistent mit createRollbackTag(): exec() + Exit-Code statt
+            // shell_exec()->null-vs-false-Ambiguität.
+            $tag_list_cmd = 'git -C '.escapeshellarg($git_root).' tag -l "pre-upgrade-*" --sort=-creatordate 2>&1';
+            $tags_output = [];
+            $tag_list_exit_code = 0;
+            exec($tag_list_cmd, $tags_output, $tag_list_exit_code);
+            if ($tag_list_exit_code === 0 && !empty($tags_output)) {
+                $tags = array_filter(array_map('trim', $tags_output));
                 $rollback_tags = array_slice($tags, 0, 10); // Nur letzte 10 Tags
 
                 if (!empty($rollback_tags)) {
