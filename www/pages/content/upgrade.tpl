@@ -8,7 +8,6 @@
         [MESSAGE]
         <form action="" method="post">
             [FORMHANDLEREVENT]
-            <input type="hidden" name="db_details_anzeigen" value="1">
 
             <div class="top-row">
                 <div class="status-col">
