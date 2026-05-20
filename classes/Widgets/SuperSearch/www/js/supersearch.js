@@ -87,6 +87,12 @@ var SuperSearch = (function ($) {
         hideOverlay: function () {
             me.getOverlay().hide();
             me.storage.isOpen = false;
+            // Accessibility: Focus zurueck zum Such-Eingabefeld, das das Overlay
+            // geoeffnet hat. Damit landet der Keyboard-Nutzer nach ESC wieder
+            // an einem sinnvollen Punkt.
+            if (me.storage.$input !== null && me.storage.$input.length > 0) {
+                me.storage.$input.trigger('focus');
+            }
         },
 
         /**
@@ -99,7 +105,8 @@ var SuperSearch = (function ($) {
             }
 
             var overlayTemplate =
-                '<span id="supersearch-icon-close" class="icon icon-close"></span>' +
+                // Close-Icon: role=button + tabindex=0 + aria-label fuer Keyboard-Bedienung.
+                '<span id="supersearch-icon-close" class="icon icon-close" role="button" tabindex="0" aria-label="Suche schliessen"></span>' +
                 '<div class="result-wrapper">' +
                 '<section class="empty-message">Keine Suchergebnisse gefunden</section>' +
                 '<section class="error-message"></section>' +
@@ -111,12 +118,27 @@ var SuperSearch = (function ($) {
                 '</div>';
 
             var overlayIdAttr = overlaySelector.substr(1);
-            var $overlay = $('<div>').attr('id', overlayIdAttr).addClass('supersearch-overlay').html(overlayTemplate);
+            var $overlay = $('<div>')
+                .attr('id', overlayIdAttr)
+                .addClass('supersearch-overlay')
+                // Accessibility: pragmatische ARIA-Annotation als Dialog.
+                .attr('role', 'dialog')
+                .attr('aria-modal', 'true')
+                .attr('aria-label', 'Globale Suche')
+                .html(overlayTemplate);
 
             $overlay.off('click.SuperSearch', '#supersearch-icon-close');
             $overlay.on('click.SuperSearch', '#supersearch-icon-close', function (event) {
                 event.preventDefault();
                 me.hideOverlay();
+            });
+            // Keyboard-Aktivierung des Close-Icons (Enter/Space).
+            $overlay.off('keydown.SuperSearchClose', '#supersearch-icon-close');
+            $overlay.on('keydown.SuperSearchClose', '#supersearch-icon-close', function (event) {
+                if (event.keyCode === 13 || event.keyCode === 32) {
+                    event.preventDefault();
+                    me.hideOverlay();
+                }
             });
 
             // K4: Delegiertes Click-Binding fuer alle Result-Items.
@@ -130,6 +152,38 @@ var SuperSearch = (function ($) {
                     return;
                 }
                 me.renderItemDetails(item);
+            });
+
+            // Accessibility: Focus-Trap. Tab innerhalb des Overlays zirkulieren
+            // lassen, damit Keyboard-Nutzer nicht ausserhalb landen waehrend
+            // das Overlay als modaler Dialog offen ist. Suchfeld ist
+            // ausserhalb des Overlays und gilt als erstes fokussierbares
+            // Element (vor dem ersten Overlay-Element).
+            $overlay.off('keydown.SuperSearchTrap');
+            $overlay.on('keydown.SuperSearchTrap', function (event) {
+                if (event.key !== 'Tab' && event.keyCode !== 9) {
+                    return;
+                }
+                var $focusable = me.getFocusableElements($overlay);
+                if ($focusable.length === 0) {
+                    return;
+                }
+                var first = $focusable.first()[0];
+                var last = $focusable.last()[0];
+                var active = document.activeElement;
+
+                if (event.shiftKey) {
+                    if (active === first || active === me.storage.$input[0]) {
+                        event.preventDefault();
+                        last.focus();
+                    }
+                } else {
+                    if (active === last) {
+                        event.preventDefault();
+                        // Schleife zurueck zum Such-Eingabefeld (logischer Anfang).
+                        me.storage.$input.trigger('focus');
+                    }
+                }
             });
 
             $overlay.hide();
@@ -823,6 +877,25 @@ var SuperSearch = (function ($) {
             me.hideDetails();
             me.getOverlay().find('section.empty-message').hide();
             me.getOverlay().find('section.error-message').html(errorMessage).show();
+        },
+
+        /**
+         * Liefert fokussierbare Elemente innerhalb des Overlays in DOM-Reihenfolge.
+         *
+         * @param {jQuery} $container
+         *
+         * @return {jQuery}
+         */
+        getFocusableElements: function ($container) {
+            var selector = [
+                'a[href]',
+                'button:not([disabled])',
+                'input:not([disabled]):not([type="hidden"])',
+                'select:not([disabled])',
+                'textarea:not([disabled])',
+                '[tabindex]:not([tabindex="-1"])'
+            ].join(',');
+            return $container.find(selector).filter(':visible');
         },
 
         /**
