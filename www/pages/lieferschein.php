@@ -283,7 +283,8 @@ class Lieferschein extends GenLieferschein
     }
 
     $datum = date('d.m.Y', strtotime($lieferschein['datum']));
-    $detailResult->setTitle(sprintf('Lieferschein %s <small>vom %s</small>', $lieferschein['belegnr'], $datum));
+    $detailResult->setTitle(sprintf('Lieferschein %s', $lieferschein['belegnr']));
+    $detailResult->setSubtitle(sprintf('vom %s', $datum));
     $detailResult->addButton('Lieferschein Details', sprintf('index.php?module=lieferschein&action=edit&id=%s', $lieferschein['id']));
     $detailResult->setMiniDetailUrl(sprintf('index.php?module=lieferschein&action=minidetail&id=%s', $lieferschein['id']));
   }
@@ -317,7 +318,8 @@ class Lieferschein extends GenLieferschein
     }
 
     $datum = date('d.m.Y', strtotime($lieferschein['datum']));
-    $detailResult->setTitle(sprintf('Lieferschein %s <small>vom %s</small>', $lieferschein['belegnr'], $datum));
+    $detailResult->setTitle(sprintf('Lieferschein %s', $lieferschein['belegnr']));
+    $detailResult->setSubtitle(sprintf('vom %s', $datum));
     $detailResult->addButton('Lieferschein Details', sprintf('index.php?module=lieferschein&action=edit&id=%s', $lieferschein['id']));
     $detailResult->setMiniDetailUrl(sprintf('index.php?module=lieferschein&action=minidetail&id=%s', $lieferschein['id']));
   }

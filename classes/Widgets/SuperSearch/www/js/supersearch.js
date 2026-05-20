@@ -507,6 +507,13 @@ var SuperSearch = (function ($) {
             var hasApps = appGroups.length > 0;
             var resultColumnBudget = hasApps ? Math.max(1, maxColumns - 1) : maxColumns;
 
+            // Bei offener Detail-Pane mehr als 3 Spalten cappen — eine 4. Spalte
+            // erzeugt nur Whitespace zwischen Buckets und Detail-Pane.
+            var isDetailOpen = me.getOverlay().hasClass('has-detail');
+            if (isDetailOpen) {
+                resultColumnBudget = Math.min(resultColumnBudget, 3);
+            }
+
             var orderedGroups = leftGroups.concat(middleGroups).concat(otherGroups);
 
             if (orderedGroups.length === 0) {
@@ -630,8 +637,14 @@ var SuperSearch = (function ($) {
             var detail = detailResult.data;
             var $details = me.storage.$details;
 
-            // Überschrift rendern — XSS-Hardening: detail.title als Text rendern.
+            // Überschrift rendern — XSS-Hardening: detail.title und detail.subtitle
+            // werden ueber .text() als reine Textknoten gerendert. Das <small>-Element
+            // wird hier per DOM-Building erzeugt; der Subtitle-Text selbst ist immer
+            // escapeter Plain-Text, niemals HTML.
             var $headline = $('<h1>').text(detail.title);
+            if (detail.subtitle) {
+                $('<small>').text(' ' + detail.subtitle).appendTo($headline);
+            }
             $details.empty().append($headline);
 
             // Attachments (z.B. Buttons) rendern

@@ -9,9 +9,9 @@
 #supersearch-overlay {
 	--ssr-min-col-width: 280px;
 	--ssr-col-gap: 16px;
-	--ssr-detail-min: 320px;
-	--ssr-detail-max: 720px;
-	--ssr-detail-pref: 30vw;
+	--ssr-detail-min: 420px;
+	--ssr-detail-max: 960px;
+	--ssr-detail-pref: 42vw;
 
 	/*
 	 * Initial versteckt: display:none. Beim Oeffnen setzt JS via jQuery .show()
@@ -97,6 +97,14 @@
 }
 #supersearch-overlay.has-detail .detail-wrapper {
     display: block;
+}
+/*
+ * Wenn das Detail-Pane offen ist, den Result-Wrapper aktiv cappen, damit
+ * keine vierte Spalte erzeugt wird, die nur Whitespace neben dem Detail
+ * produziert. Wert: Viewport minus Detail-Maximalbreite minus Overlay-Padding.
+ */
+#supersearch-overlay.has-detail .result-wrapper {
+    max-width: calc(100vw - var(--ssr-detail-max) - 60px);
 }
 
 #supersearch-overlay .search {
