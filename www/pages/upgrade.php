@@ -388,6 +388,11 @@ class upgrade {
                 $this->createRollbackTag($git_root);
             }
 
+            // Engine-Output deterministisch in englischer Locale halten —
+            // die RESULT_*-Konstanten matchen englische git-Strings.
+            putenv('LC_ALL=C');
+            putenv('LANG=C');
+
             $result_code = upgrade_main(
                 directory: $directory,
                 verbose: $cfg['verbose'],
