@@ -370,27 +370,14 @@ var SuperSearch = (function ($) {
         },
 
         /**
-         * Ordnet Suchergebnis-Gruppen dynamisch in Spalten an.
-         *
-         * Strategie:
-         *   - Apps-Gruppen landen immer als letzte Spalte (rechts).
-         *   - Bei breitem Layout (>=3 Result-Spalten) wird die alte Avatarsia-
-         *     Semantik beibehalten: Spalte 0 = offer/order, Spalte 1 =
-         *     deliverynote/invoice, restliche Spalten = uebrige Gruppen
-         *     round-robin verteilt. Leere semantische Spalten werden
-         *     herausgefiltert.
-         *   - Bei schmalem Layout (<3 Result-Spalten) werden alle Gruppen
-         *     round-robin auf einer prioritaetssortierten Liste verteilt.
-         *   - Die Spaltenanzahl wird an die verfuegbare Breite gekoppelt.
+         * Klassifiziert Suchergebnis-Gruppen in vier semantische Buckets.
          *
          * @param {object} searchResults
-         * @param {number} [wrapperWidth] Verfuegbare Breite des Result-Containers in px
-         * @returns {Array}
+         * @returns {{leftGroups: Array, middleGroups: Array, otherGroups: Array, appGroups: Array}}
          */
-        buildResultColumns: function (searchResults, wrapperWidth) {
+        classifyResultGroups: function (searchResults) {
             var leftKeys = ['offer', 'order'];
             var middleKeys = ['deliverynote', 'invoice'];
-
             var leftGroups = [];
             var middleGroups = [];
             var otherGroups = [];
@@ -409,9 +396,55 @@ var SuperSearch = (function ($) {
                 }
             });
 
-            var minColumnWidth = me.readMinColumnWidth() + me.readColumnGap();
+            return {
+                leftGroups: leftGroups,
+                middleGroups: middleGroups,
+                otherGroups: otherGroups,
+                appGroups: appGroups
+            };
+        },
+
+        /**
+         * Ordnet Suchergebnis-Gruppen dynamisch in Spalten an.
+         *
+         * Strategie:
+         *   - Apps-Gruppen landen immer als letzte Spalte (rechts).
+         *   - Bei breitem Layout (>=3 Result-Spalten) wird die alte Avatarsia-
+         *     Semantik beibehalten: Spalte 0 = offer/order, Spalte 1 =
+         *     deliverynote/invoice, restliche Spalten = uebrige Gruppen
+         *     round-robin verteilt. Leere semantische Spalten werden
+         *     herausgefiltert.
+         *   - Bei schmalem Layout (<3 Result-Spalten) werden alle Gruppen
+         *     round-robin auf einer prioritaetssortierten Liste verteilt.
+         *   - Die Spaltenanzahl wird an die verfuegbare Breite gekoppelt.
+         *
+         * @param {object} searchResults
+         * @param {number} [wrapperWidth] Verfuegbare Breite des Result-Containers in px
+         * @returns {Array}
+         */
+        buildResultColumns: function (searchResults, wrapperWidth) {
+            var buckets = me.classifyResultGroups(searchResults);
+            return me.layoutResultColumns(buckets, wrapperWidth);
+        },
+
+        /**
+         * Layout-Engine: nimmt klassifizierte Buckets + verfuegbare Breite
+         * und liefert die fertige Spalten-Struktur.
+         *
+         * @param {{leftGroups: Array, middleGroups: Array, otherGroups: Array, appGroups: Array}} buckets
+         * @param {number} wrapperWidth
+         * @returns {Array}
+         */
+        layoutResultColumns: function (buckets, wrapperWidth) {
+            var leftGroups = buckets.leftGroups;
+            var middleGroups = buckets.middleGroups;
+            var otherGroups = buckets.otherGroups;
+            var appGroups = buckets.appGroups;
+
+            var colGap = me.readColumnGap();
+            var minColumnWidth = me.readMinColumnWidth() + colGap;
             var fallbackWidth = me.config.defaultWrapperWidth;
-            var availableWidth = (wrapperWidth > 0 ? wrapperWidth : fallbackWidth) + me.readColumnGap();
+            var availableWidth = (wrapperWidth > 0 ? wrapperWidth : fallbackWidth) + colGap;
             var maxColumns = Math.max(1, Math.floor(availableWidth / minColumnWidth));
             var hasApps = appGroups.length > 0;
             var resultColumnBudget = hasApps ? Math.max(1, maxColumns - 1) : maxColumns;
