@@ -136,8 +136,6 @@ class upgrade {
         $remote_host_input = trim((string)$this->app->Secure->GetPOST('remote_host'));
         $remote_branch_input = trim((string)$this->app->Secure->GetPOST('remote_branch'));
 
-        $this->app->Tpl->Set('DETAILS_ANZEIGEN', $verbose ? "checked" : "");
-        $this->app->Tpl->Set('DB_DETAILS_ANZEIGEN', $db_verbose ? "checked" : "");
         $this->app->Tpl->Set('ERZWINGEN', $force ? "checked" : "");
 
         include("../upgrade/data/upgrade.php");
@@ -146,8 +144,6 @@ class upgrade {
         $remote_config_file = "../upgrade/data/remote.json";
         upgrade_set_out_file_name($logfile);
 
-        $this->app->Tpl->Set('UPGRADE_VISIBLE', "hidden");
-        $this->app->Tpl->Set('UPGRADE_DB_VISIBLE', "hidden");
         $upgrade_available = false;
         $upgrade_db_available = false;
 
@@ -306,16 +302,12 @@ class upgrade {
 
         $this->app->Tpl->Set('REMOTE_HOST', $this->esc($remote_host));
         $this->app->Tpl->Set('REMOTE_BRANCH', $this->esc($remote_branch));
-        $this->app->Tpl->Set('REMOTE_ORIGINAL_HOST', $this->esc($original_remote_host));
-        $this->app->Tpl->Set('REMOTE_ORIGINAL_BRANCH', $this->esc($original_remote_branch));
         $this->app->Tpl->Set('UPDATE_STATUS', $update_status_text);
         $this->app->Tpl->Set('UPDATE_STATUS_CLASS', $update_status_class);
-        $this->app->Tpl->Set('LOCAL_HASH', $local_hash);
         $this->app->Tpl->Set('LOCAL_HASH_SHORT', $this->esc($local_hash_short));
         $this->app->Tpl->Set('REMOTE_HASH_SHORT', $this->esc($remote_hash_short));
         $this->app->Tpl->Set('LOCAL_COMMIT', $this->esc($git_commit));
         $this->app->Tpl->Set('LOCAL_BRANCH', $this->esc($git_branch));
-        $this->app->Tpl->Set('SHOW_SYNC_REMOTE', "hidden");
         $show_local_branch = ($git_branch !== "" && $remote_branch !== "" && $git_branch === $remote_branch);
         $this->app->Tpl->Set('LOCAL_BRANCH_VISIBLE', $show_local_branch ? "" : "hidden");
 
@@ -548,15 +540,12 @@ class upgrade {
         $this->app->Tpl->Set('STATUS_MESSAGE', $status_message);
         $this->app->Tpl->Set('GUIDANCE_TITLE', $guidance_title);
         $this->app->Tpl->Set('GUIDANCE_MESSAGE', $guidance_message);
-        $this->app->Tpl->Set('LAST_ACTION', $last_action);
-        $this->app->Tpl->Set('LAST_RUN', $last_run);
         $this->app->Tpl->Set('UPGRADE_BUTTON_ACTION', $upgrade_available ? "do_upgrade" : "check_upgrade");
         $this->app->Tpl->Set('UPGRADE_BUTTON_LABEL', $upgrade_available ? "Upgrade starten" : "Upgrades prüfen");
         $this->app->Tpl->Set('UPGRADE_FORCE_VISIBLE', ($upgrade_available || $highlight_force) ? "" : "hidden");
         $this->app->Tpl->Set('FORCE_HIGHLIGHT_CLASS', $highlight_force ? "force-highlight" : "");
         $this->app->Tpl->Set('UPGRADE_DB_BUTTON_ACTION', $upgrade_db_available ? "do_db_upgrade" : "check_db");
         $this->app->Tpl->Set('UPGRADE_DB_BUTTON_LABEL', $upgrade_db_available ? "DB-Upgrade" : "DB prüfen");
-        $this->app->Tpl->Set('UPGRADE_DB_FORCE_VISIBLE', "hidden");
 
         // Rollback-Tags laden. Der OpenXE-Template-Parser kennt nur
         // [VARIABLE]-Platzhalter (kein Smarty-foreach), daher wird das
@@ -586,7 +575,6 @@ class upgrade {
         $this->app->Tpl->Set('ROLLBACK_TAGS_SELECT', $rollback_tags_html);
         $this->app->Tpl->Set('ROLLBACK_VISIBLE', $has_rollback_tags ? "" : "hidden");
 
-        $this->app->Tpl->Set('CURRENT', $this->app->erp->Revision());
         $revision_raw = (string)$this->app->erp->Revision();
         $app_version = trim((string)preg_replace('/\\s*\\([^)]*\\)\\s*$/', '', $revision_raw));
         if ($app_version === '') {
