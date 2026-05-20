@@ -13,6 +13,13 @@
 	--ssr-detail-max: 720px;
 	--ssr-detail-pref: 30vw;
 
+	/*
+	 * Initial versteckt: display:none. Beim Oeffnen setzt JS via jQuery .show()
+	 * den Inline-Style auf display:flex (Layout-Default), das gewuenschte Layout
+	 * ist also Flexbox. Die zweite display-Deklaration weiter unten ist
+	 * Absicht (kein Cosmetic-Fix) — sie definiert den Layout-Default fuer den
+	 * Fall, dass JS .show() ohne expliziten display-Wert aufruft.
+	 */
 	display: none;
 	position: absolute;
 	z-index: 994;
