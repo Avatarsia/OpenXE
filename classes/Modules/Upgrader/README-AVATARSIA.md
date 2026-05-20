@@ -1,0 +1,127 @@
+# Upgrader UI (Avatarsia Fork)
+
+This document describes the modernized upgrader UI shipped in the
+Avatarsia OpenXE fork. It is a drop-in replacement for the upstream
+upgrader page that keeps the upstream upgrade engine untouched but
+gives the operator a richer browser-based workflow.
+
+## Architecture Overview
+
+The Avatarsia upgrader is a thin UI layer on top of the upstream
+upgrade engine. The engine itself (`upgrade/data/upgrade.php` and
+`vendor/mustal/mustal_mysql_upgrade_tool.php`) is intentionally
+left at upstream HEAD; only the page controller and the Smarty
+template are extended. The new UI calls the existing
+`upgrade_main()` function with named arguments, which keeps the
+fork binary compatible with upstream backend bug fixes.
+
+## What is New Compared to Upstream
+
+- Responsive CSS layout with status banner, stepper and embedded
+  action cards
+- Rollback via git tags: before every upgrade run the controller
+  creates a `pre-upgrade-YYYY-MM-DD-HH-MM-SS` tag in the local
+  working tree and stores it in the session. A cleanup pass keeps
+  only the 10 newest pre-upgrade tags. The rollback action is
+  exposed in the UI and validates the supplied tag against a
+  strict `^pre-upgrade-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$`
+  pattern. The same path runs for `do_db_upgrade` so a code-level
+  rollback point exists even when only the DB action was triggered
+- Log download: `?action=list&ajax=download_log` streams the raw
+  upgrade log as `upgrade_log_YYYY-MM-DD_HH-MM.txt`. The endpoint
+  refuses unauthenticated callers with HTTP 403 — only admin users
+  pass the guard
+- Local vs upgrade-source hash comparison: the page runs
+  `git ls-remote` against the configured upgrade source and shows
+  whether the local checkout is aligned with the configured
+  remote branch
+- One-click reset to upgrade source and configurable remote
+  host/branch via `upgrade/data/remote.json`
+
+## File Layout
+
+The fork-specific files of this module are:
+
+- `www/pages/upgrade.php` (ca. 600 lines)
+  Page controller. Includes the upstream engine via
+  `include("../upgrade/data/upgrade.php")` and dispatches the
+  AJAX endpoint, the rollback action and the upgrade actions.
+- `www/pages/content/upgrade.tpl` (ca. 130 lines)
+  Smarty template for the upgrader page. References the external
+  CSS and JS assets below.
+- `www/css/upgrade.css`
+  Page styles. Follows the OpenXE convention for global pages
+  (other pages link `./css/<page>.css`).
+- `www/js/upgrade.js`
+  Page scripts (help-toggle, log-search).
+- `upgrader-ui-changelog.md`
+  Short changelog kept inside the source branch for traceability.
+
+The following files are part of the upstream engine and are NOT
+overridden by this module:
+
+- `upgrade/data/upgrade.php`
+- `upgrade/data/db_schema.json`
+- `vendor/mustal/mustal_mysql_upgrade_tool.php`
+
+## Non-Standard: No Bootstrap.php
+
+Other Avatarsia modules ship a `Bootstrap.php` that registers
+services in the DI container. The upgrader is deliberately a pure
+page feature: it has no domain services, no repositories and no
+DTO layer. The integration point is `www/pages/upgrade.php`,
+which is loaded by the upstream page router as soon as the file
+exists. There is therefore nothing to bootstrap.
+
+The upgrader also does not use `DatabaseService` or named
+prepared statements. All side effects go through `git`,
+`shell_exec()` and the existing upgrade engine. The page only
+relies on the standard OpenXE controller surface
+(`$this->app->Tpl->Set()`, `$this->app->Secure->Get…()`,
+`$this->app->User->GetID()` / `GetType()`).
+
+## Authorization
+
+The page itself is reached through the regular OpenXE module
+router and inherits its login check. In addition the controller
+guards the AJAX download endpoint via `isUpgraderAuthorized()`,
+which requires both a logged-in user (`User->GetID() > 0`) and
+the `admin` user type. Non-admin callers get HTTP 403 before any
+log content is emitted.
+
+## Rollback Mechanism
+
+Rollback is implemented as plain git tags, not as database
+snapshots:
+
+1. Before each upgrade action (`do_upgrade` or `do_db_upgrade`)
+   the controller calls `createRollbackTag()`, which runs
+   `git -C <git_root> tag pre-upgrade-<timestamp>` via `exec()`
+   so the exit code can be checked. On success the tag name is
+   written into `$_SESSION['last_rollback_tag']`.
+2. After successful tag creation the controller lists all
+   `pre-upgrade-*` tags sorted by `creatordate` and removes
+   everything beyond the 10 newest entries.
+3. The UI exposes the recent tags. When the operator triggers
+   a rollback the supplied tag is matched against
+   `^pre-upgrade-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$` to make
+   sure no arbitrary git ref can be checked out.
+4. Database state is NOT rolled back; only the working tree is
+   reverted. Operators must restore database backups manually
+   if a schema migration ran during the upgrade. A tag is still
+   created for the DB-only action so a subsequent manual
+   `git reset --hard <tag>` can pin the code back to the state
+   before the DB upgrade.
+
+## Conflict Risk
+
+Medium. Upstream actively maintains both `upgrade/data/upgrade.php`
+and `www/pages/upgrade.php`. The engine file is left untouched, so
+upstream changes there merge cleanly. The page controller and the
+template are diverged heavily; expect manual conflict resolution
+when pulling upstream changes that touch the upgrader page.
+
+## License
+
+See the OpenXE main license. This module follows the upstream
+project license and copyright headers.
