@@ -15,7 +15,10 @@ var SuperSearch = (function ($) {
             $lastUpdate: null,
             debounceBuffer: null,
             hasResults: false,
-            isOpen: false
+            isOpen: false,
+            // K3: aktuell laufender Such-XHR, damit veraltete Antworten
+            // beim Folge-Tippen abgebrochen werden koennen.
+            currentSearchXhr: null
         },
 
         init: function () {
@@ -181,7 +184,14 @@ var SuperSearch = (function ($) {
                 searchQuery = '';
             }
 
-            return $.ajax({
+            // K3: vorherigen XHR abbrechen, damit eine alte Antwort eine
+            // neuere nicht ueberschreibt (Race-Condition beim Tippen).
+            if (me.storage.currentSearchXhr !== null &&
+                typeof me.storage.currentSearchXhr.abort === 'function') {
+                me.storage.currentSearchXhr.abort();
+            }
+
+            var xhr = $.ajax({
                 url: 'index.php?module=supersearch&action=ajax&cmd=search',
                 method: 'post',
                 dataType: 'json',
@@ -189,6 +199,11 @@ var SuperSearch = (function ($) {
                     search_query: searchQuery
                 },
                 error: function (jqXHR, textStatus, errorThrown) {
+                    // Vom Folge-Request abgebrochen — kein Fehler-Alert zeigen.
+                    if (textStatus === 'abort') {
+                        return;
+                    }
+
                     var errorMessage = 'SuperSearch - Unbekannter Fehler #31: ' + errorThrown;
 
                     // PHP-Skript hat Fehler geliefert (z.b. 404)
@@ -212,6 +227,15 @@ var SuperSearch = (function ($) {
                     alert(errorMessage);
                 }
             });
+
+            me.storage.currentSearchXhr = xhr;
+            xhr.always(function () {
+                if (me.storage.currentSearchXhr === xhr) {
+                    me.storage.currentSearchXhr = null;
+                }
+            });
+
+            return xhr;
         },
 
         /**
