@@ -19,25 +19,18 @@ fork binary compatible with upstream backend bug fixes.
 
 - Responsive CSS layout with status banner, stepper and embedded
   action cards
-- OpenXE logging integration via `app->erp->LogFile()` instead of
-  pure echo to stdout, so upgrade events end up in the standard
-  application log channel `upgrade`
-- Lock-status display via `upgrade/data/.in_progress.flag`. The
-  page reads the flag (and decoded JSON metadata about user and
-  timestamp) so multiple admins can see whether someone else is
-  currently running an upgrade
 - Rollback via git tags: before every upgrade run the controller
   creates a `pre-upgrade-YYYY-MM-DD-HH-MM-SS` tag in the local
   working tree and stores it in the session. A cleanup pass keeps
   only the 10 newest pre-upgrade tags. The rollback action is
   exposed in the UI and validates the supplied tag against a
   strict `^pre-upgrade-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$`
-  pattern
-- Live AJAX polling: `?action=list&ajax=get_log_status` returns
-  the latest 100 log lines plus lock metadata as JSON, so the
-  browser can stream upgrade output without a full page reload
+  pattern. The same path runs for `do_db_upgrade` so a code-level
+  rollback point exists even when only the DB action was triggered
 - Log download: `?action=list&ajax=download_log` streams the raw
-  upgrade log as `upgrade_log_YYYY-MM-DD_HH-MM.txt`
+  upgrade log as `upgrade_log_YYYY-MM-DD_HH-MM.txt`. The endpoint
+  refuses unauthenticated callers with HTTP 403 — only admin users
+  pass the guard
 - Local vs upgrade-source hash comparison: the page runs
   `git ls-remote` against the configured upgrade source and shows
   whether the local checkout is aligned with the configured
@@ -49,13 +42,18 @@ fork binary compatible with upstream backend bug fixes.
 
 The fork-specific files of this module are:
 
-- `www/pages/upgrade.php` (627 lines)
+- `www/pages/upgrade.php` (ca. 600 lines)
   Page controller. Includes the upstream engine via
   `include("../upgrade/data/upgrade.php")` and dispatches the
-  AJAX endpoints, the rollback action and the upgrade actions.
-- `www/pages/content/upgrade.tpl` (235 lines)
-  Smarty template for the upgrader page. Defines the layout and
-  the JavaScript that polls the AJAX endpoint.
+  AJAX endpoint, the rollback action and the upgrade actions.
+- `www/pages/content/upgrade.tpl` (ca. 130 lines)
+  Smarty template for the upgrader page. References the external
+  CSS and JS assets below.
+- `www/css/upgrade.css`
+  Page styles. Follows the OpenXE convention for global pages
+  (other pages link `./css/<page>.css`).
+- `www/js/upgrade.js`
+  Page scripts (help-toggle, log-search).
 - `upgrader-ui-changelog.md`
   Short changelog kept inside the source branch for traceability.
 
@@ -77,30 +75,43 @@ exists. There is therefore nothing to bootstrap.
 
 The upgrader also does not use `DatabaseService` or named
 prepared statements. All side effects go through `git`,
-`shell_exec()` and the existing upgrade engine. The page does
-read `$this->app->erp->LogFile()` and `$this->app->Tpl->Set()`,
-which is the standard OpenXE controller surface.
+`shell_exec()` and the existing upgrade engine. The page only
+relies on the standard OpenXE controller surface
+(`$this->app->Tpl->Set()`, `$this->app->Secure->Get…()`,
+`$this->app->User->GetID()` / `GetType()`).
+
+## Authorization
+
+The page itself is reached through the regular OpenXE module
+router and inherits its login check. In addition the controller
+guards the AJAX download endpoint via `isUpgraderAuthorized()`,
+which requires both a logged-in user (`User->GetID() > 0`) and
+the `admin` user type. Non-admin callers get HTTP 403 before any
+log content is emitted.
 
 ## Rollback Mechanism
 
 Rollback is implemented as plain git tags, not as database
 snapshots:
 
-1. Before each upgrade action the controller runs
-   `git -C <git_root> tag pre-upgrade-<timestamp>` and writes
-   the tag name into `$_SESSION['last_rollback_tag']`.
-2. The tag creation is done via `exec()` so the exit code can
-   be checked. Failures are written to `app->erp->LogFile()`.
-3. After successful tag creation the controller lists all
+1. Before each upgrade action (`do_upgrade` or `do_db_upgrade`)
+   the controller calls `createRollbackTag()`, which runs
+   `git -C <git_root> tag pre-upgrade-<timestamp>` via `exec()`
+   so the exit code can be checked. On success the tag name is
+   written into `$_SESSION['last_rollback_tag']`.
+2. After successful tag creation the controller lists all
    `pre-upgrade-*` tags sorted by `creatordate` and removes
    everything beyond the 10 newest entries.
-4. The UI exposes the recent tags. When the operator triggers
+3. The UI exposes the recent tags. When the operator triggers
    a rollback the supplied tag is matched against
    `^pre-upgrade-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$` to make
    sure no arbitrary git ref can be checked out.
-5. Database state is NOT rolled back; only the working tree is
+4. Database state is NOT rolled back; only the working tree is
    reverted. Operators must restore database backups manually
-   if a schema migration ran during the upgrade.
+   if a schema migration ran during the upgrade. A tag is still
+   created for the DB-only action so a subsequent manual
+   `git reset --hard <tag>` can pin the code back to the state
+   before the DB upgrade.
 
 ## Conflict Risk
 
