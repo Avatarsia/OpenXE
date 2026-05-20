@@ -296,7 +296,9 @@ var SuperSearch = (function ($) {
 
             var $resultWrapper = $('<div class="result-group">');
             var $resultList = $('<ul class="result-list">');
-            var $listHead = $('<li class="result-head">').html(groupTitle);
+            // XSS-Hardening: groupTitle stammt aus Server-Konfiguration (ResultGroup),
+            // wird sicherheitshalber als Text gerendert.
+            var $listHead = $('<li class="result-head">').text(groupTitle);
 
             $resultList.append($listHead);
             items.forEach(function (item) {
@@ -420,26 +422,29 @@ var SuperSearch = (function ($) {
                 typeof item.additionalInfos === 'object' &&
                 item.additionalInfos !== null;
 
-            var mainTitle = '<span class="title-main">' + item.title + '</span>';
-            var subTitle = hasSubtitle ? '<span class="title-sub">' + item.subtitle + '</span>' : '';
-            var titleString = '<span class="title">' + mainTitle + subTitle + '</span>';
-
-            if (hasAdditionalInfos) {
-                titleString += '<span class="caption">';
-                $.each(item.additionalInfos, function (index, additionalInfo) {
-                    titleString += '<span class="additional">' + additionalInfo + '</span>';
-                });
-                titleString += '</span>';
+            // XSS-Hardening: title, subtitle und additionalInfos werden ausschliesslich
+            // ueber DOM-Building mit .text() gerendert. KEIN String-Konkat mit .html().
+            var $title = $('<span>').addClass('title');
+            $('<span>').addClass('title-main').text(item.title).appendTo($title);
+            if (hasSubtitle) {
+                $('<span>').addClass('title-sub').text(item.subtitle).appendTo($title);
             }
 
             var $listItem = $('<li>').addClass('result-item');
-            var $itemLink = $('<a>').attr('href', item.link).html(titleString);
-            $itemLink.appendTo($listItem);
+            var $itemLink = $('<a>').attr('href', item.link);
+            $itemLink.append($title);
 
-            $itemLink.on('click', function (e) {
-                e.preventDefault();
-                me.renderItemDetails(item);
-            });
+            if (hasAdditionalInfos) {
+                var $caption = $('<span>').addClass('caption');
+                $.each(item.additionalInfos, function (index, additionalInfo) {
+                    $('<span>').addClass('additional').text(additionalInfo).appendTo($caption);
+                });
+                $itemLink.append($caption);
+            }
+
+            $itemLink.appendTo($listItem);
+            // Item-Daten ans Element haengen fuer delegierten Click-Handler in createOverlay().
+            $listItem.data('supersearchItem', item);
 
             return $listItem;
         },
@@ -484,9 +489,9 @@ var SuperSearch = (function ($) {
             var detail = detailResult.data;
             var $details = me.storage.$details;
 
-            // Überschrift rendern
-            var $headline = $('<h1>').html(detail.title);
-            $details.html('').append($headline);
+            // Überschrift rendern — XSS-Hardening: detail.title als Text rendern.
+            var $headline = $('<h1>').text(detail.title);
+            $details.empty().append($headline);
 
             // Attachments (z.B. Buttons) rendern
             if (detail.hasOwnProperty('attachments')) {
@@ -616,6 +621,12 @@ var SuperSearch = (function ($) {
          * @param {Object} data
          *
          * @return {jQuery} jQuery-Element
+         *
+         * Hinweis: Attachment-Typ "content_static" wird vom Server bewusst als
+         * vorgerendertes HTML-Snippet geliefert (z.B. Tabellen, Listen). Dieser
+         * Pfad gibt das Markup absichtlich roh via .html() aus. Der Server MUSS
+         * sicherstellen, dass dieses Snippet keine user-kontrollierten Inhalte
+         * enthaelt. Alle anderen Render-Pfade verwenden .text() (XSS-Hardening).
          */
         generateDetailAttachmentTypeStaticContent: function (data) {
             return  $('<p>').html(data.content);
@@ -633,6 +644,8 @@ var SuperSearch = (function ($) {
                 me.fetchMiniDetailContent(data.url, data.params)
                   .then(
                       function (htmlContent) {
+                          // Mini-Detail-URL liefert per Definition vorgerendertes
+                          // HTML vom Server (analog content_static). Bewusst .html().
                           $dynamicContent.html(htmlContent);
                           me.storage.$details.append($dynamicContent);
                       },
