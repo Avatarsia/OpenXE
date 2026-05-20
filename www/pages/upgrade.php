@@ -207,6 +207,31 @@ class upgrade {
             $status_message = "Konfiguration der Upgrade-Quelle konnte nicht geladen werden.";
         }
 
+        // Concurrency-Lock: verhindert parallele schreibende Submits
+        // (Doppel-Klick, zweiter Browser-Tab). flock() ist non-blocking —
+        // ein konkurrierender Request bekommt sofort eine UI-Meldung
+        // statt zu hängen. Auth/AJAX-Pfade laufen bereits oben via exit
+        // raus, danach gibt es kein exit/die mehr in dieser Funktion,
+        // daher reicht ein einfaches Release am Ende (kein try/finally).
+        $writing_submits = ['do_upgrade', 'do_db_upgrade', 'do_git_upgrade', 'rollback_to_tag', 'save_remote', 'reset_remote_origin'];
+        $needs_lock = in_array($submit, $writing_submits, true);
+        $lock_handle = null;
+        if ($needs_lock && $git_root !== "") {
+            $lock_file = $git_root.'/upgrade/data/.upgrader.lock';
+            $lock_handle = fopen($lock_file, 'c');
+            if ($lock_handle === false || !flock($lock_handle, LOCK_EX | LOCK_NB)) {
+                if ($lock_handle !== false) {
+                    fclose($lock_handle);
+                }
+                $lock_handle = null;
+                $status_headline = "Anderer Vorgang aktiv";
+                $status_level = "warning";
+                $status_message = "Anderer Upgrade-Vorgang läuft gerade. Bitte warten und Seite neu laden.";
+                $last_action = "Abgebrochen (Lock belegt)";
+                $submit = null; // verhindert Submit-Dispatch unten
+            }
+        }
+
         if ($submit === 'save_remote') {
             if ($remote_host_input === '') {
                 $remote_errors[] = "Git-Remote darf nicht leer sein.";
@@ -619,6 +644,12 @@ class upgrade {
         // Zeilenumbrüche — kein nl2br nötig, damit auch das JS-Filter
         // (textContent-basiert) konsistent bleibt.
         $this->app->Tpl->Set('OUTPUT_FROM_CLI', $this->esc($result));
+
+        if ($lock_handle !== null) {
+            flock($lock_handle, LOCK_UN);
+            fclose($lock_handle);
+        }
+
         $this->app->Tpl->Parse('PAGE', "upgrade.tpl");
     }
 
