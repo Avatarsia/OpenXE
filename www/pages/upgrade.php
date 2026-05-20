@@ -136,9 +136,9 @@ class upgrade {
         $remote_host_input = trim((string)$this->app->Secure->GetPOST('remote_host'));
         $remote_branch_input = trim((string)$this->app->Secure->GetPOST('remote_branch'));
 
-      	$this->app->Tpl->Set('DETAILS_ANZEIGEN', $verbose?"checked":"");
-      	$this->app->Tpl->Set('DB_DETAILS_ANZEIGEN', $db_verbose?"checked":"");
-        $this->app->Tpl->Set('ERZWINGEN', $force?"checked":"");
+        $this->app->Tpl->Set('DETAILS_ANZEIGEN', $verbose ? "checked" : "");
+        $this->app->Tpl->Set('DB_DETAILS_ANZEIGEN', $db_verbose ? "checked" : "");
+        $this->app->Tpl->Set('ERZWINGEN', $force ? "checked" : "");
 
         include("../upgrade/data/upgrade.php");
 
