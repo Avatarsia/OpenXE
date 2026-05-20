@@ -1,0 +1,298 @@
+name: Build Production
+
+# Manual rebuild of the production branch from upstream/master plus
+# all integration branches listed in .github/integration-branches.txt.
+#
+# Trigger via:  gh workflow run build-production.yml --repo Avatarsia/OpenXE
+#
+# Strategy: three passes, all-or-nothing.
+#   Pass 1 - isolated merge test against upstream/master for each branch
+#   Pass 2 - full integration merge in manifest order
+#   Pass 3 - PHP lint + payload dump test
+#
+# All three passes run to completion even on failure, so a single failing
+# run reports ALL issues (not just the first one). Only a fully green run
+# force-pushes to origin/production.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: build-production
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  build:
+    name: Build and test production
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout production
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: production
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          tools: none
+          coverage: none
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote and fetch all refs
+        run: |
+          git remote add upstream https://github.com/openxe-org/openxe.git
+          git fetch upstream --no-tags master
+          git fetch origin --no-tags
+
+      - name: Load integration branch manifest
+        id: manifest
+        run: |
+          if [ ! -f .github/integration-branches.txt ]; then
+            echo "::error::Manifest .github/integration-branches.txt not found on production"
+            exit 1
+          fi
+          BRANCHES=$(grep -vE '^\s*(#|$)' .github/integration-branches.txt)
+          if [ -z "$BRANCHES" ]; then
+            echo "::error::Manifest contains no branches"
+            exit 1
+          fi
+          echo "Loaded integration branches:"
+          echo "$BRANCHES"
+          {
+            echo "branches<<EOF"
+            echo "$BRANCHES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Pass 1 - isolated merge tests
+        id: pass1
+        continue-on-error: true
+        run: |
+          set +e
+          CONFLICTS=""
+
+          while IFS= read -r BRANCH; do
+            [ -z "$BRANCH" ] && continue
+            echo "::group::Pass 1 - testing $BRANCH in isolation"
+
+            git checkout -q -B integration-test upstream/master
+
+            if ! git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+              echo "::warning::Branch origin/$BRANCH does not exist on remote"
+              CONFLICTS="${CONFLICTS}|${BRANCH}:BRANCH_NOT_FOUND"
+              echo "::endgroup::"
+              continue
+            fi
+
+            if git merge --no-ff --no-commit "origin/$BRANCH" >/dev/null 2>&1; then
+              echo "OK  $BRANCH merges cleanly against upstream/master"
+              git reset --hard upstream/master >/dev/null 2>&1
+            else
+              CONFLICT_FILES=$(git diff --name-only --diff-filter=U | tr '\n' ',' | sed 's/,$//')
+              if [ -z "$CONFLICT_FILES" ]; then
+                CONFLICT_FILES="merge_failed_without_file_list"
+              fi
+              echo "FAIL  $BRANCH has conflicts in: $CONFLICT_FILES"
+              CONFLICTS="${CONFLICTS}|${BRANCH}:${CONFLICT_FILES}"
+              git merge --abort 2>/dev/null || git reset --hard upstream/master >/dev/null 2>&1
+            fi
+
+            echo "::endgroup::"
+          done <<< "${{ steps.manifest.outputs.branches }}"
+
+          if [ -n "$CONFLICTS" ]; then
+            echo "Pass 1 found conflicts"
+          else
+            echo "Pass 1 clean - all branches merge against upstream/master"
+          fi
+          echo "conflicts=${CONFLICTS}" >> "$GITHUB_OUTPUT"
+
+      - name: Pass 2 - full integration build
+        id: pass2
+        continue-on-error: true
+        run: |
+          set +e
+
+          git checkout -q -B production-candidate upstream/master
+
+          FAILED=""
+          while IFS= read -r BRANCH; do
+            [ -z "$BRANCH" ] && continue
+            echo "::group::Pass 2 - integrating $BRANCH"
+
+            if ! git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
+              echo "::warning::Skipping $BRANCH (not on remote, already reported in Pass 1)"
+              echo "::endgroup::"
+              continue
+            fi
+
+            if git merge --no-ff -m "integrate: $BRANCH" "origin/$BRANCH" >/dev/null 2>&1; then
+              echo "OK  merged $BRANCH"
+            else
+              CONFLICT_FILES=$(git diff --name-only --diff-filter=U | tr '\n' ',' | sed 's/,$//')
+              if [ -z "$CONFLICT_FILES" ]; then
+                CONFLICT_FILES="merge_failed_without_file_list"
+              fi
+              echo "FAIL  cross-feature conflict on $BRANCH: $CONFLICT_FILES"
+              FAILED="${FAILED}|${BRANCH}:${CONFLICT_FILES}"
+              git merge --abort 2>/dev/null
+            fi
+
+            echo "::endgroup::"
+          done <<< "${{ steps.manifest.outputs.branches }}"
+
+          if [ -n "$FAILED" ]; then
+            echo "Pass 2 found conflicts"
+          else
+            echo "Pass 2 clean - full integration successful"
+          fi
+          echo "failed=${FAILED}" >> "$GITHUB_OUTPUT"
+
+      - name: Pass 3 - lint and tests
+        id: pass3
+        continue-on-error: true
+        if: steps.pass2.outputs.failed == ''
+        run: |
+          set +e
+
+          LINT_ERRORS=""
+          TEST_FAILED=""
+
+          echo "::group::PHP lint"
+          while IFS= read -r FILE; do
+            if ! php -l "$FILE" >/dev/null 2>&1; then
+              echo "FAIL  $FILE"
+              LINT_ERRORS="${LINT_ERRORS} ${FILE}"
+            fi
+          done < <(find classes/Modules -name "*.php" -type f 2>/dev/null)
+          echo "::endgroup::"
+
+          if [ -f tests/lexware_payload_dump.php ]; then
+            echo "::group::Lexware payload dump test"
+            if php tests/lexware_payload_dump.php > /tmp/payload-out 2>&1; then
+              tail -5 /tmp/payload-out
+              echo "Payload test OK"
+            else
+              echo "FAIL  payload test"
+              cat /tmp/payload-out
+              TEST_FAILED=$(tail -30 /tmp/payload-out)
+            fi
+            echo "::endgroup::"
+          fi
+
+          echo "lint_errors=${LINT_ERRORS}" >> "$GITHUB_OUTPUT"
+          {
+            echo "test_output<<EOF"
+            echo "$TEST_FAILED"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate overall status
+        id: status
+        run: |
+          OK=true
+          REASONS=""
+          if [ -n "${{ steps.pass1.outputs.conflicts }}" ]; then
+            OK=false
+            REASONS="${REASONS}pass1 "
+          fi
+          if [ -n "${{ steps.pass2.outputs.failed }}" ]; then
+            OK=false
+            REASONS="${REASONS}pass2 "
+          fi
+          if [ -n "${{ steps.pass3.outputs.lint_errors }}" ]; then
+            OK=false
+            REASONS="${REASONS}lint "
+          fi
+          if [ -n "${{ steps.pass3.outputs.test_output }}" ]; then
+            OK=false
+            REASONS="${REASONS}test "
+          fi
+          echo "ok=${OK}" >> "$GITHUB_OUTPUT"
+          echo "reasons=${REASONS}" >> "$GITHUB_OUTPUT"
+          echo "Overall status: OK=${OK} reasons=${REASONS}"
+
+      - name: Push production on success
+        if: steps.status.outputs.ok == 'true'
+        run: |
+          git checkout production
+          git reset --hard production-candidate
+          git push --force-with-lease origin production
+          echo "production updated from production-candidate"
+
+      - name: Create issue on failure
+        if: steps.status.outputs.ok == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pass1 = `${{ steps.pass1.outputs.conflicts }}`;
+            const pass2 = `${{ steps.pass2.outputs.failed }}`;
+            const lint = `${{ steps.pass3.outputs.lint_errors }}`;
+            const test = `${{ steps.pass3.outputs.test_output }}`;
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const today = new Date().toISOString().slice(0, 10);
+
+            let body = `# Production build failed\n\n`;
+            body += `**Run**: ${runUrl}\n`;
+            body += `**Trigger**: ${context.eventName}\n\n`;
+
+            const renderConflicts = (title, raw) => {
+              if (!raw) return '';
+              let section = `## ${title}\n\n`;
+              raw.split('|').filter(x => x).forEach(entry => {
+                const idx = entry.indexOf(':');
+                const branch = entry.slice(0, idx);
+                const files = entry.slice(idx + 1);
+                section += `- **\`${branch}\`**: ${files.split(',').map(f => `\`${f}\``).join(', ')}\n`;
+              });
+              return section + '\n';
+            };
+
+            body += renderConflicts('Pass 1 - isolated merge conflicts against upstream/master', pass1);
+            body += renderConflicts('Pass 2 - cross-feature integration conflicts', pass2);
+
+            if (lint && lint.trim()) {
+              body += `## Pass 3 - PHP lint errors\n\n`;
+              lint.trim().split(/\s+/).forEach(f => {
+                if (f) body += `- \`${f}\`\n`;
+              });
+              body += '\n';
+            }
+
+            if (test && test.trim()) {
+              body += `## Pass 3 - payload dump test failure\n\n`;
+              body += '```\n' + test.trim() + '\n```\n\n';
+            }
+
+            body += `## Next steps\n\n`;
+            body += `1. Check out the failing feature branch(es) locally\n`;
+            body += `2. Rebase on \`upstream/master\` and resolve conflicts\n`;
+            body += `3. Push the fixed branch\n`;
+            body += `4. Either wait for the next nightly run or trigger the workflow manually via Actions -> Build Production -> Run workflow\n\n`;
+            body += `The \`production\` branch was NOT updated and still holds the last known-good state.\n`;
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Production build failed - ${today}`,
+              body: body,
+              labels: ['ci', 'production-build']
+            });
+
+      - name: Fail workflow on any error
+        if: steps.status.outputs.ok == 'false'
+        run: |
+          echo "::error::Production build failed in: ${{ steps.status.outputs.reasons }}"
+          exit 1
