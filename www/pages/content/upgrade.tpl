@@ -76,7 +76,6 @@ button.action-btn.btn-rollback {background:#d89216 !important;background-image:n
 button.action-btn.btn-rollback:hover {background:#b87810 !important;}
 .rollback-card {border:2px solid #d89216 !important;background:#fffaf2;}
 .rollback-card legend {color:#8a4b0f;}
-.upgrade-lock {background:#fff4e5;border:1px solid #d89216;border-radius:4px;padding:10px 12px;margin-bottom:10px;color:#8a4b0f;font-size:13px;}
 @media (max-width: 980px) {
     .top-row {grid-template-columns:1fr;}
     .compare-row {grid-template-columns:1fr;}
@@ -205,9 +204,6 @@ button.action-btn.btn-rollback:hover {background:#b87810 !important;}
                         <input type="text" id="log-search" class="log-search" placeholder="Log durchsuchen…" />
                         <a href="?module=upgrade&action=list&ajax=download_log" class="log-download" download>📥 Log herunterladen</a>
                     </div>
-                    <div id="upgrade-lock-status" class="upgrade-lock" style="display:none;">
-                        <strong>⚠️ Upgrade läuft gerade:</strong> Gestartet von <span id="lock-user">-</span> um <span id="lock-time">-</span>
-                    </div>
                     <div class="log-box" id="log-box">[OUTPUT_FROM_CLI]</div>
                 </div>
             </div>
@@ -227,76 +223,27 @@ function toggleUpgradeHelp() {
 (function() {
     var logBox = document.getElementById('log-box');
     var logSearch = document.getElementById('log-search');
-    var lockStatus = document.getElementById('upgrade-lock-status');
-    var lockUser = document.getElementById('lock-user');
-    var lockTime = document.getElementById('lock-time');
-    var pollingInterval = null;
-    var lastModified = 0;
-    var allLogLines = [];
+    if (!logBox || !logSearch) {
+        return;
+    }
+    // Initial-Snapshot des Logs übernehmen; die Anzeige wird nicht
+    // gepollt — ein Reload (oder der Refresh-Button im Banner) liefert
+    // den aktuellen Stand.
+    var allLogLines = (logBox.textContent || '').split('\n');
 
-    // Log-Search Funktionalität
-    if (logSearch) {
-        logSearch.addEventListener('input', function() {
-            var searchTerm = this.value.toLowerCase();
-            if (searchTerm === '') {
-                logBox.innerHTML = allLogLines.join('<br>');
-            } else {
-                var filtered = allLogLines.filter(function(line) {
-                    return line.toLowerCase().indexOf(searchTerm) !== -1;
-                });
-                logBox.innerHTML = filtered.length > 0 ? filtered.join('<br>') : '<span style="color:#999;">Keine Treffer</span>';
-            }
+    logSearch.addEventListener('input', function() {
+        var searchTerm = this.value.toLowerCase();
+        if (searchTerm === '') {
+            logBox.textContent = allLogLines.join('\n');
+            return;
+        }
+        var filtered = allLogLines.filter(function(line) {
+            return line.toLowerCase().indexOf(searchTerm) !== -1;
         });
-    }
-
-    // AJAX-Polling-Funktion
-    function pollLogStatus() {
-        fetch('?module=upgrade&action=list&ajax=get_log_status')
-            .then(function(response) { return response.json(); })
-            .then(function(data) {
-                if (data.success) {
-                    // Update Log wenn geändert
-                    if (data.last_modified > lastModified) {
-                        lastModified = data.last_modified;
-                        allLogLines = data.log_lines;
-
-                        // Nur updaten wenn kein Search aktiv
-                        if (!logSearch || logSearch.value === '') {
-                            logBox.innerHTML = allLogLines.join('<br>');
-                            // Auto-scroll zum Ende
-                            logBox.scrollTop = logBox.scrollHeight;
-                        }
-                    }
-
-                    // Lock-Status anzeigen
-                    if (data.is_locked && data.lock_info) {
-                        lockUser.textContent = data.lock_info.user;
-                        lockTime.textContent = data.lock_info.timestamp;
-                        lockStatus.style.display = 'block';
-                    } else {
-                        lockStatus.style.display = 'none';
-                        // Upgrade fertig - Polling stoppen
-                        if (pollingInterval) {
-                            clearInterval(pollingInterval);
-                            pollingInterval = null;
-                        }
-                    }
-                }
-            })
-            .catch(function(err) {
-                console.error('Log polling failed:', err);
-            });
-    }
-
-    // Starte Polling wenn Seite geladen wird
-    // Prüfe initial, dann alle 2 Sekunden
-    pollLogStatus();
-    pollingInterval = setInterval(pollLogStatus, 2000);
-
-    // Cleanup beim Verlassen
-    window.addEventListener('beforeunload', function() {
-        if (pollingInterval) {
-            clearInterval(pollingInterval);
+        if (filtered.length > 0) {
+            logBox.textContent = filtered.join('\n');
+        } else {
+            logBox.textContent = 'Keine Treffer';
         }
     });
 })();
