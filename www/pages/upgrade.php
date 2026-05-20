@@ -23,47 +23,31 @@ class upgrade {
         /* Fill out manually later */
     }
 
+    /**
+     * Berechtigungs-Guard für Upgrader-Endpoints (UI und AJAX).
+     * Der Upgrader führt git-Operationen und DB-Migrationen aus —
+     * daher ist Admin-Login Voraussetzung.
+     */
+    private function isUpgraderAuthorized(): bool
+    {
+        if (empty($this->app->User) || (int)$this->app->User->GetID() <= 0) {
+            return false;
+        }
+        return $this->app->User->GetType() === 'admin';
+    }
+
     function upgrade_overview() {
 
-        // AJAX-Endpoints für Live-Updates
+        // AJAX-Endpoints für Log-Download. Vor jeder Ausgabe wird die
+        // Berechtigung geprüft: nur eingeloggte Admin-User dürfen den
+        // Upgrader und seinen Log einsehen.
         $ajax_action = $this->app->Secure->GetGET('ajax');
 
-        if ($ajax_action === 'get_log_status') {
-            $logfile = "../upgrade/data/upgrade.log";
-            $lockfile = "../upgrade/data/.in_progress.flag";
-
-            $log_content = "";
-            $log_lines = [];
-            if (file_exists($logfile)) {
-                $log_content = file_get_contents($logfile);
-                $log_lines = explode("\n", $log_content);
-                $log_lines = array_slice($log_lines, -100); // Letzte 100 Zeilen
-            }
-
-            $is_locked = file_exists($lockfile);
-            $lock_info = [];
-            if ($is_locked) {
-                $lock_data = @json_decode(file_get_contents($lockfile), true);
-                $lock_info = [
-                    'user' => $lock_data['user'] ?? 'unknown',
-                    'timestamp' => $lock_data['timestamp'] ?? 'unknown',
-                    'age' => file_exists($lockfile) ? (time() - filemtime($lockfile)) : 0
-                ];
-            }
-
-            header('Content-Type: application/json');
-            echo json_encode([
-                'success' => true,
-                'log_lines' => $log_lines,
-                'log_length' => count($log_lines),
-                'is_locked' => $is_locked,
-                'lock_info' => $lock_info,
-                'last_modified' => file_exists($logfile) ? filemtime($logfile) : 0
-            ]);
-            exit;
-        }
-
         if ($ajax_action === 'download_log') {
+            if (!$this->isUpgraderAuthorized()) {
+                header('HTTP/1.1 403 Forbidden');
+                exit;
+            }
             $logfile = "../upgrade/data/upgrade.log";
             if (file_exists($logfile)) {
                 header('Content-Type: text/plain; charset=utf-8');
@@ -114,11 +98,10 @@ class upgrade {
         $original_remote_host = "";
         $original_remote_branch = "";
 
+        // Sucht ab __DIR__ aufwärts nach dem Repo-Root (.git-Verzeichnis).
+        // Bricht ab, wenn dirname() denselben Pfad zurückgibt (Drive-Root).
         $git_root = __DIR__;
-        for ($i = 0; $i < 6; $i++) {
-            if (is_dir($git_root."/.git")) {
-                break;
-            }
+        while (!is_dir($git_root."/.git")) {
             $parent = dirname($git_root);
             if ($parent === $git_root) {
                 break;
