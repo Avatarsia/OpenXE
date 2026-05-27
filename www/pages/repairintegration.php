@@ -21,6 +21,11 @@ class Repairintegration
         $this->app = $app;
         if ($intern) return;
 
+        // Schema/Hooks/Cronjobs/Permissions/Menue idempotent sicherstellen,
+        // bevor irgendeine Action laeuft. Schuetzt vor "Tabelle existiert nicht"-
+        // Crashes wenn das Modul deployed wurde, aber install.php noch nie lief.
+        $this->ensureInstalled();
+
         $this->app->ActionHandlerInit($this);
         $this->app->ActionHandler('list', 'RepairList');
         $this->app->ActionHandler('einstellungen', 'RepairSettings');
@@ -28,6 +33,43 @@ class Repairintegration
         $this->app->ActionHandler('syncstatus', 'SyncStatus');
         $this->app->ActionHandler('install', 'Install');
         $this->app->ActionHandlerListen($app);
+    }
+
+    /**
+     * Sorgt einmalig dafuer, dass alle DB-Tabellen, Hooks, Cronjobs,
+     * Permissions und Menue-Eintraege fuer das Modul existieren.
+     *
+     * Performance: needsInstall() ist ein einzelnes SELECT auf systemconfig
+     * (sub-Millisekunde). Im installierten Normalfall ist die Methode no-op.
+     *
+     * Sicherheit: install.php ist DDL-only / Hook/Cronjob/Permission-Setup,
+     * keine User-Daten. Alle Statements sind idempotent (CREATE TABLE IF NOT
+     * EXISTS, INSERT mit Vorab-SELECT). Falls ein non-Admin die Page oeffnet,
+     * wirft die Action-Methode anschliessend NoRights() via RechteVorhanden().
+     */
+    private function ensureInstalled(): void
+    {
+        try {
+            $db = $this->app->Container->get('Database');
+            $migration = new \Xentral\Modules\RepairIntegration\Migration\RepairIntegrationMigration($db);
+            if (!$migration->needsInstall()) {
+                return;
+            }
+        } catch (\Throwable $e) {
+            // systemconfig fehlt evtl. noch -> install muss erst laufen
+        }
+
+        // install.php inkludieren, Output verwerfen (idempotent durch
+        // needsInstall-Check und Vorab-SELECTs innerhalb des Scripts).
+        $app = $this->app;
+        ob_start();
+        try {
+            include __DIR__ . '/../../classes/Modules/RepairIntegration/install.php';
+        } catch (\Throwable $e) {
+            // silent - fehlerhafte Action-Page zeigt anschliessend einen
+            // klareren Fehler als ein Auto-Install-Crash mitten im Header.
+        }
+        ob_get_clean();
     }
 
     function RepairList()

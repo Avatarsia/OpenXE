@@ -82,4 +82,33 @@ foreach ($adminUsers as $adminUser) {
     }
 }
 
+// 5. Register navigation menu entries
+// OpenXE rendert das Hauptmenue zur Laufzeit in erpapi->Navigation(); Eintraege
+// aus der Tabelle `hook_navigation` werden anschliessend ueber
+// erpapi->NavigationHooks() in das Menue-Array gemergt. RegisterNavigationHook()
+// ist selbst idempotent (UPDATE auf vorhandene module/action-Kombination, sonst
+// INSERT). Bucket "Verwaltung" passt semantisch zu den bereits dort gelisteten
+// Eintraegen "Service & Support" und "RMA Lieferungen".
+$menuEntries = [
+    // [module, action, first (Top-Level), sec (Sub-Label), aftersec, position]
+    ['repairintegration', 'list',          'Verwaltung', 'Reparaturen',                  'RMA Lieferungen', 0],
+    ['repairintegration', 'einstellungen', 'Verwaltung', 'Reparatur Einstellungen',      'Reparaturen',     0],
+    ['repairintegration', 'syncstatus',    'Verwaltung', 'Reparatur Sync-Status',        'Reparaturen',     0],
+    ['repairintegration', 'merge',         'Verwaltung', 'Reparatur Tickets mergen',     'Reparaturen',     0],
+];
+foreach ($menuEntries as [$mod, $act, $first, $sec, $aftersec, $pos]) {
+    // Vorab-Check fuer Echo-Konsistenz; RegisterNavigationHook ist auch ohne
+    // Check idempotent, aber wir wollen "Menu registered" nur beim ersten Mal.
+    $existing = $db->fetchValue(
+        "SELECT COUNT(*) FROM `hook_navigation`
+         WHERE `module` = :module AND `action` = :action
+           AND `first` = :first AND `sec` = :sec",
+        ['module' => $mod, 'action' => $act, 'first' => $first, 'sec' => $sec]
+    );
+    $app->erp->RegisterNavigationHook($mod, $act, $first, $sec, $aftersec, $pos);
+    if ((int)$existing === 0) {
+        echo "Menu registered: {$first} > {$sec} -> {$mod}::{$act}\n";
+    }
+}
+
 echo "\nRepairIntegration install complete.\n";
