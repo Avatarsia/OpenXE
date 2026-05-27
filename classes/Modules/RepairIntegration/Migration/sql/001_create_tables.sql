@@ -135,3 +135,10 @@ CREATE TABLE IF NOT EXISTS `repair_ticket_beleg` (
   KEY `beleg_typ_id` (`beleg_typ`, `beleg_id`),
   KEY `ticket_schluessel` (`ticket_schluessel`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `systemconfig` (
+  `namespace` varchar(64) NOT NULL,
+  `key` varchar(128) NOT NULL,
+  `value` text NOT NULL,
+  PRIMARY KEY (`namespace`, `key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
