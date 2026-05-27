@@ -26,6 +26,7 @@ class Repairintegration
         $this->app->ActionHandler('einstellungen', 'RepairSettings');
         $this->app->ActionHandler('merge', 'RepairMerge');
         $this->app->ActionHandler('syncstatus', 'SyncStatus');
+        $this->app->ActionHandler('install', 'Install');
         $this->app->ActionHandlerListen($app);
     }
 
@@ -72,6 +73,36 @@ class Repairintegration
 
         $this->app->Tpl->Set('KURZUEBERSCHRIFT', 'RepairIntegration Einstellungen');
         $this->app->Tpl->Parse('PAGE', 'repair_config.tpl');
+    }
+
+    function Install()
+    {
+        // Henne-Ei: solange das Modul nicht installiert ist, existieren keine
+        // userrights-Eintraege, daher hier kein RechteVorhanden-Check.
+        // Nur Admin-User duerfen den Installer triggern.
+        if ($this->app->User->GetType() !== 'admin') {
+            $this->app->erp->NoRights();
+            return;
+        }
+
+        $app = $this->app;
+        $output = '';
+
+        ob_start();
+        try {
+            include __DIR__ . '/../../classes/Modules/RepairIntegration/install.php';
+        } catch (\Throwable $e) {
+            echo "\nFEHLER: " . $e->getMessage() . "\n";
+        }
+        $output = ob_get_clean();
+
+        $this->app->Tpl->Set('KURZUEBERSCHRIFT', 'RepairIntegration Installation');
+        $this->app->Tpl->Set(
+            'TAB1',
+            '<pre>' . htmlspecialchars($output) . '</pre>'
+            . '<p><a href="index.php?module=repairintegration&amp;action=einstellungen">Zurueck zu den Einstellungen</a></p>'
+        );
+        $this->app->Tpl->Parse('PAGE', 'tabview.tpl');
     }
 
     function RepairMerge()

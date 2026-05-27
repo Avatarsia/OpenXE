@@ -57,4 +57,29 @@ foreach ($cronjobs as [$parameter, $datei, $periode, $bezeichnung]) {
     }
 }
 
+// 4. Register permissions
+// Fuer alle vorhandenen Admin-User die vier Modul-Actions in userrights anlegen.
+// Idempotent: bereits vorhandene Eintraege werden uebersprungen.
+$permissionActions = ['list', 'einstellungen', 'merge', 'syncstatus'];
+$adminUsers = $db->fetchAll("SELECT id FROM `user` WHERE `type` = 'admin'");
+foreach ($adminUsers as $adminUser) {
+    $userId = (int)$adminUser['id'];
+    foreach ($permissionActions as $action) {
+        $existing = $db->fetchValue(
+            "SELECT id FROM `userrights`
+             WHERE `module` = :module AND `action` = :action AND `user` = :user_id
+             LIMIT 1",
+            ['module' => 'repairintegration', 'action' => $action, 'user_id' => $userId]
+        );
+        if ($existing === null || $existing === false) {
+            $db->perform(
+                "INSERT INTO `userrights` (`module`, `action`, `permission`, `user`)
+                 VALUES (:module, :action, 1, :user_id)",
+                ['module' => 'repairintegration', 'action' => $action, 'user_id' => $userId]
+            );
+            echo "Permission registered: repairintegration::{$action} -> user {$userId}\n";
+        }
+    }
+}
+
 echo "\nRepairIntegration install complete.\n";
