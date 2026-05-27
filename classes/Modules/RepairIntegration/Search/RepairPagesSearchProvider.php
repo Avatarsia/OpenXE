@@ -74,6 +74,11 @@ final class RepairPagesSearchProvider implements FullIndexProviderInterface, Ite
                 'link'  => 'index.php?module=repairintegration&action=syncstatus',
                 'words' => ['Reparatur', 'Repair', 'Reparaturen', 'Sync', 'Status', 'Synchronisation', 'WordPress'],
             ],
+            'install' => [
+                'title' => 'Reparatur Installation',
+                'link'  => 'index.php?module=repairintegration&action=install',
+                'words' => ['Reparatur', 'Repair', 'Install', 'Installation', 'Setup', 'Migration', 'Einrichtung'],
+            ],
         ];
     }
 
