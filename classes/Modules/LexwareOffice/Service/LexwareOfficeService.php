@@ -51,6 +51,24 @@ final class LexwareOfficeService
     }
 
     /**
+     * Liefert die konfigurierte Default-Erloeskategorie (Voucher categoryId)
+     * fuer die Settings-UI. Faellt intern auf den neutralen Default zurueck.
+     */
+    public function getDefaultCategoryId(): string
+    {
+        return $this->config->getDefaultCategoryId();
+    }
+
+    /**
+     * Speichert die Default-Erloeskategorie aus der Settings-UI. Leerer String
+     * setzt auf den Default zurueck; ein nicht-UUID-Wert wirft eine Exception.
+     */
+    public function saveDefaultCategoryId(string $id): void
+    {
+        $this->config->saveDefaultCategoryId($id);
+    }
+
+    /**
      * @param int $invoiceId
      *
      * @return array
@@ -88,16 +106,21 @@ final class LexwareOfficeService
         }
 
         $contactId = $this->resolveContact($apiKey, $invoice);
-        $payload = $this->mapper->mapInvoicePayload($invoice, $positions, $contactId);
+        $payload = $this->mapper->mapVoucherPayload(
+            $invoice,
+            $positions,
+            $contactId,
+            $this->config->getDefaultCategoryId()
+        );
 
         // D1: Deterministischer Idempotency-Key aus OpenXE-Invoice-ID + Belegnr.
-        // Falls persistInvoiceMapping() nach erfolgreichem createInvoice() fehlschlaegt
+        // Falls persistInvoiceMapping() nach erfolgreichem createVoucher() fehlschlaegt
         // und der User den Upload erneut ausloest, dedupliziert Lexware serverseitig
         // auf diesem Key (best effort — Header ist in der public Doku nicht
         // explizit bestaetigt, aber ein sicherer No-Op falls ignoriert).
         $idempotencyKey = sprintf('openxe-rechnung-%d-%s', $invoiceId, $invoice['belegnr'] ?? '');
         try {
-            $invoiceResponse = $this->client->createInvoice($apiKey, $payload, true, $idempotencyKey);
+            $invoiceResponse = $this->client->createVoucher($apiKey, $payload, $idempotencyKey);
         } catch (LexwareOfficeException $e) {
             // D2: Self-Heal bei toter persistierter contactId. Wenn wir eine
             // persistierte adresse.lexware_contact_id hatten und Lexware sie
@@ -137,8 +160,13 @@ final class LexwareOfficeService
                 // Stufe 0 (persistierte ID) ueberspringt.
                 $invoice['adresse_lexware_contact_id'] = '';
                 $contactId = $this->resolveContact($apiKey, $invoice);
-                $payload = $this->mapper->mapInvoicePayload($invoice, $positions, $contactId);
-                $invoiceResponse = $this->client->createInvoice($apiKey, $payload, true, $idempotencyKey);
+                $payload = $this->mapper->mapVoucherPayload(
+                    $invoice,
+                    $positions,
+                    $contactId,
+                    $this->config->getDefaultCategoryId()
+                );
+                $invoiceResponse = $this->client->createVoucher($apiKey, $payload, $idempotencyKey);
             } else {
                 throw $e;
             }
@@ -371,7 +399,7 @@ final class LexwareOfficeService
      * Spiegelt pushInvoice():
      *   - Idempotency-Pre-Check via gutschrift.lexware_creditnote_id
      *   - Contact-Resolve identisch zu Rechnungs-Pfad
-     *   - createCreditNote() mit finalize=true
+     *   - createVoucher() mit type=salescreditnote
      *   - PDF-Upload via uploadFileToVoucher() (Best-Effort)
      *   - Persistierung in gutschrift-Tabelle
      *
@@ -411,14 +439,19 @@ final class LexwareOfficeService
         // adresse_lexware_contact_id) — die in fetchCreditNote() identisch
         // bereitgestellt werden. Kein Code-Duplikat noetig.
         $contactId = $this->resolveContact($apiKey, $creditNote);
-        $payload   = $this->mapper->mapCreditNotePayload($creditNote, $positions, $contactId);
+        $payload   = $this->mapper->mapVoucherCreditNotePayload(
+            $creditNote,
+            $positions,
+            $contactId,
+            $this->config->getDefaultCategoryId()
+        );
 
         // Idempotency-Key nach gleichem Schema wie Rechnung, aber mit
         // 'gutschrift'-Praefix damit Server-seitig keine Kollision droht.
         $idempotencyKey = sprintf('openxe-gutschrift-%d-%s', $creditNoteId, $creditNote['belegnr'] ?? '');
 
         try {
-            $cnResponse = $this->client->createCreditNote($apiKey, $payload, true, $idempotencyKey);
+            $cnResponse = $this->client->createVoucher($apiKey, $payload, $idempotencyKey);
         } catch (LexwareOfficeException $e) {
             // Self-Heal bei toter persistierter contactId — gleiches Muster wie pushInvoice().
             $persistedContactId = trim((string)($creditNote['adresse_lexware_contact_id'] ?? ''));
@@ -451,8 +484,13 @@ final class LexwareOfficeService
                 }
                 $creditNote['adresse_lexware_contact_id'] = '';
                 $contactId = $this->resolveContact($apiKey, $creditNote);
-                $payload   = $this->mapper->mapCreditNotePayload($creditNote, $positions, $contactId);
-                $cnResponse = $this->client->createCreditNote($apiKey, $payload, true, $idempotencyKey);
+                $payload   = $this->mapper->mapVoucherCreditNotePayload(
+                    $creditNote,
+                    $positions,
+                    $contactId,
+                    $this->config->getDefaultCategoryId()
+                );
+                $cnResponse = $this->client->createVoucher($apiKey, $payload, $idempotencyKey);
             } else {
                 throw $e;
             }

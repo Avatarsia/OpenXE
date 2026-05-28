@@ -9,7 +9,7 @@ Das Modul folgt einem klaren Service-Layer-Aufbau:
 - `Bootstrap.php` registriert alle Services im OpenXE-Container und stellt die Schema-Helper (`ensureSchema()`) bereit. Wird vom OpenXE-Installer per Auto-Discovery gefunden.
 - `LexwareOfficeConfigService` verwaltet den verschluesselten API-Key in der `konfiguration`-Tabelle (AES-256-CBC + HMAC-SHA256) und triggert lazy die Schema-Migration beim ersten `saveApiKey()`.
 - `LexwareOfficePayloadMapper` ist eine reine Mapping-Klasse ohne DB- oder HTTP-Seiteneffekte; sie uebersetzt OpenXE-Rechnungsobjekte in die Lexware-API-Payload.
-- `LexwareOfficeApiClient` kapselt Guzzle, enthaelt Retry-Logik mit exponentiellem Backoff (1s/2s/4s), respektiert `Retry-After`-Header und setzt einen `Idempotency-Key` fuer `createInvoice()`.
+- `LexwareOfficeApiClient` kapselt Guzzle, enthaelt Retry-Logik mit exponentiellem Backoff (1s/2s/4s), respektiert `Retry-After`-Header und setzt einen `Idempotency-Key` fuer `createVoucher()`.
 - `LexwareOfficeService` orchestriert den Upload (Kontakt-Upsert, Rechnung erzeugen, Persistierung der Lexware-IDs in `rechnung.lexware_invoice_id` / `adresse.lexware_contact_id`).
 - `www/pages/lexwareoffice.php` ist die eigene Page mit Settings-Form, dem `upload`-Action-Handler und den beiden Hook-Listenern fuer `Rechnung_Aktion_option` + `Rechnung_Aktion_case`.
 
@@ -178,7 +178,8 @@ Kurze Begruendungen zu den wichtigeren architektonischen Entscheidungen:
 - **Eigene Page + eigenes Action-Handler-Routing** statt rechnung.php-Edit, weil OpenXE keinen Mechanismus bietet, externe Action-Handler in bestehende Pages zu injizieren.
 - **SHOW COLUMNS statt IF NOT EXISTS**, weil MySQL 5.7/8.0 das `IF NOT EXISTS`-Feature fuer `ALTER TABLE ADD COLUMN` nicht unterstuetzt. Die SHOW-COLUMNS-Methode ist portabel bis MySQL 3.23.
 - **Lazy Schema-Migration beim saveApiKey()** statt bei jedem Bootstrap-Request, um den Hot-Path nicht zu belasten.
-- **Idempotency-Key Header** bei `createInvoice()`, damit ein erneuter Upload nach verlorenem persistierten Marker keinen Duplikat in Lexware erzeugt (falls Lexware den Header honoriert).
+- **Voucher statt Invoice** (`POST /v1/vouchers`, type `salesinvoice`/`salescreditnote`) statt `/v1/invoices`, weil nur der Voucher-Endpoint eine echte Voucher-ID liefert, an die anschliessend das PDF (`/vouchers/{id}/files`) gehaengt werden kann. Invoice-IDs scheiterten am File-Endpoint mit HTTP 404.
+- **Idempotency-Key Header** bei `createVoucher()`, damit ein erneuter Upload nach verlorenem persistierten Marker keinen Duplikat in Lexware erzeugt (falls Lexware den Header honoriert).
 - **Kein Settings-Tile in der Einstellungen-Uebersicht**, um einen Core-Touch an `einstellungen.php` zu vermeiden. Discoverability via direkter URL und optionaler SuperSearch-Integration.
 
 ## License

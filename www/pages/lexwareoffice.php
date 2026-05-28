@@ -75,6 +75,18 @@ class Lexwareoffice
       }
     }
 
+    // Default-Erloeskategorie (Voucher categoryId) separat speichern. Optional:
+    // leerer Wert setzt auf den neutralen Default zurueck.
+    if($this->app->Secure->GetPOST('save_category') !== '') {
+      try {
+        $categoryId = (string)$this->app->Secure->GetPOST('default_category_id');
+        $service->saveDefaultCategoryId($categoryId);
+        $message = '<div class="success">Standard-Erl&ouml;skategorie wurde gespeichert.</div>';
+      } catch (LexwareOfficeException $exception) {
+        $message = '<div class="error">'.htmlspecialchars($exception->getMessage()).'</div>';
+      }
+    }
+
     if($message !== '') {
       $this->app->Tpl->Set('MESSAGE',$message);
     }
@@ -82,6 +94,8 @@ class Lexwareoffice
     $apiKeyPlaceholder = $hasApiKey ? '******** (gespeichert)' : '';
     $this->app->Tpl->Set('API_KEY_PLACEHOLDER', $apiKeyPlaceholder);
     $this->app->Tpl->Set('API_KEY_HINT', 'Der API-Schl&uuml;ssel wird verschl&uuml;sselt in der Systemkonfiguration abgelegt.');
+    $this->app->Tpl->Set('DEFAULT_CATEGORY_ID', htmlspecialchars($service->getDefaultCategoryId()));
+    $this->app->Tpl->Set('DEFAULT_CATEGORY_HINT', 'Neutrale Default-Erl&ouml;skategorie (UUID) f&uuml;r die Voucher-&Uuml;bergabe. Leer lassen f&uuml;r den Standard. Die Belege werden in Lexware ohnehin manuell umgebucht.');
     $deleteSection = '';
     if($hasApiKey) {
       $deleteSection = '
