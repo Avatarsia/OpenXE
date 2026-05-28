@@ -12,6 +12,12 @@ final class LexwareOfficeConfigService
     private const NAMESPACE = 'lexwareoffice';
     private const KEY_API = 'api_key';
     private const KEY_SALT = 'encryption_salt';
+    private const KEY_DEFAULT_CATEGORY = 'default_category_id';
+    // Neutrale Default-Erloeskategorie (Einnahmen) — nur ein Platzhalter, der
+    // User bucht die Belege manuell in Lexware um.
+    private const DEFAULT_CATEGORY_ID = '8f8664a1-fd86-11e1-a21f-0800200c9a66';
+    // Lexware categoryIds sind UUIDs (8-4-4-4-12 Hex).
+    private const UUID_PATTERN = '/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i';
     // B6: Defense in depth gegen Header-Injection und Schema-Overflow.
     // Lexware API-Keys sind JWT-aehnlich / opaque Base64-URL-Tokens.
     private const MAX_API_KEY_LENGTH = 512;
@@ -77,6 +83,47 @@ final class LexwareOfficeConfigService
         } catch (\Throwable $exception) {
             throw new LexwareOfficeException('API-Schlüssel konnte nicht gelöscht werden.', 0, $exception);
         }
+    }
+
+    /**
+     * Liefert die konfigurierte Default-Erloeskategorie (Voucher categoryId).
+     *
+     * Faellt auf DEFAULT_CATEGORY_ID zurueck, wenn kein Wert gespeichert ist
+     * oder der gespeicherte Wert kein gueltiges UUID-Format hat.
+     */
+    public function getDefaultCategoryId(): string
+    {
+        $value = trim((string)$this->config->tryGetValue(self::NAMESPACE, self::KEY_DEFAULT_CATEGORY));
+        if ($value === '' || !preg_match(self::UUID_PATTERN, $value)) {
+            return self::DEFAULT_CATEGORY_ID;
+        }
+
+        return $value;
+    }
+
+    /**
+     * Speichert die Default-Erloeskategorie. Leerer String setzt auf den
+     * neutralen Default zurueck. Ein nicht-UUID-Wert wird abgelehnt.
+     */
+    public function saveDefaultCategoryId(string $id): void
+    {
+        $id = trim($id);
+        if ($id === '') {
+            // Reset auf Default: gespeicherten Wert entfernen (getDefaultCategoryId
+            // liefert dann wieder DEFAULT_CATEGORY_ID).
+            if ($this->config->isKeyExisting(self::NAMESPACE, self::KEY_DEFAULT_CATEGORY)) {
+                $this->config->deleteKey(self::NAMESPACE, self::KEY_DEFAULT_CATEGORY);
+            }
+
+            return;
+        }
+        if (!preg_match(self::UUID_PATTERN, $id)) {
+            throw new LexwareOfficeException(
+                'Die Erloeskategorie muss eine gueltige UUID sein (Format: 8-4-4-4-12 Hex).'
+            );
+        }
+
+        $this->config->setValue(self::NAMESPACE, self::KEY_DEFAULT_CATEGORY, $id);
     }
 
     private function encrypt(string $value, string $salt): string
