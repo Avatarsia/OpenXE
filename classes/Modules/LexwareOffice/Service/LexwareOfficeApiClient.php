@@ -105,61 +105,41 @@ final class LexwareOfficeApiClient
     }
 
     /**
+     * Legt einen Voucher (Sales-Invoice oder Sales-Credit-Note) in Lexware
+     * Office an.
+     *
+     * POST /v1/vouchers liefert eine echte Voucher-ID zurueck, die anschliessend
+     * fuer uploadFileToVoucher() (/v1/vouchers/{id}/files) verwendbar ist. Die
+     * frueher genutzten /v1/invoices bzw. /v1/credit-notes liefern dagegen
+     * Invoice-/CreditNote-IDs, die am File-Endpoint mit HTTP 404 scheitern.
+     *
      * @param string      $apiKey
-     * @param array       $payload
-     * @param bool        $finalize
-     * @param string|null $idempotencyKey Optional deterministischer Key; wenn gesetzt
-     *                                    wird er als Idempotency-Key Header mitgeschickt.
-     *                                    Ist in der public Lexware-API-Doku nicht
-     *                                    explizit dokumentiert, folgt aber der verbreiteten
-     *                                    Konvention und ist andernfalls ein No-Op.
+     * @param array       $payload         Voucher-Body (siehe LexwareOfficePayloadMapper::mapVoucherPayload).
+     * @param string|null $idempotencyKey  Optional deterministischer Key; wenn gesetzt
+     *                                     wird er als Idempotency-Key Header mitgeschickt.
+     *                                     Ist in der public Lexware-API-Doku nicht
+     *                                     explizit dokumentiert, folgt aber der verbreiteten
+     *                                     Konvention und ist andernfalls ein No-Op.
      *
      * @return array
      */
-    public function createInvoice(string $apiKey, array $payload, bool $finalize = true, ?string $idempotencyKey = null): array
+    public function createVoucher(string $apiKey, array $payload, ?string $idempotencyKey = null): array
     {
-        $query = $finalize ? ['finalize' => 'true'] : [];
-        $options = ['json' => $payload, 'query' => $query];
+        $options = ['json' => $payload];
         if ($idempotencyKey !== null && $idempotencyKey !== '') {
             $options['headers'] = ['Idempotency-Key' => $idempotencyKey];
         }
 
-        return $this->request('POST', 'invoices', $apiKey, $options);
-    }
-
-    /**
-     * Legt eine Sales-Gutschrift in Lexware Office an.
-     *
-     * Gleiche Payload-Struktur wie createInvoice() (lineItems, taxConditions,
-     * address.contactId, voucherDate). Einziger Unterschied: Endpoint
-     * /v1/credit-notes und ?finalize=true als Query.
-     *
-     * @param string      $apiKey
-     * @param array       $payload
-     * @param bool        $finalize
-     * @param string|null $idempotencyKey Wie createInvoice(): optionaler
-     *                                    deterministischer Idempotency-Key.
-     *
-     * @return array
-     */
-    public function createCreditNote(string $apiKey, array $payload, bool $finalize = true, ?string $idempotencyKey = null): array
-    {
-        $query = $finalize ? ['finalize' => 'true'] : [];
-        $options = ['json' => $payload, 'query' => $query];
-        if ($idempotencyKey !== null && $idempotencyKey !== '') {
-            $options['headers'] = ['Idempotency-Key' => $idempotencyKey];
-        }
-
-        return $this->request('POST', 'credit-notes', $apiKey, $options);
+        return $this->request('POST', 'vouchers', $apiKey, $options);
     }
 
     /**
      * Laedt eine Datei (PDF/JPG/PNG/XML, max. 5 MB) zu einem bestehenden Voucher hoch.
      *
-     * Lexware behandelt Sales-Invoices und Sales-Credit-Notes intern als Voucher,
-     * darum kann hier sowohl eine Invoice-ID als auch eine CreditNote-ID
-     * uebergeben werden — der File-Endpoint haengt am gemeinsamen
-     * /vouchers/{id}/files-Pfad.
+     * Erwartet eine echte Voucher-ID, wie sie createVoucher() (POST /v1/vouchers)
+     * zurueckliefert. Achtung: Invoice-IDs aus /v1/invoices oder CreditNote-IDs
+     * aus /v1/credit-notes sind hier NICHT verwendbar — der /vouchers/{id}/files-
+     * Endpoint quittiert sie mit HTTP 404 (das war der urspruengliche Bug).
      *
      * Multipart-Feldname ist 'file' (Lexware-Vorgabe). Die bestehende
      * Retry-/429-Mechanik aus dem Konstruktor greift auch hier.

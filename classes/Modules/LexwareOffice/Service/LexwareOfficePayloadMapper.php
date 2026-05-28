@@ -22,23 +22,20 @@ final class LexwareOfficePayloadMapper
 {
     /**
      * Fallback-Steuersatz wenn weder Rechnung noch Position einen Wert liefern.
-     * DE-Standard 19%. Lexware verlangt unitPrice.taxRatePercentage pro Position als Pflichtfeld.
+     * DE-Standard 19%. Lexware verlangt voucherItems[].taxRatePercent pro Item als Pflichtfeld.
      */
     private const DEFAULT_TAX_RATE = 19.0;
 
     /**
-     * Lexware-taxTypes, bei denen unitPrice.taxRatePercentage zwingend 0 sein muss.
-     * Sendet man hier den OpenXE-Steuersatz (z.B. 19%), antwortet die API mit HTTP 400.
-     * Quelle: Lexware-Office-API-Doku zu taxConditions/lineItems.
+     * Lexware-Voucher categoryIds (GUIDs aus der offiziellen Lexware-Office-Doku
+     * zu POST /v1/vouchers). Jede steuerfreie Sonderkonstellation hat einen
+     * fixen categoryId-Platzhalter, der die Buchungslogik in Lexware vorgibt.
+     * Der Default (Erloeskategorie) ist konfigurierbar und kommt als Parameter
+     * vom Service.
      */
-    private const TAX_EXEMPT_TAX_TYPES = [
-        'vatfree',
-        'intraCommunitySupply',
-        'constructionService13b',
-        'externalService13b',
-        'thirdPartyCountryService',
-        'thirdPartyCountryDelivery',
-    ];
+    private const CATEGORY_KLEINUNTERNEHMER       = 'f5c7fee8-f184-4e7a-ab04-8f7e7ad6c207';
+    private const CATEGORY_INTRA_COMMUNITY_SUPPLY = '9075a4e3-66de-4795-a016-3889feca0d20';
+    private const CATEGORY_THIRD_PARTY_DELIVERY   = '93d24c20-ea84-424e-a731-5e1b78d1e6a9';
 
     private LoggerInterface $logger;
 
@@ -139,98 +136,206 @@ final class LexwareOfficePayloadMapper
     }
 
     /**
-     * Baut den Invoice-POST-Payload.
+     * Baut den Voucher-POST-Payload fuer POST /v1/vouchers (type=salesinvoice).
      *
-     * @param array  $invoice
-     * @param array  $positions
-     * @param string $contactId
+     * Lexware behandelt Belege als Voucher; nur dieser Endpoint liefert eine
+     * Voucher-ID, an die anschliessend per /vouchers/{id}/files ein PDF gehaengt
+     * werden kann. Der Body folgt strikt der Voucher-Spec (KEINE Invoice-Felder
+     * wie lineItems/taxConditions/address/version/currency).
+     *
+     * @param array  $invoice            Rechnungs-Row inkl. JOIN auf adresse.
+     * @param array  $positions          rechnung_position-Rows.
+     * @param string $contactId          Bereits aufgeloeste Lexware-Contact-ID (top-level).
+     * @param string $defaultCategoryId  Neutrale Default-Erloeskategorie (vom ConfigService).
      *
      * @return array
      */
-    public function mapInvoicePayload(array $invoice, array $positions, string $contactId): array
-    {
+    public function mapVoucherPayload(
+        array $invoice,
+        array $positions,
+        string $contactId,
+        string $defaultCategoryId
+    ): array {
         $voucherDate = $invoice['datum'] ?? date('Y-m-d');
-        // Lexware erwartet einen RFC3339-Timestamp mit Zeitzone; wir fixieren auf Europe/Berlin,
-        // damit voucherDate auf UTC-Servern nicht auf den Vortag rutscht.
+        // Europe/Berlin fixieren, damit voucherDate auf UTC-Servern nicht auf den
+        // Vortag rutscht. Voucher erwartet yyyy-MM-dd (NICHT RFC3339).
         $voucherDateTime = new DateTimeImmutable($voucherDate . 'T00:00:00', new DateTimeZone('Europe/Berlin'));
-        $defaultCurrency = $this->normalizeCurrency($invoice['waehrung'] ?? 'EUR');
         $paymentTerm = (int)($invoice['zahlungszieltage'] ?? 0);
-        $discountDays = (int)($invoice['zahlungszieltageskonto'] ?? 0);
-        $discountPercent = (float)($invoice['zahlungszielskonto'] ?? 0);
-        $title = !empty($invoice['belegnr']) ? sprintf('Rechnung %s', $invoice['belegnr']) : 'Rechnung';
-        // taxType einmal aufloesen und an mapLineItems durchreichen, damit Position-Mapper
-        // und taxConditions denselben Wert sehen. Lexware verlangt fuer steuerfreie taxTypes
-        // (vatfree, intraCommunitySupply, ...) zwingend unitPrice.taxRatePercentage = 0 —
-        // sonst HTTP 400.
+        $dueDateTime = $voucherDateTime->modify(sprintf('+%d days', max(0, $paymentTerm)));
+
+        // taxType einmal aufloesen; bestimmt categoryId UND ob alle Items auf
+        // rate 0 gezwungen werden (steuerfreie Faelle -> HTTP 400 bei !=0).
         $taxType = $this->resolveTaxType($invoice, $positions);
+        $categoryId = $this->resolveCategoryId($taxType, $defaultCategoryId);
+        $forceZeroTax = $taxType !== 'net';
+
+        $items = $this->buildVoucherItems($positions, $invoice, $categoryId, $forceZeroTax);
+
+        // Totals = Summe der bereits gerundeten Item-Werte (by construction
+        // konsistent, kein Re-Rounding -> kein Total-Mismatch -> kein 400).
+        $totalGross = 0.0;
+        $totalTax = 0.0;
+        foreach ($items as $item) {
+            $totalGross += $item['amount'];
+            $totalTax += $item['taxAmount'];
+        }
+        // abs() auf Totals: No-Op fuer Rechnung; bei Gutschrift werden ggf.
+        // negativ gespeicherte OpenXE-Werte positiv (type kodiert die Richtung).
+        $totalGross = round(abs($totalGross), 2);
+        $totalTax = round(abs($totalTax), 2);
 
         $payload = [
-            // Lexware voucherDate: RFC3339 extended (mit Millisekunden & Zeitzone)
-            'voucherDate' => $voucherDateTime->format(DATE_RFC3339_EXTENDED),
-            'title' => $title,
-            'remark' => $invoice['freitext'] ?? '',
-            // Lexware-Spec: choose ONE approach - entweder contactId ODER freie Felder,
-            // niemals beides parallel. Da resolveContact() immer eine contactId liefert,
-            // senden wir ausschliesslich die contactId; die kanonische Adresse liegt am Contact.
-            'address' => [
-                'contactId' => $contactId,
-            ],
-            'lineItems' => $this->mapLineItems($positions, $invoice, $taxType),
-            'totalPrice' => [
-                'currency' => $defaultCurrency,
-            ],
-            'taxConditions' => [
-                'taxType' => $taxType,
-            ],
-            'shippingConditions' => [
-                'shippingType' => 'delivery',
-                'shippingDate' => $voucherDateTime->format(DATE_RFC3339_EXTENDED),
-            ],
-            'paymentConditions' => [
-                'paymentTermLabel' => $this->buildPaymentTermLabel($paymentTerm),
-                'paymentTermDuration' => $paymentTerm,
-            ],
+            'type' => 'salesinvoice',
+            'voucherStatus' => 'open',
+            'voucherDate' => $voucherDateTime->format('Y-m-d'),
+            'dueDate' => $dueDateTime->format('Y-m-d'),
+            'totalGrossAmount' => $totalGross,
+            'totalTaxAmount' => $totalTax,
+            'taxType' => 'gross',
+            'useCollectiveContact' => false,
+            'contactId' => $contactId,
+            'voucherItems' => $items,
         ];
 
-        if ($discountDays > 0 && $discountPercent > 0) {
-            $payload['paymentConditions']['paymentDiscountConditions'] = [
-                'discountPercentage' => $discountPercent,
-                'discountRange' => $discountDays,
-            ];
-            // Skonto-Label ueberschreibt das Default-Label mit der ausfuehrlicheren Variante.
-            $payload['paymentConditions']['paymentTermLabel'] = $this->truncatePaymentTermLabel(sprintf(
-                '%d Tage - %s%%, %d Tage netto',
-                $discountDays,
-                $this->formatNumber($discountPercent),
-                $paymentTerm
-            ));
+        // voucherNumber: nur setzen wenn belegnr vorhanden (sonst Feld weglassen).
+        $belegnr = trim((string)($invoice['belegnr'] ?? ''));
+        if ($belegnr !== '') {
+            $payload['voucherNumber'] = $belegnr;
+        }
+
+        // remark: nur setzen wenn Freitext vorhanden.
+        $remark = trim((string)($invoice['freitext'] ?? ''));
+        if ($remark !== '') {
+            $payload['remark'] = $remark;
         }
 
         return $payload;
     }
 
     /**
-     * Baut den CreditNote-POST-Payload fuer /v1/credit-notes.
+     * Baut den Voucher-Payload fuer eine Gutschrift (type=salescreditnote).
      *
-     * Lexware verwendet fuer credit-notes die exakt gleiche Payload-Struktur
-     * wie /v1/invoices (lineItems, taxConditions, address.contactId,
-     * voucherDate, paymentConditions, shippingConditions). Wir delegieren
-     * darum an mapInvoicePayload() und tauschen lediglich den Title aus,
-     * damit "Gutschrift {belegnr}" statt "Rechnung {belegnr}" am Voucher
-     * steht.
+     * Delegiert an mapVoucherPayload() und tauscht nur den type. Lexware verlangt
+     * fuer salescreditnote POSITIVE Betraege — die Credit-Richtung kodiert der
+     * type, nicht das Vorzeichen. abs() wird bereits in buildVoucherItems() und
+     * bei den Totals angewandt.
      *
-     * @param array  $creditNote      gutschrift-Row inkl. JOIN-Felder.
-     * @param array  $positions       gutschrift_position-Rows.
-     * @param string $contactId       Bereits aufgeloeste Lexware-Contact-ID.
+     * @param array  $creditNote         gutschrift-Row inkl. JOIN-Felder.
+     * @param array  $positions          gutschrift_position-Rows.
+     * @param string $contactId          Bereits aufgeloeste Lexware-Contact-ID.
+     * @param string $defaultCategoryId  Neutrale Default-Erloeskategorie.
+     *
+     * @return array
      */
-    public function mapCreditNotePayload(array $creditNote, array $positions, string $contactId): array
-    {
-        $payload = $this->mapInvoicePayload($creditNote, $positions, $contactId);
-        $payload['title'] = !empty($creditNote['belegnr'])
-            ? sprintf('Gutschrift %s', $creditNote['belegnr'])
-            : 'Gutschrift';
+    public function mapVoucherCreditNotePayload(
+        array $creditNote,
+        array $positions,
+        string $contactId,
+        string $defaultCategoryId
+    ): array {
+        $payload = $this->mapVoucherPayload($creditNote, $positions, $contactId, $defaultCategoryId);
+        $payload['type'] = 'salescreditnote';
 
         return $payload;
+    }
+
+    /**
+     * Leitet die Voucher-categoryId aus dem aufgeloesten taxType ab.
+     *
+     * - 'net'/'vatfree'           -> konfigurierbare Default-Erloeskategorie
+     * - 'gross' (Kleinunternehmer)-> fixe Kleinunternehmer-Kategorie
+     * - 'intraCommunitySupply'    -> fixe innergemeinschaftliche-Lieferung-Kategorie
+     * - 'thirdPartyCountryDelivery'-> fixe Drittland-Lieferung-Kategorie
+     */
+    private function resolveCategoryId(string $taxType, string $defaultCategoryId): string
+    {
+        switch ($taxType) {
+            case 'gross':
+                return self::CATEGORY_KLEINUNTERNEHMER;
+            case 'intraCommunitySupply':
+                return self::CATEGORY_INTRA_COMMUNITY_SUPPLY;
+            case 'thirdPartyCountryDelivery':
+                return self::CATEGORY_THIRD_PARTY_DELIVERY;
+            case 'vatfree':
+            case 'net':
+            default:
+                return $defaultCategoryId;
+        }
+    }
+
+    /**
+     * Baut die voucherItems gruppiert pro Steuersatz inkl. konsistenter Rundung.
+     *
+     * Pro Position: net = preis * menge * (1 - rabatt/100). Sentinel
+     * steuersatz == -1 -> Default-Satz. Die net-Summen werden pro rate
+     * gruppiert, dann pro Gruppe amount/taxAmount EINMAL gerundet — so sind
+     * die Totals (Summe der Item-Werte) garantiert konsistent.
+     *
+     * @return list<array{amount: float, taxAmount: float, taxRatePercent: float, categoryId: string}>
+     */
+    private function buildVoucherItems(
+        array $positions,
+        array $invoice,
+        string $categoryId,
+        bool $forceZeroTax
+    ): array {
+        // Default-Satz aus firmendaten.steuersatz_normal; defensiv auf DE-Standard
+        // zwingen wenn 0/leer (Mandantenwechsel, leeres Feld).
+        $defaultTax = (float)($invoice['steuersatz_normal'] ?? self::DEFAULT_TAX_RATE);
+        if ($defaultTax <= 0.0) {
+            $defaultTax = self::DEFAULT_TAX_RATE;
+        }
+
+        // net-Summen pro Steuersatz gruppieren.
+        $netByRate = [];
+        foreach ($positions as $position) {
+            // OpenXE-Sentinel: steuersatz = -1 bedeutet "keinen Satz erzwingen"
+            // -> Default-Satz. Lexware lehnt negative Werte ab.
+            $rawTax = $position['steuersatz'] ?? null;
+            $rate = ($rawTax !== null && (float)$rawTax >= 0.0) ? (float)$rawTax : $defaultTax;
+            // Steuerfreie taxTypes erzwingen rate 0 fuer alle Items (HTTP 400 sonst).
+            if ($forceZeroTax) {
+                $rate = 0.0;
+            }
+
+            $preis = (float)($position['preis'] ?? 0.0);
+            $menge = (float)($position['menge'] ?? 0.0);
+            $net = $preis * $menge;
+            if (!is_finite($net)) {
+                $net = 0.0;
+            }
+            $rabatt = (float)($position['rabatt'] ?? 0.0);
+            if ($rabatt > 0.0) {
+                $net *= (1 - $rabatt / 100);
+            }
+
+            $rateKey = (string)$rate;
+            if (!isset($netByRate[$rateKey])) {
+                $netByRate[$rateKey] = ['rate' => $rate, 'net' => 0.0];
+            }
+            $netByRate[$rateKey]['net'] += $net;
+        }
+
+        $items = [];
+        foreach ($netByRate as $group) {
+            $rate = $group['rate'];
+            $netSum = $group['net'];
+            // abs(): No-Op fuer Rechnung; bei Gutschrift werden negativ
+            // gespeicherte OpenXE-Betraege positiv (type kodiert die Richtung).
+            $amount = round(abs($netSum * (1 + $rate / 100)), 2);
+            $taxAmount = $rate > 0.0
+                ? round($amount - $amount / (1 + $rate / 100), 2)
+                : 0.0;
+
+            $items[] = [
+                'amount' => $amount,
+                'taxAmount' => $taxAmount,
+                'taxRatePercent' => (float)$rate,
+                'categoryId' => $categoryId,
+            ];
+        }
+
+        return $items;
     }
 
     /**
@@ -405,85 +510,6 @@ private function isKleinunternehmer(): bool
     }
 
     /**
-     * @param array       $positions
-     * @param array       $invoice
-     * @param string|null $taxType  Aufloesender Lexware-taxType (siehe resolveTaxType).
-     *                              Bei steuerfreien taxTypes (TAX_EXEMPT_TAX_TYPES) wird
-     *                              unitPrice.taxRatePercentage hart auf 0 gesetzt — Lexware
-     *                              lehnt jeden anderen Wert mit HTTP 400 ab. Default null
-     *                              fuer Backward-Compat (Verhalten dann wie bisher).
-     *
-     * @return array
-     */
-    private function mapLineItems(array $positions, array $invoice, ?string $taxType = null): array
-    {
-        $items = [];
-        $defaultCurrency = $this->normalizeCurrency($invoice['waehrung'] ?? 'EUR');
-        // Defensiv: negative oder leere $defaultTax-Werte auf DE-Standard zwingen.
-        // OpenXE liefert in seltenen Fallkonstellationen (Mandantenwechsel, leere
-        // firmendaten.steuersatz_normal) einen 0/leeren Wert; Lexware verlangt aber
-        // einen sinnvollen Steuersatz pro Position.
-        $defaultTax = (float)($invoice['steuersatz_normal'] ?? self::DEFAULT_TAX_RATE);
-        if ($defaultTax <= 0.0) {
-            $defaultTax = self::DEFAULT_TAX_RATE;
-        }
-
-        // Steuerfreie taxTypes erzwingen taxRatePercentage = 0 fuer ALLE Positionen,
-        // unabhaengig davon was OpenXE in position.steuersatz liefert. Lexware
-        // validiert das strikt (HTTP 400 bei Mismatch).
-        $forceZeroTax = $taxType !== null && in_array($taxType, self::TAX_EXEMPT_TAX_TYPES, true);
-
-        foreach ($positions as $position) {
-            // OpenXE-Sentinel: steuersatz = -1 bedeutet "keinen Steuersatz erzwingen"
-            // (vgl. www/lib/class.erpapi.php:5105). Lexware lehnt negative Werte ab,
-            // darum auf $defaultTax zurueckfallen wenn null/<0.
-            $rawTax = $position['steuersatz'] ?? null;
-            $tax = ($rawTax !== null && (float)$rawTax >= 0.0) ? (float)$rawTax : $defaultTax;
-            // Hard-Override: bei steuerfreien taxTypes ueberschreibt 0.0 jede vorherige
-            // Logik (Sentinel-Clamp, Position-Steuersatz, Default-Tax).
-            if ($forceZeroTax) {
-                $tax = 0.0;
-            }
-            $currency = $this->normalizeCurrency($position['waehrung'] ?? $defaultCurrency);
-            // Lexware unitPrice.netAmount: bis zu 4 Nachkommastellen (Doku-Constraint).
-            // is_finite-Guard gegen NaN/Inf aus fehlerhaften OpenXE-Importen.
-            $netAmount = (float)$position['preis'];
-            $netAmount = is_finite($netAmount) ? round($netAmount, 4) : 0.0;
-            $unitPrice = [
-                'currency' => $currency,
-                'netAmount' => $netAmount,
-                'taxRatePercentage' => (float)$tax,
-            ];
-            $items[] = array_filter([
-                'type' => 'custom',
-                'name' => $position['bezeichnung'] ?? $position['nummer'] ?? 'Position',
-                'description' => $position['beschreibung'] ?? '',
-                'quantity' => (float)$position['menge'],
-                'unitName' => $position['einheit'] ?: 'Stück',
-                'unitPrice' => $unitPrice,
-                'discountPercentage' => $this->getDiscount($position),
-            ], static fn($value) => $value !== null && $value !== '');
-        }
-
-        return $items;
-    }
-
-    /**
-     * @param array $position
-     *
-     * @return float|null
-     */
-    private function getDiscount(array $position): ?float
-    {
-        $discount = $position['rabatt'] ?? 0.0;
-        if ((float)$discount <= 0.0) {
-            return null;
-        }
-
-        return (float)$discount;
-    }
-
-    /**
      * @param string $country
      *
      * @return string
@@ -511,55 +537,5 @@ private function isKleinunternehmer(): bool
         }
 
         return 'DE';
-    }
-
-    private function normalizeCurrency(?string $currency): string
-    {
-        $currency = trim((string)$currency);
-        if ($currency === '') {
-            return 'EUR';
-        }
-
-        return strtoupper($currency);
-    }
-
-    private function formatNumber(float $value): string
-    {
-        return rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');
-    }
-
-    /**
-     * Baut das Default-Label fuer paymentConditions.paymentTermLabel.
-     *
-     * Lexware fordert das Feld als String; wir setzen es immer (auch ohne Skonto),
-     * weil die API sonst die Default-Bezeichnung des Lexware-Mandanten zieht und
-     * der Beleg-Footer dadurch unterschiedlich aussieht je nach Mandant.
-     */
-    private function buildPaymentTermLabel(int $paymentTerm): string
-    {
-        if ($paymentTerm <= 0) {
-            return 'Zahlbar sofort';
-        }
-
-        return $this->truncatePaymentTermLabel(sprintf(
-            'Zahlbar innerhalb von %d Tagen netto',
-            $paymentTerm
-        ));
-    }
-
-    /**
-     * Kuerzt paymentTermLabel defensiv auf 255 Zeichen. Lexware dokumentiert die
-     * Max-Laenge nicht hart, branchenueblich sind 255 — wir schneiden statt 4xx-Fehler.
-     */
-    private function truncatePaymentTermLabel(string $label): string
-    {
-        if (function_exists('mb_strlen') && mb_strlen($label) > 255) {
-            return mb_substr($label, 0, 255);
-        }
-        if (strlen($label) > 255) {
-            return substr($label, 0, 255);
-        }
-
-        return $label;
     }
 }
