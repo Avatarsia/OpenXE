@@ -60,6 +60,9 @@ mahnfenster
 # PHP 8 compat — 5 Bootstrap onInit*() methods need `static` keyword
 # Supersedes the earlier fix/backup-bootstrap-static (which only fixed BackupTask)
 fix/bootstrap-static-cross-check
+# #279 Location redirects behind TLS-terminating reverse proxy pointed to
+#   https://host:80/... (SERVER_PORT blindly appended) -> SSL error after actions
+fix/location-redirect-proxy-port
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
