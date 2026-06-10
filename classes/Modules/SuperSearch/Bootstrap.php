@@ -3,6 +3,8 @@
 namespace Xentral\Modules\SuperSearch;
 
 use Xentral\Core\DependencyInjection\ContainerInterface;
+use Xentral\Modules\RepairIntegration\Search\RepairPagesSearchProvider;
+use Xentral\Modules\RepairIntegration\Search\RepairTicketSearchProvider;
 use Xentral\Modules\SuperSearch\Factory\ProviderFactory;
 use Xentral\Modules\SuperSearch\Scheduler\SuperSearchDiffIndexTask;
 use Xentral\Modules\SuperSearch\Scheduler\SuperSearchFullIndexTask;
@@ -121,6 +123,18 @@ final class Bootstrap
                 $appstoreModule = $app->erp->LoadModul('appstore');
 
                 return new AppProvider($appstoreModule);
+            }
+        );
+        $factory->registerProviderFactory(
+            'repairpages',
+            static function (ContainerInterface $container) {
+                return new RepairPagesSearchProvider();
+            }
+        );
+        $factory->registerProviderFactory(
+            'repairs',
+            static function (ContainerInterface $container) {
+                return new RepairTicketSearchProvider($container->get('Database'));
             }
         );
 
