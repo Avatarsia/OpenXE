@@ -637,10 +637,13 @@ class QrBlockRenderer
         $rendered = 0;
 
         foreach ($items as $item) {
+            $tmpbase = '';
             $tmpfile = '';
             try {
                 if (isset($item['png'])) {
-                    $tmpfile = tempnam(sys_get_temp_dir(), 'payqr') . '.png';
+                    // tempnam legt bereits eine endungslose Datei an - beide aufraeumen
+                    $tmpbase = tempnam(sys_get_temp_dir(), 'payqr');
+                    $tmpfile = $tmpbase . '.png';
                     if (file_put_contents($tmpfile, $item['png']) === false) {
                         continue;
                     }
@@ -663,6 +666,9 @@ class QrBlockRenderer
             } finally {
                 if ($tmpfile !== '' && is_file($tmpfile)) {
                     @unlink($tmpfile);
+                }
+                if ($tmpbase !== '' && is_file($tmpbase)) {
+                    @unlink($tmpbase);
                 }
             }
         }
@@ -731,7 +737,7 @@ class StubApp {
   public function __construct() { $this->DB = new StubDb(); $this->Secure = new StubSecure(); $this->erp = new StubErp(); }
 }
 
-$root = getenv('OPENXE_CORE') ?: dirname(__DIR__, 3); // OPENXE_CORE zeigt auf OpenXE-src
+$root = getenv('OPENXE_CORE') ?: dirname(__DIR__, 3); // OPENXE_CORE ist PFLICHT und zeigt auf OpenXE-src (Fallback loest nur classes/ auf)
 require_once $root . '/www/lib/zahlungsweisen/rechnung_qr.php';
 require_once $root . '/www/lib/zahlungsweisen/paypal_qr.php';
 require_once $root . '/www/lib/zahlungsweisen/wero.php';
@@ -889,8 +895,11 @@ class Zahlungsweise_paypal_qr extends Zahlungsweisenmodul
 **Files:**
 - Create: `OpenXE-git/www/pages/zahlungsqr.php`
 - Create: `OpenXE-git/www/pages/content/zahlungsqr_settings.tpl`
+- Create: `OpenXE-git/classes/Modules/PaymentQr/Service/QrItemAssembler.php`
+- Create: `OpenXE-git/classes/Modules/PaymentQr/tests/ZahlungsqrItemsTest.php`
 - Modify: `OpenXE-git/classes/Modules/PaymentQr/Service/PaymentQrSettingsService.php` (nur falls Step 5.1 Abweichungen ergibt)
-- Test: Gate-/Assembly-Logik wandert in eine testbare Methode; Instanz-Verhalten wird in Task 8 abgenommen
+- Test: Gate-/Assembly-Logik liegt testbar im QrItemAssembler; Instanz-Verhalten wird in Task 8 abgenommen
+- Commit (Step 5.8) umfasst ALLE vier neuen Dateien + ggf. den angepassten SettingsService
 
 **Vorab am Bestandscode verifizieren (Spec-Risiken #1, #4, #8): TEILWEISE ERLEDIGT 2026-07-01:**
 - [ ] **Step 5.1:**
@@ -975,8 +984,8 @@ class Zahlungsqr
       if ($id <= 0) { return; }
 
       $rechnung = $this->app->DB->SelectRow(
-        "SELECT belegnr, zahlungsweise, gesamtsumme, waehrung, projekt, kundennummer
-         FROM rechnung WHERE id = $id"          // Spalten aus Step 5.1.3
+        "SELECT belegnr, zahlungsweise, soll, waehrung, projekt, kundennummer
+         FROM rechnung WHERE id = $id"          // Bruttobetrag = soll (verifiziert Step 5.1.3)
       );
       if (empty($rechnung) || empty($rechnung['belegnr'])) { return; }
 
@@ -1032,7 +1041,7 @@ Wichtig bei `ZahlungsqrUpload`: `einstellungen_json` des Wero-Eintrags per read-
 
 - [ ] **Step 6.1:** `OpenXE-src/classes/Components/Barcode/Bootstrap.php` und `classes/Modules/LexwareOffice/Bootstrap.php` (Branch feature/lexwareoffice-module, notfalls via `gh api` den Datei-Inhalt holen) als Muster lesen; klären, ob Bootstrap-Registrierung nötig ist, wenn der Controller Services direkt instanziiert (`new EpcQrPayloadBuilder()`) — **YAGNI: Bootstrap nur anlegen, wenn der Autoloader die Namespace-Klassen sonst nicht findet.** PSR-4-Mapping von `classes/` prüfen (`Psr4ClassNameResolver`, cache_services): Läuft `Xentral\Modules\PaymentQr\Service\...` ohne Registrierung? Test: kleines PHP-Script, das nur den xentral_autoloader lädt und die Klasse instanziiert (gegen OpenXE-src + kopierte Dateien).
 - [ ] **Step 6.2:** README.md schreiben: Zweck, Installation (Modul-URL `index.php?module=zahlungsqr&action=list` → Install-Button; führt Hook+Navigation+Zahlungsweisen-Anlage aus), Konfiguration (native Zahlungsarten-Einstellungen + Wero-Upload), Deinstallation, bekannte Grenzen (PayPal-Betrag änderbar, Wero statisch, nur EUR, **Wero-Upload akzeptiert nur PNG** — bewusste Vereinfachung ggü. Spec §4.2, dort dokumentieren).
-- [ ] **Step 6.3:** Gesamt-Lint: `find`-Schleife `php -l` über alle neuen Dateien; alle 4 Test-Scripts laufen lassen. Expected: alles grün.
+- [ ] **Step 6.3:** Gesamt-Lint: `find`-Schleife `php -l` über alle neuen Dateien; alle 5 Test-Scripts laufen lassen (EpcQrPayloadBuilder, SettingsService, QrBlockRenderer, ZahlungsweisenStruktur, ZahlungsqrItems). Expected: alles grün.
 - [ ] **Step 6.4: Commit** (`feat(paymentqr): Bootstrap/Autoload-Verdrahtung und README`)
 
 ---
