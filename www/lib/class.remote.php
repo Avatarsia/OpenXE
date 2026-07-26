@@ -1197,6 +1197,7 @@ class Remote
         //$lagerexport = $shopexportarr['lagerexport'];
         $lagergrundlage = $shopexportarr['lagergrundlage'];
         $shopbilderuebertragen = $shopexportarr['shopbilderuebertragen'];
+        $dateienuebertragen = explode(',',str_replace(' ','',strtolower($shopexportarr['dateienuebertragen'])));
         $projekt = (int) $shopexportarr['projekt'];
         $projektlager = $this->app->DB->Select("SELECT id FROM projekt WHERE id = $projekt AND projektlager = 1 LIMIT 1");
         $tmp = new ObjGenArtikel($this->app);
@@ -1234,6 +1235,12 @@ class Remote
                         $data[$i]['artikelnummer_fremdnummern'][$fkey]['nummer'] = trim($fval['nummer']);
                     }
                 }
+            }
+
+            if($tmp->GetVariante()) {
+                $parentid = $tmp->GetVariante_Von();
+            } else {
+                $parentid = 0;
             }
 
             if (!empty($loadElements['article_descriptions'])) {
@@ -1434,10 +1441,16 @@ class Remote
                 $data[$i]['eigenschaftenuebersetzungen'] = $eigenschaftenuebersetzungen;
             }
 
-            //Bilder
+            //Bilder + Anhänge
             $dateien = null;
-            if ($shopbilderuebertragen && !empty($loadElements['pictures'])) {
-                $dateien = $this->getImagesForArticle($artikel);
+
+            if ($shopbilderuebertragen) {
+                $dateienuebertragen[] = 'shopbild';
+            }
+
+            if (!empty($dateienuebertragen)) {
+                $dateien = $this->getFilesForArticle($artikel,$dateienuebertragen,$parentid);
+
                 if (!empty($dateien)) {
                     $data[$i]['Dateien'] = [];
                     foreach ($dateien as $datei) {
@@ -1447,6 +1460,7 @@ class Remote
                             'datei' => base64_encode($this->app->erp->GetDatei($datei['id'])),
                             'filename' => $filename,
                             'extension' => $path_info['extension'],
+                            'mimetype' => $this->app->erp->GetDateiMimeType($datei['id']),
                             'titel' => $datei['titel'],
                             'beschreibung' => $datei['beschreibung'],
                             'id' => $datei['id'],
@@ -1466,7 +1480,6 @@ class Remote
                     }
                 }
             }
-
 
             if (method_exists($tmp, 'GetSteuer_Art_Produkt')) {
                 $data[$i]['steuer_art_produkt'] = $tmp->GetSteuer_Art_Produkt();
@@ -1883,7 +1896,7 @@ class Remote
                         }
 
                         if ($shopbilderuebertragen && !empty($loadElements['pictures'])) {
-                            $dateien = $this->getImagesForArticle($eigenschaft['artikel']);
+                            $dateien = $this->getFilesForArticle($eigenschaft['artikel']);
                             if (!empty($dateien)) {
                                 foreach ($dateien as $datei) {
                                     $filename = $this->app->erp->GetDateiName($datei['id']);
@@ -2139,7 +2152,7 @@ class Remote
                             }
                         }
                         if ($shopbilderuebertragen && !empty($loadElements['pictures'])) {
-                            $dateien = $this->getImagesForArticle($v['id']);
+                            $dateien = $this->getFilesForArticle($v['id']);
                             if (!empty($dateien)) {
                                 foreach ($dateien as $datei) {
                                     $filename = $this->app->erp->GetDateiName($datei['id']);
@@ -2181,15 +2194,33 @@ class Remote
      * @param int $articleId
      * @return array|null
      */
-    protected function getImagesForArticle($articleId)
+    protected function getFilesForArticle($articleId, array $stichwoerter = array('Shopbild'), int $parentid = 0)
     {
-        $query = sprintf("SELECT d.id AS `id`, dv.id AS `vid`, d.titel, d.beschreibung, ds.subjekt, ds.sort, dv.version AS `version`
-                FROM `datei_stichwoerter` AS `ds` 
-                INNER JOIN `datei` AS `d` ON ds.datei = d.id  
+        $query = "SELECT
+                    d.id AS `id`,
+                    dv.id AS `vid`,
+                    IF(ds.parameter = $parentid, 1,0) AS vom_hauptartikel,
+                    d.titel,
+                    d.beschreibung,
+                    ds.subjekt,
+                    ds.sort,
+                    dv.version AS `version`
+                FROM `datei_stichwoerter` AS `ds`
+                INNER JOIN `datei` AS `d` ON ds.datei = d.id
                 INNER JOIN `datei_version` AS `dv` ON dv.datei = ds.datei
-                INNER JOIN (SELECT MAX(`version`) AS `version`, `datei` FROM `datei_version` GROUP BY `datei`) AS `dvm` ON dvm.datei = dv.datei AND dvm.version = dv.version
-                WHERE ds.parameter = %d AND ds.objekt like 'Artikel' AND ds.subjekt LIKE 'Shopbild' AND d.geloescht = 0
-                ORDER BY ds.sort", $articleId);
+                INNER JOIN
+                (
+                    SELECT MAX(`version`) AS `version`, `datei` FROM `datei_version`
+                    GROUP BY `datei`
+                ) AS `dvm` ON dvm.datei = dv.datei AND dvm.version = dv.version
+                WHERE
+                    (ds.parameter = $articleId OR
+                    (ds.parameter = $parentid AND $parentid <> 0)) AND 
+                    ds.objekt like 'Artikel' AND
+                    (LOWER(ds.subjekt) LIKE '".
+                implode("' OR LOWER(ds.subjekt) LIKE '",$stichwoerter)
+                ."') AND d.geloescht = 0
+                ORDER BY vom_hauptartikel, ds.sort";
 
         return $this->app->DB->SelectArr($query);
     }
