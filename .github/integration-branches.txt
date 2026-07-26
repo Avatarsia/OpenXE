@@ -31,6 +31,11 @@ feature/upgrader-ui-module
 #   upstream and the refactor into a dedicated TicketPortalService is
 #   still pending. Re-enable once the refactor lands.
 
+# RepairIntegration — Inbound endpoint (/repair-status) consumed by the
+# Partner3D WordPress repair-intake plugin. Adds classes/Modules/RepairIntegration/*
+# plus Bootstrap registration; no core PHP touches outside the module folder.
+feature/repair-integration-port
+
 # Mini-patches (small core touches, kept as patch branches without Bootstrap)
 feature/plz-clean
 feature/row-highlight-clean
@@ -55,6 +60,9 @@ mahnfenster
 # PHP 8 compat — 5 Bootstrap onInit*() methods need `static` keyword
 # Supersedes the earlier fix/backup-bootstrap-static (which only fixed BackupTask)
 fix/bootstrap-static-cross-check
+# #279 Location redirects behind TLS-terminating reverse proxy pointed to
+#   https://host:80/... (SERVER_PORT blindly appended) -> SSL error after actions
+fix/location-redirect-proxy-port
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
