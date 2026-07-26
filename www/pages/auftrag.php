@@ -1063,7 +1063,8 @@ class Auftrag extends GenAuftrag
     }
 
     $datum = date('d.m.Y', strtotime($auftrag['datum']));
-    $detailResult->setTitle(sprintf('Auftrag %s <small>vom %s</small>', $auftrag['belegnr'], $datum));
+    $detailResult->setTitle(sprintf('Auftrag %s', $auftrag['belegnr']));
+    $detailResult->setSubtitle(sprintf('vom %s', $datum));
     $detailResult->addButton('Auftrag Details', sprintf('index.php?module=auftrag&action=edit&id=%s', $auftrag['id']));
     $detailResult->setMiniDetailUrl(sprintf('index.php?module=auftrag&action=minidetail&id=%s', $auftrag['id']));
   }
