@@ -142,14 +142,15 @@ final class RepairSyncService
 
         $result = $this->request($baseUrl . '/wp-json/p3d/v1/ping', $payload, $apiKey, 10);
 
+        $ok = $result['error'] === null && $result['http_code'] === 200;
         $error = '';
-        if ($result['http_code'] !== 200) {
+        if (!$ok) {
             $error = $result['error'] ?? sprintf('WP API returned HTTP %d', (int)$result['http_code']);
         }
         $this->logSync(
             'outbound',
             ['ticket_schluessel' => null, 'action' => 'connection_test', 'payload' => $payload],
-            $result['http_code'] === 200,
+            $ok,
             $error
         );
 
