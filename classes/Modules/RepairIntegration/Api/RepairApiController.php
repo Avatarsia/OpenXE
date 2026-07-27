@@ -270,7 +270,11 @@ final class RepairApiController
             ? "{$customerName} <{$customerEmail}>"
             : ($customerName !== '' ? $customerName : $customerEmail);
 
-        $companyName = $data['customer']['company'] ?? null;
+        $companyName = (string)($data['customer']['company'] ?? '');
+        $notiz = "Automatisch erstellt via WP API Push ({$serviceType})";
+        if ($companyName !== '') {
+            $notiz .= " | Firma: {$companyName}";
+        }
 
         $this->db->perform(
             "INSERT INTO `ticket` (
@@ -288,8 +292,8 @@ final class RepairApiController
                 'mailadresse' => $customerEmail,
                 'prio' => 3,
                 'betreff' => $betreff,
-                'firma' => $companyName ?? '',
-                'notiz' => "Automatisch erstellt via WP API Push ({$serviceType})",
+                'firma' => 1,
+                'notiz' => $notiz,
             ]
         );
         $ticketId = (int)$this->db->lastInsertId();
