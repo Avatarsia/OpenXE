@@ -63,6 +63,9 @@ fix/bootstrap-static-cross-check
 # #279 Location redirects behind TLS-terminating reverse proxy pointed to
 #   https://host:80/... (SERVER_PORT blindly appended) -> SSL error after actions
 fix/location-redirect-proxy-port
+# #282 Ticket-Ansicht zeigt fremde Belege — GetTicketBelege joint dst.parameter
+#   gegen ticket_nachricht.id ohne dst.objekt-Filter -> ID-Kollisionen
+fix/ticket-belege-objekt-filter
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
