@@ -36,11 +36,13 @@ $db = new \Xentral\Components\Database\Database($adapter, $queryFactory);
 $configService = new \Xentral\Modules\RepairIntegration\Service\RepairConfigService($db);
 $auth = new \Xentral\Modules\RepairIntegration\Api\RepairApiAuth();
 $detailsGateway = new \Xentral\Modules\RepairIntegration\Gateway\RepairDetailsGateway($db);
+$statusConfigGateway = new \Xentral\Modules\RepairIntegration\Gateway\RepairStatusConfigGateway($db);
 $controller = new \Xentral\Modules\RepairIntegration\Api\RepairApiController(
     $db,
     $auth,
     $configService,
-    $detailsGateway
+    $detailsGateway,
+    $statusConfigGateway
 );
 
 // Route — support both ?action=push_details and /repair-status (WP plugin format)

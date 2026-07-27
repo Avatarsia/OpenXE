@@ -52,6 +52,31 @@ final class RepairStatusConfigGateway
         return ($value !== false && $value !== null && $value !== '') ? (string)$value : null;
     }
 
+    /**
+     * Rueckwaerts-Lookup: WP-Status-Slug -> OpenXE-Status-Zeile.
+     *
+     * Ein WP-Slug ist mehrdeutig (z.B. 'in_repair' existiert fuer repair,
+     * maintenance, reverse_engineering und individualization), daher wird
+     * ueber die Kategorie des Service-Typs aufgeloest
+     * (siehe ServiceType::statusCategory()). Kategorie-spezifische Zeilen
+     * gewinnen gegen 'general' (z.B. 'new' -> 'neu', 'closed' -> 'abgeschlossen').
+     *
+     * @return array<string, mixed>|null
+     */
+    public function getByWpMapping(string $wpStatus, string $category): ?array
+    {
+        $row = $this->db->fetchRow(
+            "SELECT * FROM `ticket_status_config`
+             WHERE `wp_status_mapping` = :wp
+               AND `is_active` = 1
+               AND (`category` = :cat OR `category` = 'general')
+             ORDER BY (`category` = 'general') ASC, `sort_order` ASC
+             LIMIT 1",
+            ['wp' => $wpStatus, 'cat' => $category]
+        );
+        return $row ?: null;
+    }
+
     public function getNextStatus(string $currentSlug): ?string
     {
         $value = $this->db->fetchValue(

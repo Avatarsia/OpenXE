@@ -4,22 +4,27 @@ declare(strict_types=1);
 namespace Xentral\Modules\RepairIntegration\Api;
 
 use Xentral\Components\Database\Database;
+use Xentral\Modules\RepairIntegration\Enum\ServiceType;
 use Xentral\Modules\RepairIntegration\Exception\AuthenticationException;
 use Xentral\Modules\RepairIntegration\Exception\ForbiddenException;
 use Xentral\Modules\RepairIntegration\Exception\ValidationException;
 use Xentral\Modules\RepairIntegration\Gateway\RepairDetailsGateway;
+use Xentral\Modules\RepairIntegration\Gateway\RepairStatusConfigGateway;
 use Xentral\Modules\RepairIntegration\Service\RepairConfigService;
 
 final class RepairApiController
 {
     private const MAX_PAYLOAD_SIZE = 65536; // @php83: add type int
     private const MAX_REQUESTS_PER_MINUTE = 60; // @php83: add type int
+    private const MAX_STATUS_LENGTH = 30; // @php83: add type int
+    private const DEFAULT_STATUS = 'neu'; // @php83: add type string
 
     public function __construct(
         private readonly Database $db,
         private readonly RepairApiAuth $auth,
         private readonly RepairConfigService $configService,
         private readonly RepairDetailsGateway $detailsGateway,
+        private readonly RepairStatusConfigGateway $statusConfigGateway,
     ) {}
 
     public function handlePushDetails(): void
@@ -140,6 +145,18 @@ final class RepairApiController
         if (strlen($data['request_number']) > 20) {
             throw new ValidationException('request_number too long');
         }
+
+        // `status` ist optional. Ein unbekannter Wert ist KEIN Fehler (Fallback
+        // auf DEFAULT_STATUS bei der Ticket-Anlage), nur Typ und Laenge werden
+        // hart geprueft, damit nichts Ueberlanges in den Log-Payload wandert.
+        if (isset($data['status'])) {
+            if (!is_string($data['status'])) {
+                throw new ValidationException('Invalid status');
+            }
+            if (strlen($data['status']) > self::MAX_STATUS_LENGTH) {
+                throw new ValidationException('status too long');
+            }
+        }
     }
 
     private function processPushDetails(array $data): void
@@ -153,10 +170,23 @@ final class RepairApiController
         );
 
         if (!$ticket) {
-            // No ticket found — create one from the WP payload
-            $ticket = $this->createTicketFromPayload($data);
+            // No ticket found — create one from the WP payload.
+            // Der WP-Status wird nur hier ausgewertet: nach der Anlage besitzt
+            // OpenXE den Workflow, bestehende Tickets werden nie ueberschrieben.
+            $wpStatus = self::normalizeWpStatus($data['status'] ?? null);
+            $mappedStatus = $this->resolveOpenXeStatus($wpStatus, (string)$data['service_type']);
+            $ticket = $this->createTicketFromPayload($data, $mappedStatus ?? self::DEFAULT_STATUS);
             $this->createInitialTicketMessage($data, $ticket['schluessel']);
-            $this->logInbound($ticketSchluessel, (string)json_encode($data), true, 'TICKET_CREATED');
+
+            $note = 'TICKET_CREATED';
+            if ($wpStatus !== null && $mappedStatus === null) {
+                $note .= sprintf(
+                    ' (WP-Status "%s" ohne Mapping, Fallback "%s")',
+                    $wpStatus,
+                    self::DEFAULT_STATUS
+                );
+            }
+            $this->logInbound($ticketSchluessel, (string)json_encode($data), true, $note);
         }
 
         $existing = $this->detailsGateway->getByTicketId((int)$ticket['id']);
@@ -176,12 +206,63 @@ final class RepairApiController
     }
 
     /**
+     * Normalisiert den optionalen WP-Status aus dem Payload.
+     *
+     * Reine Funktion ohne DB-Zugriff (bewusst statisch, damit sie ohne
+     * Container getestet werden kann). Liefert null, wenn der Wert nicht als
+     * Status-Slug verwertbar ist — der Aufrufer faellt dann auf DEFAULT_STATUS
+     * zurueck, ein unbekannter Wert ist kein Request-Fehler.
+     *
+     * @param mixed $raw Rohwert aus dem JSON-Payload
+     */
+    public static function normalizeWpStatus(mixed $raw): ?string
+    {
+        if (!is_string($raw)) {
+            return null;
+        }
+
+        $value = strtolower(trim($raw));
+        if ($value === '' || strlen($value) > self::MAX_STATUS_LENGTH) {
+            return null;
+        }
+        if (preg_match('/^[a-z0-9_]+$/', $value) !== 1) {
+            return null;
+        }
+
+        return $value;
+    }
+
+    /**
+     * Loest einen WP-Status-Slug ueber die Kategorie des Service-Typs in einen
+     * OpenXE-Status auf. Null = kein Mapping vorhanden.
+     */
+    private function resolveOpenXeStatus(?string $wpStatus, string $serviceType): ?string
+    {
+        if ($wpStatus === null) {
+            return null;
+        }
+
+        $type = ServiceType::tryFrom($serviceType);
+        if ($type === null) {
+            return null;
+        }
+
+        $row = $this->statusConfigGateway->getByWpMapping($wpStatus, $type->statusCategory());
+        if ($row === null || empty($row['slug'])) {
+            return null;
+        }
+
+        return (string)$row['slug'];
+    }
+
+    /**
      * Creates a new ticket from the WP API push payload.
      *
      * @param array<string, mixed> $data Validated payload from WP
+     * @param string $status OpenXE-Status-Slug (aufgeloest aus dem WP-Status)
      * @return array{id: int, schluessel: string} The created ticket row
      */
-    private function createTicketFromPayload(array $data): array
+    private function createTicketFromPayload(array $data, string $status = self::DEFAULT_STATUS): array
     {
         $ticketSchluessel = $data['request_number'];
         $serviceType = $data['service_type'];
@@ -208,7 +289,7 @@ final class RepairApiController
             [
                 'schluessel' => $ticketSchluessel,
                 'quelle' => 'api',
-                'status' => 'neu',
+                'status' => $status,
                 'kunde' => $verfasser,
                 'mailadresse' => $customerEmail,
                 'prio' => 3,
@@ -311,7 +392,9 @@ final class RepairApiController
         $mapped = [
             'wp_request_number' => $data['request_number'] ?? null,
             'service_type' => $data['service_type'] ?? null,
-            'service_delivery_type' => $data['service_delivery_type'] ?? 'einsendung',
+            // Feldnamen-Kompatibilitaet: das WP-Plugin sendet je nach Version
+            // `service_delivery_type` oder das kuerzere `service_delivery`.
+            'service_delivery_type' => $data['service_delivery_type'] ?? $data['service_delivery'] ?? 'einsendung',
         ];
 
         if (isset($data['customer']) && is_array($data['customer'])) {
@@ -325,7 +408,8 @@ final class RepairApiController
             $d = $data['device'];
             $mapped['manufacturer'] = $d['manufacturer'] ?? null;
             $mapped['model'] = $d['model'] ?? null;
-            $mapped['serial_number'] = $d['serial_number'] ?? null;
+            // Feldnamen-Kompatibilitaet: `serial_number` (aktuell) bzw. `serial` (aeltere Plugin-Version).
+            $mapped['serial_number'] = $d['serial_number'] ?? $d['serial'] ?? null;
             $mapped['mods_present'] = !empty($d['mods_present']) ? 1 : 0;
             $mapped['mods_text'] = $d['mods_text'] ?? null;
         }

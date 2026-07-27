@@ -131,6 +131,7 @@ final class Bootstrap
             $container->get('RepairApiAuth'),
             $container->get('RepairConfigService'),
             $container->get('RepairDetailsGateway'),
+            $container->get('RepairStatusConfigGateway'),
         );
     }
 }
