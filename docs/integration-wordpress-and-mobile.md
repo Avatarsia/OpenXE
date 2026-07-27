@@ -6,7 +6,7 @@
 Diese Datei beschreibt das Modul `Xentral\Modules\RepairIntegration` aus Sicht der externen Schnittstellen:
 
 - **Inbound von WP-Plugin:** Push neuer Reparatur-Anfragen / Status-Updates aus dem Plugin nach OpenXE (Phase 1, implementiert)
-- **Outbound nach WP-Plugin:** Status-Echo wenn OpenXE-Tickets sich aendern (Phase 2.5, Roadmap)
+- **Outbound nach WP-Plugin:** Status-Echo wenn OpenXE-Tickets sich aendern (Phase 2, implementiert)
 - **Inbound von Mobile-App:** Direkt-Anbindung der Werkstatt-App (Phase 2.5, Roadmap)
 
 Cross-Links:
@@ -19,22 +19,27 @@ Cross-Links:
 ## Datenfluss
 
 ```
-Phase 1 (aktiv):
+Phase 1 + 2 (aktiv):
 
   +-------------+   POST   +--------+
   | WP-Plugin   | ------>  | OpenXE |   /repairapi/index.php/repair-status
   |             |          |        |   Bearer ODER HMAC-SHA256
   +-------------+          +--------+
 
+  +-------------+  Bearer  +--------+
+  | WP-Plugin   | <------  | OpenXE |   POST p3d/v1/requests/status
+  |             |          |        |   Queue (repair_sync_queue) + Cron
+  +-------------+          +--------+
+
 
 Phase 2.5 (Roadmap):
 
-  +---------+    Bearer    +--------+    HMAC+Bearer    +-------------+
-  | Android |  -------->   | OpenXE |  ------------->   | WP-Plugin   |
-  |  App    |  <--------   |        |   Status-Echo     |             |
-  +---------+   neue       +--------+   POST p3d/v1/    +-------------+
-              Mobile-API               requests/status
-              (zu bauen)               (Plugin-Seite ready)
+  +---------+    Bearer    +--------+
+  | Android |  -------->   | OpenXE |
+  |  App    |  <--------   |        |
+  +---------+   neue       +--------+
+              Mobile-API
+              (zu bauen)
 ```
 
 ---
@@ -93,6 +98,16 @@ Pflicht-Felder:
 - `request_number` (string, max 20 chars)
 - `service_type` (`reparatur` | `wartung` | `reverse_engineering` | `individualisierung`)
 
+Optional:
+- `status` (string, max 30 chars) — WP-Slug, siehe [Status-Uebernahme](#status-uebernahme-inbound). Unbekannte Werte sind kein Fehler.
+
+Feldnamen-Aliase (das Plugin sendet je nach Version die kurze oder lange Variante, `mapInboundData()` akzeptiert beide):
+
+| Kanonisch                | Alias              |
+|--------------------------|--------------------|
+| `device.serial_number`   | `device.serial`    |
+| `service_delivery_type`  | `service_delivery` |
+
 Beispiel (siehe `tests/E2E/RepairIntegration/fixtures/inbound_api_payload.json`):
 
 ```json
@@ -150,7 +165,7 @@ Wenn kein Ticket mit `schluessel = <request_number>` existiert, wird automatisch
 |-----------------|-----------------------------------------------------|
 | `schluessel`    | `data.request_number`                                |
 | `quelle`        | `'api'`                                              |
-| `status`        | `'neu'`                                              |
+| `status`        | aus `data.status` gemappt, sonst `'neu'` (siehe unten) |
 | `betreff`       | `[REP|WRT|REV|IND] Ticket #<nr> - <Hersteller> <Modell>` |
 | `kunde`         | `"<name> <<email>>"`                                  |
 | `mailadresse`   | `data.customer.email`                                 |
@@ -162,23 +177,71 @@ Anschliessend wird die `issue_description` als erste `ticket_nachricht` geschrie
 
 Reparatur-Details landen in `repair_details` via `RepairDetailsGateway::create()` bzw. `update()`.
 
+### Status-Uebernahme (Inbound)
+
+Das optionale Feld `status` im Payload wird **ausschliesslich bei der Ticket-Anlage** ausgewertet. Danach besitzt OpenXE den Workflow: bei einem Push auf ein bereits existierendes Ticket bleibt `ticket.status` unveraendert, es werden nur die Reparatur-Details aktualisiert. Sonst wuerde ein verspaeteter WP-Push einen in OpenXE weitergedrehten Vorgang zuruecksetzen.
+
+Ablauf bei Neuanlage (`RepairApiController::processPushDetails()`):
+
+1. `RepairApiController::normalizeWpStatus()` — reine Funktion: trim, lowercase, Pattern `^[a-z0-9_]+$`, max 30 Zeichen. Ergebnis `null` = nicht verwertbar.
+2. `ServiceType::from(service_type)->statusCategory()` liefert die Kategorie (`repair` | `maintenance` | `reverse_engineering` | `individualization`).
+3. `RepairStatusConfigGateway::getByWpMapping($wpStatus, $category)` sucht in `ticket_status_config` die aktive Zeile mit passendem `wp_status_mapping`. Ein WP-Slug ist mehrdeutig (`in_repair` existiert in allen vier Kategorien), daher die Aufloesung ueber die Kategorie; kategorie-spezifische Zeilen gewinnen gegen `general`.
+4. Kein Treffer → Fallback `'neu'`.
+
+Validierung: `status` muss ein String mit maximal 30 Zeichen sein, sonst HTTP 400 (`Invalid status` / `status too long`). Ein **unbekannter** Wert ist ausdruecklich kein Fehler — der Request wird mit Fallback verarbeitet und der `repair_sync_log`-Eintrag der Neuanlage vermerkt es:
+
+```
+TICKET_CREATED (WP-Status "some_future_status" ohne Mapping, Fallback "neu")
+```
+
+Aufloesungs-Matrix (Stand Seed 1.1.0, `-` = Fallback `neu`):
+
+| WP-Status        | reparatur      | wartung          | reverse_engineering | individualisierung |
+|------------------|----------------|------------------|---------------------|--------------------|
+| `new`            | `neu`          | `neu`            | `neu`               | `neu`              |
+| `in_diagnosis`   | `in_diagnose`  | -                | `re_analyse`        | `ind_planung`      |
+| `quote_sent`     | `kv_gesendet`  | -                | `re_angebot`        | `ind_angebot`      |
+| `quote_declined` | `kv_abgelehnt` | -                | `re_abgelehnt`      | `ind_abgelehnt`    |
+| `approved`       | `freigegeben`  | -                | `re_freigabe`       | `ind_freigabe`     |
+| `in_repair`      | `in_reparatur` | `wartung_laeuft` | `re_umsetzung`      | `ind_fertigung`    |
+| `repaired`       | `repariert`    | `wartung_fertig` | `re_fertig`         | `ind_fertig`       |
+| `returned`       | `versendet`    | -                | -                   | -                  |
+| `closed`         | `abgeschlossen`| `abgeschlossen`  | `abgeschlossen`     | `abgeschlossen`    |
+
+`versendet` liegt in Kategorie `repair`, wird aber von den `*_fertig`-Status aller Kategorien als `next_status_slug` genutzt. Ein `returned`-Push auf ein Wartungs-/RE-/IND-Ticket findet daher kein kategorie-eigenes Ziel und faellt auf `neu` zurueck — in der Praxis irrelevant, weil ein Rueckversand nach der Anlage passiert und Inbound-Status nur bei der Anlage greift.
+
 ### Audit-Log
 
 Jeder Request (Erfolg und Fehler) wird in `repair_sync_log` mit `direction = 'inbound'`, `action = 'push_details'` geloggt, inkl. Remote-IP und gekuerztem Payload.
 
 ---
 
-## (B) Outbound nach WP (Status-Echo) — `Phase 2.5, geplant`
+## (B) Outbound nach WP (Status-Echo) — `Phase 2, implementiert`
 
-Wenn ein OpenXE-Mitarbeiter den Ticket-Status aendert (z.B. UI-Action "In Reparatur" → "Reparatur abgeschlossen"), soll OpenXE diesen Status-Change zurueck ins WP-Plugin pushen, damit der Kunde im `frontend-status-lookup.php` aktuelle Daten sieht.
+Wenn ein OpenXE-Mitarbeiter den Ticket-Status aendert (z.B. "In Reparatur" → "Repariert"), pusht OpenXE den Status-Change zurueck ins WP-Plugin, damit der Kunde im `frontend-status-lookup.php` aktuelle Daten sieht.
 
-**Status:** WP-Plugin-Endpoint ist fertig, OpenXE-Outbound-Modul muss noch gebaut werden.
+**Quelle:**
+- Trigger: `www/pages/ticket_custom.php::ticket_edit()` instanziiert nach dem Speichern `classes/Modules/RepairIntegration/Hook/TicketStatusChangeHook.php::onTicketEditAfter($ticketId, $oldStatus)`; die Hook-Registrierung `ticket_edit_after` legt `install.php` an
+- Service: `classes/Modules/RepairIntegration/Service/RepairSyncService.php`
+- Queue-Gateway: `classes/Modules/RepairIntegration/Gateway/RepairSyncQueueGateway.php`
+- Cron: `cronjobs/repair_sync.php` (Prozessstarter-Parameter `repair_sync`, alle 2 Minuten, Mutex-geschuetzt)
+- Mapping-Quelle: `ticket_status_config.wp_status_mapping` ueber `RepairStatusConfigGateway::getWpMapping()`
+
+### Ablauf
+
+1. `TicketStatusChangeHook::onTicketEditAfter($ticketId, $oldStatus)` vergleicht alten und aktuellen `ticket.status`; bei Gleichstand passiert nichts.
+2. `RepairSyncService::checkAndQueueStatusChange($ticketId)` bricht ab, wenn das Modul deaktiviert ist, keine `repair_details` existieren oder `wp_request_number` leer ist.
+3. `getWpMapping(ticket.status)` liefert den WP-Slug. **Ist das Mapping `NULL`, wird nicht synchronisiert** — das ist der bewusste Weg, um interne Status (z.B. `offen`, `warten_e`, `wartung_geplant`) vor dem Kunden-Frontend zu verbergen.
+4. Der Payload wird in `repair_sync_queue` eingereiht (`action = 'status_change'`, Ziel-URL aus `RepairConfigService::getWpApiUrl()` + `/wp-json/p3d/v1/requests/status`).
+5. `cronjobs/repair_sync.php` ruft `RepairSyncService::processQueue()` (max. 50 Eintraege pro Lauf), Ergebnis landet in `repair_sync_log` (`direction = 'outbound'`).
 
 ### Ziel-Endpoint (im WP-Plugin)
 
 | Method | URL                                                        | Auth              |
 |--------|------------------------------------------------------------|-------------------|
 | POST   | `https://partner-3d.de/wp-json/p3d/v1/requests/status`     | `Bearer <token>`  |
+
+Header: `Content-Type: application/json`, `Authorization: Bearer <wp_api_key>`, `X-Repair-Source: openxe`.
 
 Body:
 ```json
@@ -187,25 +250,66 @@ Body:
 
 Response 200:
 ```json
-{ "success": true, "old_status": "in_diagnose", "new_status": "in_repair", "audit_logged": true }
+{ "success": true, "old_status": "in_diagnosis", "new_status": "in_repair", "audit_logged": true }
 ```
 
-`status` muss in der WP-Allowlist sein (siehe Plugin-`Helpers::get_status_labels()`).
+`status` muss in der WP-Allowlist sein (siehe Plugin-`Helpers::get_status_labels()`): `new`, `in_diagnosis`, `quote_sent`, `quote_declined`, `approved`, `in_repair`, `repaired`, `returned`, `closed`.
 
-### Vorschlag fuer das Outbound-Modul
+### Retry / Backoff
 
-Spiegelbild zur WP-seitigen ERP-Queue. Empfohlene Komponenten:
+`RepairSyncService::RETRY_DELAYS` = `[120, 600, 1800, 7200, 28800]` Sekunden (2 min, 10 min, 30 min, 2 h, 8 h). Nach `max_retries` (Default 5) geht der Eintrag auf `permanently_failed`. Jeder Versuch schreibt `last_error` + `last_http_code` in `repair_sync_queue`; die UI dazu liegt unter `index.php?module=repairintegration&action=syncstatus`.
 
-- **Trigger:** OpenXE-Event-Hook auf `ticket_status_change` (oder `repair_details_status_change` wenn Repair-Status separat gehalten wird) — pusht `request_number + neuer_status` in eine neue Tabelle `repair_outbound_queue`
-- **Queue-Tabelle:** `repair_outbound_queue` (Spalten: `id`, `request_number`, `status`, `retry_count`, `next_retry_at`, `last_error`, `created_at`)
-- **Cron:** alle 5 Minuten (analog zu WP `p3d_erp_queue_process`)
-- **Backoff:** `[5, 15, 60, 240, 720]` Minuten — identisch zum WP-Plugin, damit Operations-Verhalten konsistent ist
-- **HTTP-Client:** Symfony HttpClient ueber den OpenXE-Container; `RepairApiAuth::generateSignature()` **wiederverwenden** (gleicher HMAC-Algorithmus), Header-Format identisch zur Inbound-Seite
-- **Config:** neuer Settings-Eintrag `repair_outbound_wp_url`, `repair_outbound_bearer_token` (kann derselbe wie inbound sein), HMAC-Secret darf identisch sein
+### Status-Mapping-Tabelle
+
+Gepflegt in `ticket_status_config`, ausgeliefert von `Migration/sql/002_seed_status_config.sql` (Schema-Version 1.1.0). `wp_status_mapping = NULL` bedeutet: kein Outbound-Push. `notify_customer = 1` steuert `RepairEmailService::shouldSendNotification()` — der eigentliche Mailversand ist noch nicht verdrahtet (der Hook bereitet ihn nur vor, siehe Kommentar in `TicketStatusChangeHook`), das Flag ist heute also reine Konfiguration.
+
+| Slug              | Label                                  | Kategorie             | Sort | `wp_status_mapping` | `next_status_slug` | notify |
+|-------------------|----------------------------------------|-----------------------|------|---------------------|--------------------|--------|
+| `neu`             | Neu                                    | general               | 10   | `new`               | `offen`            | 0      |
+| `offen`           | Offen                                  | general               | 20   | -                   | -                  | 0      |
+| `warten_e`        | Warten auf Intern                      | general               | 30   | -                   | -                  | 0      |
+| `warten_kd`       | Warten auf Kunde                       | general               | 40   | -                   | -                  | 0      |
+| `klaeren`         | Klaeren                                | general               | 50   | -                   | -                  | 0      |
+| `beantwortet`     | Beantwortet                            | general               | 60   | -                   | -                  | 0      |
+| `in_diagnose`     | In Diagnose                            | repair                | 100  | `in_diagnosis`      | `kv_gesendet`      | 1      |
+| `kv_gesendet`     | Kostenvoranschlag gesendet             | repair                | 110  | `quote_sent`        | `freigegeben`      | 1      |
+| `kv_abgelehnt`    | Kostenvoranschlag abgelehnt            | repair                | 115  | `quote_declined`    | `versendet`        | 1      |
+| `freigegeben`     | Freigegeben                            | repair                | 120  | `approved`          | `in_reparatur`     | 1      |
+| `in_reparatur`    | In Reparatur                           | repair                | 130  | `in_repair`         | `repariert`        | 0      |
+| `repariert`       | Repariert                              | repair                | 140  | `repaired`          | `versendet`        | 1      |
+| `versendet`       | Versendet                              | repair                | 150  | `returned`          | `abgeschlossen`    | 1      |
+| `wartung_geplant` | Wartung geplant                        | maintenance           | 200  | -                   | `wartung_laeuft`   | 1      |
+| `wartung_laeuft`  | Wartung laeuft                         | maintenance           | 210  | `in_repair`         | `wartung_fertig`   | 0      |
+| `wartung_fertig`  | Wartung abgeschlossen                  | maintenance           | 220  | `repaired`          | `versendet`        | 1      |
+| `re_analyse`      | RE: Analyse                            | reverse_engineering   | 300  | `in_diagnosis`      | `re_angebot`       | 1      |
+| `re_angebot`      | RE: Angebot erstellt                   | reverse_engineering   | 310  | `quote_sent`        | `re_freigabe`      | 1      |
+| `re_abgelehnt`    | RE: Angebot abgelehnt                  | reverse_engineering   | 315  | `quote_declined`    | `versendet`        | 1      |
+| `re_freigabe`     | RE: Freigegeben                        | reverse_engineering   | 320  | `approved`          | `re_umsetzung`     | 1      |
+| `re_umsetzung`    | RE: In Umsetzung                       | reverse_engineering   | 330  | `in_repair`         | `re_fertig`        | 0      |
+| `re_fertig`       | RE: Fertig                             | reverse_engineering   | 340  | `repaired`          | `versendet`        | 1      |
+| `ind_planung`     | Individualisierung: Planung            | individualization     | 400  | `in_diagnosis`      | `ind_angebot`      | 1      |
+| `ind_angebot`     | Individualisierung: Angebot            | individualization     | 410  | `quote_sent`        | `ind_freigabe`     | 1      |
+| `ind_abgelehnt`   | Individualisierung: Angebot abgelehnt  | individualization     | 415  | `quote_declined`    | `versendet`        | 1      |
+| `ind_freigabe`    | Individualisierung: Freigegeben        | individualization     | 420  | `approved`          | `ind_fertigung`    | 1      |
+| `ind_fertigung`   | Individualisierung: In Fertigung       | individualization     | 430  | `in_repair`         | `ind_fertig`       | 0      |
+| `ind_fertig`      | Individualisierung: Fertig             | individualization     | 440  | `repaired`          | `versendet`        | 1      |
+| `abgeschlossen`   | Abgeschlossen                          | general               | 900  | `closed`            | -                  | 0      |
+| `spam`            | Papierkorb                             | general               | 999  | -                   | -                  | 0      |
+
+Bewusst ohne Mapping: die `general`-Arbeitsstatus (`offen`, `warten_e`, `warten_kd`, `klaeren`, `beantwortet`, `spam`) und `wartung_geplant` — eine geplante Wartung ist keine Diagnose, ein WP-Echo waere irrefuehrend.
+
+### Migration bestehender Installationen
+
+Der Seed (`002_...`) laeuft nur bei Erstinstallation (`RepairIntegrationMigration::needsInstall()`). Bestehende Installationen bekommen Mapping-Aenderungen und neue Status ueber `Migration/sql/003_status_config_upgrade.sql`:
+
+- `RepairIntegrationMigration::needsUpgrade()` vergleicht die in `systemconfig` (`repair_integration.schema_version`) gespeicherte Version mit `SCHEMA_VERSION`
+- `upgrade()` fuehrt das Upgrade-SQL aus und schreibt die neue Version
+- Ausgeloest via `classes/Modules/RepairIntegration/install.php` (Action `index.php?module=repairintegration&action=install`) **und** automatisch beim ersten Seitenaufruf des Moduls (`repairintegration.php::ensureInstalled()`)
+- Idempotent: `INSERT IGNORE` fuer neue Zeilen, `UPDATE`s eng auf das jeweilige alte Seed-Wertepaar begrenzt (`WHERE slug = 'x' AND wp_status_mapping IS NULL`), damit vom Admin angepasste Zeilen nicht ueberschrieben werden
 
 ### Reduce-Coupling-Note
 
-Auch wenn das Plugin den Bearer-Token in beide Richtungen akzeptiert, sollte OpenXE-Outbound **HMAC** verwenden, damit ein eventuelles Leak des Bearer-Tokens (durch z.B. Log-Capture irgendwo im Stack) nicht ausreicht — Angreifer braucht zusaetzlich den HMAC-Secret und einen aktuellen Timestamp.
+Outbound nutzt aktuell den Bearer-Token (`RepairConfigService::getWpApiKey()`), weil das Plugin ihn in beide Richtungen akzeptiert. Perspektivisch sollte auch Outbound **HMAC** verwenden (`RepairApiAuth::generateSignature()` ist wiederverwendbar), damit ein Leak des Bearer-Tokens allein nicht ausreicht — ein Angreifer braucht zusaetzlich das HMAC-Secret und einen aktuellen Timestamp.
 
 ---
 
