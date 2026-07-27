@@ -343,7 +343,7 @@ class Repairintegration
                     t.schluessel,
                     rd.service_type,
                     CONCAT(COALESCE(rd.manufacturer,''), ' ', COALESCE(rd.model,'')) as device,
-                    CONCAT(COALESCE(t.kunde,''), ' <', COALESCE(t.mailadresse,''), '>') as customer,
+                    CONCAT(COALESCE(t.kunde,''), ' &lt;', COALESCE(t.mailadresse,''), '&gt;') as customer,
                     COALESCE(sc.label_de, t.status) as status_label,
                     IF(rd.is_express = 1, 'Ja', '') as is_express,
                     t.zeit,
