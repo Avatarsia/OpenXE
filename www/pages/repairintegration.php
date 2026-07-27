@@ -31,6 +31,8 @@ class Repairintegration
         $this->app->ActionHandler('einstellungen', 'RepairSettings');
         $this->app->ActionHandler('merge', 'RepairMerge');
         $this->app->ActionHandler('syncstatus', 'SyncStatus');
+        $this->app->ActionHandler('createbeleg', 'RepairCreateBeleg');
+        $this->app->ActionHandler('createadresse', 'RepairCreateAdresse');
         $this->app->ActionHandler('install', 'Install');
         $this->app->ActionHandlerListen($app);
     }
@@ -323,6 +325,190 @@ class Repairintegration
         $this->app->Tpl->Parse('PAGE', 'tabview.tpl');
     }
 
+    /**
+     * Leitet zurueck auf das Ticket und uebergibt eine Meldung base64-kodiert
+     * per GET. ticket_edit (www/pages/ticket.php) dekodiert den msg-Parameter
+     * und rendert ihn als MESSAGE.
+     */
+    private function redirectToTicket(int $ticketId, string $cssClass, string $text): void
+    {
+        $msg = $this->app->erp->base64_url_encode(
+            '<div class="' . $cssClass . '">' . htmlspecialchars($text) . '</div>'
+        );
+        $this->app->Location->execute(
+            'index.php?module=ticket&action=edit&id=' . $ticketId . '&msg=' . $msg
+        );
+    }
+
+    /**
+     * Vergibt eine Kundennummer, falls die Adresse noch keine hat. Per API
+     * angelegte Adressen bleiben zunaechst ohne Nummer (der Standalone-Endpoint
+     * hat keinen Zugriff auf den Nummernkreis) - spaetestens beim ersten
+     * Beleg aus dem Web-Kontext wird sie hier nachgezogen.
+     */
+    private function ensureKundennummer(int $adresseId): void
+    {
+        if ($adresseId <= 0) {
+            return;
+        }
+        $kundennummer = (string)$this->app->DB->Select(
+            'SELECT kundennummer FROM adresse WHERE id = ' . $adresseId . ' LIMIT 1'
+        );
+        if ($kundennummer !== '') {
+            return;
+        }
+        $neu = (string)$this->app->erp->GetNextKundennummer();
+        if ($neu !== '') {
+            $this->app->DB->Update(
+                "UPDATE adresse SET kundennummer = '"
+                . $this->app->DB->real_escape_string($neu)
+                . "' WHERE id = " . $adresseId . " LIMIT 1"
+            );
+        }
+    }
+
+    /**
+     * Legt aus einem Reparatur-Ticket heraus einen leeren Beleg an
+     * (Angebot/Auftrag/Rechnung), setzt Adresse und Betreff und verknuepft ihn
+     * mit dem Ticket. Positionen werden bewusst nicht befuellt - die
+     * Bearbeitung findet anschliessend im jeweiligen Beleg-Modul statt.
+     */
+    function RepairCreateBeleg()
+    {
+        $ticketId = (int)$this->app->Secure->GetGET('ticket');
+        $typ = (string)$this->app->Secure->GetGET('typ');
+
+        if (!$this->app->erp->RechteVorhanden('repairintegration', 'list')) {
+            $this->redirectToTicket($ticketId, 'error', 'Keine Berechtigung.');
+            return;
+        }
+
+        // Whitelist vor dem zweiten Rechtecheck: $typ wird weiter unten als
+        // Tabellenname im SQL und als Modulname in der Redirect-URL verwendet.
+        if (!in_array($typ, array('angebot', 'auftrag', 'rechnung'), true)) {
+            $this->redirectToTicket($ticketId, 'error', 'Unbekannte Belegart.');
+            return;
+        }
+
+        if (!$this->app->erp->RechteVorhanden($typ, 'edit')) {
+            $this->redirectToTicket($ticketId, 'error', 'Keine Berechtigung fuer Belegart ' . $typ . '.');
+            return;
+        }
+
+        /** @var \Xentral\Modules\RepairIntegration\Service\RepairBelegService $belegService */
+        $belegService = $this->app->Container->get('RepairBelegService');
+        try {
+            $prepared = $belegService->prepareBelegCreation($ticketId, $typ);
+        } catch (\Throwable $e) {
+            // Haeufigster Fall: RepairIntegrationException, weil am Ticket
+            // keine Adresse haengt. Dann erst action=createadresse aufrufen.
+            $this->redirectToTicket($ticketId, 'error', $e->getMessage());
+            return;
+        }
+
+        $adresseId = (int)$prepared['adresse_id'];
+        $this->ensureKundennummer($adresseId);
+
+        // Gleiches Muster wie AdresseCreateDokument in www/pages/adresse.php:
+        // Beleg mit Adresse anlegen, danach die Standardwerte der Adresse
+        // (Zahlungsziel, Steuersaetze, Lieferadresse ...) nachziehen.
+        switch ($typ) {
+            case 'angebot':
+                $belegId = (int)$this->app->erp->CreateAngebot($adresseId);
+                if ($belegId > 0) {
+                    $this->app->erp->LoadAngebotStandardwerte($belegId, $adresseId);
+                }
+                break;
+            case 'auftrag':
+                $belegId = (int)$this->app->erp->CreateAuftrag($adresseId);
+                if ($belegId > 0) {
+                    $this->app->erp->LoadAuftragStandardwerte($belegId, $adresseId);
+                }
+                break;
+            default:
+                $belegId = (int)$this->app->erp->CreateRechnung($adresseId);
+                if ($belegId > 0) {
+                    $this->app->erp->LoadRechnungStandardwerte($belegId, $adresseId);
+                }
+                break;
+        }
+
+        if ($belegId <= 0) {
+            $this->redirectToTicket($ticketId, 'error', 'Beleg konnte nicht angelegt werden.');
+            return;
+        }
+
+        $betreff = (string)$prepared['betreff'];
+        if ($betreff !== '') {
+            $this->app->DB->Update(
+                "UPDATE `" . $typ . "` SET betreff = '"
+                . $this->app->DB->real_escape_string($betreff)
+                . "' WHERE id = " . $belegId . " LIMIT 1"
+            );
+        }
+
+        // Die Belegnummer vergibt OpenXE erst bei der Freigabe, ein frisch
+        // angelegter Beleg ist ein Entwurf mit leerer belegnr. Der Wert wird
+        // trotzdem gelesen, damit die Verknuepfung korrekt ist, falls in der
+        // Firmenkonfiguration eine Schnellfreigabe aktiv ist.
+        $belegNr = (string)$this->app->DB->Select(
+            "SELECT belegnr FROM `" . $typ . "` WHERE id = " . $belegId . " LIMIT 1"
+        );
+
+        try {
+            $belegService->linkBelegToTicket(
+                $ticketId,
+                (string)$prepared['ticket_schluessel'],
+                $typ,
+                $belegId,
+                $belegNr === '' ? null : $belegNr,
+                (string)$this->app->User->GetName()
+            );
+        } catch (\Throwable $e) {
+            // Der Beleg existiert an dieser Stelle bereits. Ein Fehler beim
+            // Verknuepfen darf den Anwender nicht auf einen Fehlerbildschirm
+            // werfen - die Verknuepfung laesst sich nachziehen, der Fehler
+            // landet im Log.
+            error_log('RepairIntegration linkBelegToTicket failed: ' . $e->getMessage());
+        }
+
+        $this->app->Location->execute('index.php?module=' . $typ . '&action=edit&id=' . $belegId);
+    }
+
+    /**
+     * Verknuepft ein Reparatur-Ticket mit einem Kundenkonto: der Service sucht
+     * per E-Mail nach einer bestehenden Adresse und legt sonst eine neue an.
+     */
+    function RepairCreateAdresse()
+    {
+        $ticketId = (int)$this->app->Secure->GetGET('ticket');
+
+        if (!$this->app->erp->RechteVorhanden('repairintegration', 'list')
+            || !$this->app->erp->RechteVorhanden('adresse', 'edit')) {
+            $this->redirectToTicket($ticketId, 'error', 'Keine Berechtigung.');
+            return;
+        }
+
+        try {
+            /** @var \Xentral\Modules\RepairIntegration\Service\RepairAdresseService $adresseService */
+            $adresseService = $this->app->Container->get('RepairAdresseService');
+            // Leeres Array: der Service liest die Kundendaten selbst aus
+            // ticket und ticket_repair_details.
+            $adresseId = (int)$adresseService->ensureAdresseForTicket($ticketId, array());
+        } catch (\Throwable $e) {
+            $this->redirectToTicket($ticketId, 'error', $e->getMessage());
+            return;
+        }
+
+        if ($adresseId <= 0) {
+            $this->redirectToTicket($ticketId, 'error', 'Kundenkonto konnte nicht angelegt werden.');
+            return;
+        }
+
+        $this->ensureKundennummer($adresseId);
+        $this->redirectToTicket($ticketId, 'info', 'Kundenkonto verknuepft.');
+    }
+
     function TableSearch(&$app, $name, $erlaubtevars)
     {
         switch ($name) {
@@ -330,7 +516,19 @@ class Repairintegration
                 $allowed['repair_list'] = array('list');
                 $heading = array('Ticket #', 'Typ', 'Hersteller/Modell', 'Kunde', 'Status', 'Express', 'Erstellt', 'Men&uuml;');
                 $width = array('8%', '8%', '18%', '22%', '12%', '4%', '10%', '1%');
-                $findcols = array('t.schluessel', 'rd.service_type', 'device', 'customer', 'status_label', 'rd.is_express', 't.zeit', 't.id');
+
+                // Klartext-Ausdruecke der beiden zusammengesetzten Spalten.
+                // Sie werden im SELECT in einen Ticket-Link gewickelt, in
+                // findcols aber roh verwendet: sonst wuerde die Sortierung auf
+                // dem gemeinsamen '<a href=...'-Praefix statt auf dem Inhalt
+                // arbeiten.
+                $device = "CONCAT(COALESCE(rd.manufacturer,''), ' ', COALESCE(rd.model,''))";
+                // Die Spitzklammern um die E-Mail bleiben als Entity kodiert -
+                // rohe < > zerreissen das DOM der Liste.
+                $customer = "CONCAT(COALESCE(t.kunde,''), ' &lt;', COALESCE(t.mailadresse,''), '&gt;')";
+                $linkopen = "CONCAT('<a href=\"index.php?module=ticket&action=edit&id=',t.id,'\">',";
+
+                $findcols = array('t.schluessel', 'rd.service_type', $device, $customer, 'status_label', 'rd.is_express', 't.zeit', 't.id');
                 $searchsql = array('t.schluessel', 'rd.manufacturer', 'rd.model', 't.kunde', 't.mailadresse', 'rd.serial_number');
 
                 $defaultorder = 7;
@@ -340,10 +538,10 @@ class Repairintegration
 
                 $sql = "SELECT SQL_CALC_FOUND_ROWS
                     t.id,
-                    t.schluessel,
+                    " . $linkopen . "t.schluessel,'</a>'),
                     rd.service_type,
-                    CONCAT(COALESCE(rd.manufacturer,''), ' ', COALESCE(rd.model,'')) as device,
-                    CONCAT(COALESCE(t.kunde,''), ' &lt;', COALESCE(t.mailadresse,''), '&gt;') as customer,
+                    " . $linkopen . $device . ",'</a>') as device,
+                    " . $linkopen . $customer . ",'</a>') as customer,
                     COALESCE(sc.label_de, t.status) as status_label,
                     IF(rd.is_express = 1, 'Ja', '') as is_express,
                     t.zeit,
