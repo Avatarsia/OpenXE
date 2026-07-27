@@ -94,6 +94,12 @@ class Repairintegration
         /** @var \Xentral\Modules\RepairIntegration\Service\RepairConfigService */
         $config = $this->app->Container->get('RepairConfigService');
 
+        // Meldung aus dem Redirect nach dem Generieren (siehe unten).
+        $incomingMsg = $this->app->erp->base64_url_decode((string)$this->app->Secure->GetGET('msg'));
+        if ($incomingMsg !== '') {
+            $this->app->Tpl->Set('MESSAGE', $incomingMsg);
+        }
+
         if ($this->app->Secure->GetPOST('submit') === 'save') {
             $config->set('enabled', $this->app->Secure->GetPOST('enabled') ? '1' : '0');
             $config->set('wp_api_url', $this->app->Secure->GetPOST('wp_api_url'));
@@ -105,20 +111,32 @@ class Repairintegration
             $this->app->Tpl->Set('MESSAGE', '<div class="info">Einstellungen gespeichert.</div>');
         }
 
+        // Post/Redirect/Get: nach dem Generieren umleiten, damit ein Reload
+        // (F5) den Schluessel nicht erneut rotiert. Das #tabs-2-Fragment
+        // laesst jQuery UI Tabs den Verbindungs-Tab wieder oeffnen.
         $submit = $this->app->Secure->GetPOST('submit');
         if ($submit === 'generate_inbound_secret' || $submit === 'generate_wp_api_key') {
             $configKey = $submit === 'generate_inbound_secret' ? 'inbound_shared_secret' : 'wp_api_key';
+            $generated = false;
             try {
                 $config->set($configKey, bin2hex(random_bytes(32)));
-                $this->app->Tpl->Set(
-                    'MESSAGE',
-                    '<div class="info">Neuer Schluessel generiert. Wert ins WordPress-Plugin uebernehmen.</div>'
-                );
+                $generated = true;
             } catch (\Throwable $e) {
                 $this->app->Tpl->Set(
                     'MESSAGE',
                     '<div class="error">Generierung fehlgeschlagen: ' . htmlspecialchars($e->getMessage()) . '</div>'
                 );
+            }
+            // Redirect bewusst ausserhalb des try: ein Fehlschlag rendert
+            // direkt weiter, ein Erfolg verlaesst die Methode sofort.
+            if ($generated) {
+                $msg = $this->app->erp->base64_url_encode(
+                    '<div class="info">Neuer Schluessel generiert. Wert ins WordPress-Plugin uebernehmen.</div>'
+                );
+                $this->app->Location->execute(
+                    'index.php?module=repairintegration&action=einstellungen&msg=' . $msg . '#tabs-2'
+                );
+                return;
             }
         }
 
