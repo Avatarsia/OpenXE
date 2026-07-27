@@ -17,17 +17,26 @@ class upgrade {
      */
     const REMOTE_HOST_PATTERN = '/^[\\w@.:\\/-]+$/';
     const BRANCH_NAME_PATTERN = '/^[A-Za-z0-9._\\/-]+$/';
-    const ROLLBACK_TAG_PATTERN = '/^pre-upgrade-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}$/';
+    // Optionaler numerischer Suffix (-2, -3, ...) entsteht bei
+    // Tag-Namenskollisionen innerhalb derselben Sekunde.
+    const ROLLBACK_TAG_PATTERN = '/^pre-upgrade-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}(-\d+)?$/';
 
     /**
-     * Match-Strings aus der upstream Engine (upgrade/data/upgrade.php).
-     * Bei Engine-Updates müssen diese mit den dort produzierten Outputs
-     * abgeglichen werden.
+     * Match-Regexe auf Zeilen der Engine-Ausgabe (upgrade/data/upgrade.php).
+     * Alle Matches sind zeilenverankert (/m), damit Commit-Betreffs in der
+     * "Pending upgrades"-Liste oder Verbose-Ausgaben die Klassifikation
+     * nicht fälschlich auslösen (False-Positives). Bei Engine-Updates
+     * müssen diese mit den dort produzierten Outputs abgeglichen werden.
      */
-    const RESULT_ABORTED = 'Aborted';
-    const RESULT_UP_TO_DATE = 'Already up to date';
-    const RESULT_MODIFIED_FILES = 'There are modified files';
-    const RESULT_NEEDS_FORCE = 'Clear modified files or use -f';
+    const RESULT_ABORTED = '/^-+ Aborted! -+$/m';
+    const RESULT_UP_TO_DATE = '/^Already up to date\.$/m';
+    const RESULT_NO_UPGRADES = '/^No upgrades pending\.$/m';
+    const RESULT_MODIFIED_FILES = '/^There are modified files:$/m';
+    const RESULT_NEEDS_FORCE = '/^Clear modified files or use -f$/m';
+    const RESULT_DIFF_IN_DB_NOT_JSON = '/^(\d+) differences \(in DB not in JSON\)\.$/m';
+    const RESULT_DIFF_IN_JSON_NOT_DB = '/^(\d+) differences \(in JSON not in DB\)\.$/m';
+    const RESULT_DIFF_REMAINING = '/^(\d+) differences remaining after upgrade\.$/m';
+    const RESULT_DB_ERRORS = '/^Database upgrade errors: (\d+)$/m';
 
     function __construct($app, $intern = false) {
         $this->app = $app;
@@ -55,6 +64,28 @@ class upgrade {
     }
 
     /**
+     * Zeilenverankerter Match auf das Engine-Log. Alle RESULT_*-Konstanten
+     * sind /m-Regexe — KEIN str_contains aufs ganze Log verwenden.
+     */
+    private function logMatches(string $pattern, string $log): bool
+    {
+        return preg_match($pattern, $log) === 1;
+    }
+
+    /**
+     * Extrahiert eine Zahl aus einer zeilenverankerten Log-Zeile (Regex mit
+     * genau einer Capture-Group). Liefert null, wenn die Zeile fehlt —
+     * "0" und "Zeile fehlt" müssen unterscheidbar bleiben.
+     */
+    private function logNumber(string $pattern, string $log): ?int
+    {
+        if (preg_match($pattern, $log, $m) === 1) {
+            return (int)$m[1];
+        }
+        return null;
+    }
+
+    /**
      * Berechtigungs-Guard für Upgrader-Endpoints (UI und AJAX).
      * Der Upgrader führt git-Operationen und DB-Migrationen aus —
      * daher ist Admin-Login Voraussetzung.
@@ -68,25 +99,64 @@ class upgrade {
     }
 
     /**
-     * Erzeugt einen pre-upgrade-Tag im lokalen Git-Repo und entfernt
-     * Tags jenseits der 10 jüngsten Einträge. Schlägt die Tag-Erstellung
-     * fehl, wird das in der Session nicht vermerkt — der Aufrufer kann
-     * sich dann nicht auf einen Rollback verlassen.
+     * Liest Branch/Commit-Datum/Hashes aus dem lokalen Repo. Bei detached
+     * HEAD liefert rev-parse --abbrev-ref den String "HEAD" — für die
+     * Anzeige wird daraus "detached @ <kurzhash>" (passiert z.B. nach
+     * einem Rollback-Checkout auf einen Tag).
      */
-    private function createRollbackTag(string $git_root): void
+    private function readGitInfo(string $git_root): array
     {
-        $tag_name = 'pre-upgrade-'.date('Y-m-d-H-i-s');
-        $tag_cmd = 'git -C '.escapeshellarg($git_root).' tag '.escapeshellarg($tag_name).' 2>&1';
+        $info = array('branch' => '', 'commit' => '', 'hash' => '', 'hash_short' => '');
+        if ($git_root === "") {
+            return $info;
+        }
+        $info['branch'] = trim((string)@shell_exec('git -C '.escapeshellarg($git_root).' rev-parse --abbrev-ref HEAD'));
+        $info['commit'] = trim((string)@shell_exec('git -C '.escapeshellarg($git_root).' log -1 --date=short --pretty="%cd"'));
+        $info['hash'] = trim((string)@shell_exec('git -C '.escapeshellarg($git_root).' rev-parse HEAD'));
+        $info['hash_short'] = trim((string)@shell_exec('git -C '.escapeshellarg($git_root).' rev-parse --short=8 HEAD'));
+        if ($info['branch'] === 'HEAD') {
+            $info['branch'] = 'detached @ '.$info['hash_short'];
+        }
+        return $info;
+    }
 
-        $tag_output = [];
-        $tag_exit_code = 0;
-        exec($tag_cmd, $tag_output, $tag_exit_code);
+    /**
+     * Erzeugt einen pre-upgrade-Tag im lokalen Git-Repo und entfernt
+     * Tags jenseits der 10 jüngsten Einträge. Kollidiert der Name mit
+     * einem Tag aus derselben Sekunde, wird mit Suffix -2, -3 erneut
+     * versucht (Pattern ROLLBACK_TAG_PATTERN lässt den Suffix zu).
+     *
+     * @return string|null Name des erzeugten Tags oder null bei Fehlschlag —
+     *                     der Aufrufer kann sich dann nicht auf einen
+     *                     Rollback verlassen.
+     */
+    private function createRollbackTag(string $git_root): ?string
+    {
+        $base_name = 'pre-upgrade-'.date('Y-m-d-H-i-s');
+        $tag_name = null;
 
-        if ($tag_exit_code !== 0) {
-            return;
+        for ($attempt = 1; $attempt <= 3; $attempt++) {
+            $candidate = $attempt === 1 ? $base_name : $base_name.'-'.$attempt;
+            $tag_cmd = 'git -C '.escapeshellarg($git_root).' tag '.escapeshellarg($candidate).' 2>&1';
+
+            $tag_output = [];
+            $tag_exit_code = 0;
+            exec($tag_cmd, $tag_output, $tag_exit_code);
+
+            if ($tag_exit_code === 0) {
+                $tag_name = $candidate;
+                break;
+            }
+            // Nur bei Namenskollision erneut versuchen — andere Fehler
+            // (kein Repo, keine Rechte) verschwinden nicht durch Retry.
+            if (preg_match('/already exists/i', implode("\n", $tag_output)) !== 1) {
+                break;
+            }
         }
 
-        $_SESSION['last_rollback_tag'] = $tag_name;
+        if ($tag_name === null) {
+            return null;
+        }
 
         // Cleanup: Behalte nur die neuesten 10 pre-upgrade Tags
         $list_tags_cmd = 'git -C '.escapeshellarg($git_root).' tag -l "pre-upgrade-*" --sort=-creatordate 2>&1';
@@ -101,6 +171,8 @@ class upgrade {
                 exec($delete_cmd);
             }
         }
+
+        return $tag_name;
     }
 
     function upgrade_overview() {
@@ -115,7 +187,7 @@ class upgrade {
                 header('HTTP/1.1 403 Forbidden');
                 exit;
             }
-            $logfile = "../upgrade/data/upgrade.log";
+            $logfile = dirname(__DIR__, 2) . '/upgrade/data/upgrade.log';
             if (file_exists($logfile)) {
                 header('Content-Type: text/plain; charset=utf-8');
                 header('Content-Disposition: attachment; filename="upgrade_log_' . date('Y-m-d_H-i') . '.txt"');
@@ -130,21 +202,29 @@ class upgrade {
         $submit = $this->app->Secure->GetPOST('submit');
         $details_post = $this->app->Secure->GetPOST('details_anzeigen');
         $db_details_post = $this->app->Secure->GetPOST('db_details_anzeigen');
-        $verbose = $details_post === null ? true : $details_post === '1';
-        $db_verbose = $db_details_post === null ? true : $db_details_post === '1';
+        // GetPOST liefert '' (nie null), wenn ein Feld nicht gesendet wurde.
+        // Beim allerersten Aufruf (kein Submit) ist verbose Default an,
+        // danach zählt allein der Checkbox-Zustand.
+        $no_submit = ($submit === null || $submit === '');
+        $verbose = $no_submit ? true : ($details_post === '1');
+        $db_verbose = $no_submit ? true : ($db_details_post === '1');
         $force = $this->app->Secure->GetPOST('erzwingen') === '1';
         $remote_host_input = trim((string)$this->app->Secure->GetPOST('remote_host'));
         $remote_branch_input = trim((string)$this->app->Secure->GetPOST('remote_branch'));
 
         $this->app->Tpl->Set('ERZWINGEN', $force ? "checked" : "");
+        $this->app->Tpl->Set('DETAILS_ANZEIGEN', $verbose ? "checked" : "");
+        $this->app->Tpl->Set('DB_DETAILS_ANZEIGEN', $db_verbose ? "checked" : "");
 
-        // Pfadstabil relativ zu __FILE__: getcwd() kann sich durch
-        // OpenXE-Frontcontroller ändern. require_once verhindert
-        // Reentry bei künftigen Refactorings.
+        // Pfadstabil relativ zu __DIR__: getcwd() kann sich durch den
+        // OpenXE-Frontcontroller ändern, daher ALLE Pfade aus __DIR__
+        // ableiten. require_once verhindert Reentry bei künftigen
+        // Refactorings.
         require_once(__DIR__ . '/../../upgrade/data/upgrade.php');
 
-        $logfile = "../upgrade/data/upgrade.log";
-        $remote_config_file = "../upgrade/data/remote.json";
+        $upgrade_dir = dirname(__DIR__, 2) . '/upgrade';
+        $logfile = $upgrade_dir . '/data/upgrade.log';
+        $remote_config_file = $upgrade_dir . '/data/remote.json';
         upgrade_set_out_file_name($logfile);
 
         $upgrade_available = false;
@@ -178,16 +258,11 @@ class upgrade {
             $git_root = "";
         }
 
-        $git_branch = "";
-        $git_commit = "";
-        $local_hash = "";
-        $local_hash_short = "";
-        if ($git_root !== "") {
-            $git_branch = trim((string)@shell_exec('git -C '.escapeshellarg($git_root).' rev-parse --abbrev-ref HEAD'));
-            $git_commit = trim((string)@shell_exec('git -C '.escapeshellarg($git_root).' log -1 --date=short --pretty="%cd"'));
-            $local_hash = trim((string)@shell_exec('git -C '.escapeshellarg($git_root).' rev-parse HEAD'));
-            $local_hash_short = trim((string)@shell_exec('git -C '.escapeshellarg($git_root).' rev-parse --short=8 HEAD'));
-        }
+        $git_info = $this->readGitInfo($git_root);
+        $git_branch = $git_info['branch'];
+        $git_commit = $git_info['commit'];
+        $local_hash = $git_info['hash'];
+        $local_hash_short = $git_info['hash_short'];
 
         $update_status_text = "Remote-Stand nicht geprüft.";
         $update_status_class = "pill-info";
@@ -207,22 +282,31 @@ class upgrade {
             $status_message = "Konfiguration der Upgrade-Quelle konnte nicht geladen werden.";
         }
 
-        // Concurrency-Lock: verhindert parallele schreibende Submits
-        // (Doppel-Klick, zweiter Browser-Tab). flock() ist non-blocking —
-        // ein konkurrierender Request bekommt sofort eine UI-Meldung
-        // statt zu hängen. Auth/AJAX-Pfade laufen bereits oben via exit
-        // raus, danach gibt es kein exit/die mehr in dieser Funktion,
-        // daher reicht ein einfaches Release am Ende (kein try/finally).
-        $writing_submits = ['do_upgrade', 'do_db_upgrade', 'rollback_to_tag', 'save_remote', 'reset_remote_origin'];
-        $needs_lock = in_array($submit, $writing_submits, true);
+        // Concurrency-Lock: verhindert parallele Engine-/schreibende Submits
+        // (Doppel-Klick, zweiter Browser-Tab). Auch die Check-Submits löschen
+        // und schreiben das Logfile und laufen daher unter demselben Lock.
+        // flock() ist non-blocking — ein konkurrierender Request bekommt
+        // sofort eine UI-Meldung statt zu hängen. Auth/AJAX-Pfade laufen
+        // bereits oben via exit raus, danach gibt es kein exit/die mehr in
+        // dieser Funktion, daher reicht ein einfaches Release am Ende
+        // (kein try/finally).
+        $locked_submits = ['check_upgrade', 'do_upgrade', 'check_db', 'do_db_upgrade', 'rollback_to_tag', 'save_remote', 'reset_remote_origin'];
+        $needs_lock = in_array($submit, $locked_submits, true);
         $lock_handle = null;
         if ($needs_lock && $git_root !== "") {
-            $lock_file = $git_root.'/upgrade/data/.upgrader.lock';
-            $lock_handle = fopen($lock_file, 'c');
-            if ($lock_handle === false || !flock($lock_handle, LOCK_EX | LOCK_NB)) {
-                if ($lock_handle !== false) {
-                    fclose($lock_handle);
-                }
+            $lock_file = $upgrade_dir.'/data/.upgrader.lock';
+            $lock_handle = @fopen($lock_file, 'c');
+            if ($lock_handle === false) {
+                // fopen-Fehler (Rechte/Verzeichnis) ist KEIN belegtes Lock —
+                // klar unterscheiden, sonst sucht der User nach einem
+                // Phantom-Prozess statt nach Berechtigungen.
+                $status_headline = "Lock-Datei nicht schreibbar";
+                $status_level = "error";
+                $status_message = "Die Lock-Datei konnte nicht angelegt werden. Bitte Schreibrechte auf dem upgrade/data-Verzeichnis prüfen.";
+                $last_action = "Abgebrochen (Lock-Datei nicht schreibbar)";
+                $submit = null; // verhindert Submit-Dispatch unten
+            } elseif (!flock($lock_handle, LOCK_EX | LOCK_NB)) {
+                fclose($lock_handle);
                 $lock_handle = null;
                 $status_headline = "Anderer Vorgang aktiv";
                 $status_level = "warning";
@@ -247,12 +331,21 @@ class upgrade {
             }
 
             if (empty($remote_errors)) {
+                // Originalwerte nur beim allerersten Speichern festlegen.
+                // Existieren bereits original_*-Werte, werden sie im Payload
+                // beibehalten — sonst würde reset_remote_origin zur No-Op.
+                // Edge: alte remote.json ohne original_* → die bisherigen
+                // host/branch-Werte sind das werksseitige Original.
+                $original_host_to_store = $original_remote_host !== "" ? $original_remote_host
+                    : ($remote_host !== "" ? $remote_host : $remote_host_input);
+                $original_branch_to_store = $original_remote_branch !== "" ? $original_remote_branch
+                    : ($remote_branch !== "" ? $remote_branch : $remote_branch_input);
                 $payload = json_encode(
                     array(
                         'host' => $remote_host_input,
                         'branch' => $remote_branch_input,
-                        'original_host' => $remote_host_input,
-                        'original_branch' => $remote_branch_input
+                        'original_host' => $original_host_to_store,
+                        'original_branch' => $original_branch_to_store
                     ),
                     JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
                 );
@@ -261,16 +354,21 @@ class upgrade {
                 } else {
                     $remote_host = $remote_host_input;
                     $remote_branch = $remote_branch_input;
-                    $original_remote_host = $remote_host_input;
-                    $original_remote_branch = $remote_branch_input;
+                    $original_remote_host = $original_host_to_store;
+                    $original_remote_branch = $original_branch_to_store;
                     $status_headline = "Upgrade-Quelle gespeichert";
                     $status_level = "success";
                     $status_message = "Remote und Branch wurden übernommen.";
                 }
-            } else {
+            }
+            if (!empty($remote_errors)) {
                 $status_headline = "Eingabefehler";
                 $status_level = "error";
                 $status_message = implode(" ", $remote_errors);
+                // Eingegebene Werte im Formular behalten — sonst verschwindet
+                // die Usereingabe hinter den alten Config-Werten.
+                $remote_host = $remote_host_input;
+                $remote_branch = $remote_branch_input;
             }
         } elseif ($submit === 'reset_remote_origin') {
             if ($original_remote_host === "" || $original_remote_branch === "") {
@@ -292,10 +390,11 @@ class upgrade {
                     $remote_host = $original_remote_host;
                     $remote_branch = $original_remote_branch;
                     $status_headline = "Upgrade-Quelle zurückgesetzt";
-                    $status_level = "info";
+                    $status_level = "success";
                     $status_message = "Remote/Branch auf Originalwerte gestellt.";
                 }
-            } else {
+            }
+            if (!empty($remote_errors)) {
                 $status_headline = "Eingabefehler";
                 $status_level = "error";
                 $status_message = implode(" ", $remote_errors);
@@ -303,6 +402,8 @@ class upgrade {
         }
 
         // Calculate version alignment (local vs. upgrade source)
+        $step_files_pill_class = "pill-info";
+        $step_files_pill_text = "nicht geprüft";
         if ($git_root !== "" && $remote_host !== "" && $remote_branch !== "") {
             $remote_ref = "refs/heads/".$remote_branch;
             $remote_cmd = 'git -C '.escapeshellarg($git_root).' ls-remote '.escapeshellarg($remote_host).' '.escapeshellarg($remote_ref).' 2>&1';
@@ -316,6 +417,8 @@ class upgrade {
                 // shell_exec hätte hier nur `null` zurückgegeben.
                 $update_status_text = "Remote-Probe fehlgeschlagen (Exit-Code ".$remote_exit_code.")";
                 $update_status_class = "pill-warning";
+                $step_files_pill_class = "pill-warning";
+                $step_files_pill_text = "Remote nicht prüfbar";
             } elseif ($remote_line !== "") {
                 $remote_hash = trim(strtok($remote_line, "\t "));
                 $remote_hash_short = substr($remote_hash, 0, 8);
@@ -323,37 +426,40 @@ class upgrade {
                 if ($local_hash === "") {
                     $update_status_text = "Lokaler Stand unbekannt";
                     $update_status_class = "pill-warning";
+                    $step_files_pill_class = "pill-warning";
+                    $step_files_pill_text = "lokaler Stand unbekannt";
                 } elseif ($local_hash === $remote_hash) {
                     $update_status_text = "Alles aktuell";
                     $update_status_class = "pill-success";
+                    $step_files_pill_class = "pill-success";
+                    $step_files_pill_text = "aktuell";
                 } else {
-                    $update_status_text = "Update verfügbar";
+                    // Hash-Mismatch heißt nicht zwingend "remote ist neuer" —
+                    // lokal kann auch voraus oder divergiert sein. Ohne
+                    // zusätzliche git-Aufrufe ist das nicht unterscheidbar.
+                    $update_status_text = "Stand weicht ab – Prüfung empfohlen";
                     $update_status_class = "pill-warning";
+                    $step_files_pill_class = "pill-warning";
+                    $step_files_pill_text = "Stand weicht ab";
                 }
             } else {
                 $update_status_text = "Remote nicht erreichbar";
                 $update_status_class = "pill-warning";
+                $step_files_pill_class = "pill-warning";
+                $step_files_pill_text = "Remote nicht erreichbar";
             }
         }
 
-        $this->app->Tpl->Set('REMOTE_HOST', $this->esc($remote_host));
-        $this->app->Tpl->Set('REMOTE_BRANCH', $this->esc($remote_branch));
-        $this->app->Tpl->Set('UPDATE_STATUS', $update_status_text);
-        $this->app->Tpl->Set('UPDATE_STATUS_CLASS', $update_status_class);
-        $this->app->Tpl->Set('LOCAL_HASH_SHORT', $this->esc($local_hash_short));
-        $this->app->Tpl->Set('REMOTE_HASH_SHORT', $this->esc($remote_hash_short));
-        $this->app->Tpl->Set('LOCAL_COMMIT', $this->esc($git_commit));
-        $this->app->Tpl->Set('LOCAL_BRANCH', $this->esc($git_branch));
-        $show_local_branch = ($git_branch !== "" && $remote_branch !== "" && $git_branch === $remote_branch);
-        $this->app->Tpl->Set('LOCAL_BRANCH_VISIBLE', $show_local_branch ? "" : "hidden");
-
-        $directory = dirname(getcwd())."/upgrade";
+        // Engine erwartet als directory das upgrade/-Verzeichnis.
+        $directory = $upgrade_dir;
         $result_code = null;
+        $engine_exception = null;
 
         // Lookup-Tabelle für die Engine-Aktionen. Jede Action mapped auf
         // ein Set Flags, das nahezu 1:1 an upgrade_main() durchgereicht
         // wird. Andere Submits (refresh, save_remote, rollback_to_tag)
-        // sind UI-only und werden separat behandelt.
+        // sind UI-only und werden separat behandelt; unbekannte Submits
+        // laufen wie 'refresh' (kein Status-Overwrite, kein Log-Reset).
         $actions = [
             'check_upgrade' => [
                 'label' => "System-Check (Dateien & Datenbank)",
@@ -397,15 +503,11 @@ class upgrade {
             ],
         ];
 
-        if (isset($actions[$submit])) {
+        $engine_ran = isset($actions[$submit]);
+
+        if ($engine_ran) {
             $cfg = $actions[$submit];
             $last_action = $cfg['label'];
-            if ($cfg['sets_upgrade_visible']) {
-                $upgrade_available = true;
-            }
-            if ($cfg['sets_upgrade_db_visible']) {
-                $upgrade_db_available = true;
-            }
             if (file_exists($logfile)) {
                 unlink($logfile);
             }
@@ -417,8 +519,23 @@ class upgrade {
             // manuellen Git-Reset auf einen bekannten Stand zu fahren.
             // ACHTUNG: Der Tag rollt nur Code zurück — DB-Schema-
             // Migrationen müssen separat behandelt werden.
+            // Bei do_upgrade ohne -f bricht die Engine bei lokalen
+            // Änderungen sofort ab ("Clear modified files or use -f") —
+            // ein Tag auf denselben Stand wäre nutzlos, daher vorher
+            // denselben Check wie die Engine (git ls-files -m) machen.
             if (($cfg['do_git'] || $cfg['do_db']) && $git_root !== "") {
-                $this->createRollbackTag($git_root);
+                $create_tag = true;
+                if ($cfg['do_git'] && !$force) {
+                    $modified_output = [];
+                    $modified_exit_code = 0;
+                    exec('git -C '.escapeshellarg($git_root).' ls-files -m 2>&1', $modified_output, $modified_exit_code);
+                    if (!empty($modified_output)) {
+                        $create_tag = false;
+                    }
+                }
+                if ($create_tag) {
+                    $this->createRollbackTag($git_root);
+                }
             }
 
             // Engine-Output deterministisch in englischer Locale halten —
@@ -446,9 +563,24 @@ class upgrade {
                     origin: false,
                     drop_keys: false
                 );
+            } catch (Throwable $e) {
+                // PHP >= 8.1 wirft z.B. mysqli_sql_exception — das darf den
+                // Request nicht killen, der User braucht eine UI-Meldung.
+                $result_code = -1;
+                $engine_exception = $e->getMessage();
             } finally {
                 putenv($prev_lc_all === false ? 'LC_ALL' : 'LC_ALL='.$prev_lc_all);
                 putenv($prev_lang === false ? 'LANG' : 'LANG='.$prev_lang);
+            }
+
+            // Check-Buttons erst nach bekanntem Ergebnis schalten: ein
+            // fehlgeschlagener Check (-1) darf den Button nicht auf
+            // "Upgrade starten" umstellen.
+            if ($cfg['sets_upgrade_visible']) {
+                $upgrade_available = ($result_code === 0 || $result_code === 1);
+            }
+            if ($cfg['sets_upgrade_db_visible']) {
+                $upgrade_db_available = ($result_code === 0 || $result_code === 1);
             }
         } elseif ($submit === 'refresh') {
             $last_action = "Anzeige aktualisiert";
@@ -479,10 +611,27 @@ class upgrade {
 
                     if ($checkout_exit_code === 0) {
                         $status_headline = "Rollback durchgeführt";
-                        $status_level = "info";
+                        $status_level = "success";
                         $status_message = "System auf Stand von Tag $rollback_tag zurückgesetzt.";
                         $guidance_title = "Wichtig";
                         $guidance_message = "Code wurde zurückgesetzt. DB-Änderungen wurden NICHT rückgängig gemacht!";
+
+                        // Git-Infos wurden VOR dem Checkout gelesen und wären
+                        // jetzt stale (Hash/Branch/Datum). Neu einlesen; der
+                        // Remote-Vergleich oben lief mit dem alten Stand,
+                        // daher die Update-Pille neutral setzen statt
+                        // erneut zu proben.
+                        $git_info = $this->readGitInfo($git_root);
+                        $git_branch = $git_info['branch'];
+                        $git_commit = $git_info['commit'];
+                        $local_hash = $git_info['hash'];
+                        $local_hash_short = $git_info['hash_short'];
+                        $remote_hash = "";
+                        $remote_hash_short = "";
+                        $update_status_text = "Nach Rollback nicht erneut geprüft";
+                        $update_status_class = "pill-info";
+                        $step_files_pill_class = "pill-info";
+                        $step_files_pill_text = "nicht geprüft";
                     } else {
                         $status_headline = "Rollback fehlgeschlagen";
                         $status_level = "error";
@@ -501,27 +650,53 @@ class upgrade {
 
         // Read results
         $result = file_exists($logfile) ? file_get_contents($logfile) : "";
-        $highlight_force = (!$force && str_contains($result, self::RESULT_NEEDS_FORCE));
 
-        if ($result_code === 0 && $result !== "") {
-            if (str_contains($result, self::RESULT_ABORTED)) {
-                $result_code = -1;
-            }
+        // Force-Hinweis nur auswerten, wenn in DIESEM Request ein Engine-
+        // Lauf stattfand — sonst blendet das alte Log beim bloßen
+        // Seitenaufruf/Refresh die Force-Checkbox ohne Anlass ein.
+        $highlight_force = $engine_ran && !$force && $this->logMatches(self::RESULT_NEEDS_FORCE, $result);
+
+        if ($result_code === 0 && $result !== "" && $this->logMatches(self::RESULT_ABORTED, $result)) {
+            // Absicherung: ein "Aborted!"-Marker im Log dominiert den
+            // Returncode (die Engine meldet Abbrüche normalerweise mit -1).
+            $result_code = -1;
         }
 
-        if ($submit && $submit !== 'refresh' && $submit !== 'save_remote') {
+        // Differences-Auswertung je Aktion:
+        // - Checks: relevant ist "in JSON not in DB" (Schema-Teile, die der
+        //   DB fehlen). "in DB not in JSON" (überflüssige Tabellen) ist nur
+        //   informativ und triggert nie ein "Upgrade empfohlen".
+        // - do_*: zählen die Restdifferenzen nach dem Upgrade.
+        $diff_count = null;      // fehlende Teile (in JSON not in DB)
+        $obsolete_count = null;  // überflüssige Teile (in DB not in JSON)
+        $remaining_count = null; // Restdifferenzen nach Upgrade
+        $db_error_count = null;  // fehlgeschlagene DB-Statements
 
-            $diff_count = null;
-            if (preg_match('/(\\d+) differences\\./', $result, $matches)) {
-                $diff_count = (int)$matches[1];
-            }
+        // Status-Klassifikation NUR für Engine-Submits — rollback_to_tag,
+        // save_remote, reset_remote_origin und unbekannte Submits setzen
+        // ihren Status selbst bzw. behalten den Default.
+        if ($engine_ran) {
+            $diff_count = $this->logNumber(self::RESULT_DIFF_IN_JSON_NOT_DB, $result);
+            $obsolete_count = $this->logNumber(self::RESULT_DIFF_IN_DB_NOT_JSON, $result);
+            $remaining_count = $this->logNumber(self::RESULT_DIFF_REMAINING, $result);
+            $db_error_count = $this->logNumber(self::RESULT_DB_ERRORS, $result);
 
-            $has_modified_files = str_contains($result, self::RESULT_MODIFIED_FILES);
+            $has_modified_files = $this->logMatches(self::RESULT_MODIFIED_FILES, $result);
+            $up_to_date = $this->logMatches(self::RESULT_UP_TO_DATE, $result)
+                || $this->logMatches(self::RESULT_NO_UPGRADES, $result);
 
-            if ($result_code === 0) {
+            if ($result_code === 0 && $result === "") {
+                // Return 0 ohne eine einzige Log-Zeile: kein echter
+                // Erfolg nachweisbar — nicht grün melden.
+                $status_headline = "Kein Protokoll erzeugt";
+                $status_level = "warning";
+                $status_message = "Die Aktion meldet Erfolg, hat aber kein Protokoll geschrieben. Bitte manuell prüfen.";
+                $guidance_title = "Hinweis";
+                $guidance_message = "Log-Datei und Schreibrechte prüfen, Aktion ggf. erneut starten.";
+            } elseif ($result_code === 0) {
                 $status_headline = "Aktion erfolgreich";
                 $status_level = "success";
-                if (str_contains($result, self::RESULT_UP_TO_DATE)) {
+                if ($up_to_date) {
                     $status_message = "Keine neuen Updates verfügbar. System ist aktuell.";
                 } else {
                     $status_message = "Der Durchlauf wurde ohne Fehler abgeschlossen.";
@@ -544,8 +719,15 @@ class upgrade {
                         }
                         break;
                     case 'do_upgrade':
-                        $guidance_title = "Upgrade abgeschlossen";
-                        $guidance_message = "System und Datenbank wurden aktualisiert. Nächster Schritt: Funktionstest durchführen.";
+                        if ($up_to_date && ($remaining_count === 0 || ($remaining_count === null && $diff_count === 0))) {
+                            // No-op-Lauf: weder Dateien noch DB angefasst —
+                            // dann nicht "wurden aktualisiert" behaupten.
+                            $guidance_title = "Alles aktuell";
+                            $guidance_message = "Dateien und Datenbank sind auf dem Stand der Upgrade-Quelle.";
+                        } else {
+                            $guidance_title = "Upgrade abgeschlossen";
+                            $guidance_message = "System und Datenbank wurden aktualisiert. Nächster Schritt: Funktionstest durchführen.";
+                        }
                         break;
                     case 'check_db':
                         if ($diff_count === 0) {
@@ -563,23 +745,42 @@ class upgrade {
                         $guidance_title = "Datenbank aktualisiert";
                         $guidance_message = "DB-Upgrade ausgeführt. Prüfe das Protokoll und teste Funktionen.";
                         break;
-                    default:
-                        $guidance_title = "Ergebnis vorliegend";
-                        $guidance_message = "Siehe Protokoll für Details.";
                 }
 
+                if (($submit === 'check_upgrade' || $submit === 'check_db') && $obsolete_count !== null && $obsolete_count > 0) {
+                    $guidance_message .= " Hinweis: ".$obsolete_count." Einträge existieren nur in der Datenbank (nicht in JSON). Das blockiert kein Upgrade.";
+                }
+
+            } elseif ($result_code === 1) {
+                // Returncode 1: durchgelaufen, aber mit Warnungen (DB-
+                // Statement-Fehler, Restdifferenzen nach dem Upgrade oder
+                // fehlgeschlagener Verifikations-Reload). Kein Erfolgsbanner.
+                $status_headline = "Mit Warnungen abgeschlossen";
+                $status_level = "warning";
+                $warnings_detail = [];
+                if ($db_error_count !== null && $db_error_count > 0) {
+                    $warnings_detail[] = $db_error_count." fehlgeschlagene DB-Statements";
+                }
+                if ($remaining_count !== null && $remaining_count > 0) {
+                    $warnings_detail[] = $remaining_count." Restdifferenzen nach dem Upgrade";
+                }
+                $status_message = "Der Durchlauf wurde mit Warnungen abgeschlossen"
+                    .(!empty($warnings_detail) ? ": ".implode(", ", $warnings_detail)."." : ". Details siehe Protokoll.");
+                $guidance_title = "Protokoll auswerten";
+                $guidance_message = "\"Database upgrade errors: N\" zeigt fehlgeschlagene DB-Statements, \"N differences remaining after upgrade.\" zeigt verbleibende Schema-Differenzen. Ursachen beheben und das Upgrade ggf. erneut starten.";
+                if ($remaining_count !== null && $remaining_count > 0) {
+                    $guidance_message .= " Upgrade unvollständig: ".$remaining_count." Restdifferenzen prüfen.";
+                }
             } elseif ($result_code === -1) {
                 $status_headline = "Fehlgeschlagen";
                 $status_level = "error";
-                $status_message = "Upgrade hat Fehler gemeldet. Protokoll prüfen.";
+                if ($engine_exception !== null) {
+                    $status_message = "Unerwarteter Fehler im Upgrade-Lauf: ".$this->esc($engine_exception);
+                } else {
+                    $status_message = "Upgrade hat Fehler gemeldet. Protokoll prüfen.";
+                }
                 $guidance_title = "Fehlerbehebung";
                 $guidance_message = "Siehe Protokoll, bereinige Fehler (z.B. lokale Änderungen, Verbindungsprobleme) und starte erneut.";
-            } else {
-                $status_headline = "Abgeschlossen";
-                $status_level = "info";
-                $status_message = "Ergebnis siehe Protokoll.";
-                $guidance_title = "Protokoll prüfen";
-                $guidance_message = "Bitte Protokoll ansehen und ggf. nächsten Schritt manuell wählen.";
             }
         }
 
@@ -591,8 +792,30 @@ class upgrade {
             $guidance_message = "Aktiviere unten 'Erzwingen (-f)' und starte das Upgrade erneut (oder setze die Änderungen zurück).";
         }
 
+        // DB-Pill nur nach einem DB-Submit in DIESEM Request bewerten —
+        // sonst bliebe ein veralteter Zustand als "geprüft" stehen.
+        $step_db_pill_class = "pill-info";
+        $step_db_pill_text = "nicht geprüft";
+        if ($engine_ran && ($submit === 'check_db' || $submit === 'do_db_upgrade')) {
+            $db_diff = ($submit === 'check_db') ? $diff_count : $remaining_count;
+            if (($result_code === 0 || $result_code === 1) && $db_diff !== null) {
+                if ($db_diff === 0) {
+                    $step_db_pill_class = "pill-success";
+                    $step_db_pill_text = "aktuell";
+                } else {
+                    $step_db_pill_class = "pill-warning";
+                    $step_db_pill_text = $db_diff." Differenzen";
+                }
+            } elseif ($result_code === -1) {
+                $step_db_pill_class = "pill-warning";
+                $step_db_pill_text = "Prüfung fehlgeschlagen";
+            }
+        }
+
         if ($result !== "") {
-            $last_run = date('d.m.Y H:i', filemtime($logfile));
+            // filemtime mit file_exists absichern: ein paralleler Request
+            // kann das Logfile zwischen Lesen und mtime gelöscht haben.
+            $last_run = file_exists($logfile) ? date('d.m.Y H:i', filemtime($logfile)) : "";
         } else {
             $result = "Noch kein Protokoll vorhanden.";
             $last_run = "Noch kein Durchlauf";
@@ -603,12 +826,41 @@ class upgrade {
         $this->app->Tpl->Set('STATUS_MESSAGE', $status_message);
         $this->app->Tpl->Set('GUIDANCE_TITLE', $guidance_title);
         $this->app->Tpl->Set('GUIDANCE_MESSAGE', $guidance_message);
+        $this->app->Tpl->Set('LAST_ACTION', $last_action);
+        $this->app->Tpl->Set('LAST_RUN', $last_run);
         $this->app->Tpl->Set('UPGRADE_BUTTON_ACTION', $upgrade_available ? "do_upgrade" : "check_upgrade");
         $this->app->Tpl->Set('UPGRADE_BUTTON_LABEL', $upgrade_available ? "Upgrade starten" : "Upgrades prüfen");
-        $this->app->Tpl->Set('UPGRADE_FORCE_VISIBLE', ($upgrade_available || $highlight_force) ? "" : "hidden");
+        // Die Force-Checkbox wird komplett als Platzhalter gerendert: ist
+        // sie versteckt, existiert das input-Element gar nicht und der
+        // Browser kann kein verstecktes, aber gechecktes "erzwingen"
+        // mitsenden. UPGRADE_FORCE_VISIBLE steuert weiterhin den Wrapper
+        // (Highlight-Styling), FORCE_CHECKBOX das eigentliche Element.
+        $force_visible = ($upgrade_available || $highlight_force);
+        $this->app->Tpl->Set('UPGRADE_FORCE_VISIBLE', $force_visible ? "" : "hidden");
         $this->app->Tpl->Set('FORCE_HIGHLIGHT_CLASS', $highlight_force ? "force-highlight" : "");
+        $this->app->Tpl->Set('FORCE_CHECKBOX', $force_visible
+            ? '<input type="checkbox" name="erzwingen" value="1"'.($force ? ' checked' : '').'>'
+            : '');
         $this->app->Tpl->Set('UPGRADE_DB_BUTTON_ACTION', $upgrade_db_available ? "do_db_upgrade" : "check_db");
         $this->app->Tpl->Set('UPGRADE_DB_BUTTON_LABEL', $upgrade_db_available ? "DB-Upgrade" : "DB prüfen");
+
+        $this->app->Tpl->Set('REMOTE_HOST', $this->esc($remote_host));
+        $this->app->Tpl->Set('REMOTE_BRANCH', $this->esc($remote_branch));
+        $this->app->Tpl->Set('UPDATE_STATUS', $update_status_text);
+        $this->app->Tpl->Set('UPDATE_STATUS_CLASS', $update_status_class);
+        $this->app->Tpl->Set('LOCAL_HASH_SHORT', $this->esc($local_hash_short));
+        $this->app->Tpl->Set('REMOTE_HASH_SHORT', $this->esc($remote_hash_short));
+        $this->app->Tpl->Set('LOCAL_COMMIT', $this->esc($git_commit));
+        $this->app->Tpl->Set('LOCAL_BRANCH', $this->esc($git_branch));
+        // Lokalen Branch nur anzeigen, wenn er vom Remote-Branch ABWEICHT —
+        // genau das ist der warnenswerte Fall (inkl. detached HEAD, der
+        // oben als "detached @ <hash>" formatiert wird).
+        $show_local_branch = ($git_branch !== "" && $remote_branch !== "" && $git_branch !== $remote_branch);
+        $this->app->Tpl->Set('LOCAL_BRANCH_VISIBLE', $show_local_branch ? "" : "hidden");
+        $this->app->Tpl->Set('STEP_FILES_PILL_CLASS', $step_files_pill_class);
+        $this->app->Tpl->Set('STEP_FILES_PILL_TEXT', $step_files_pill_text);
+        $this->app->Tpl->Set('STEP_DB_PILL_CLASS', $step_db_pill_class);
+        $this->app->Tpl->Set('STEP_DB_PILL_TEXT', $step_db_pill_text);
 
         // Rollback-Tags laden. Der OpenXE-Template-Parser kennt nur
         // [VARIABLE]-Platzhalter (kein Smarty-foreach), daher wird das

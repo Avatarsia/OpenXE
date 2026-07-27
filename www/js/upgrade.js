@@ -4,16 +4,41 @@
  * Extracted from www/pages/content/upgrade.tpl. The script is loaded
  * via <script src="js/upgrade.js"> from the page template; there are
  * no Smarty variables baked in, the DOM-Lookup is enough.
+ * Die Hilfe-Karte laeuft ueber <details>/<summary> ganz ohne JS.
  */
-function toggleUpgradeHelp() {
-    var card = document.getElementById('upgrade-help');
-    if (card) {
-        card.classList.toggle('open');
-        card.classList.toggle('collapsed');
-    }
-}
-
 (function() {
+    // Refresh-Button ist type="button" (kein Submit), damit Enter in
+    // den Textfeldern nicht versehentlich ihn als ersten Submit-Button
+    // des Formulars auslöst. Beim Klick wird submit=refresh als
+    // hidden input gesetzt und das Formular regulär abgeschickt.
+    var refreshBtn = document.getElementById('refresh-btn');
+    if (refreshBtn && refreshBtn.form) {
+        refreshBtn.addEventListener('click', function() {
+            var form = refreshBtn.form;
+            var input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'submit';
+            input.value = 'refresh';
+            form.appendChild(input);
+            form.submit();
+        });
+    }
+
+    // Enter in den Textfeldern soll KEIN implizites Form-Submit
+    // auslösen — der Browser würde sonst den ersten Submit-Button
+    // des Formulars wählen und die Eingaben verwerfen.
+    var textFieldIds = ['remote_host', 'remote_branch', 'log-search'];
+    for (var i = 0; i < textFieldIds.length; i++) {
+        var field = document.getElementById(textFieldIds[i]);
+        if (field) {
+            field.addEventListener('keydown', function(event) {
+                if (event.key === 'Enter' || event.keyCode === 13) {
+                    event.preventDefault();
+                }
+            });
+        }
+    }
+
     var logBox = document.getElementById('log-box');
     var logSearch = document.getElementById('log-search');
     if (!logBox || !logSearch) {
