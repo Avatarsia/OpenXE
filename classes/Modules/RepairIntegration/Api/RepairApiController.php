@@ -52,7 +52,11 @@ final class RepairApiController
             $this->respond(400, ['success' => false, 'error' => $e->getMessage()]);
         } catch (ForbiddenException $e) {
             $this->respond(403, ['success' => false, 'error' => $e->getMessage()]);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
+            error_log(
+                'RepairIntegration push failed: ' . get_class($e) . ': ' . $e->getMessage()
+                . ' @ ' . $e->getFile() . ':' . $e->getLine()
+            );
             $this->respond(500, ['success' => false, 'error' => 'INTERNAL_ERROR']);
         }
     }
