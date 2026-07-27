@@ -317,10 +317,14 @@ final class RepairApiController
         $this->db->perform(
             "INSERT INTO `ticket` (
                 `schluessel`, `zeit`, `projekt`, `quelle`, `status`, `kunde`,
-                `mailadresse`, `prio`, `betreff`, `firma`, `notiz`
+                `mailadresse`, `prio`, `betreff`, `firma`, `notiz`,
+                `bearbeiter`, `adresse`, `warteschlange`, `zugewiesen`,
+                `inbearbeitung`, `inbearbeitung_user`, `kommentar`, `tags`
             ) VALUES (
                 :schluessel, NOW(), 0, :quelle, :status, :kunde,
-                :mailadresse, :prio, :betreff, :firma, :notiz
+                :mailadresse, :prio, :betreff, :firma, :notiz,
+                '', 0, '', 0,
+                0, '', '', ''
             )",
             [
                 'schluessel' => $ticketSchluessel,
@@ -393,10 +397,14 @@ final class RepairApiController
         $this->db->perform(
             "INSERT INTO `ticket_nachricht` (
                 `ticket`, `zeit`, `text`, `betreff`, `medium`,
-                `verfasser`, `mail`, `status`
+                `verfasser`, `mail`, `status`,
+                `bearbeiter`, `textausgang`, `bemerkung`, `versendet`,
+                `mail_cc`, `verfasser_replyto`, `mail_replyto`
             ) VALUES (
                 :ticket, NOW(), :text, :betreff, :medium,
-                :verfasser, :mail, :status
+                :verfasser, :mail, :status,
+                '', '', '', '',
+                '', '', ''
             )",
             [
                 'ticket' => $ticketSchluessel,
