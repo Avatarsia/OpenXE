@@ -9,7 +9,7 @@ final class RepairIntegrationMigration
 {
     private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
     private const SCHEMA_VERSION_KEY = 'schema_version'; // @php83: add type string
-    private const SCHEMA_VERSION = '1.1.0'; // @php83: add type string
+    private const SCHEMA_VERSION = '1.2.0'; // @php83: add type string
 
     /**
      * Explizite Upgrade-Kette: gespeicherte Version => auszufuehrender Schritt.
@@ -24,6 +24,7 @@ final class RepairIntegrationMigration
      */
     private const UPGRADE_STEPS = [
         '1.0.0' => ['sql' => '003_status_config_upgrade.sql', 'to' => '1.1.0'],
+        '1.1.0' => ['sql' => '004_remove_menu_hooks.sql', 'to' => '1.2.0'],
     ];
 
     public function __construct(

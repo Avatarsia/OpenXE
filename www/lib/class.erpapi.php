@@ -7082,6 +7082,10 @@ title: 'Abschicken',
     $navarray['menu']['admin'][$menu]['sec'][]  = array('Ticketregeln','ticketregeln','list');
     $navarray['menu']['admin'][$menu]['sec'][]  = array('Zeitkonten','zeiterfassung','list');
 
+    // ------ Reparatur
+    $navarray['menu']['admin'][++$menu]['first']  = array('Reparatur','repairintegration','list');
+    $navarray['menu']['admin'][$menu]['sec'][]  = array('Reparaturen','repairintegration','list');
+
     // ------ System
     $navarray['menu']['admin'][++$menu]['first']  = array('System','rechnung','list');
     $navarray['menu']['admin'][$menu]['sec'][]  = array('Einstellungen','einstellungen','list');
