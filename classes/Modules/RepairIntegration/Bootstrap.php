@@ -9,6 +9,7 @@ use Xentral\Modules\RepairIntegration\Gateway\RepairBelegGateway;
 use Xentral\Modules\RepairIntegration\Gateway\RepairDetailsGateway;
 use Xentral\Modules\RepairIntegration\Gateway\RepairStatusConfigGateway;
 use Xentral\Modules\RepairIntegration\Gateway\RepairSyncQueueGateway;
+use Xentral\Modules\RepairIntegration\Service\RepairAdresseService;
 use Xentral\Modules\RepairIntegration\Service\RepairBelegService;
 use Xentral\Modules\RepairIntegration\Service\RepairConfigService;
 use Xentral\Modules\RepairIntegration\Service\RepairEmailService;
@@ -32,6 +33,7 @@ final class Bootstrap
             'RepairEmailService'        => 'onInitRepairEmailService',
             'RepairBelegService'        => 'onInitRepairBelegService',
             'RepairTicketMergeService'  => 'onInitRepairTicketMergeService',
+            'RepairAdresseService'      => 'onInitRepairAdresseService',
             'RepairConfigService'       => 'onInitRepairConfigService',
             'RepairApiAuth'             => 'onInitRepairApiAuth',
             'RepairApiController'       => 'onInitRepairApiController',
@@ -114,6 +116,11 @@ final class Bootstrap
         );
     }
 
+    public static function onInitRepairAdresseService(ContainerInterface $container): RepairAdresseService
+    {
+        return new RepairAdresseService($container->get('Database'));
+    }
+
     public static function onInitRepairConfigService(ContainerInterface $container): RepairConfigService
     {
         return new RepairConfigService($container->get('Database'));
@@ -132,6 +139,7 @@ final class Bootstrap
             $container->get('RepairConfigService'),
             $container->get('RepairDetailsGateway'),
             $container->get('RepairStatusConfigGateway'),
+            $container->get('RepairAdresseService'),
         );
     }
 }
