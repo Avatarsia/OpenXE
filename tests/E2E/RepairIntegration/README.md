@@ -47,6 +47,7 @@ OPENXE_URL=http://localhost:8081 WP_URL=http://localhost:8080 \
 - [ ] Endpoint-URL zeigt Scheme+Host der aktuellen Instanz
 - [ ] "Generieren" bei leerem Secret erzeugt 64-Hex-Zeichen-Wert
 - [ ] "Neu generieren" bei vorhandenem Wert fragt per confirm() nach
+- [ ] Nach dem Generieren Seite neu laden (F5): kein erneutes Rotieren des Secrets
 - [ ] Auge-Toggle blendet Klartext ein/aus
 - [ ] Copy-Button kopiert Klartext (auch ueber http — Fallback-Pfad)
 - [ ] Werte ins WP-Plugin eintragen -> Inbound-Test-Push liefert 200

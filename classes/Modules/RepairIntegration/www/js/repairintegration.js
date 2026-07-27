@@ -45,7 +45,9 @@ $(document).ready(function() {
         input.setSelectionRange(0, value.length);
         var ok = false;
         try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
-        if (wasPassword) { input.type = 'password'; }
+        // Nur bei Erfolg wieder maskieren: ein type-Wechsel verwirft die
+        // Selektion, sonst waere der Hinweis "Manuell kopieren" nutzlos.
+        if (wasPassword && ok) { input.type = 'password'; }
         repairSetTempLabel(btn, ok ? 'Kopiert!' : 'Manuell kopieren');
     });
 
