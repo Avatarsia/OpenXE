@@ -37,10 +37,12 @@ class Repairintegration
 
     /**
      * Sorgt einmalig dafuer, dass alle DB-Tabellen, Hooks, Cronjobs,
-     * Permissions und Menue-Eintraege fuer das Modul existieren.
+     * Permissions und Menue-Eintraege fuer das Modul existieren. Faengt
+     * ausserdem bestehende Installationen ab, deren Schema-Version hinter
+     * der ausgelieferten liegt (needsUpgrade).
      *
-     * Performance: needsInstall() ist ein einzelnes SELECT auf systemconfig
-     * (sub-Millisekunde). Im installierten Normalfall ist die Methode no-op.
+     * Performance: needsInstall()/needsUpgrade() lesen dieselbe systemconfig-
+     * Zeile (sub-Millisekunde). Im aktuellen Normalfall ist die Methode no-op.
      *
      * Sicherheit: install.php ist DDL-only / Hook/Cronjob/Permission-Setup,
      * keine User-Daten. Alle Statements sind idempotent (CREATE TABLE IF NOT
@@ -52,7 +54,7 @@ class Repairintegration
         try {
             $db = $this->app->Container->get('Database');
             $migration = new \Xentral\Modules\RepairIntegration\Migration\RepairIntegrationMigration($db);
-            if (!$migration->needsInstall()) {
+            if (!$migration->needsInstall() && !$migration->needsUpgrade()) {
                 return;
             }
         } catch (\Throwable $e) {

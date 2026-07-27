@@ -14,6 +14,10 @@ $migration = new \Xentral\Modules\RepairIntegration\Migration\RepairIntegrationM
 if ($migration->needsInstall()) {
     $migration->install();
     echo "Database migration completed.\n";
+} elseif ($migration->needsUpgrade()) {
+    $fromVersion = (string)$migration->getCurrentVersion();
+    $migration->upgrade();
+    echo "Database upgraded: {$fromVersion} -> " . $migration->getTargetVersion() . ".\n";
 } else {
     echo "Database already up to date (version: " . $migration->getCurrentVersion() . ").\n";
 }

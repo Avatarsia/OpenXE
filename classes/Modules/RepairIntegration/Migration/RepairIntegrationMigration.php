@@ -9,7 +9,7 @@ final class RepairIntegrationMigration
 {
     private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
     private const SCHEMA_VERSION_KEY = 'schema_version'; // @php83: add type string
-    private const SCHEMA_VERSION = '1.0.0'; // @php83: add type string
+    private const SCHEMA_VERSION = '1.1.0'; // @php83: add type string
 
     public function __construct(
         private readonly Database $db,
@@ -22,9 +22,41 @@ final class RepairIntegrationMigration
         $this->setVersion(self::SCHEMA_VERSION);
     }
 
+    /**
+     * Bringt eine bereits installierte Datenbank auf SCHEMA_VERSION.
+     *
+     * Wird bei jedem Install-Aufruf ausgefuehrt und ist ein No-Op, sobald
+     * die gespeicherte Version aktuell ist. Die Upgrade-Statements selbst
+     * sind zusaetzlich idempotent (INSERT IGNORE / eng gefasste UPDATEs).
+     */
+    public function upgrade(): void
+    {
+        if (!$this->needsUpgrade()) {
+            return;
+        }
+
+        $this->executeSqlFile(__DIR__ . '/sql/003_status_config_upgrade.sql');
+        $this->setVersion(self::SCHEMA_VERSION);
+    }
+
     public function needsInstall(): bool
     {
         return $this->getCurrentVersion() === null;
+    }
+
+    /**
+     * True, wenn installiert, aber auf einer aelteren Schema-Version.
+     */
+    public function needsUpgrade(): bool
+    {
+        $current = $this->getCurrentVersion();
+
+        return $current !== null && version_compare($current, self::SCHEMA_VERSION, '<');
+    }
+
+    public function getTargetVersion(): string
+    {
+        return self::SCHEMA_VERSION;
     }
 
     public function getCurrentVersion(): ?string
