@@ -24,3 +24,24 @@
 .repairGenForm {
     display: inline;
 }
+/* Fehlerbeschreibung: scrollbare Box, damit lange Kundentexte die
+   Karte nicht sprengen (max. Hoehe, Rest per Scroll). */
+#repair-details-panel .issue-box {
+    background: #fafafa;
+    border: 1px solid #e3e3e3;
+    border-radius: 3px;
+    padding: 6px 8px;
+    max-height: 110px;
+    overflow: auto;
+}
+/* Vom Kunden im WP-Portal freigegebener KVA-Preis: read-only-Chip,
+   bewusst kein Eingabefeld (Wert kommt nur per Push). */
+#repair-details-panel .kva-kunde {
+    background: #e8f5e9;
+    border: 1px solid #2bb673;
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-weight: 600;
+    color: #1b5e20;
+    white-space: nowrap;
+}

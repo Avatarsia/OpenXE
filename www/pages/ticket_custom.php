@@ -84,12 +84,17 @@ class TicketCustom extends Ticket
             $this->app->Tpl->Set('REPAIR_ISSUE_DESC', htmlspecialchars($details['issue_description'] ?? ''));
             $this->app->Tpl->Set('REPAIR_WARRANTY', htmlspecialchars($details['warranty_status'] ?? ''));
             $this->app->Tpl->Set('REPAIR_COST_LIMIT', htmlspecialchars($details['cost_limit'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_EXPRESS', $details['is_express'] ? 'Ja' : 'Nein');
+            $this->app->Tpl->Set('REPAIR_EXPRESS', $details['is_express'] ? '<span class="repair-express-badge">Ja</span>' : 'Nein');
             $this->app->Tpl->Set('REPAIR_DIAGNOSIS', htmlspecialchars($details['diagnosis_result'] ?? ''));
             $this->app->Tpl->Set('REPAIR_QUOTE', htmlspecialchars($details['quote_amount'] ?? ''));
             $this->app->Tpl->Set('REPAIR_ACTUAL_COST', htmlspecialchars($details['actual_cost'] ?? ''));
             // Read-only: der Wert kommt ausschliesslich per Push von WP.
-            $this->app->Tpl->Set('REPAIR_CUSTOMER_QUOTE', htmlspecialchars($details['customer_quote_amount'] ?? ''));
+            // Leer -> Gedankenstrich, damit der Chip im Panel nicht leer steht.
+            $customerQuote = trim((string)($details['customer_quote_amount'] ?? ''));
+            $this->app->Tpl->Set(
+                'REPAIR_CUSTOMER_QUOTE',
+                $customerQuote !== '' ? htmlspecialchars($customerQuote) . ' &euro;' : '&ndash;'
+            );
             $this->app->Tpl->Set('REPAIR_NOTES', htmlspecialchars($details['repair_notes'] ?? ''));
 
             // Customer account and beleg shortcuts
