@@ -63,13 +63,25 @@ class Repairintegration
 
         // install.php inkludieren, Output verwerfen (idempotent durch
         // needsInstall-Check und Vorab-SELECTs innerhalb des Scripts).
+        //
+        // Bewusst der volle Include statt nur RepairIntegrationMigration::
+        // upgrade(): install.php registriert zusaetzlich Hooks, Cronjobs,
+        // Permissions und Menue-Eintraege. Da diese Methode nach einem
+        // erfolgreichen Upgrade nie wieder etwas tut, ist der Upgrade-Lauf die
+        // einzige Gelegenheit, in der eine neue Schema-Version auch neue
+        // Hooks/Cronjobs/Menue-Eintraege nachziehen kann.
         $app = $this->app;
         ob_start();
         try {
             include __DIR__ . '/../../classes/Modules/RepairIntegration/install.php';
         } catch (\Throwable $e) {
-            // silent - fehlerhafte Action-Page zeigt anschliessend einen
-            // klareren Fehler als ein Auto-Install-Crash mitten im Header.
+            // Nicht still verschlucken: schlaegt das Upgrade fehl, bleibt die
+            // Schema-Version zurueck und dieser Block laeuft bei JEDEM
+            // Seitenaufruf erneut. Ohne Log-Zeile haette der Betreiber davon
+            // kein Signal. Danach laeuft die Seite weiter (ggf. auf altem
+            // Schema) - eine fehlerhafte Action-Page zeigt einen klareren
+            // Fehler als ein Auto-Install-Crash mitten im Header.
+            error_log('RepairIntegration install/upgrade failed: ' . $e->getMessage());
         }
         ob_get_clean();
     }
