@@ -54,8 +54,17 @@
     padding: 8px 12px;
     margin-bottom: 10px;
 }
+#repair-status-filter .filter-group {
+    display: inline-block;
+    padding: 2px 12px 2px 8px;
+    margin: 2px 8px 2px 0;
+    border: 1px solid #e3e3e3;
+    border-radius: 4px;
+    background: #fafafa;
+    white-space: nowrap;
+}
 #repair-status-filter label {
-    margin-right: 12px;
+    margin-right: 10px;
     white-space: nowrap;
     cursor: pointer;
     font-weight: normal;

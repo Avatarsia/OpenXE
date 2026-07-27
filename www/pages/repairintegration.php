@@ -157,28 +157,72 @@ class Repairintegration
         try {
             $db = $this->app->Container->get('Database');
             $statuses = $db->fetchAll(
-                'SELECT slug, label_de, is_terminal FROM `ticket_status_config`
-                 WHERE is_active = 1 ORDER BY sort_order, id'
+                'SELECT slug, label_de, is_terminal, category FROM `ticket_status_config`
+                 WHERE is_active = 1 ORDER BY category, sort_order, id'
             );
         } catch (\Throwable $e) {
             $this->app->Tpl->Set('STATUSFILTER', '');
             return;
         }
 
-        $hiddenDefault = $this->getDefaultHiddenStatuses($statuses);
-        $html = '<div id="repair-status-filter"><strong>Status:</strong> ';
+        // Nach category gruppieren, damit die Leiste bei vielen Stati
+        // lesbar bleibt. Reihenfolge der Gruppen bewusst festlegen.
+        $categoryLabels = array(
+            'general' => 'Allgemein',
+            'repair' => 'Reparatur',
+            'maintenance' => 'Wartung',
+            'reverse_engineering' => 'Reverse Engineering',
+            'individualization' => 'Individualisierung',
+        );
+
+        $grouped = array();
         foreach ($statuses as $status) {
             $slug = (string)$status['slug'];
             if (!preg_match('/^[a-z0-9_]+$/', $slug)) {
                 continue;
             }
-            $checked = in_array($slug, $hiddenDefault, true) ? '' : ' checked';
-            $html .= '<label><input type="checkbox" class="repair-status-filter" data-slug="'
-                . $slug . '"' . $checked . '> '
-                . htmlspecialchars((string)$status['label_de']) . '</label> ';
+            $category = (string)($status['category'] ?? 'general');
+            $grouped[$category][] = $status;
         }
-        $html .= '</div>';
-        $this->app->Tpl->Set('STATUSFILTER', $html);
+
+        $hiddenDefault = $this->getDefaultHiddenStatuses($statuses);
+        $groupsHtml = array();
+        foreach ($categoryLabels as $category => $label) {
+            if (empty($grouped[$category])) {
+                continue;
+            }
+            $group = '<span class="filter-group"><strong>' . $label . ':</strong> ';
+            foreach ($grouped[$category] as $status) {
+                $slug = (string)$status['slug'];
+                $checked = in_array($slug, $hiddenDefault, true) ? '' : ' checked';
+                $group .= '<label><input type="checkbox" class="repair-status-filter" data-slug="'
+                    . $slug . '"' . $checked . '> '
+                    . htmlspecialchars((string)$status['label_de']) . '</label> ';
+            }
+            $group .= '</span>';
+            $groupsHtml[] = $group;
+        }
+        // Unbekannte/zukuenftige Kategorien nicht verschlucken
+        foreach ($grouped as $category => $items) {
+            if (isset($categoryLabels[$category])) {
+                continue;
+            }
+            $group = '<span class="filter-group"><strong>' . htmlspecialchars(ucfirst($category)) . ':</strong> ';
+            foreach ($items as $status) {
+                $slug = (string)$status['slug'];
+                $checked = in_array($slug, $hiddenDefault, true) ? '' : ' checked';
+                $group .= '<label><input type="checkbox" class="repair-status-filter" data-slug="'
+                    . $slug . '"' . $checked . '> '
+                    . htmlspecialchars((string)$status['label_de']) . '</label> ';
+            }
+            $group .= '</span>';
+            $groupsHtml[] = $group;
+        }
+
+        $this->app->Tpl->Set(
+            'STATUSFILTER',
+            '<div id="repair-status-filter">' . implode('', $groupsHtml) . '</div>'
+        );
     }
 
     /**
