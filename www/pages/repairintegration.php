@@ -105,6 +105,23 @@ class Repairintegration
             $this->app->Tpl->Set('MESSAGE', '<div class="info">Einstellungen gespeichert.</div>');
         }
 
+        $submit = $this->app->Secure->GetPOST('submit');
+        if ($submit === 'generate_inbound_secret' || $submit === 'generate_wp_api_key') {
+            $configKey = $submit === 'generate_inbound_secret' ? 'inbound_shared_secret' : 'wp_api_key';
+            try {
+                $config->set($configKey, bin2hex(random_bytes(32)));
+                $this->app->Tpl->Set(
+                    'MESSAGE',
+                    '<div class="info">Neuer Schluessel generiert. Wert ins WordPress-Plugin uebernehmen.</div>'
+                );
+            } catch (\Throwable $e) {
+                $this->app->Tpl->Set(
+                    'MESSAGE',
+                    '<div class="error">Generierung fehlgeschlagen: ' . htmlspecialchars($e->getMessage()) . '</div>'
+                );
+            }
+        }
+
         $this->app->Tpl->Set('ENABLED', $config->isEnabled() ? ' checked' : '');
         $this->app->Tpl->Set('WP_API_URL', htmlspecialchars($config->getWpApiUrl()));
         $this->app->Tpl->Set('WP_API_KEY', htmlspecialchars($config->getWpApiKey()));
@@ -112,6 +129,17 @@ class Repairintegration
         $this->app->Tpl->Set('MAX_RETRIES', htmlspecialchars((string)$config->getMaxRetries()));
         $this->app->Tpl->Set('RETENTION_YEARS', htmlspecialchars((string)$config->getRetentionAnonymizeYears()));
         $this->app->Tpl->Set('NOTIFY_EMAIL', htmlspecialchars($config->getNotifyOnPermanentFailEmail()));
+
+        $this->app->Tpl->Set(
+            'ENDPOINT_URL',
+            htmlspecialchars(\Xentral\Modules\RepairIntegration\Service\RepairConnectionInfo::endpointUrl($_SERVER))
+        );
+        $inboundSecret = $config->getInboundSharedSecret();
+        $wpApiKey = $config->getWpApiKey();
+        $this->app->Tpl->Set('GEN_INBOUND_LABEL', $inboundSecret === '' ? 'Generieren' : 'Neu generieren');
+        $this->app->Tpl->Set('GEN_INBOUND_CONFIRM', $inboundSecret === '' ? '' : ' data-confirm="1"');
+        $this->app->Tpl->Set('GEN_WPKEY_LABEL', $wpApiKey === '' ? 'Generieren' : 'Neu generieren');
+        $this->app->Tpl->Set('GEN_WPKEY_CONFIRM', $wpApiKey === '' ? '' : ' data-confirm="1"');
 
         $this->app->Tpl->Set('KURZUEBERSCHRIFT', 'RepairIntegration Einstellungen');
         $this->app->Tpl->Parse('PAGE', 'repair_config.tpl');
