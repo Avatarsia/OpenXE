@@ -8,10 +8,20 @@ $(document).ready(function() {
 
     // --- WordPress-Verbindungs-Tab -------------------------------------
 
+    // Merkt sich das Original-Label einmalig pro Button, damit schnelle
+    // Wiederholungs-Klicks nicht das Feedback-Label festschreiben.
     function repairSetTempLabel(btn, text) {
-        var original = btn.textContent;
+        if (btn.getAttribute('data-repair-label') === null) {
+            btn.setAttribute('data-repair-label', btn.textContent);
+        }
+        if (btn.repairLabelTimer) {
+            window.clearTimeout(btn.repairLabelTimer);
+        }
         btn.textContent = text;
-        window.setTimeout(function() { btn.textContent = original; }, 1500);
+        btn.repairLabelTimer = window.setTimeout(function() {
+            btn.textContent = btn.getAttribute('data-repair-label');
+            btn.repairLabelTimer = null;
+        }, 1500);
     }
 
     // Copy: Clipboard-API nur im Secure Context (https/localhost) verfuegbar.
