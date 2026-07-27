@@ -304,7 +304,7 @@ Bewusst ohne Mapping: die `general`-Arbeitsstatus (`offen`, `warten_e`, `warten_
 
 Schema-Version 1.1.0 ergaenzt `wp_status_mapping`-Eintraege fuer `quote_declined` (`kv_abgelehnt`, `re_abgelehnt`, `ind_abgelehnt`) und `in_repair` (`wartung_laeuft`, `re_umsetzung`, `ind_fertigung`). Sobald ein Ticket in einen dieser Status wechselt, stellt `TicketStatusChangeHook` einen Outbound-Eintrag in `repair_sync_queue`.
 
-Kennt das Ziel-Plugin einen dieser Slugs noch nicht, antwortet es mit einem non-2xx-Code. `RepairSyncService` wiederholt den Versuch entlang `RETRY_DELAYS` (2 min, 10 min, 30 min, 2 h, 8 h) und setzt den Eintrag nach `max_retries` (Default 5, in Summe also nach rund 11 Stunden) endgueltig auf `permanently_failed`. Von dort wird **nicht** automatisch erneut zugestellt: die Sync-Status-Seite (`index.php?module=repairintegration&action=syncstatus`) zeigt `permanently_failed` nur als Zaehler, eine Wiedervorlage-Aktion gibt es nicht — betroffene Eintraege muessten in `repair_sync_queue` von Hand zurueckgesetzt werden.
+Kennt das Ziel-Plugin einen dieser Slugs noch nicht, antwortet es mit einem non-2xx-Code. `RepairSyncService` wiederholt den Versuch entlang `RETRY_DELAYS` (2 min, 10 min, 30 min, 2 h) und setzt den Eintrag nach `max_retries` (Default 5, in Summe also nach ca. 2 Stunden 42 Minuten) endgueltig auf `permanently_failed`. Von dort wird **nicht** automatisch erneut zugestellt: die Sync-Status-Seite (`index.php?module=repairintegration&action=syncstatus`) zeigt `permanently_failed` nur als Zaehler, eine Wiedervorlage-Aktion gibt es nicht — betroffene Eintraege muessten in `repair_sync_queue` von Hand zurueckgesetzt werden.
 
 ### Migration bestehender Installationen
 
