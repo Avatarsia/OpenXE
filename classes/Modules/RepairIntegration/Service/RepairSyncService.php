@@ -113,6 +113,49 @@ final class RepairSyncService
         return $this->syncQueueGateway->getQueueStats();
     }
 
+    /**
+     * Prueft die Erreichbarkeit der WordPress-REST-API ueber den Ping-Endpoint.
+     *
+     * Idempotent: es werden keine Daten uebertragen, der Aufruf kann beliebig
+     * oft wiederholt werden. Fehler werden bewusst nicht geworfen, sondern als
+     * Rohergebnis zurueckgegeben, damit die UI HTTP-Code und Antwort-Body
+     * unveraendert anzeigen kann.
+     *
+     * @return array{http_code: int|null, body: string, error: string|null}
+     */
+    public function testConnection(): array
+    {
+        $baseUrl = $this->configService->getWpApiUrl();
+        if ($baseUrl === '') {
+            return ['http_code' => null, 'body' => '', 'error' => 'WP API-URL ist nicht konfiguriert'];
+        }
+
+        $apiKey = $this->configService->getWpApiKey();
+        if ($apiKey === '') {
+            return ['http_code' => null, 'body' => '', 'error' => 'WP API-Key ist nicht konfiguriert'];
+        }
+
+        $payload = json_encode(
+            ['source' => 'openxe', 'action' => 'connection_test'],
+            JSON_THROW_ON_ERROR
+        );
+
+        $result = $this->request($baseUrl . '/wp-json/p3d/v1/ping', $payload, $apiKey, 10);
+
+        $error = '';
+        if ($result['http_code'] !== 200) {
+            $error = $result['error'] ?? sprintf('WP API returned HTTP %d', (int)$result['http_code']);
+        }
+        $this->logSync(
+            'outbound',
+            ['ticket_schluessel' => null, 'action' => 'connection_test', 'payload' => $payload],
+            $result['http_code'] === 200,
+            $error
+        );
+
+        return $result;
+    }
+
     private function pushToWordPress(array $item): void
     {
         $apiKey = $this->configService->getWpApiKey();
@@ -120,6 +163,28 @@ final class RepairSyncService
             throw new SyncFailedException('WP API key not configured');
         }
 
+        $result = $this->request((string)$item['target_url'], (string)$item['payload'], $apiKey, 15);
+        $httpCode = (int)$result['http_code'];
+
+        if ($result['error'] !== null || $httpCode < 200 || $httpCode >= 300) {
+            throw new SyncFailedException(
+                sprintf('WP API returned HTTP %d', $httpCode),
+                $httpCode,
+                substr($result['body'], 0, 1000),
+            );
+        }
+    }
+
+    /**
+     * Fuehrt einen POST-Request gegen die WordPress-REST-API aus.
+     *
+     * `http_code` ist null, wenn kein HTTP-Status gelesen werden konnte
+     * (Transportfehler: DNS, Connect, Timeout, TLS).
+     *
+     * @return array{http_code: int|null, body: string, error: string|null}
+     */
+    private function request(string $url, string $payload, string $apiKey, int $timeout): array
+    {
         $context = stream_context_create([
             'http' => [
                 'method' => 'POST',
@@ -128,8 +193,8 @@ final class RepairSyncService
                     'Authorization: Bearer ' . $apiKey,
                     'X-Repair-Source: openxe',
                 ]),
-                'content' => $item['payload'],
-                'timeout' => 15,
+                'content' => $payload,
+                'timeout' => $timeout,
                 'ignore_errors' => true,
             ],
             'ssl' => [
@@ -138,16 +203,26 @@ final class RepairSyncService
             ],
         ]);
 
-        $response = @file_get_contents($item['target_url'], false, $context);
+        // error_clear_last(), damit error_get_last() unten garantiert die
+        // Warnung dieses Requests liefert und keinen aelteren Rest.
+        error_clear_last();
+        $response = @file_get_contents($url, false, $context);
         $httpCode = $this->parseHttpCode($http_response_header ?? []);
 
-        if ($response === false || $httpCode < 200 || $httpCode >= 300) {
-            throw new SyncFailedException(
-                sprintf('WP API returned HTTP %d', $httpCode),
-                $httpCode,
-                $response !== false ? substr($response, 0, 1000) : '',
-            );
+        if ($response === false) {
+            $lastError = error_get_last();
+            return [
+                'http_code' => $httpCode > 0 ? $httpCode : null,
+                'body' => '',
+                'error' => $lastError['message'] ?? 'Request failed',
+            ];
         }
+
+        return [
+            'http_code' => $httpCode > 0 ? $httpCode : null,
+            'body' => $response,
+            'error' => null,
+        ];
     }
 
     private function parseHttpCode(array $headers): int

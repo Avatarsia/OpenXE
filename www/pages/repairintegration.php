@@ -154,6 +154,22 @@ class Repairintegration
             }
         }
 
+        // Kein Post/Redirect/Get: der Verbindungstest ist idempotent und soll
+        // per F5 wiederholbar sein, das Ergebnis wird direkt gerendert.
+        if ($submit === 'test_wp_connection') {
+            try {
+                /** @var \Xentral\Modules\RepairIntegration\Service\RepairSyncService $syncService */
+                $syncService = $this->app->Container->get('RepairSyncService');
+                $this->app->Tpl->Set('MESSAGE', $this->renderConnectionTestResult($syncService->testConnection()));
+            } catch (\Throwable $e) {
+                $this->app->Tpl->Set(
+                    'MESSAGE',
+                    '<div class="error">Verbindungstest fehlgeschlagen: '
+                    . htmlspecialchars($e->getMessage()) . '</div>'
+                );
+            }
+        }
+
         $this->app->Tpl->Set('ENABLED', $config->isEnabled() ? ' checked' : '');
         $this->app->Tpl->Set('WP_API_URL', htmlspecialchars($config->getWpApiUrl()));
         $this->app->Tpl->Set('WP_API_KEY', htmlspecialchars($config->getWpApiKey()));
@@ -175,6 +191,36 @@ class Repairintegration
 
         $this->app->Tpl->Set('KURZUEBERSCHRIFT', 'RepairIntegration Einstellungen');
         $this->app->Tpl->Parse('PAGE', 'repair_config.tpl');
+    }
+
+    /**
+     * Rendert das Rohergebnis von RepairSyncService::testConnection() als
+     * MESSAGE-Div. Bewusst ohne Interpretation: HTTP-Code und Antwort-Anfang
+     * werden unveraendert gezeigt, damit z.B. ein 404 einer alten
+     * Plugin-Version sofort erkennbar ist.
+     *
+     * @param array{http_code: int|null, body: string, error: string|null} $result
+     */
+    private function renderConnectionTestResult(array $result): string
+    {
+        $httpCode = $result['http_code'];
+
+        if ($httpCode === null) {
+            $detail = 'kein HTTP-Status erreicht. Transportfehler: '
+                . htmlspecialchars((string)($result['error'] ?? 'unbekannt'));
+        } else {
+            $detail = 'HTTP-Code ' . $httpCode;
+            // ENT_SUBSTITUTE: der Body kommt von aussen und kann durch das
+            // Kuerzen auf 300 Bytes ein UTF-8-Zeichen zerschneiden.
+            $body = substr($result['body'], 0, 300);
+            if ($body !== '') {
+                $detail .= '<br><code>'
+                    . htmlspecialchars($body, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</code>';
+            }
+        }
+
+        return '<div class="' . ($httpCode === 200 ? 'info' : 'error') . '">'
+            . 'Verbindungstest zu WordPress: ' . $detail . '</div>';
     }
 
     function Install()

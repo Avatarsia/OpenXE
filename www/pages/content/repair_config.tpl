@@ -84,6 +84,16 @@
                     <div class="repairHint">Im WP-Plugin als API-Key fuer eingehende Status-Updates eintragen.</div>
                 </td>
             </tr>
+            <tr>
+                <td>Verbindungstest:</td>
+                <td>
+                    <form method="post" action="index.php?module=repairintegration&amp;action=einstellungen#tabs-2" class="repairGenForm">
+                        <input type="hidden" name="submit" value="test_wp_connection">
+                        <button type="submit" class="repairGenBtn">Verbindung zu WordPress testen</button>
+                    </form>
+                    <div class="repairHint">POST auf /wp-json/p3d/v1/ping mit dem WP API-Key, erfordert Plugin v3.30.0+. Aeltere Versionen antworten mit HTTP 404.</div>
+                </td>
+            </tr>
         </table>
     </div>
 </div>
