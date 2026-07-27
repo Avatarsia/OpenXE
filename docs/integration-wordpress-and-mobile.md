@@ -184,7 +184,7 @@ Das optionale Feld `status` im Payload wird **ausschliesslich bei der Ticket-Anl
 Ablauf bei Neuanlage (`RepairApiController::processPushDetails()`):
 
 1. `RepairApiController::normalizeWpStatus()` — reine Funktion: trim, lowercase, Pattern `^[a-z0-9_]+$`, max 30 Zeichen. Ergebnis `null` = nicht verwertbar.
-2. `ServiceType::from(service_type)->statusCategory()` liefert die Kategorie (`repair` | `maintenance` | `reverse_engineering` | `individualization`).
+2. `ServiceType::tryFrom(service_type)?->statusCategory()` liefert die Kategorie (`repair` | `maintenance` | `reverse_engineering` | `individualization`).
 3. `RepairStatusConfigGateway::getByWpMapping($wpStatus, $category)` sucht in `ticket_status_config` die aktive Zeile mit passendem `wp_status_mapping`. Ein WP-Slug ist mehrdeutig (`in_repair` existiert in allen vier Kategorien), daher die Aufloesung ueber die Kategorie; kategorie-spezifische Zeilen gewinnen gegen `general`.
 4. Kein Treffer → Fallback `'neu'`.
 
@@ -297,6 +297,14 @@ Gepflegt in `ticket_status_config`, ausgeliefert von `Migration/sql/002_seed_sta
 | `spam`            | Papierkorb                             | general               | 999  | -                   | -                  | 0      |
 
 Bewusst ohne Mapping: die `general`-Arbeitsstatus (`offen`, `warten_e`, `warten_kd`, `klaeren`, `beantwortet`, `spam`) und `wartung_geplant` — eine geplante Wartung ist keine Diagnose, ein WP-Echo waere irrefuehrend.
+
+### Deploy-Reihenfolge — WP-Plugin zuerst
+
+> **Wichtig:** Die WP-Plugin-Version, die die Slugs `in_repair` und `quote_declined` kennt (**v3.29.0**), muss **vor oder zusammen mit** dieser OpenXE-Version deployed werden. Ein spaeter nachgezogenes Plugin verliert Status-Echos dauerhaft.
+
+Schema-Version 1.1.0 ergaenzt `wp_status_mapping`-Eintraege fuer `quote_declined` (`kv_abgelehnt`, `re_abgelehnt`, `ind_abgelehnt`) und `in_repair` (`wartung_laeuft`, `re_umsetzung`, `ind_fertigung`). Sobald ein Ticket in einen dieser Status wechselt, stellt `TicketStatusChangeHook` einen Outbound-Eintrag in `repair_sync_queue`.
+
+Kennt das Ziel-Plugin einen dieser Slugs noch nicht, antwortet es mit einem non-2xx-Code. `RepairSyncService` wiederholt den Versuch entlang `RETRY_DELAYS` (2 min, 10 min, 30 min, 2 h, 8 h) und setzt den Eintrag nach `max_retries` (Default 5, in Summe also nach rund 11 Stunden) endgueltig auf `permanently_failed`. Von dort wird **nicht** automatisch erneut zugestellt: die Sync-Status-Seite (`index.php?module=repairintegration&action=syncstatus`) zeigt `permanently_failed` nur als Zaehler, eine Wiedervorlage-Aktion gibt es nicht — betroffene Eintraege muessten in `repair_sync_queue` von Hand zurueckgesetzt werden.
 
 ### Migration bestehender Installationen
 
