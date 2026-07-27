@@ -1,100 +1,342 @@
 /*
  * Upgrader UI styles (Avatarsia fork)
  *
- * Extracted from www/pages/content/upgrade.tpl to follow OpenXE asset
- * convention (other pages link CSS under ./css/<page>.css).
+ * Layout aus dem genehmigten Mockup (upgrade-layout-mockup.html):
+ * - App-Farben als CSS-Variablen (--upg-* Praefix, keine Kollision
+ *   mit Theme-Variablen aus themes/new/css/style.css)
+ * - 8px-Spacing-Skala (--upg-s1 … --upg-s6)
+ * - Container max-width 1200px, einspaltig < 900px
  */
 
-.status-banner {border-radius:6px;padding:18px 56px 18px 18px;margin-bottom:12px;color:#fff;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;height:100%;box-sizing:border-box;position:relative;width:100%;}
-.banner-success {background:#1b6e30;}
-.banner-error {background:#b52b27;}
-.banner-warning {background:#d89216;}
-.banner-info {background:#0b3c68;}
+:root {
+    --upg-success: #1b6e30;
+    --upg-error:   #b52b27;
+    --upg-warning: #d89216;
+    --upg-info:    #0b3c68;
+
+    --upg-success-bg: #e6f4ea;
+    --upg-error-bg:   #fdecea;
+    --upg-warning-bg: #fff4e5;
+    --upg-info-bg:    #e8f1ff;
+    /* dunkleres Orange fuer Text auf hellem Warning-BG (Kontrast) */
+    --upg-warning-text: #8a4b0f;
+
+    --upg-text:       #1a2433;
+    --upg-text-muted: #5b6675;
+    --upg-border:     #dbe3ef;
+    --upg-surface:    #ffffff;
+    --upg-surface-alt:#f6f8fb;
+    --upg-dark:       #0f1720;
+
+    --upg-s1: 8px; --upg-s2: 16px; --upg-s3: 24px; --upg-s4: 32px; --upg-s5: 40px; --upg-s6: 48px;
+
+    --upg-radius: 8px;
+    --upg-shadow: 0 1px 3px rgba(15, 23, 32, .08);
+    --upg-mono: Consolas, "Courier New", monospace;
+}
+
+/*
+ * Das hidden-Attribut muss gegen die display-Regeln der Grids
+ * gewinnen — gleiche Spezifitaet, spaetere Ladereihenfolge wuerde
+ * das Attribut sonst wirkungslos machen. Gilt bewusst global fuer
+ * alle hidden-Nutzungen der Seite (ROLLBACK_VISIBLE,
+ * UPGRADE_FORCE_VISIBLE, LOCAL_BRANCH_VISIBLE).
+ */
+[hidden] {display:none !important;}
+
+/* Barrierefreiheit: sichtbarer Fokus-Ring fuer interaktive Elemente
+   der Upgrader-Seite (gescoped auf #tabs-1, damit das Framework-Chrome
+   unberuehrt bleibt). */
+#tabs-1 :focus-visible {
+    outline: 3px solid var(--upg-info);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* ---------- Seitengeruest ---------- */
+#tabs-1 > form {max-width:1200px;margin:0 auto;}
+
+/* ---------- Status-Banner ---------- */
+.status-banner {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--upg-s2);
+    padding: var(--upg-s3) calc(var(--upg-s5) + var(--upg-s2)) var(--upg-s3) var(--upg-s3);
+    border-radius: var(--upg-radius);
+    color: #fff;
+    box-shadow: var(--upg-shadow);
+    margin-bottom: var(--upg-s3);
+    box-sizing: border-box;
+    width: 100%;
+}
+.banner-success {background:var(--upg-success);}
+.banner-error   {background:var(--upg-error);}
+/* dunkler Text: Kontrast auf Orange */
+.banner-warning {background:var(--upg-warning);color:#2b1d00;}
+.banner-info    {background:var(--upg-info);}
+
 .banner-text {flex:1;min-width:0;}
-.banner-headline {font-size:19px;font-weight:700;}
-.banner-sub {font-size:14px;margin-top:4px;}
-.banner-guidance {margin-top:8px;font-weight:700;}
-.banner-guidance small {display:block;font-weight:400;}
-.banner-actions {position:absolute;top:10px;right:10px;display:flex;gap:8px;}
-.banner-btn {background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.2);border-radius:5px;padding:8px 14px;font-weight:700;cursor:pointer;}
-.banner-btn:hover {background:rgba(255,255,255,0.18);}
-.icon-btn {width:34px;height:34px;border-radius:17px;display:flex;align-items:center;justify-content:center;font-size:16px;padding:0;}
-.hidden-force {display:block;width:100%;margin-top:6px;}
-.hidden-force label {display:flex;align-items:center;gap:6px;margin:0;font-size:12px;color:rgba(255,255,255,0.9);}
-#tabs-1 > form {max-width:1600px;margin:0 auto;}
-.top-row {display:grid;grid-template-columns: minmax(440px, 1.7fr) minmax(320px, 420px);gap:20px;align-items:stretch;margin-bottom:56px;position:relative;z-index:1;box-sizing:border-box;}
-.status-col {display:flex;}
-.steps-col {display:flex;}
-.steps-stack {display:flex;flex-direction:column;gap:12px;width:100%;height:100%;}
-.compare-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:stretch;margin:0 0 56px 0;}
-.compare-row .card {height:100%;margin-bottom:0;min-width:0;}
-.secondary-row {display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:stretch;margin:0 0 56px 0;}
-.secondary-row .card {height:100%;margin-bottom:0;min-width:0;}
-.log-section {margin-top:0;clear:both;position:relative;z-index:0;}
-.stepper {display:flex;flex-direction:column;gap:12px;margin-bottom:12px;}
-.step-card {border:1px solid #dbe3ef;border-radius:6px;background:#f6f8fb;padding:14px;display:flex;flex-direction:column;gap:8px;}
-.step-card:last-child {flex:1 1 auto;}
-.step-head {display:flex;flex-direction:column;align-items:flex-start;gap:6px;}
-.step-head strong {font-size:14px;color:#0b3c68;}
-.pill {display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;}
-.pill-success {background:#e6f4ea;color:#1b6e30;}
-.pill-error {background:#fdecea;color:#b52b27;}
-.pill-warning {background:#fff4e5;color:#8a4b0f;}
-.pill-info {background:#e8f1ff;color:#0b3c68;}
-.step-actions {display:flex;justify-content:flex-end;align-items:flex-end;flex:1;}
-.step-btn {width:auto;min-width:170px;background:#0b3c68;color:#fff;border:none;border-radius:4px;padding:9px 16px;font-weight:700;cursor:pointer;font-size:13px;}
-.step-btn:hover {background:#0a325a;}
-.force-wrap {margin-top:2px;font-size:12px;color:#0b3c68;}
-.force-highlight {border:2px solid #b52b27;background:#fff4e5;border-radius:6px;padding:8px;}
-.force-highlight label {font-weight:700;}
-.card {border:1px solid #dbe3ef;border-radius:6px;background:#fff;padding:20px;margin-bottom:12px;display:flex;flex-direction:column;}
-.card-title {margin:0 0 12px 0;padding:0 0 10px 0;font-size:14px;font-weight:700;color:#0b3c68;border-bottom:1px solid #eef1f6;letter-spacing:0.02em;text-transform:uppercase;}
+.banner-headline {font-size:20px;font-weight:700;line-height:1.25;}
+.banner-sub {font-size:14px;margin-top:6px;}
+.banner-guidance {margin-top:var(--upg-s1);font-weight:700;}
+.banner-guidance small {display:block;font-weight:400;margin-top:2px;}
+.banner-actions {position:absolute;top:var(--upg-s2);right:var(--upg-s2);display:flex;gap:var(--upg-s1);}
+.banner-btn {
+    background: rgba(255, 255, 255, .14);
+    color: inherit;
+    border: 1px solid rgba(255, 255, 255, .3);
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+}
+.banner-btn:hover {background:rgba(255, 255, 255, .24);}
+.icon-btn {width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:17px;padding:0;}
+.banner-warning .banner-btn {background:rgba(0, 0, 0, .08);border-color:rgba(0, 0, 0, .25);}
+.banner-warning .banner-btn:hover {background:rgba(0, 0, 0, .16);}
+
+/* ---------- Karten ---------- */
+.card {
+    background: var(--upg-surface);
+    border: 1px solid var(--upg-border);
+    border-radius: var(--upg-radius);
+    box-shadow: var(--upg-shadow);
+    padding: var(--upg-s3);
+    display: flex;
+    flex-direction: column;
+}
+.card-title {
+    margin: 0 0 var(--upg-s2);
+    padding-bottom: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--upg-info);
+    border-bottom: 1px solid #eef1f6;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
 .card-body {flex:1 1 auto;}
-.card-footer {display:flex;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid #eef1f6;}
-.kv-grid {display:grid;grid-template-columns:max-content minmax(0,1fr);column-gap:14px;row-gap:10px;font-size:13px;align-items:baseline;}
-.kv-grid dt {color:#5b6675;font-weight:600;white-space:nowrap;}
-.kv-grid dd {margin:0;color:#1a2433;overflow-wrap:anywhere;min-width:0;}
-.kv-grid dd .hint {color:#7a8696;font-family:Consolas,monospace;font-size:12px;}
-.form-stack {display:flex;flex-direction:column;gap:10px;}
+.card-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--upg-s2);
+    padding-top: var(--upg-s2);
+    border-top: 1px solid #eef1f6;
+}
+
+/* ---------- Grid-Bereiche ---------- */
+.grid {display:grid;gap:var(--upg-s3);margin-bottom:var(--upg-s3);align-items:stretch;}
+.grid-2 {grid-template-columns:repeat(2, minmax(0, 1fr));}
+.grid > .card {min-width:0;}
+
+/* ---------- Steps ---------- */
+.step-card {background:var(--upg-surface-alt);gap:12px;}
+.step-head {display:flex;align-items:center;gap:12px;}
+.step-head strong {font-size:15px;color:var(--upg-info);}
+.step-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--upg-text-muted);
+    cursor: pointer;
+}
+.step-check input {margin:0;}
+.step-actions {display:flex;flex:1;align-items:flex-end;}
+
+/* ---------- Pills ---------- */
+.pill {display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;}
+.pill-success {background:var(--upg-success-bg);color:var(--upg-success);}
+.pill-error   {background:var(--upg-error-bg);color:var(--upg-error);}
+.pill-warning {background:var(--upg-warning-bg);color:var(--upg-warning-text);}
+.pill-info    {background:var(--upg-info-bg);color:var(--upg-info);}
+
+/* ---------- Force-Checkbox ---------- */
+.force-wrap {font-size:13px;color:var(--upg-info);border-radius:6px;}
+.force-wrap label {display:inline-flex;align-items:center;gap:8px;cursor:pointer;padding:4px;}
+.force-wrap.force-highlight {
+    border: 2px solid var(--upg-error);
+    background: var(--upg-warning-bg);
+    padding: var(--upg-s1);
+}
+.force-wrap.force-highlight label {font-weight:700;color:var(--upg-text);}
+
+/* ---------- Versionsabgleich: Lokal vs. Remote ---------- */
+.compare-panels {display:grid;grid-template-columns:1fr 1fr;gap:var(--upg-s2);}
+.compare-panel {
+    border: 1px solid var(--upg-border);
+    border-radius: 6px;
+    padding: var(--upg-s2);
+    background: var(--upg-surface-alt);
+}
+.compare-panel h4 {margin:0 0 var(--upg-s1);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--upg-text-muted);}
+.kv-grid {display:grid;grid-template-columns:max-content minmax(0, 1fr);column-gap:14px;row-gap:8px;font-size:13px;align-items:baseline;}
+.kv-grid dt {color:var(--upg-text-muted);font-weight:600;white-space:nowrap;}
+.kv-grid dd {margin:0;color:var(--upg-text);overflow-wrap:anywhere;min-width:0;}
+.mono {font-family:var(--upg-mono);font-size:12px;color:#7a8696;}
+.compare-status {margin-top:var(--upg-s2);padding-top:var(--upg-s2);border-top:1px solid #eef1f6;display:flex;align-items:center;gap:var(--upg-s1);font-size:13px;color:var(--upg-text-muted);}
+
+/* ---------- Formulare ---------- */
+.form-stack {display:flex;flex-direction:column;gap:12px;}
 .form-row {display:flex;flex-direction:column;gap:4px;}
-.form-row label {font-size:12px;font-weight:600;color:#5b6675;letter-spacing:0.02em;text-transform:uppercase;}
-.tag-select-wrap {margin:6px 0 12px 0;}
-.tag-select-wrap select {width:100%;padding:8px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;background:#fff;}
+.form-row label {font-size:12px;font-weight:600;color:var(--upg-text-muted);letter-spacing:.02em;text-transform:uppercase;}
+.input-inline, select.input-inline {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #c4cfde;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 13px;
+    background: var(--upg-surface);
+    color: var(--upg-text);
+    box-sizing: border-box;
+}
+.input-inline:focus {border-color:var(--upg-info);}
+.hint {color:var(--upg-text-muted);font-size:13px;line-height:1.5;}
+.hint-spaced {margin:0 0 var(--upg-s2);}
+/* Rollback-Select wird vom Controller als fertiges Markup geliefert
+   ([ROLLBACK_TAGS_SELECT]) — Wrapper gleicht es an .input-inline an. */
+.tag-select-wrap select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #c4cfde;
+    border-radius: 6px;
+    font-size: 13px;
+    background: var(--upg-surface);
+    color: var(--upg-text);
+    box-sizing: border-box;
+}
 .rollback-tag-select {margin-bottom:8px;}
-.help-card {background:#f6f8fb;border:1px dashed #c4cfde;}
-.help-card .help-toggle {cursor:pointer;font-weight:700;color:#0b3c68;font-size:13px;display:flex;align-items:center;gap:8px;letter-spacing:0.02em;text-transform:uppercase;}
-.help-card .help-toggle::before {content:"\203A";display:inline-block;transition:transform 0.15s ease;font-size:18px;line-height:1;}
-.help-card.open .help-toggle::before {transform:rotate(90deg);}
-.help-card .help-body {margin-top:12px;font-size:13px;color:#3a4655;line-height:1.55;max-width:760px;}
-.help-card.collapsed .help-body {display:none;}
-.help-card code {background:#e9eef6;padding:1px 6px;border-radius:3px;font-family:Consolas,monospace;font-size:12px;}
+
+/* ---------- Buttons ---------- */
+.action-btn {
+    min-width: 220px;
+    padding: 10px 20px;
+    font: inherit;
+    font-weight: 700;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    border: 1px solid transparent;
+}
+.btn-primary {background:var(--upg-info);color:#fff;border-color:#0a325a;}
+.btn-primary:hover {background:#0a325a;}
+.btn-rollback {background:var(--upg-warning);color:#2b1d00;border-color:var(--upg-warning-text);}
+.btn-rollback:hover {background:#b87810;color:#fff;}
+.step-btn {
+    min-width: 170px;
+    background: var(--upg-info);
+    color: #fff;
+    border: 1px solid #0a325a;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font: inherit;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+}
+.step-btn:hover {background:#0a325a;}
+
+/* ---------- Rollback ---------- */
+.rollback-card {border:2px solid var(--upg-warning);background:#fffaf2;}
+.hint-rollback {margin:0 0 var(--upg-s2);color:var(--upg-warning-text);}
+
+/* ---------- Hilfe (details/summary, ohne JS noetig) ---------- */
+.help-card {background:var(--upg-surface-alt);border:1px dashed #c4cfde;justify-content:center;}
+.help-card details {font-size:13px;}
+.help-card summary {
+    cursor: pointer;
+    font-weight: 700;
+    color: var(--upg-info);
+    font-size: 13px;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: var(--upg-s1);
+}
+.help-card summary::-webkit-details-marker {display:none;}
+.help-card summary::before {
+    content: "\203A";
+    display: inline-block;
+    font-size: 18px;
+    line-height: 1;
+    transition: transform .15s ease;
+}
+.help-card details[open] summary::before {transform:rotate(90deg);}
+.help-body {margin-top:12px;color:#3a4655;line-height:1.55;}
+.help-body code {background:#e9eef6;padding:1px 6px;border-radius:3px;font-family:var(--upg-mono);font-size:12px;}
+
+/* ---------- Log ---------- */
+.log-header {display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:var(--upg-s2);}
+.log-title {font-weight:700;color:var(--upg-info);}
+.log-meta {font-size:12px;color:#7a8696;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto;}
+.log-search {
+    flex: 0 1 260px;
+    padding: 7px 12px;
+    border: 1px solid #c4cfde;
+    border-radius: 6px;
+    font: inherit;
+    font-size: 13px;
+}
+.log-download {
+    background: var(--upg-info);
+    color: #fff;
+    border: 1px solid #0a325a;
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+.log-download:hover {background:#0a325a;}
 /* Log-Box: white-space:pre-wrap erlaubt es, das Log per textContent
-   einzuspielen (XSS-Schutz) und trotzdem Zeilenumbrüche zu zeigen. */
-.log-box {background:#0f1720;color:#e5e7eb;border-radius:6px;padding:12px;max-height:420px;overflow:auto;font-family:Consolas,monospace;font-size:13px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
-.log-header {display:flex;align-items:center;gap:10px;margin-bottom:10px;padding-right:16px;}
-.log-header .log-title {font-weight:700;color:#0b3c68;flex-shrink:0;}
-.log-header .log-search {flex:1 1 auto;max-width:280px;padding:6px 10px;border:1px solid #ccc;border-radius:4px;font-size:13px;}
-.log-header .log-download {margin-left:auto;background:#0b3c68;color:#fff;border:none;border-radius:4px;padding:7px 12px;font-size:12px;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:6px;cursor:pointer;}
-.log-header .log-download:hover {background:#0a325a;}
-.hint {color:#555;font-size:13px;line-height:1.5;}
-.hint-spaced {margin-bottom:12px;}
-.hint-rollback {margin-bottom:12px;color:#8a4b0f;}
-.input-inline {width:100%;padding:6px 8px;border:1px solid #ccc;border-radius:4px;font-size:13px;box-sizing:border-box;}
-.action-btn {width:auto;min-width:240px;margin-top:0;padding:9px 18px;font-weight:700;border-radius:4px;cursor:pointer;font-size:13px;}
+   einzuspielen (XSS-Schutz) und trotzdem Zeilenumbrueche zu zeigen. */
+.log-box {
+    background: var(--upg-dark);
+    color: #e5e7eb;
+    border-radius: 6px;
+    padding: var(--upg-s2);
+    max-height: 320px;
+    overflow: auto;
+    font-family: var(--upg-mono);
+    font-size: 13px;
+    line-height: 1.55;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
 /*
  * !important wird hier bewusst genutzt, weil das globale OpenXE-Theme
- * (themes/new/css/style.css) `button` mit hoher Spezifität blau-violett
- * styled. Ohne !important schlägt das Theme die Page-spezifischen
- * Farben durch.
+ * (themes/new/css/style.css) `button` (und teils `a`) mit hoher
+ * Spezifitaet blau-violett styled. Ohne !important schlaegt das Theme
+ * die Page-spezifischen Farben durch. Betroffen sind .action-btn,
+ * .step-btn, .banner-btn und .log-download gleichermassen.
  */
-button.action-btn.btn-primary {background:#0b3c68 !important;background-image:none !important;color:#fff !important;border:1px solid #0a325a !important;}
+button.action-btn.btn-primary {background:var(--upg-info) !important;background-image:none !important;color:#fff !important;border:1px solid #0a325a !important;}
 button.action-btn.btn-primary:hover {background:#0a325a !important;}
-button.action-btn.btn-rollback {background:#d89216 !important;background-image:none !important;color:#fff !important;border:1px solid #8a4b0f !important;}
-button.action-btn.btn-rollback:hover {background:#b87810 !important;}
-.rollback-card {border:2px solid #d89216 !important;background:#fffaf2;}
-.rollback-card legend {color:#8a4b0f;}
-@media (max-width: 980px) {
-    .top-row {grid-template-columns:1fr;}
-    .compare-row {grid-template-columns:1fr;}
-    .secondary-row {grid-template-columns:1fr;}
+button.action-btn.btn-rollback {background:var(--upg-warning) !important;background-image:none !important;color:#2b1d00 !important;border:1px solid var(--upg-warning-text) !important;}
+button.action-btn.btn-rollback:hover {background:#b87810 !important;color:#fff !important;}
+button.step-btn {background:var(--upg-info) !important;background-image:none !important;color:#fff !important;border:1px solid #0a325a !important;}
+button.step-btn:hover {background:#0a325a !important;}
+button.banner-btn {background:rgba(255, 255, 255, .14) !important;background-image:none !important;color:inherit !important;border:1px solid rgba(255, 255, 255, .3) !important;}
+button.banner-btn:hover {background:rgba(255, 255, 255, .24) !important;}
+.banner-warning button.banner-btn {background:rgba(0, 0, 0, .08) !important;border-color:rgba(0, 0, 0, .25) !important;}
+.banner-warning button.banner-btn:hover {background:rgba(0, 0, 0, .16) !important;}
+.log-header a.log-download {background:var(--upg-info) !important;background-image:none !important;color:#fff !important;border:1px solid #0a325a !important;}
+.log-header a.log-download:hover {background:#0a325a !important;}
+.rollback-card {border:2px solid var(--upg-warning) !important;}
+
+/* ---------- Responsive: einspaltig < 900px ---------- */
+@media (max-width: 900px) {
+    .grid-2 {grid-template-columns:1fr;}
+    .compare-panels {grid-template-columns:1fr;}
+    .status-banner {padding-right:calc(var(--upg-s5) + var(--upg-s1));}
 }
