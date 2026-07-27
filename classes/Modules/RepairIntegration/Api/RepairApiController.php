@@ -146,17 +146,11 @@ final class RepairApiController
             throw new ValidationException('request_number too long');
         }
 
-        // `status` ist optional. Ein unbekannter Wert ist KEIN Fehler (Fallback
-        // auf DEFAULT_STATUS bei der Ticket-Anlage), nur Typ und Laenge werden
-        // hart geprueft, damit nichts Ueberlanges in den Log-Payload wandert.
-        if (isset($data['status'])) {
-            if (!is_string($data['status'])) {
-                throw new ValidationException('Invalid status');
-            }
-            if (strlen($data['status']) > self::MAX_STATUS_LENGTH) {
-                throw new ValidationException('status too long');
-            }
-        }
+        // `status` wird hier bewusst NICHT validiert. Das Feld ist optional und
+        // rein beratend: normalizeWpStatus() liefert fuer Nicht-Strings, leere,
+        // ueberlange oder anders geformte Werte null, die Ticket-Anlage faellt
+        // dann auf DEFAULT_STATUS zurueck. Ein kaputtes Beiwerk-Feld darf die
+        // Anlage des Tickets nicht mit 400 scheitern lassen.
     }
 
     private function processPushDetails(array $data): void

@@ -188,7 +188,7 @@ Ablauf bei Neuanlage (`RepairApiController::processPushDetails()`):
 3. `RepairStatusConfigGateway::getByWpMapping($wpStatus, $category)` sucht in `ticket_status_config` die aktive Zeile mit passendem `wp_status_mapping`. Ein WP-Slug ist mehrdeutig (`in_repair` existiert in allen vier Kategorien), daher die Aufloesung ueber die Kategorie; kategorie-spezifische Zeilen gewinnen gegen `general`.
 4. Kein Treffer → Fallback `'neu'`.
 
-Validierung: `status` muss ein String mit maximal 30 Zeichen sein, sonst HTTP 400 (`Invalid status` / `status too long`). Ein **unbekannter** Wert ist ausdruecklich kein Fehler — der Request wird mit Fallback verarbeitet und der `repair_sync_log`-Eintrag der Neuanlage vermerkt es:
+Validierung: `status` wird **nicht** hart geprueft und kann einen Request nie mit HTTP 400 abweisen — das Feld ist beratend, ein kaputter Wert darf die Ticket-Anlage nicht verhindern. Nicht verwertbare Werte (Nicht-String, leer, ueber 30 Zeichen, unerlaubte Zeichen) verhalten sich wie ein fehlendes Feld: `normalizeWpStatus()` liefert `null`, es greift der Fallback `'neu'`. Ein **wohlgeformter, aber unbekannter** Slug ist ebenfalls kein Fehler — der Request wird mit Fallback verarbeitet und der `repair_sync_log`-Eintrag der Neuanlage vermerkt es:
 
 ```
 TICKET_CREATED (WP-Status "some_future_status" ohne Mapping, Fallback "neu")
