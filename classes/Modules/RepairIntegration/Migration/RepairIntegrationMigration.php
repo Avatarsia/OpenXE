@@ -63,6 +63,10 @@ final class RepairIntegrationMigration
             $this->setVersion($step['to']);
             $current = $step['to'];
         }
+
+        if ($current !== self::SCHEMA_VERSION) {
+            error_log('RepairIntegration upgrade: no upgrade path from version ' . $current . ' to ' . self::SCHEMA_VERSION);
+        }
     }
 
     public function needsInstall(): bool
