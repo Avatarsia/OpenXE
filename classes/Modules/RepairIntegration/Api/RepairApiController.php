@@ -61,6 +61,40 @@ final class RepairApiController
         }
     }
 
+    /**
+     * Reiner Verbindungstest fuer das WordPress-Plugin.
+     *
+     * Prueft ausschliesslich Erreichbarkeit und Authentifizierung. Es werden
+     * bewusst weder Tickets angelegt noch Reparaturdaten geschrieben, damit
+     * der Test beliebig oft ausgefuehrt werden kann.
+     */
+    public function handlePing(): void
+    {
+        try {
+            $this->validateMethod('POST');
+            $this->checkRateLimit();
+
+            $rawBody = $this->readBody();
+            $this->authenticate($rawBody);
+
+            $this->logInbound(null, $rawBody, true, '', 'ping');
+            $this->respond(200, ['success' => true, 'pong' => true]);
+        } catch (AuthenticationException $e) {
+            $this->logInbound(null, $rawBody ?? '', false, $e->getMessage(), 'ping');
+            $this->respond(401, ['success' => false, 'error' => $e->getMessage()]);
+        } catch (ValidationException $e) {
+            $this->respond(400, ['success' => false, 'error' => $e->getMessage()]);
+        } catch (ForbiddenException $e) {
+            $this->respond(403, ['success' => false, 'error' => $e->getMessage()]);
+        } catch (\Throwable $e) {
+            error_log(
+                'RepairIntegration ping failed: ' . get_class($e) . ': ' . $e->getMessage()
+                . ' @ ' . $e->getFile() . ':' . $e->getLine()
+            );
+            $this->respond(500, ['success' => false, 'error' => 'INTERNAL_ERROR']);
+        }
+    }
+
     private function validateMethod(string $expected): void
     {
         if (($_SERVER['REQUEST_METHOD'] ?? '') !== $expected) {
@@ -439,14 +473,20 @@ final class RepairApiController
         return array_filter($mapped, static fn($v): bool => $v !== null);
     }
 
-    private function logInbound(?string $ticketSchluessel, string $payload, bool $success, string $error = ''): void
-    {
+    private function logInbound(
+        ?string $ticketSchluessel,
+        string $payload,
+        bool $success,
+        string $error = '',
+        string $action = 'push_details',
+    ): void {
         $this->db->perform(
             "INSERT INTO `repair_sync_log`
              (`direction`, `ticket_schluessel`, `action`, `payload_sent`, `success`, `error_message`, `ip_address`)
-             VALUES ('inbound', :key, 'push_details', :payload, :success, :error, :ip)",
+             VALUES ('inbound', :key, :action, :payload, :success, :error, :ip)",
             [
                 'key' => $ticketSchluessel,
+                'action' => $action,
                 'payload' => substr($payload, 0, 65000),
                 'success' => $success ? 1 : 0,
                 'error' => $error !== '' ? $error : null,

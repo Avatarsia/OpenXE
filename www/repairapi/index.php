@@ -53,6 +53,7 @@ $pathInfo = $_SERVER['PATH_INFO'] ?? '';
 if ($action === '' && $pathInfo !== '') {
     $action = match (trim($pathInfo, '/')) {
         'repair-status' => 'push_details',
+        'ping' => 'ping',
         default => '',
     };
 }
@@ -60,6 +61,9 @@ if ($action === '' && $pathInfo !== '') {
 switch ($action) {
     case 'push_details':
         $controller->handlePushDetails();
+        break;
+    case 'ping':
+        $controller->handlePing();
         break;
     default:
         http_response_code(404);
