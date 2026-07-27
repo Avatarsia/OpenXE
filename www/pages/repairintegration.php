@@ -21,7 +21,7 @@ class Repairintegration
         $this->app = $app;
         if ($intern) return;
 
-        // Schema/Hooks/Cronjobs/Permissions/Menue idempotent sicherstellen,
+        // Schema/Hooks/Cronjobs/Permissions idempotent sicherstellen,
         // bevor irgendeine Action laeuft. Schuetzt vor "Tabelle existiert nicht"-
         // Crashes wenn das Modul deployed wurde, aber install.php noch nie lief.
         $this->ensureInstalled();
@@ -36,8 +36,8 @@ class Repairintegration
     }
 
     /**
-     * Sorgt einmalig dafuer, dass alle DB-Tabellen, Hooks, Cronjobs,
-     * Permissions und Menue-Eintraege fuer das Modul existieren. Faengt
+     * Sorgt einmalig dafuer, dass alle DB-Tabellen, Hooks, Cronjobs
+     * und Permissions fuer das Modul existieren. Faengt
      * ausserdem bestehende Installationen ab, deren Schema-Version hinter
      * der ausgelieferten liegt (needsUpgrade).
      *
@@ -65,11 +65,11 @@ class Repairintegration
         // needsInstall-Check und Vorab-SELECTs innerhalb des Scripts).
         //
         // Bewusst der volle Include statt nur RepairIntegrationMigration::
-        // upgrade(): install.php registriert zusaetzlich Hooks, Cronjobs,
-        // Permissions und Menue-Eintraege. Da diese Methode nach einem
+        // upgrade(): install.php registriert zusaetzlich Hooks, Cronjobs
+        // und Permissions. Da diese Methode nach einem
         // erfolgreichen Upgrade nie wieder etwas tut, ist der Upgrade-Lauf die
         // einzige Gelegenheit, in der eine neue Schema-Version auch neue
-        // Hooks/Cronjobs/Menue-Eintraege nachziehen kann.
+        // Hooks/Cronjobs nachziehen kann.
         $app = $this->app;
         ob_start();
         try {
