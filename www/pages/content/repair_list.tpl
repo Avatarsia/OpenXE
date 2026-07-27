@@ -4,6 +4,7 @@
     </ul>
     <div id="tabs-1">
         [MESSAGE]
+        [STATUSFILTER]
         [TAB1]
         [TAB1NEXT]
     </div>

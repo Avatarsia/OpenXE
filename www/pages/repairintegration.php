@@ -118,9 +118,96 @@ class Repairintegration
 
         $this->RepairMenu();
 
+        // Status-Filterleiste: eine Checkbox pro aktivem Status aus
+        // ticket_status_config. Abgewaehlte Stati werden als kommaseparierte
+        // Liste in more_data1 transportiert und serverseitig per NOT IN
+        // ausgefiltert (ein Slot reicht, die YUI-Toggle-Helper decken nur
+        // boolsche Einzelfilter ab).
+        $this->renderStatusFilter();
+
         $this->app->Tpl->Set('KURZUEBERSCHRIFT', 'Reparaturen');
         $this->app->YUI->TableSearch('TAB1', 'repair_list', 'show', '', '', basename(__FILE__), __CLASS__);
+
+        // Initiale Belegung NACH dem TableSearch-Aufruf setzen (dort werden
+        // die oMoreData*-Variablen deklariert): terminale Stati (z.B.
+        // abgeschlossen) sind per Default ausgeblendet.
+        $hiddenDefault = implode(',', $this->getDefaultHiddenStatuses());
+        $this->app->Tpl->Add('JAVASCRIPT', "oMoreData1repair_list = '" . $hiddenDefault . "';");
+        $this->app->Tpl->Add('JQUERYREADY',
+            "$('.repair-status-filter').change(function() {
+                var hidden = [];
+                $('.repair-status-filter').each(function() {
+                    if (!$(this).prop('checked')) { hidden.push($(this).data('slug')); }
+                });
+                oMoreData1repair_list = hidden.join(',');
+                $('#repair_list').dataTable().fnFilter('', 0, 0, 0);
+            });"
+        );
+
         $this->app->Tpl->Parse('PAGE', 'repair_list.tpl');
+    }
+
+    /**
+     * Rendert die Checkbox-Leiste ueber der Liste. Liest die aktiven Stati
+     * aus ticket_status_config; faellt die Tabelle weg (Modul nicht
+     * installiert), bleibt die Leiste einfach leer.
+     */
+    private function renderStatusFilter(): void
+    {
+        try {
+            $db = $this->app->Container->get('Database');
+            $statuses = $db->fetchAll(
+                'SELECT slug, label_de, is_terminal FROM `ticket_status_config`
+                 WHERE is_active = 1 ORDER BY sort_order, id'
+            );
+        } catch (\Throwable $e) {
+            $this->app->Tpl->Set('STATUSFILTER', '');
+            return;
+        }
+
+        $hiddenDefault = $this->getDefaultHiddenStatuses($statuses);
+        $html = '<div id="repair-status-filter"><strong>Status:</strong> ';
+        foreach ($statuses as $status) {
+            $slug = (string)$status['slug'];
+            if (!preg_match('/^[a-z0-9_]+$/', $slug)) {
+                continue;
+            }
+            $checked = in_array($slug, $hiddenDefault, true) ? '' : ' checked';
+            $html .= '<label><input type="checkbox" class="repair-status-filter" data-slug="'
+                . $slug . '"' . $checked . '> '
+                . htmlspecialchars((string)$status['label_de']) . '</label> ';
+        }
+        $html .= '</div>';
+        $this->app->Tpl->Set('STATUSFILTER', $html);
+    }
+
+    /**
+     * Stati, die beim ersten Laden ausgeblendet werden: alle als terminal
+     * markierten (z.B. abgeschlossen). Fallback auf 'abgeschlossen', falls
+     * kein Status das Flag traegt.
+     */
+    private function getDefaultHiddenStatuses(?array $statuses = null): array
+    {
+        if ($statuses === null) {
+            try {
+                $db = $this->app->Container->get('Database');
+                $statuses = $db->fetchAll(
+                    'SELECT slug, is_terminal FROM `ticket_status_config` WHERE is_active = 1'
+                );
+            } catch (\Throwable $e) {
+                return array('abgeschlossen');
+            }
+        }
+
+        $hidden = array();
+        foreach ($statuses as $status) {
+            if ((int)$status['is_terminal'] === 1
+                && preg_match('/^[a-z0-9_]+$/', (string)$status['slug'])) {
+                $hidden[] = (string)$status['slug'];
+            }
+        }
+
+        return $hidden !== array() ? $hidden : array('abgeschlossen');
     }
 
     function RepairSettings()
@@ -580,8 +667,26 @@ class Repairintegration
                 INNER JOIN ticket_repair_details rd ON rd.ticket_id = t.id
                 LEFT JOIN ticket_status_config sc ON sc.slug = t.status";
 
-                $where = "t.status != 'spam'";
-                $count = "SELECT COUNT(t.id) FROM ticket t INNER JOIN ticket_repair_details rd ON rd.ticket_id = t.id WHERE t.status != 'spam'";
+                // Status-Filterleiste (RepairList): more_data1 transportiert
+                // die abgewaehlten Stati als CSV. Whitelist per Regex, dann
+                // einzeln escaped -> NOT IN ist injection-sicher.
+                $statusFilter = '';
+                $hiddenRaw = (string)$this->app->Secure->GetGET('more_data1');
+                if ($hiddenRaw !== '') {
+                    $hidden = array();
+                    foreach (explode(',', $hiddenRaw) as $slug) {
+                        $slug = trim($slug);
+                        if (preg_match('/^[a-z0-9_]+$/', $slug)) {
+                            $hidden[] = $this->app->DB->real_escape_string($slug);
+                        }
+                    }
+                    if ($hidden !== array()) {
+                        $statusFilter = " AND t.status NOT IN ('" . implode("','", $hidden) . "')";
+                    }
+                }
+
+                $where = "t.status != 'spam'" . $statusFilter;
+                $count = "SELECT COUNT(t.id) FROM ticket t INNER JOIN ticket_repair_details rd ON rd.ticket_id = t.id WHERE t.status != 'spam'" . $statusFilter;
 
                 $moreinfo = false;
                 $menucol = 7;

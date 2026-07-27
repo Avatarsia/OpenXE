@@ -45,3 +45,21 @@
     color: #1b5e20;
     white-space: nowrap;
 }
+/* Status-Filterleiste ueber der Reparatur-Liste (Checkboxen je Status,
+   Abwahl blendet serverseitig via more_data1/NOT IN aus). */
+#repair-status-filter {
+    background: #fff;
+    border: 1px solid #d6d9de;
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+}
+#repair-status-filter label {
+    margin-right: 12px;
+    white-space: nowrap;
+    cursor: pointer;
+    font-weight: normal;
+}
+#repair-status-filter input {
+    vertical-align: -2px;
+}
