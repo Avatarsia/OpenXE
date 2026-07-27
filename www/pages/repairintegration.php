@@ -86,12 +86,22 @@ class Repairintegration
         ob_get_clean();
     }
 
+    private function RepairMenu()
+    {
+        $this->app->erp->MenuEintrag('index.php?module=repairintegration&action=list', '&Uuml;bersicht');
+        $this->app->erp->MenuEintrag('index.php?module=repairintegration&action=merge', 'Tickets mergen');
+        $this->app->erp->MenuEintrag('index.php?module=repairintegration&action=syncstatus', 'Sync-Status');
+        $this->app->erp->MenuEintrag('index.php?module=repairintegration&action=einstellungen', 'Einstellungen');
+    }
+
     function RepairList()
     {
         if (!$this->app->erp->RechteVorhanden('repairintegration', 'list')) {
             $this->app->erp->NoRights();
             return;
         }
+
+        $this->RepairMenu();
 
         $this->app->Tpl->Set('KURZUEBERSCHRIFT', 'Reparaturen');
         $this->app->YUI->TableSearch('TAB1', 'repair_list', 'show', '', '', basename(__FILE__), __CLASS__);
@@ -104,6 +114,8 @@ class Repairintegration
             $this->app->erp->NoRights();
             return;
         }
+
+        $this->RepairMenu();
 
         /** @var \Xentral\Modules\RepairIntegration\Service\RepairConfigService */
         $config = $this->app->Container->get('RepairConfigService');
@@ -260,6 +272,8 @@ class Repairintegration
             return;
         }
 
+        $this->RepairMenu();
+
         $sourceId = (int)$this->app->Secure->GetPOST('source');
         $targetId = (int)$this->app->Secure->GetPOST('target');
 
@@ -286,6 +300,8 @@ class Repairintegration
             $this->app->erp->NoRights();
             return;
         }
+
+        $this->RepairMenu();
 
         $syncService = $this->app->Container->get('RepairSyncService');
         $stats = $syncService->getQueueStatus();
