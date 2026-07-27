@@ -50,6 +50,17 @@
         </tr>
     </table>
 
+    <h3 style="margin-top:15px;">Kundenkonto</h3>
+    <table class="mkTableFormular" style="width:100%">
+        <tr>
+            <td width="150">Adresse:</td>
+            <td>[REPAIR_ADRESSE_BLOCK]</td>
+        </tr>
+    </table>
+
+    <h3 style="margin-top:15px;">Belege erstellen</h3>
+    <div style="margin-bottom:5px;">[REPAIR_BELEG_BUTTONS]</div>
+
     <h3 style="margin-top:15px;">Verknuepfte Belege</h3>
     <table class="mkTable" style="width:100%">
         <thead><tr><th>Typ</th><th>Nr.</th><th>Datum</th></tr></thead>
