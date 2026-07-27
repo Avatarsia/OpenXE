@@ -207,7 +207,10 @@ class Repairintegration
             $mergeService = $this->app->Container->get('RepairTicketMergeService');
             try {
                 $result = $mergeService->mergeTickets($sourceId, $targetId);
-                $this->app->Location("index.php?module=ticket&action=edit&id={$targetId}&msg=merged");
+                $this->app->Location->execute(
+                    'index.php?module=ticket&action=edit&id=' . $targetId
+                    . '&msg=' . $this->app->erp->base64_url_encode('<div class="info">Tickets zusammengefuehrt.</div>')
+                );
             } catch (\Exception $e) {
                 $this->app->Tpl->Set('MESSAGE', '<div class="error">' . htmlspecialchars($e->getMessage()) . '</div>');
             }
