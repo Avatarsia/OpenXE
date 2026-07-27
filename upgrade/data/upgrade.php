@@ -42,7 +42,7 @@ function git(string $command, &$output, bool $show_command, bool $show_output, s
     if ($show_command) {
         echo_out("git ".$command."\n");
     }
-    exec("git ".$command,$output,$retval);
+    exec("git ".$command." 2>&1",$output,$retval);
     if (!empty($output)) {
         if ($show_output || $retval != 0) {
             echo_output($output);
@@ -164,6 +164,13 @@ if (php_sapi_name() == "cli") {
 
 function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do_git, bool $export_db, bool $check_db, bool $strict_db, bool $do_db, bool $force, bool $connection, bool $origin, bool $drop_keys) {
 
+    GLOBAL $upgrade_echo_out_file_name, $mustal_replacers;
+
+    // Collected across the whole run to determine the return code:
+    // $errors -> return -1, $warnings -> return 1, otherwise return 0
+    $errors = false;
+    $warnings = false;
+
     $mainfolder = dirname($directory);
     $datafolder = $directory."/data";
     $lockfile_name = $datafolder."/.in_progress.flag";
@@ -184,6 +191,10 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 return(-1);
             }
             $remote_info = json_decode($remote_info_contents, true);
+            if (!is_array($remote_info) || empty($remote_info['host']) || empty($remote_info['branch'])) {
+                abort("Invalid or missing host/branch in $remote_file_name");
+                return(-1);
+            }
             $remotes[] = $remote_info;
             $config = file_get_contents($mainfolder."/conf/user.inc.php");
             preg_match("/WFuserdata='(?<path>.*?)';/", $config, $matches);
@@ -215,8 +226,9 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
         }
 
         $retval = git("log HEAD --", $output,$verbose,false,"");
-        // Not a git repository -> Create it and then go ahead
-        if ($retval == 128) {
+        // Not a git repository (no .git in the main folder) -> Create it and then go ahead.
+        // A retval 128 with an existing .git means a real git error (e.g. dubious ownership, corrupt repo)
+        if ($retval == 128 && !file_exists($mainfolder."/.git")) {
             if (!$do_git) {
                 abort("Git not initialized, use -do to initialize.");
                 return(-1);
@@ -261,14 +273,14 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
         if ($verbose) {
             echo_out("--------------- Upgrade history ---------------\n");
-            $retval = git("log --date=short-local --pretty=\"%cd (%h): %s\" HEAD --not HEAD~5 --",$output,$verbose,$verbose,"Error while showing history!");
+            $retval = git("log --date=short-local --pretty=%cd%x20(%h):%x20%s HEAD --not HEAD~5 --",$output,$verbose,$verbose,"Error while showing history!");
             if ($retval != 0) {
                 abort("");
                 return(-1);
             }
         } else {
             echo_out("--------------- Current version ---------------\n");
-            $retval = git("log -1 --date=short-local --pretty=\"%cd (%h): %s\" HEAD --",$output,$verbose,true,"Error while showing history!");
+            $retval = git("log -1 --date=short-local --pretty=%cd%x20(%h):%x20%s HEAD --",$output,$verbose,true,"Error while showing history!");
             if ($retval != 0) {
                 return(-1);
             }
@@ -301,10 +313,26 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 return(-1);
             }
 
-            $retval = git("reset --hard FETCH_HEAD",$output,$verbose,$verbose,"Error while applying files!");
+            // Skip the reset when the fetched head matches the current head (nothing to do)
+            $retval = git("rev-parse HEAD",$head_output,$verbose,false,"Error while checking files!");
             if ($retval != 0) {
                  abort("");
                 return(-1);
+            }
+            $retval = git("rev-parse FETCH_HEAD",$fetch_head_output,$verbose,false,"Error while checking files!");
+            if ($retval != 0) {
+                 abort("");
+                return(-1);
+            }
+
+            if ($head_output === $fetch_head_output) {
+                echo_out("Already up to date.\n");
+            } else {
+                $retval = git("reset --hard FETCH_HEAD",$output,$verbose,$verbose,"Error while applying files!");
+                if ($retval != 0) {
+                     abort("");
+                    return(-1);
+                }
             }
 
             echo_out("--------------- Files upgrade completed ---------------\n");
@@ -317,9 +345,11 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
             // Remove files cache
             echo_out("--------------- Cleaning Filescache ---------------\n");
-            class UserdataInfo {
-                function __construct($dir) {
-                    require($dir."/../conf/user.inc.php");
+            if (!class_exists('UserdataInfo')) {
+                class UserdataInfo {
+                    function __construct($dir) {
+                        require($dir."/../conf/user.inc.php");
+                    }
                 }
             }
 
@@ -352,16 +382,18 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
             $retval = git("fetch ".$remote_info['host']." ".$remote_info['branch'],$output,$verbose,$verbose,"Error while fetching files!");
             if ($retval != 0) {
                 abort("");
+                return(-1);
             }
 
             echo_out("--------------- Pending upgrades: ---------------\n");
 
-            $retval = git("log --date=short-local --pretty=\"%cd (%h): %s\" FETCH_HEAD --not HEAD",$output,$verbose,true,"Error while fetching files!");
+            $retval = git("log --date=short-local --pretty=%cd%x20(%h):%x20%s FETCH_HEAD --not HEAD",$output,$verbose,true,"Error while fetching files!");
             if (empty($output)) {
                 echo_out("No upgrades pending.\n");
             }
             if ($retval != 0) {
                 abort("");
+                return(-1);
             }
         } // Dry run
     } // $check_git
@@ -384,9 +416,11 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
         } else {
 
-            class DatabaseConnectionInfo {
-                function __construct($dir) {
-                    require($dir."/../conf/user.inc.php");
+            if (!class_exists('DatabaseConnectionInfo')) {
+                class DatabaseConnectionInfo {
+                    function __construct($dir) {
+                        require($dir."/../conf/user.inc.php");
+                    }
                 }
             }
 
@@ -401,11 +435,17 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
         require_once($directory.'/../vendor/mustal/mustal_mysql_upgrade_tool.php');
 
         echo_out("--------------- Loading from database '$schema@$host'... ---------------\n");
-        $db_def = mustal_load_tables_from_db($host, $schema, $user, $passwd, $mustal_replacers);
+        try {
+            $db_def = mustal_load_tables_from_db($host, $schema, $user, $passwd, $mustal_replacers);
+        }
+        catch (Throwable $e) {
+            abort("Could not load from $schema@$host: ".$e->getMessage());
+            return(-1);
+        }
 
         if (empty($db_def)) {
-            echo_out("Could not load from $schema@$host\n");
-            exit;
+            abort("Could not load from $schema@$host");
+            return(-1);
         }
 
         if ($export_db) {
@@ -440,7 +480,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 echo_out("\n");
             }
         }
-        echo_out((empty($compare_differences)?0:count($compare_differences))." differences.\n");
+        echo_out((empty($compare_differences)?0:count($compare_differences))." differences (in DB not in JSON).\n");
 
         echo_out("--------------- Comparing database '$schema@$host' vs. JSON '".$compare_def['database']."@".$compare_def['host']."' ---------------\n");
 
@@ -458,7 +498,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 echo_out("\n");
             }
         }
-        echo_out((empty($compare_differences)?0:count($compare_differences))." differences.\n");
+        echo_out((empty($compare_differences)?0:count($compare_differences))." differences (in JSON not in DB).\n");
 
         echo_out("--------------- Calculating database upgrade for '$schema@$host'... ---------------\n");
 
@@ -486,54 +526,91 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
         if ($do_db) {
             echo_out("--------------- Executing database upgrade for '$schema@$host' database... ---------------\n");
              // First get the contents of the database table structure
-            $mysqli = mysqli_connect($host, $user, $passwd, $schema);
+            $connect_error = "";
+            try {
+                $mysqli = mysqli_connect($host, $user, $passwd, $schema);
+            }
+            catch (Throwable $e) {
+                $mysqli = false;
+                $connect_error = " ".$e->getMessage();
+            }
 
             /* Check if the connection succeeded */
             if (!$mysqli) {
-                echo ("Failed to connect!\n");
+                echo_out("Failed to connect!".$connect_error."\n");
+                $errors = true;
             } else  {
 
                 $counter = 0;
                 $error_counter = 0;
                 $number_of_statements = count($upgrade_sql);
+                // When writing to a log file, avoid \r progress spam:
+                // one status line every 10 steps, errors always as their own line
+                $progress_to_file = ($upgrade_echo_out_file_name != "");
 
                 foreach ($upgrade_sql as $sql) {
                     $counter++;
-                    echo_out("\rUpgrade step $counter of $number_of_statements... ");
+                    if ($progress_to_file) {
+                        if ($counter % 10 == 0 || $counter == $number_of_statements) {
+                            echo_out("Upgrade step $counter of $number_of_statements...\n");
+                        }
+                    } else {
+                        echo_out("\rUpgrade step $counter of $number_of_statements... ");
+                    }
                     if ($verbose) {
                         echo_out("\n".$sql."\n");
                     }
                     try {
                         $query_result = mysqli_query($mysqli, $sql);
                         if (!$query_result) {
-                            $error = " not ok: ". mysqli_error($mysqli);
-                            echo_out($error);
-                            echo_out("\n");
+                            if ($progress_to_file) {
+                                echo_out("Upgrade step $counter of $number_of_statements not ok: ". mysqli_error($mysqli)."\n");
+                            } else {
+                                echo_out(" not ok: ". mysqli_error($mysqli)."\n");
+                            }
                             $error_counter++;
-                        } else {
+                        } else if (!$progress_to_file) {
                             echo_out("ok.\r");
                         }
                     }
-                    catch (Exception $e) {
-                        $error = " not ok: ". mysqli_error($mysqli);
-                        echo_out($error);
-                        echo_out("\n");
+                    catch (Throwable $e) {
+                        if ($progress_to_file) {
+                            echo_out("Upgrade step $counter of $number_of_statements not ok: ". $e->getMessage()."\n");
+                        } else {
+                            echo_out(" not ok: ". $e->getMessage()."\n");
+                        }
                         $error_counter++;
                     }
                 }
 
                 echo_out("\n");
                 echo_out("$error_counter errors.\n");
+                echo_out("Database upgrade errors: $error_counter\n");
                 if ($error_counter > 0) {
+                    $warnings = true;
 //                    echo_out("See 'errors.txt'\n");
                 }
 
                 echo_out("--------------- Checking database upgrade for '$schema@$host'... ---------------\n");
-                $db_def = mustal_load_tables_from_db($host, $schema, $user, $passwd, $mustal_replacers);
+                try {
+                    $db_def = mustal_load_tables_from_db($host, $schema, $user, $passwd, $mustal_replacers);
+                }
+                catch (Throwable $e) {
+                    echo_out("Could not load from $schema@$host: ".$e->getMessage()."\n");
+                    $db_def = array();
+                }
 
                 echo_out("--------------- Comparing database '$schema@$host' vs. JSON '".$compare_def['database']."@".$compare_def['host']."' ---------------\n");
-                $compare_differences = mustal_compare_table_array($compare_def,"in JSON",$db_def,"in DB",true,true);
-                echo_out((empty($compare_differences)?0:count($compare_differences))." differences.\n");
+                if (empty($db_def)) {
+                    $warnings = true;
+                } else {
+                    $compare_differences = mustal_compare_table_array($compare_def,"in JSON",$db_def,"in DB",true,true);
+                    $remaining_differences = (empty($compare_differences)?0:count($compare_differences));
+                    echo_out($remaining_differences." differences remaining after upgrade.\n");
+                    if ($remaining_differences > 0) {
+                        $warnings = true;
+                    }
+                }
             }
         } // $do_db
     } // $check_db
@@ -552,6 +629,12 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
     echo_out("--------------- Done! ---------------\n");
     echo_out("--------------- ".date("Y-m-d H:i:s")." ---------------\n");
+    if ($errors) {
+        return(-1);
+    }
+    if ($warnings) {
+        return(1);
+    }
     return(0);
 }
 
