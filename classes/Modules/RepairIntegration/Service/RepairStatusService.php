@@ -32,45 +32,6 @@ final class RepairStatusService
         return $this->statusConfigGateway->getActiveStatuses($category);
     }
 
-    public function renderStatusDropdown(string $currentStatus, ?string $serviceTypeCategory): string
-    {
-        $statuses = $this->statusConfigGateway->getActiveStatuses($serviceTypeCategory);
-
-        $html = '<select name="status" id="status">';
-        $currentCategory = '';
-        $categoryLabels = [
-            'general' => 'Allgemein',
-            'repair' => 'Reparatur',
-            'maintenance' => 'Wartung',
-            'reverse_engineering' => 'Reverse Engineering',
-            'individualization' => 'Individualisierung',
-        ];
-
-        foreach ($statuses as $status) {
-            if ($status['category'] !== $currentCategory) {
-                if ($currentCategory !== '') {
-                    $html .= '</optgroup>';
-                }
-                $label = isset($categoryLabels[$status['category']])
-                    ? $categoryLabels[$status['category']]
-                    : $status['category'];
-                $html .= '<optgroup label="' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '">';
-                $currentCategory = $status['category'];
-            }
-            $selected = ($status['slug'] === $currentStatus) ? ' selected' : '';
-            $html .= '<option value="' . htmlspecialchars($status['slug'], ENT_QUOTES, 'UTF-8') . '"'
-                   . $selected . '>'
-                   . htmlspecialchars($status['label_de'], ENT_QUOTES, 'UTF-8')
-                   . '</option>';
-        }
-        if ($currentCategory !== '') {
-            $html .= '</optgroup>';
-        }
-        $html .= '</select>';
-
-        return $html;
-    }
-
     /**
      * MCP-compatible: returns structured array, no side effects beyond DB write.
      */

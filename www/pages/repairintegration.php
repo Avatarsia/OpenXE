@@ -21,7 +21,7 @@ class Repairintegration
         $this->app = $app;
         if ($intern) return;
 
-        // Schema/Hooks/Cronjobs/Permissions idempotent sicherstellen,
+        // Schema/Cronjobs/Permissions idempotent sicherstellen,
         // bevor irgendeine Action laeuft. Schuetzt vor "Tabelle existiert nicht"-
         // Crashes wenn das Modul deployed wurde, aber install.php noch nie lief.
         $this->ensureInstalled();
@@ -38,7 +38,7 @@ class Repairintegration
     }
 
     /**
-     * Sorgt einmalig dafuer, dass alle DB-Tabellen, Hooks, Cronjobs
+     * Sorgt einmalig dafuer, dass alle DB-Tabellen, Cronjobs
      * und Permissions fuer das Modul existieren. Faengt
      * ausserdem bestehende Installationen ab, deren Schema-Version hinter
      * der ausgelieferten liegt (needsUpgrade).
@@ -46,10 +46,10 @@ class Repairintegration
      * Performance: needsInstall()/needsUpgrade() lesen dieselbe systemconfig-
      * Zeile (sub-Millisekunde). Im aktuellen Normalfall ist die Methode no-op.
      *
-     * Sicherheit: install.php ist DDL-only / Hook/Cronjob/Permission-Setup,
+     * Sicherheit: install.php ist DDL-only / Cronjob/Permission-Setup,
      * keine User-Daten. Alle Statements sind idempotent (CREATE TABLE IF NOT
      * EXISTS, INSERT mit Vorab-SELECT). Falls ein non-Admin die Page oeffnet,
-     * wirft die Action-Methode anschliessend NoRights() via RechteVorhanden().
+     * leitet die Action-Methode anschliessend per redirectNoRights() um.
      */
     private function ensureInstalled(): void
     {
@@ -67,11 +67,11 @@ class Repairintegration
         // needsInstall-Check und Vorab-SELECTs innerhalb des Scripts).
         //
         // Bewusst der volle Include statt nur RepairIntegrationMigration::
-        // upgrade(): install.php registriert zusaetzlich Hooks, Cronjobs
+        // upgrade(): install.php registriert zusaetzlich Cronjobs
         // und Permissions. Da diese Methode nach einem
         // erfolgreichen Upgrade nie wieder etwas tut, ist der Upgrade-Lauf die
         // einzige Gelegenheit, in der eine neue Schema-Version auch neue
-        // Hooks/Cronjobs nachziehen kann.
+        // Cronjobs nachziehen kann.
         $app = $this->app;
         ob_start();
         try {
@@ -88,6 +88,19 @@ class Repairintegration
         ob_get_clean();
     }
 
+    /**
+     * Leitet bei fehlenden Rechten auf die Info-Seite um (Core-Muster,
+     * vgl. welcome.php). erp->NoRights() existiert nicht - die frueheren
+     * Aufrufe waeren als Fatal gelaufen, sobald sie erreicht worden waeren.
+     */
+    private function redirectNoRights(): void
+    {
+        $msg = $this->app->erp->base64_url_encode(
+            '<div class="error">Keine Berechtigung.</div>'
+        );
+        $this->app->Location->execute('index.php?module=welcome&action=info&msg=' . $msg);
+    }
+
     private function RepairMenu()
     {
         $this->app->erp->MenuEintrag('index.php?module=repairintegration&action=list', '&Uuml;bersicht');
@@ -99,7 +112,7 @@ class Repairintegration
     function RepairList()
     {
         if (!$this->app->erp->RechteVorhanden('repairintegration', 'list')) {
-            $this->app->erp->NoRights();
+            $this->redirectNoRights();
             return;
         }
 
@@ -113,7 +126,7 @@ class Repairintegration
     function RepairSettings()
     {
         if (!$this->app->erp->RechteVorhanden('repairintegration', 'einstellungen')) {
-            $this->app->erp->NoRights();
+            $this->redirectNoRights();
             return;
         }
 
@@ -243,7 +256,7 @@ class Repairintegration
         // userrights-Eintraege, daher hier kein RechteVorhanden-Check.
         // Nur Admin-User duerfen den Installer triggern.
         if ($this->app->User->GetType() !== 'admin') {
-            $this->app->erp->NoRights();
+            $this->redirectNoRights();
             return;
         }
 
@@ -270,7 +283,7 @@ class Repairintegration
     function RepairMerge()
     {
         if (!$this->app->erp->RechteVorhanden('repairintegration', 'merge')) {
-            $this->app->erp->NoRights();
+            $this->redirectNoRights();
             return;
         }
 
@@ -299,7 +312,7 @@ class Repairintegration
     function SyncStatus()
     {
         if (!$this->app->erp->RechteVorhanden('repairintegration', 'syncstatus')) {
-            $this->app->erp->NoRights();
+            $this->redirectNoRights();
             return;
         }
 
@@ -393,6 +406,19 @@ class Repairintegration
         if (!$this->app->erp->RechteVorhanden($typ, 'edit')) {
             $this->redirectToTicket($ticketId, 'error', 'Keine Berechtigung fuer Belegart ' . $typ . '.');
             return;
+        }
+
+        // Idempotenz: existiert fuer das Ticket bereits ein Beleg desselben
+        // Typs, direkt dorthin weiterleiten, statt bei Reload/Doppelklick
+        // einen zweiten Beleg anzulegen.
+        $belegGateway = $this->app->Container->get('RepairBelegGateway');
+        foreach ($belegGateway->getByTicketId($ticketId) as $bestehenderBeleg) {
+            if ($bestehenderBeleg['beleg_typ'] === $typ && (int)$bestehenderBeleg['beleg_id'] > 0) {
+                $this->app->Location->execute(
+                    'index.php?module=' . $typ . '&action=edit&id=' . (int)$bestehenderBeleg['beleg_id']
+                );
+                return;
+            }
         }
 
         /** @var \Xentral\Modules\RepairIntegration\Service\RepairBelegService $belegService */
@@ -521,7 +547,9 @@ class Repairintegration
                 // Sie werden im SELECT in einen Ticket-Link gewickelt, in
                 // findcols aber roh verwendet: sonst wuerde die Sortierung auf
                 // dem gemeinsamen '<a href=...'-Praefix statt auf dem Inhalt
-                // arbeiten.
+                // arbeiten. Die Geraete-Spalte wird nur verlinkt, wenn
+                // Hersteller oder Modell gefuellt ist (SQL-IF unten) - sonst
+                // stuende ein Link auf ein einzelnes Leerzeichen in der Liste.
                 $device = "CONCAT(COALESCE(rd.manufacturer,''), ' ', COALESCE(rd.model,''))";
                 // Die Spitzklammern um die E-Mail bleiben als Entity kodiert -
                 // rohe < > zerreissen das DOM der Liste.
@@ -540,7 +568,9 @@ class Repairintegration
                     t.id,
                     " . $linkopen . "t.schluessel,'</a>'),
                     rd.service_type,
-                    " . $linkopen . $device . ",'</a>') as device,
+                    IF(TRIM(" . $device . ") != '',
+                        " . $linkopen . $device . ",'</a>'),
+                        '') as device,
                     " . $linkopen . $customer . ",'</a>') as customer,
                     COALESCE(sc.label_de, t.status) as status_label,
                     IF(rd.is_express = 1, 'Ja', '') as is_express,

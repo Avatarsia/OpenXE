@@ -1,4 +1,5 @@
 <div id="repair-details-panel" style="display:[REPAIR_TAB_DISPLAY]; margin-top:15px; padding:10px; border:1px solid #ddd; background:#f9f9f9;">
+    [REPAIR_MESSAGE]
     <h3>Reparatur-Details</h3>
     <table class="mkTableFormular" style="width:100%">
         <tr>
@@ -43,6 +44,10 @@
         <tr>
             <td>Tats. Kosten (EUR):</td>
             <td><input type="text" name="repair_actual_cost" value="[REPAIR_ACTUAL_COST]" size="10"></td>
+        </tr>
+        <tr>
+            <td>KVA-Preis Kunde (EUR):</td>
+            <td>[REPAIR_CUSTOMER_QUOTE]</td>
         </tr>
         <tr>
             <td>Reparatur-Notizen:</td>

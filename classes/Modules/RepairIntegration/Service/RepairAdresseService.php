@@ -16,6 +16,13 @@ use Xentral\Components\Database\Database;
 final class RepairAdresseService
 {
     /**
+     * Single-Tenant-Annahme: Diese OpenXE-Instanz laeuft mit genau einer
+     * Firma (firma = 1); neu angelegte Adressen werden immer dieser
+     * zugeordnet. Bei Mandanten-Ausbau hier anpassen.
+     */
+    private const FIRMA_ID = 1;
+
+    /**
      * Alle NOT-NULL-Spalten von `adresse` OHNE DEFAULT laut
      * database/struktur.sql, vorbelegt mit Leerwerten — plus die drei
      * NULL-faehigen Stammdatenfelder, die aus dem Payload befuellt werden.
@@ -69,7 +76,7 @@ final class RepairAdresseService
         'zahlungszielskontolieferant' => '',
         'versandartlieferant' => '',
         'geloescht' => 0,
-        'firma' => 1,
+        'firma' => self::FIRMA_ID,
         'sachkonto' => '',
         'infoauftragserfassung' => '',
         'mandatsreferenz' => '',

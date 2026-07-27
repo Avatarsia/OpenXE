@@ -5,6 +5,9 @@
 
 class TicketCustom extends Ticket
 {
+    /** @var string Warnmeldung aus dem Panel-Save, wird im Panel gerendert */
+    private string $repairPanelMessage = '';
+
     function __construct($app, $intern = false)
     {
         parent::__construct($app, $intern);
@@ -35,22 +38,8 @@ class TicketCustom extends Ticket
             return;
         }
 
-        // Extend status dropdown with repair-specific statuses
+        // Trigger status change hook
         try {
-            $statusService = $this->app->Container->get('RepairStatusService');
-            $serviceType = $statusService->getServiceTypeForTicket($ticketId);
-
-            if ($serviceType !== null) {
-                $category = $serviceType->statusCategory();
-                $ticket = $this->app->DB->SelectRow(
-                    "SELECT status FROM ticket WHERE id = '" . (int)$ticketId . "' LIMIT 1"
-                );
-                $currentStatus = $ticket['status'] ?? 'neu';
-                $statusHtml = $statusService->renderStatusDropdown($currentStatus, $category);
-                $this->app->Tpl->Set('REPAIRSTATUSDROPDOWN', $statusHtml);
-            }
-
-            // Trigger status change hook
             if ($oldStatus !== '' && $this->app->Secure->GetPOST('status') !== '') {
                 $hook = new \Xentral\Modules\RepairIntegration\Hook\TicketStatusChangeHook(
                     $this->app->Container->get('Database'),
@@ -85,6 +74,7 @@ class TicketCustom extends Ticket
 
             $details = $this->repair_save_panel_fields($detailsGateway, $ticketId, $details);
 
+            $this->app->Tpl->Set('REPAIR_MESSAGE', $this->repairPanelMessage);
             $this->app->Tpl->Set('REPAIR_TAB_DISPLAY', 'block');
             $this->app->Tpl->Set('REPAIR_SERVICE_TYPE', htmlspecialchars(ucfirst($details['service_type'] ?? '')));
             $this->app->Tpl->Set('REPAIR_MANUFACTURER', htmlspecialchars($details['manufacturer'] ?? ''));
@@ -98,6 +88,8 @@ class TicketCustom extends Ticket
             $this->app->Tpl->Set('REPAIR_DIAGNOSIS', htmlspecialchars($details['diagnosis_result'] ?? ''));
             $this->app->Tpl->Set('REPAIR_QUOTE', htmlspecialchars($details['quote_amount'] ?? ''));
             $this->app->Tpl->Set('REPAIR_ACTUAL_COST', htmlspecialchars($details['actual_cost'] ?? ''));
+            // Read-only: der Wert kommt ausschliesslich per Push von WP.
+            $this->app->Tpl->Set('REPAIR_CUSTOMER_QUOTE', htmlspecialchars($details['customer_quote_amount'] ?? ''));
             $this->app->Tpl->Set('REPAIR_NOTES', htmlspecialchars($details['repair_notes'] ?? ''));
 
             // Customer account and beleg shortcuts
@@ -161,6 +153,18 @@ class TicketCustom extends Ticket
             }
             if ($column === 'quote_amount' || $column === 'actual_cost') {
                 $value = $this->repair_normalize_amount((string)$raw);
+                if ($value === false) {
+                    // Unparsebare Eingabe: alten Wert behalten und warnen,
+                    // statt ihn kommentarlos mit NULL zu ueberschreiben.
+                    // Die Meldung landet im Panel-Template ([REPAIR_MESSAGE]),
+                    // weil der Parent MESSAGE beim Speichern ueberschreibt.
+                    if ($this->repairPanelMessage === '') {
+                        $this->repairPanelMessage = '<div class="error">Betrag &quot;'
+                            . htmlspecialchars((string)$raw)
+                            . '&quot; konnte nicht gelesen werden - der bisherige Wert bleibt erhalten.</div>';
+                    }
+                    continue;
+                }
             } else {
                 $value = trim((string)$raw);
                 if ($value === '') {
@@ -188,10 +192,13 @@ class TicketCustom extends Ticket
     }
 
     /**
-     * Converts a user entered amount to a decimal string. Empty or unparsable
-     * input becomes NULL.
+     * Converts a user entered amount to a decimal string.
+     * Rueckgabe: null bei leerer Eingabe (Feld leeren), false bei
+     * unparsebarer Eingabe (alten Wert behalten), sonst String.
+     *
+     * @return string|null|false
      */
-    private function repair_normalize_amount(string $value): ?string
+    private function repair_normalize_amount(string $value)
     {
         $value = str_replace(' ', '', trim($value));
         if ($value === '') {
@@ -200,9 +207,12 @@ class TicketCustom extends Ticket
         if (strpos($value, ',') !== false) {
             // German notation 1.234,56 -> 1234.56
             $value = str_replace(['.', ','], ['', '.'], $value);
+        } elseif (preg_match('/^\d{1,3}(\.\d{3})+$/', $value) === 1) {
+            // Deutsche Tausender-Notation ohne Nachkommastellen: 1.234 -> 1234
+            $value = str_replace('.', '', $value);
         }
 
-        return is_numeric($value) ? $value : null;
+        return is_numeric($value) ? $value : false;
     }
 
     private function repair_adresse_block(int $ticketId, int $adresseId): string

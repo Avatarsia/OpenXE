@@ -50,6 +50,7 @@ final class RepairDetailsGateway
             'color_preference', 'functional_requirements', 'warranty_status',
             'invoice_number', 'purchase_date', 'seller', 'cost_limit',
             'is_express', 'express_price', 'travel_distance_km', 'travel_fee',
+            'customer_quote_amount',
         ];
 
         $filteredData = array_intersect_key($data, array_flip($columns));
@@ -74,7 +75,8 @@ final class RepairDetailsGateway
     public function update(int $id, array $data): void
     {
         $allowed = [
-            'service_type', 'service_delivery_type', 'manufacturer', 'model',
+            'service_type', 'service_delivery_type', 'customer_type',
+            'company_name', 'vat_id', 'manufacturer', 'model',
             'serial_number', 'mods_present', 'mods_text', 'issue_category',
             'issue_description', 'wartung_paket', 'wartung_notes',
             'has_original_part', 'has_templates', 're_tolerance', 're_output_format',
@@ -82,6 +84,7 @@ final class RepairDetailsGateway
             'functional_requirements', 'warranty_status', 'invoice_number',
             'purchase_date', 'seller', 'cost_limit', 'is_express', 'express_price',
             'travel_distance_km', 'travel_fee', 'wp_request_number',
+            'customer_quote_amount',
         ];
 
         $filteredData = array_intersect_key($data, array_flip($allowed));

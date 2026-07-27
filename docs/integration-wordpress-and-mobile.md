@@ -100,6 +100,7 @@ Pflicht-Felder:
 
 Optional:
 - `status` (string, max 30 chars) — WP-Slug, siehe [Status-Uebernahme](#status-uebernahme-inbound). Unbekannte Werte sind kein Fehler.
+- `customer_quote_amount` (Zahl oder numerischer String) — vom Kunden im WP-Frontend freigegebener KVA-Preis. Wird in `ticket_repair_details.customer_quote_amount` gespeichert und im Repair-Panel read-only angezeigt. Tolerant geparst (auch deutsche Schreibweise); ungueltige Werte werden ignoriert (error_log), nie mit 400 abgelehnt. **WP-Plugin muss das Feld ab dem naechsten Plugin-Release liefern** — aeltere Plugin-Versionen senden es nicht, das Feld bleibt dann `NULL`.
 
 Feldnamen-Aliase (das Plugin sendet je nach Version die kurze oder lange Variante, `mapInboundData()` akzeptiert beide):
 
@@ -116,6 +117,7 @@ Beispiel (siehe `tests/E2E/RepairIntegration/fixtures/inbound_api_payload.json`)
   "status": "new",
   "service_type": "reparatur",
   "service_delivery_type": "einsendung",
+  "customer_quote_amount": "149.90",
   "customer": {
     "name": "Max Mustermann",
     "email": "max@example.com",
@@ -194,7 +196,7 @@ Validierung: `status` wird **nicht** hart geprueft und kann einen Request nie mi
 TICKET_CREATED (WP-Status "some_future_status" ohne Mapping, Fallback "neu")
 ```
 
-Aufloesungs-Matrix (Stand Seed 1.1.0, `-` = Fallback `neu`):
+Aufloesungs-Matrix (Stand Seed 1.2.0, `-` = Fallback `neu`):
 
 | WP-Status        | reparatur      | wartung          | reverse_engineering | individualisierung |
 |------------------|----------------|------------------|---------------------|--------------------|
@@ -221,10 +223,10 @@ Jeder Request (Erfolg und Fehler) wird in `repair_sync_log` mit `direction = 'in
 Wenn ein OpenXE-Mitarbeiter den Ticket-Status aendert (z.B. "In Reparatur" → "Repariert"), pusht OpenXE den Status-Change zurueck ins WP-Plugin, damit der Kunde im `frontend-status-lookup.php` aktuelle Daten sieht.
 
 **Quelle:**
-- Trigger: `www/pages/ticket_custom.php::ticket_edit()` instanziiert nach dem Speichern `classes/Modules/RepairIntegration/Hook/TicketStatusChangeHook.php::onTicketEditAfter($ticketId, $oldStatus)`; die Hook-Registrierung `ticket_edit_after` legt `install.php` an
+- Trigger: `www/pages/ticket_custom.php::ticket_edit()` instanziiert nach dem Speichern direkt `classes/Modules/RepairIntegration/Hook/TicketStatusChangeHook.php::onTicketEditAfter($ticketId, $oldStatus)` (keine `hook_register`-Registrierung — die frueheren, toten `ticket_edit_after`/`ticket_list_after`-Eintraege entfernt `install.php` self-healing per DELETE)
 - Service: `classes/Modules/RepairIntegration/Service/RepairSyncService.php`
 - Queue-Gateway: `classes/Modules/RepairIntegration/Gateway/RepairSyncQueueGateway.php`
-- Cron: `cronjobs/repair_sync.php` (Prozessstarter-Parameter `repair_sync`, alle 2 Minuten, Mutex-geschuetzt)
+- Cron: `cronjobs/repair_sync.php` (Prozessstarter-Parameter `repair_sync`, einmal taeglich, periode 1440, Mutex-geschuetzt)
 - Mapping-Quelle: `ticket_status_config.wp_status_mapping` ueber `RepairStatusConfigGateway::getWpMapping()`
 
 ### Ablauf
@@ -261,7 +263,7 @@ Response 200:
 
 ### Status-Mapping-Tabelle
 
-Gepflegt in `ticket_status_config`, ausgeliefert von `Migration/sql/002_seed_status_config.sql` (Schema-Version 1.1.0). `wp_status_mapping = NULL` bedeutet: kein Outbound-Push. `notify_customer = 1` steuert `RepairEmailService::shouldSendNotification()` — der eigentliche Mailversand ist noch nicht verdrahtet (der Hook bereitet ihn nur vor, siehe Kommentar in `TicketStatusChangeHook`), das Flag ist heute also reine Konfiguration.
+Gepflegt in `ticket_status_config`, ausgeliefert von `Migration/sql/002_seed_status_config.sql` (aktuelle Schema-Version 1.3.0). `wp_status_mapping = NULL` bedeutet: kein Outbound-Push. `notify_customer = 1` steuert `RepairEmailService::shouldSendNotification()` — der eigentliche Mailversand ist noch nicht verdrahtet (der Hook bereitet ihn nur vor, siehe Kommentar in `TicketStatusChangeHook`), das Flag ist heute also reine Konfiguration.
 
 | Slug              | Label                                  | Kategorie             | Sort | `wp_status_mapping` | `next_status_slug` | notify |
 |-------------------|----------------------------------------|-----------------------|------|---------------------|--------------------|--------|
@@ -308,7 +310,7 @@ Kennt das Ziel-Plugin einen dieser Slugs noch nicht, antwortet es mit einem non-
 
 ### Migration bestehender Installationen
 
-Der Seed (`002_...`) laeuft nur bei Erstinstallation (`RepairIntegrationMigration::needsInstall()`). Bestehende Installationen bekommen Mapping-Aenderungen und neue Status ueber `Migration/sql/003_status_config_upgrade.sql`:
+Der Seed (`002_...`) laeuft nur bei Erstinstallation (`RepairIntegrationMigration::needsInstall()`). Bestehende Installationen bekommen Mapping-Aenderungen, neue Status und neue Spalten ueber die Upgrade-Kette `Migration/sql/003_*.sql` bis `005_*.sql` (1.3.0: `005_customer_quote_amount.sql` ergaenzt `ticket_repair_details.customer_quote_amount`, idempotent per information_schema-Check):
 
 - `RepairIntegrationMigration::needsUpgrade()` vergleicht die in `systemconfig` (`repair_integration.schema_version`) gespeicherte Version mit `SCHEMA_VERSION`
 - `upgrade()` fuehrt das Upgrade-SQL aus und schreibt die neue Version

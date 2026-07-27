@@ -57,16 +57,6 @@ final class RepairConfigService
         return (int)$this->get('max_retries', '5');
     }
 
-    public function getSyncIntervalSeconds(): int
-    {
-        return (int)$this->get('sync_interval_seconds', '120');
-    }
-
-    public function getRetentionArchiveYears(): int
-    {
-        return (int)$this->get('retention_archive_years', '3');
-    }
-
     public function getRetentionAnonymizeYears(): int
     {
         return (int)$this->get('retention_anonymize_years', '8');
@@ -75,11 +65,6 @@ final class RepairConfigService
     public function getNotifyOnPermanentFailEmail(): string
     {
         return $this->get('notify_on_permanent_fail');
-    }
-
-    public function isAutoEnrichEnabled(): bool
-    {
-        return $this->get('auto_enrich_from_email', '1') === '1';
     }
 
     public function getAllowedIps(): array

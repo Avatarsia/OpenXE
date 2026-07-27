@@ -58,4 +58,37 @@ class RepairApiControllerTest extends TestCase
         // beim Gateway-Lookup verworfen (Fallback auf 'neu').
         self::assertSame('some_future_status', RepairApiController::normalizeWpStatus('some_future_status'));
     }
+
+    public function testNormalizeCustomerQuoteAmountAcceptsNumbersAndStrings(): void
+    {
+        self::assertSame('149.90', RepairApiController::normalizeCustomerQuoteAmount(149.9));
+        self::assertSame('149.90', RepairApiController::normalizeCustomerQuoteAmount('149.90'));
+        self::assertSame('0.00', RepairApiController::normalizeCustomerQuoteAmount(0));
+        self::assertSame('1234.00', RepairApiController::normalizeCustomerQuoteAmount('1234'));
+    }
+
+    public function testNormalizeCustomerQuoteAmountAcceptsGermanNotation(): void
+    {
+        self::assertSame('1234.56', RepairApiController::normalizeCustomerQuoteAmount('1.234,56'));
+        // Deutsche Tausender-Notation ohne Nachkommastellen.
+        self::assertSame('1234.00', RepairApiController::normalizeCustomerQuoteAmount('1.234'));
+    }
+
+    public function testNormalizeCustomerQuoteAmountReturnsNullForInvalidValues(): void
+    {
+        self::assertNull(RepairApiController::normalizeCustomerQuoteAmount(null));
+        self::assertNull(RepairApiController::normalizeCustomerQuoteAmount(''));
+        self::assertNull(RepairApiController::normalizeCustomerQuoteAmount('   '));
+        self::assertNull(RepairApiController::normalizeCustomerQuoteAmount('abc'));
+        self::assertNull(RepairApiController::normalizeCustomerQuoteAmount(['149.90']));
+        self::assertNull(RepairApiController::normalizeCustomerQuoteAmount(true));
+    }
+
+    public function testNormalizeCustomerQuoteAmountRejectsNegativeAndOverflow(): void
+    {
+        self::assertNull(RepairApiController::normalizeCustomerQuoteAmount('-1'));
+        // Zielfeld decimal(10,2): max 99999999.99.
+        self::assertNull(RepairApiController::normalizeCustomerQuoteAmount('100000000'));
+        self::assertSame('99999999.99', RepairApiController::normalizeCustomerQuoteAmount('99999999.99'));
+    }
 }

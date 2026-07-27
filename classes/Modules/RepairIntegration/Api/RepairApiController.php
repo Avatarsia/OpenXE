@@ -29,8 +29,25 @@ final class RepairApiController
     private const ATTACHMENT_MAX_BYTES = 26214400; // 25 MB @php83: add type int
     private const ATTACHMENT_MAX_COUNT = 20; // @php83: add type int
     private const ATTACHMENT_CREATOR = 'WP-API'; // @php83: add type string
-    /** Praefix in `datei`.`nummer`, ueber das Re-Pushes ihre Importe wiederfinden. */
+    /**
+     * Praefix in `datei`.`nummer`, ueber das Re-Pushes ihre Importe wiederfinden.
+     *
+     * Marker-Schema: sha1 der Quell-URL, weil der Push-Payload keine stabile
+     * WP-Attachment-ID mitliefert (`media_urls` enthaelt nur URLs bzw. Objekte
+     * mit `url`). Ziehen die WP-Uploads um (URL-Wechsel), greift der Marker
+     * nicht und der Anhang wird erneut importiert — Abhilfe waere ein ID-Feld
+     * im Payload (WP-Seite muesste z.B. `media_id` liefern). Wird das Schema
+     * spaeter auf eine ID umgestellt, matchen die Bestandsmarker nicht mehr:
+     * einmaliger Re-Import aller Alt-Anhaenge.
+     */
     private const ATTACHMENT_MARKER_PREFIX = 'WP-REPAIR-MEDIA-'; // @php83: add type string
+
+    /**
+     * Single-Tenant-Annahme: alle Datensaetze laufen auf Mandant 1. Wird die
+     * Installation mandantenfaehig, muss die Firma aus dem Kontext gelesen
+     * werden statt diese Konstante zu nutzen.
+     */
+    private const FIRMA_ID = 1; // @php83: add type int
 
     /** @var list<string> Erlaubte MIME-Typen fuer `media_urls`. */
     private const MEDIA_MIME_TYPES = [
@@ -70,10 +87,14 @@ final class RepairApiController
         try {
             $this->validateMethod('POST');
             $this->validateContentType();
-            $this->checkRateLimit();
 
+            // Rate-Limit bewusst NACH der Authentifizierung: ungueltige
+            // Requests sollen das IP-Kontingent legitimer Pushes nicht
+            // verbrauchen (DoS-Schutz).
             $rawBody = $this->readBody();
             $this->authenticate($rawBody);
+            $this->checkAllowedIps();
+            $this->checkRateLimit();
 
             $data = json_decode($rawBody, true);
             if (json_last_error() !== JSON_ERROR_NONE) {
@@ -110,10 +131,12 @@ final class RepairApiController
     {
         try {
             $this->validateMethod('POST');
-            $this->checkRateLimit();
 
+            // Wie in handlePushDetails: erst authentifizieren, dann limitieren.
             $rawBody = $this->readBody();
             $this->authenticate($rawBody);
+            $this->checkAllowedIps();
+            $this->checkRateLimit();
 
             $this->logInbound(null, $rawBody, true, '', 'ping');
             $this->respond(200, ['success' => true, 'pong' => true]);
@@ -173,10 +196,32 @@ final class RepairApiController
             if (strpos($authHeader, 'Bearer ') !== 0) {
                 throw new AuthenticationException('MISSING_AUTH');
             }
+            // Ohne konfiguriertes Secret waere hash_equals('', '') bei einem
+            // leeren Bearer-Token wahr — dann liefe der Fallback offen.
+            if ($secret === '') {
+                throw new AuthenticationException('SHARED_SECRET_NOT_CONFIGURED');
+            }
             $token = substr($authHeader, 7);
             if (!hash_equals($secret, $token)) {
                 throw new AuthenticationException('INVALID_BEARER_TOKEN');
             }
+        }
+    }
+
+    /**
+     * Optionale IP-Allowlist: ist in der Modul-Konfiguration eine
+     * kommaseparierte Liste hinterlegt, wird nur exakt diesen Absender-IPs
+     * der Zugriff gewaehrt. Leere Liste = keine Einschraenkung.
+     */
+    private function checkAllowedIps(): void
+    {
+        $allowedIps = $this->configService->getAllowedIps();
+        if ($allowedIps === []) {
+            return;
+        }
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+        if (!in_array($ip, $allowedIps, true)) {
+            throw new ForbiddenException('IP_NOT_ALLOWED');
         }
     }
 
@@ -201,6 +246,15 @@ final class RepairApiController
              VALUES (:key, :window, 1)
              ON DUPLICATE KEY UPDATE `request_count` = `request_count` + 1',
             ['key' => $key, 'window' => $window]
+        );
+
+        // Opportunistisches Aufraeumen: Fenster aelter als zwei Minuten sind
+        // fuer das Limit irrelevant und wuerden die Tabelle sonst endlos
+        // fuellen. window_key ist fest formatiert (YmdHi), daher reicht der
+        // String-Vergleich.
+        $this->db->perform(
+            'DELETE FROM `repair_api_ratelimit` WHERE `window_key` < :oldWindow',
+            ['oldWindow' => date('YmdHi', time() - 120)]
         );
     }
 
@@ -227,6 +281,10 @@ final class RepairApiController
         // ueberlange oder anders geformte Werte null, die Ticket-Anlage faellt
         // dann auf DEFAULT_STATUS zurueck. Ein kaputtes Beiwerk-Feld darf die
         // Anlage des Tickets nicht mit 400 scheitern lassen.
+        //
+        // `customer_quote_amount` ebenfalls nicht: das optionale Feld wird in
+        // normalizeCustomerQuoteAmount() tolerant geparst, ein ungueltiger
+        // Wert wird ignoriert (error_log), niemals mit 400 abgelehnt.
     }
 
     private function processPushDetails(array $data): void
@@ -234,48 +292,67 @@ final class RepairApiController
         $ticketSchluessel = $data['request_number'];
         $createdAt = self::normalizeCreatedAt($data['created_at'] ?? null);
 
-        // Find existing ticket by schluessel
-        $ticket = $this->db->fetchRow(
-            'SELECT `id`, `schluessel`, `quelle`, `adresse` FROM `ticket` WHERE `schluessel` = :key',
-            ['key' => $ticketSchluessel]
+        // Find-or-Create pro Schluessel serialisieren: `ticket`.`schluessel`
+        // ist nicht UNIQUE, zwei parallele Pushes wuerden sonst beide "nicht
+        // gefunden" lesen und Duplikat-Tickets anlegen. Benannter MySQL-Lock
+        // (Lockname max. 64 Zeichen: 14 Praefix + max. 20 request_number).
+        $lockName = 'repair_ticket_' . $ticketSchluessel;
+        $locked = (int)$this->db->fetchValue(
+            'SELECT GET_LOCK(:name, 10)',
+            ['name' => $lockName]
         );
+        if ($locked !== 1) {
+            throw new \RuntimeException('Ticket-Lock nicht erhalten: ' . $lockName);
+        }
 
-        $isNewTicket = false;
-        if (!$ticket) {
-            // No ticket found — create one from the WP payload.
-            // Der WP-Status wird nur hier ausgewertet: nach der Anlage besitzt
-            // OpenXE den Workflow, bestehende Tickets werden nie ueberschrieben.
-            $isNewTicket = true;
-            $wpStatus = self::normalizeWpStatus($data['status'] ?? null);
-            $mappedStatus = $this->resolveOpenXeStatus($wpStatus, (string)$data['service_type']);
-            $ticket = $this->createTicketFromPayload($data, $mappedStatus ?? self::DEFAULT_STATUS, $createdAt);
-            $this->createInitialTicketMessage($data, $ticket['schluessel'], $createdAt);
+        try {
+            // Find existing ticket by schluessel
+            $ticket = $this->db->fetchRow(
+                'SELECT `id`, `schluessel`, `quelle`, `adresse` FROM `ticket` WHERE `schluessel` = :key',
+                ['key' => $ticketSchluessel]
+            );
 
-            $note = 'TICKET_CREATED';
-            if ($wpStatus !== null && $mappedStatus === null) {
-                $note .= sprintf(
-                    ' (WP-Status "%s" ohne Mapping, Fallback "%s")',
-                    $wpStatus,
-                    self::DEFAULT_STATUS
+            $isNewTicket = false;
+            if (!$ticket) {
+                // No ticket found — create one from the WP payload.
+                // Der WP-Status wird nur hier ausgewertet: nach der Anlage besitzt
+                // OpenXE den Workflow, bestehende Tickets werden nie ueberschrieben.
+                $isNewTicket = true;
+                $wpStatus = self::normalizeWpStatus($data['status'] ?? null);
+                $mappedStatus = $this->resolveOpenXeStatus($wpStatus, (string)$data['service_type']);
+                $ticket = $this->createTicketFromPayload($data, $mappedStatus ?? self::DEFAULT_STATUS, $createdAt);
+                $this->createInitialTicketMessage($data, $ticket['schluessel'], $createdAt);
+
+                $note = 'TICKET_CREATED';
+                if ($wpStatus !== null && $mappedStatus === null) {
+                    $note .= sprintf(
+                        ' (WP-Status "%s" ohne Mapping, Fallback "%s")',
+                        $wpStatus,
+                        self::DEFAULT_STATUS
+                    );
+                }
+                $this->logInbound($ticketSchluessel, (string)json_encode($data), true, $note);
+            } elseif ($createdAt !== null && (string)($ticket['quelle'] ?? '') === 'api') {
+                // Bestandskorrektur per Re-Push: Tickets, die diese Schnittstelle
+                // selbst angelegt hat, duerfen ihre Erstellzeit nachtraeglich vom
+                // WP-Zeitstempel bekommen. Manuell angelegte Tickets bleiben unberuehrt.
+                $this->db->perform(
+                    'UPDATE `ticket` SET `zeit` = :zeit WHERE `id` = :id',
+                    ['zeit' => $createdAt, 'id' => (int)$ticket['id']]
+                );
+                // Auch die urspruengliche API-Nachricht mitkorrigieren, sonst zeigt
+                // die Ticket-Detailansicht weiterhin den Push-Zeitpunkt.
+                $this->db->perform(
+                    'UPDATE `ticket_nachricht` SET `zeit` = :zeit
+                     WHERE `medium` = \'api\' AND `ticket` = :schluessel
+                     ORDER BY `id` ASC LIMIT 1',
+                    ['zeit' => $createdAt, 'schluessel' => (string)$ticket['schluessel']]
                 );
             }
-            $this->logInbound($ticketSchluessel, (string)json_encode($data), true, $note);
-        } elseif ($createdAt !== null && (string)($ticket['quelle'] ?? '') === 'api') {
-            // Bestandskorrektur per Re-Push: Tickets, die diese Schnittstelle
-            // selbst angelegt hat, duerfen ihre Erstellzeit nachtraeglich vom
-            // WP-Zeitstempel bekommen. Manuell angelegte Tickets bleiben unberuehrt.
-            $this->db->perform(
-                'UPDATE `ticket` SET `zeit` = :zeit WHERE `id` = :id',
-                ['zeit' => $createdAt, 'id' => (int)$ticket['id']]
-            );
-            // Auch die urspruengliche API-Nachricht mitkorrigieren, sonst zeigt
-            // die Ticket-Detailansicht weiterhin den Push-Zeitpunkt.
-            $this->db->perform(
-                'UPDATE `ticket_nachricht` SET `zeit` = :zeit
-                 WHERE `medium` = \'api\' AND `ticket` = :schluessel
-                 ORDER BY `id` ASC LIMIT 1',
-                ['zeit' => $createdAt, 'schluessel' => (string)$ticket['schluessel']]
-            );
+        } finally {
+            // Release auch im Fehlerfall, sonst blockiert der Lock bis zum
+            // Verbindungsende (Standalone: Request-Ende).
+            $this->db->fetchValue('SELECT RELEASE_LOCK(:name)', ['name' => $lockName]);
         }
 
         $existing = $this->detailsGateway->getByTicketId((int)$ticket['id']);
@@ -376,6 +453,54 @@ final class RepairApiController
     }
 
     /**
+     * Normalisiert das optionale Top-Level-Feld `customer_quote_amount` aus
+     * dem Payload (vom Kunden im WP-Frontend freigegebener KVA-Preis).
+     *
+     * Reine Funktion ohne DB-Zugriff (bewusst statisch, damit sie ohne
+     * Container getestet werden kann). Akzeptiert Zahlen und numerische
+     * Strings; deutsche Schreibweise ("1.234,56" bzw. "1.234") wird
+     * mitverstanden, auch wenn das Plugin sie nicht sendet. Liefert null,
+     * wenn der Wert fehlt, nicht parsebar, negativ oder groesser als das
+     * Zielfeld decimal(10,2) ist — der Aufrufer ignoriert das Feld dann,
+     * der Push gilt nicht als fehlerhaft.
+     *
+     * @param mixed $raw Rohwert aus dem JSON-Payload
+     */
+    public static function normalizeCustomerQuoteAmount(mixed $raw): ?string
+    {
+        if (is_int($raw) || is_float($raw)) {
+            $value = (string)$raw;
+        } elseif (is_string($raw)) {
+            $value = str_replace(' ', '', trim($raw));
+        } else {
+            return null;
+        }
+
+        if ($value === '') {
+            return null;
+        }
+        if (strpos($value, ',') !== false) {
+            // Deutsche Schreibweise 1.234,56 -> 1234.56
+            $value = str_replace(['.', ','], ['', '.'], $value);
+        } elseif (preg_match('/^\d{1,3}(\.\d{3})+$/', $value) === 1) {
+            // Deutsche Tausender-Notation ohne Nachkommastellen: 1.234 -> 1234
+            $value = str_replace('.', '', $value);
+        }
+
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $amount = (float)$value;
+        // Zielfeld decimal(10,2): negativ oder Ueberlauf ist nicht verwertbar.
+        if ($amount < 0 || $amount > 99999999.99) {
+            return null;
+        }
+
+        return sprintf('%.2f', $amount);
+    }
+
+    /**
      * Loest einen WP-Status-Slug ueber die Kategorie des Service-Typs in einen
      * OpenXE-Status auf. Null = kein Mapping vorhanden.
      */
@@ -450,7 +575,7 @@ final class RepairApiController
                 'mailadresse' => $customerEmail,
                 'prio' => 3,
                 'betreff' => $betreff,
-                'firma' => 1,
+                'firma' => self::FIRMA_ID,
                 'notiz' => $notiz,
             ]
         );
@@ -630,8 +755,12 @@ final class RepairApiController
 
             // Anhaenge haengen in OpenXE an der Nachricht, nicht am Ticket
             // (vgl. www/pages/ticket.php: AddDateiStichwort(..., 'Ticket', <nachricht.id>)).
+            // Filter medium='api', damit hier dieselbe "erste Nachricht" greift
+            // wie bei der created_at-Korrektur in processPushDetails — sonst
+            // divergieren beide bei zusammengefuehrten Tickets.
             $nachrichtId = (int)$this->db->fetchValue(
-                'SELECT MIN(`id`) FROM `ticket_nachricht` WHERE `ticket` = :key',
+                'SELECT MIN(`id`) FROM `ticket_nachricht`
+                 WHERE `ticket` = :key AND `medium` = \'api\'',
                 ['key' => $ticketSchluessel]
             );
             if ($nachrichtId <= 0) {
@@ -678,12 +807,9 @@ final class RepairApiController
         int $nachrichtId,
         ?string $createdAt,
     ): void {
-        $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
-        if ($scheme !== 'http' && $scheme !== 'https') {
-            error_log('RepairIntegration: Anhang-URL mit unzulaessigem Schema uebersprungen: ' . $url);
-            return;
-        }
-
+        // Schema-/Host-/IP-Pruefung der URL erfolgt zentral in
+        // downloadAttachment() (nur https, Host = wp_api_url-Host, keine
+        // privaten/reservierten Ziel-IPs) — inklusive aller Redirect-Ziele.
         $marker = self::ATTACHMENT_MARKER_PREFIX . sha1($url);
         $alreadyImported = $this->db->fetchValue(
             'SELECT `d`.`id`
@@ -718,49 +844,100 @@ final class RepairApiController
     /**
      * Laedt eine Datei mit Timeout, Groessenlimit und MIME-Pruefung.
      *
+     * SSRF-Haertung: WP ist oeffentlich erreichbar, die Payload-URLs sind
+     * damit potenziell angreiferbeeinflussbar. Es gilt: nur https (WP laeuft
+     * oeffentlich ueber https, ein http-Bedarf ist nicht bekannt), der Host
+     * muss exakt dem Host der konfigurierten wp_api_url entsprechen, und die
+     * aufgeloeste IP darf nicht in privaten/reservierten Bereichen liegen.
+     * Redirects (max. 3) werden manuell verfolgt und jedes Ziel erneut mit
+     * denselben Checks geprueft.
+     *
      * @param list<string> $allowedTypes Erlaubte MIME-Typen
      * @return array{content: string, mime: string, filename: string}|null
      */
     private function downloadAttachment(string $url, array $allowedTypes): ?array
     {
-        $context = stream_context_create([
-            'http' => [
-                'method' => 'GET',
-                'header' => 'User-Agent: OpenXE-RepairIntegration',
-                'timeout' => self::ATTACHMENT_TIMEOUT,
-                'follow_location' => 1,
-                'max_redirects' => 3,
-                'ignore_errors' => true,
-            ],
-            'ssl' => [
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-            ],
-        ]);
-
-        // Ein Byte ueber dem Limit lesen, um Ueberlaeufe sicher zu erkennen,
-        // ohne die ganze Datei in den Speicher zu ziehen.
-        error_clear_last();
-        $content = @file_get_contents($url, false, $context, 0, self::ATTACHMENT_MAX_BYTES + 1);
-        $headers = $http_response_header ?? [];
-
-        if ($content === false) {
-            $lastError = error_get_last();
+        $allowedHost = strtolower((string)parse_url($this->configService->getWpApiUrl(), PHP_URL_HOST));
+        if ($allowedHost === '') {
             error_log(
-                'RepairIntegration: Download fehlgeschlagen (' . $url . '): '
-                . ($lastError['message'] ?? 'unbekannter Fehler')
+                'RepairIntegration: wp_api_url nicht konfiguriert, Anhang-Download abgelehnt ('
+                . $url . ')'
             );
             return null;
         }
 
-        $httpCode = self::parseHttpCode($headers);
+        // follow_location bewusst aus: Redirects werden manuell verfolgt,
+        // damit jedes Ziel erneut gegen Host- und IP-Regeln geprueft wird.
+        $currentUrl = $url;
+        $redirectsLeft = 3;
+        while (true) {
+            if (!self::isAttachmentUrlAllowed($currentUrl, $allowedHost)) {
+                return null;
+            }
+
+            $context = stream_context_create([
+                'http' => [
+                    'method' => 'GET',
+                    'header' => 'User-Agent: OpenXE-RepairIntegration',
+                    'timeout' => self::ATTACHMENT_TIMEOUT,
+                    'follow_location' => 0,
+                    'ignore_errors' => true,
+                ],
+                'ssl' => [
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
+                ],
+            ]);
+
+            // Ein Byte ueber dem Limit lesen, um Ueberlaeufe sicher zu erkennen,
+            // ohne die ganze Datei in den Speicher zu ziehen.
+            error_clear_last();
+            $content = @file_get_contents(
+                $currentUrl,
+                false,
+                $context,
+                0,
+                self::ATTACHMENT_MAX_BYTES + 1
+            );
+            $headers = $http_response_header ?? [];
+
+            if ($content === false) {
+                $lastError = error_get_last();
+                error_log(
+                    'RepairIntegration: Download fehlgeschlagen (' . $currentUrl . '): '
+                    . ($lastError['message'] ?? 'unbekannter Fehler')
+                );
+                return null;
+            }
+
+            $httpCode = self::parseHttpCode($headers);
+            if ($httpCode >= 300 && $httpCode < 400) {
+                $location = self::parseRedirectLocation($headers);
+                if ($location === null) {
+                    error_log(
+                        'RepairIntegration: Redirect ohne verwertbares Ziel (' . $currentUrl . ')'
+                    );
+                    return null;
+                }
+                if ($redirectsLeft <= 0) {
+                    error_log('RepairIntegration: zu viele Redirects (' . $url . ')');
+                    return null;
+                }
+                $redirectsLeft--;
+                $currentUrl = $location;
+                continue;
+            }
+
+            break;
+        }
+
         if ($httpCode !== 0 && ($httpCode < 200 || $httpCode >= 300)) {
-            error_log('RepairIntegration: Download lieferte HTTP ' . $httpCode . ' (' . $url . ')');
+            error_log('RepairIntegration: Download lieferte HTTP ' . $httpCode . ' (' . $currentUrl . ')');
             return null;
         }
 
         if ($content === '') {
-            error_log('RepairIntegration: Download lieferte leere Datei (' . $url . ')');
+            error_log('RepairIntegration: Download lieferte leere Datei (' . $currentUrl . ')');
             return null;
         }
 
@@ -783,6 +960,104 @@ final class RepairApiController
             'mime' => $mime,
             'filename' => self::buildAttachmentFileName($url, $mime),
         ];
+    }
+
+    /**
+     * Prueft eine Download-URL gegen die SSRF-Regeln: nur https, exakt der
+     * konfigurierte WP-Host (case-insensitiv), keine privaten/reservierten
+     * Ziel-IPs.
+     */
+    private static function isAttachmentUrlAllowed(string $url, string $allowedHost): bool
+    {
+        $scheme = strtolower((string)parse_url($url, PHP_URL_SCHEME));
+        if ($scheme !== 'https') {
+            error_log('RepairIntegration: Anhang-URL ohne https abgelehnt: ' . $url);
+            return false;
+        }
+
+        $host = strtolower((string)parse_url($url, PHP_URL_HOST));
+        if ($host === '' || $host !== $allowedHost) {
+            error_log('RepairIntegration: Anhang-URL mit fremdem Host abgelehnt: ' . $url);
+            return false;
+        }
+
+        // DNS-Rebinding-Schutz: der Hostname darf nicht auf interne Dienste
+        // zeigen. Restrisiko: TOCTOU zwischen Pruefung und Verbindungsaufbau —
+        // vollstaendig loesbar nur mit gepinnter Aufloesung (z.B. cURL
+        // CURLOPT_RESOLVE), der Stream-Wrapper bietet das nicht.
+        $ips = filter_var($host, FILTER_VALIDATE_IP) !== false
+            ? [$host]
+            : self::resolveHostIps($host);
+        if ($ips === []) {
+            error_log('RepairIntegration: Anhang-Host nicht aufloesbar: ' . $host);
+            return false;
+        }
+        foreach ($ips as $ip) {
+            if (!self::isPublicIp($ip)) {
+                error_log(
+                    'RepairIntegration: Anhang-Host zeigt auf private/reservierte IP '
+                    . $ip . ' (' . $url . ')'
+                );
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Liefert alle A- und AAAA-Eintraege des Hostnamens.
+     *
+     * @return list<string>
+     */
+    private static function resolveHostIps(string $host): array
+    {
+        $ips = [];
+        $records = @dns_get_record($host, DNS_A | DNS_AAAA);
+        if (is_array($records)) {
+            foreach ($records as $record) {
+                if (isset($record['ip'])) {
+                    $ips[] = (string)$record['ip'];
+                }
+                if (isset($record['ipv6'])) {
+                    $ips[] = (string)$record['ipv6'];
+                }
+            }
+        }
+        return $ips;
+    }
+
+    /**
+     * True nur fuer oeffentlich routbare IPs. Die Filter-Flags decken alle
+     * geforderten Bereiche ab (privat + reserviert nach IANA/RFC 6890):
+     * 127/8, 10/8, 172.16/12, 192.168/16, 169.254/16, 0.0.0.0/8 sowie
+     * ::1, fc00::/7 und fe80::/10.
+     */
+    private static function isPublicIp(string $ip): bool
+    {
+        return filter_var(
+            $ip,
+            FILTER_VALIDATE_IP,
+            FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE
+        ) !== false;
+    }
+
+    /**
+     * Liest das Redirect-Ziel aus den Roh-Headern. Nur absolute URLs — fuer
+     * relative Ziele fehlt hier die sichere Aufloesung, sie werden abgelehnt.
+     *
+     * @param list<string> $headers Roh-Header aus $http_response_header
+     */
+    private static function parseRedirectLocation(array $headers): ?string
+    {
+        foreach ($headers as $header) {
+            if (stripos((string)$header, 'Location:') === 0) {
+                $location = trim(substr((string)$header, strlen('Location:')));
+                $host = parse_url($location, PHP_URL_HOST);
+                return is_string($host) && $host !== '' ? $location : null;
+            }
+        }
+        return null;
     }
 
     /**
@@ -858,66 +1133,93 @@ final class RepairApiController
             $sourceUrl
         );
 
-        $this->db->perform(
-            "INSERT INTO `datei` (`titel`, `beschreibung`, `nummer`, `geloescht`, `firma`)
-             VALUES (:titel, :beschreibung, :nummer, 0, :firma)",
-            [
-                'titel' => $fileName,
-                'beschreibung' => $beschreibung,
-                'nummer' => $marker,
-                'firma' => 1,
-            ]
-        );
-        $fileId = (int)$this->db->lastInsertId();
-        if ($fileId <= 0) {
-            throw new \RuntimeException('INSERT INTO datei lieferte keine ID');
+        // datei + Version + Stichwort gehoeren atomar zusammen: brach bisher
+        // z.B. der datei_stichwoerter-INSERT nach dem datei-INSERT ab, blieb
+        // eine verwaiste datei-Zeile zurueck und der naechste Push importierte
+        // ein Duplikat (der Idempotenz-Marker matcht nur ueber die
+        // Stichwort-Verknuepfung). Laeuft bereits eine fremde Transaktion,
+        // wird keine eigene eroeffnet (verschachtelte Transaktionen kann
+        // MySQL nicht) — dann gilt das bisherige Verhalten mit manuellem
+        // Aufraeumen.
+        $ownTransaction = !$this->db->inTransaction();
+        if ($ownTransaction) {
+            $this->db->beginTransaction();
         }
 
-        $this->db->perform(
-            "INSERT INTO `datei_version`
-                (`datei`, `ersteller`, `datum`, `version`, `dateiname`, `bemerkung`, `size`)
-             VALUES (:datei, :ersteller, IFNULL(:datum, CURDATE()), 1, :dateiname, :bemerkung, :size)",
-            [
-                'datei' => $fileId,
-                'ersteller' => self::ATTACHMENT_CREATOR,
-                // Spalte ist vom Typ DATE — nur den Datumsteil uebergeben.
-                'datum' => $createdAt !== null ? substr($createdAt, 0, 10) : null,
-                'dateiname' => $fileName,
-                'bemerkung' => 'Initiale Version',
-                'size' => (string)strlen($content),
-            ]
-        );
-        $versionId = (int)$this->db->lastInsertId();
+        try {
+            $this->db->perform(
+                "INSERT INTO `datei` (`titel`, `beschreibung`, `nummer`, `geloescht`, `firma`)
+                 VALUES (:titel, :beschreibung, :nummer, 0, :firma)",
+                [
+                    'titel' => $fileName,
+                    'beschreibung' => $beschreibung,
+                    'nummer' => $marker,
+                    'firma' => self::FIRMA_ID,
+                ]
+            );
+            $fileId = (int)$this->db->lastInsertId();
+            if ($fileId <= 0) {
+                throw new \RuntimeException('INSERT INTO datei lieferte keine ID');
+            }
 
-        $targetDir = $versionId > 0 ? $this->createDmsPath($versionId) : null;
-        $written = $targetDir !== null
-            && @file_put_contents($targetDir . '/' . $versionId, $content) !== false;
+            $this->db->perform(
+                "INSERT INTO `datei_version`
+                    (`datei`, `ersteller`, `datum`, `version`, `dateiname`, `bemerkung`, `size`)
+                 VALUES (:datei, :ersteller, IFNULL(:datum, CURDATE()), 1, :dateiname, :bemerkung, :size)",
+                [
+                    'datei' => $fileId,
+                    'ersteller' => self::ATTACHMENT_CREATOR,
+                    // Spalte ist vom Typ DATE — nur den Datumsteil uebergeben.
+                    'datum' => $createdAt !== null ? substr($createdAt, 0, 10) : null,
+                    'dateiname' => $fileName,
+                    'bemerkung' => 'Initiale Version',
+                    'size' => (string)strlen($content),
+                ]
+            );
+            $versionId = (int)$this->db->lastInsertId();
 
-        if (!$written) {
-            // Ohne physische Datei waeren die Zeilen Karteileichen im DMS.
-            $this->db->perform('DELETE FROM `datei_version` WHERE `id` = :id', ['id' => $versionId]);
-            $this->db->perform('DELETE FROM `datei` WHERE `id` = :id', ['id' => $fileId]);
-            throw new \RuntimeException('DMS-Ablage fehlgeschlagen fuer datei ' . $fileId);
+            $targetDir = $versionId > 0 ? $this->createDmsPath($versionId) : null;
+            $written = $targetDir !== null
+                && @file_put_contents($targetDir . '/' . $versionId, $content) !== false;
+
+            if (!$written) {
+                // Ohne physische Datei waeren die Zeilen Karteileichen im DMS.
+                // Bei eigener Transaktion erledigt das der Rollback im catch.
+                if (!$ownTransaction) {
+                    $this->db->perform('DELETE FROM `datei_version` WHERE `id` = :id', ['id' => $versionId]);
+                    $this->db->perform('DELETE FROM `datei` WHERE `id` = :id', ['id' => $fileId]);
+                }
+                throw new \RuntimeException('DMS-Ablage fehlgeschlagen fuer datei ' . $fileId);
+            }
+
+            $sort = 1 + (int)$this->db->fetchValue(
+                'SELECT MAX(`sort`) FROM `datei_stichwoerter`
+                  WHERE `objekt` = :objekt AND `parameter` = :parameter',
+                ['objekt' => 'Ticket', 'parameter' => (string)$nachrichtId]
+            );
+
+            $this->db->perform(
+                "INSERT INTO `datei_stichwoerter`
+                    (`datei`, `subjekt`, `objekt`, `parameter`, `sort`, `parameter2`, `objekt2`)
+                 VALUES (:datei, :subjekt, :objekt, :parameter, :sort, 0, '')",
+                [
+                    'datei' => $fileId,
+                    'subjekt' => 'Anhang',
+                    'objekt' => 'Ticket',
+                    'parameter' => (string)$nachrichtId,
+                    'sort' => $sort,
+                ]
+            );
+
+            if ($ownTransaction) {
+                $this->db->commit();
+            }
+        } catch (\Throwable $e) {
+            if ($ownTransaction && $this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $e;
         }
-
-        $sort = 1 + (int)$this->db->fetchValue(
-            'SELECT MAX(`sort`) FROM `datei_stichwoerter`
-              WHERE `objekt` = :objekt AND `parameter` = :parameter',
-            ['objekt' => 'Ticket', 'parameter' => (string)$nachrichtId]
-        );
-
-        $this->db->perform(
-            "INSERT INTO `datei_stichwoerter`
-                (`datei`, `subjekt`, `objekt`, `parameter`, `sort`, `parameter2`, `objekt2`)
-             VALUES (:datei, :subjekt, :objekt, :parameter, :sort, 0, '')",
-            [
-                'datei' => $fileId,
-                'subjekt' => 'Anhang',
-                'objekt' => 'Ticket',
-                'parameter' => (string)$nachrichtId,
-                'sort' => $sort,
-            ]
-        );
     }
 
     /**
@@ -996,6 +1298,23 @@ final class RepairApiController
             'service_delivery_type' => $data['service_delivery_type'] ?? $data['service_delivery'] ?? 'einsendung',
         ];
 
+        // Vom Kunden freigegebener KVA-Preis (Top-Level-Feld, nur von WP).
+        $customerQuote = self::normalizeCustomerQuoteAmount($data['customer_quote_amount'] ?? null);
+        if ($customerQuote !== null) {
+            $mapped['customer_quote_amount'] = $customerQuote;
+        } elseif (isset($data['customer_quote_amount']) && !is_array($data['customer_quote_amount'])) {
+            $rawQuote = trim((string)$data['customer_quote_amount']);
+            if ($rawQuote !== '') {
+                // Ungueltiger Betrag: nur das Feld ignorieren, der Push
+                // laeuft normal weiter (siehe validatePushDetailsSchema).
+                error_log(sprintf(
+                    'RepairIntegration: customer_quote_amount "%s" nicht verwertbar, Feld ignoriert (%s)',
+                    substr($rawQuote, 0, 50),
+                    (string)($data['request_number'] ?? '?')
+                ));
+            }
+        }
+
         if (isset($data['customer']) && is_array($data['customer'])) {
             $c = $data['customer'];
             $mapped['customer_type'] = isset($c['company']) && $c['company'] !== null ? 'business' : 'private';
@@ -1043,12 +1362,28 @@ final class RepairApiController
         string $error = '',
         string $action = 'push_details',
     ): void {
+        // wp_request_number aus dem Payload befuellen (Feld request_number —
+        // die einzige inbound verfuegbare Quelle; http_code bleibt bewusst
+        // leer, dafuer gibt es inbound keine Quelle). Fallback auf den
+        // Schluessel, falls der Payload kein parsebares JSON ist.
+        $requestNumber = null;
+        $decoded = json_decode($payload, true);
+        if (is_array($decoded) && isset($decoded['request_number'])
+            && is_scalar($decoded['request_number'])
+        ) {
+            $requestNumber = substr((string)$decoded['request_number'], 0, 20);
+        } elseif ($ticketSchluessel !== null) {
+            $requestNumber = substr($ticketSchluessel, 0, 20);
+        }
+
         $this->db->perform(
             "INSERT INTO `repair_sync_log`
-             (`direction`, `ticket_schluessel`, `action`, `payload_sent`, `success`, `error_message`, `ip_address`)
-             VALUES ('inbound', :key, :action, :payload, :success, :error, :ip)",
+             (`direction`, `ticket_schluessel`, `wp_request_number`, `action`,
+              `payload_sent`, `success`, `error_message`, `ip_address`)
+             VALUES ('inbound', :key, :requestNumber, :action, :payload, :success, :error, :ip)",
             [
                 'key' => $ticketSchluessel,
+                'requestNumber' => $requestNumber,
                 'action' => $action,
                 'payload' => substr($payload, 0, 65000),
                 'success' => $success ? 1 : 0,

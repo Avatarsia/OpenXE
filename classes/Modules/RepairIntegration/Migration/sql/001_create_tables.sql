@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS `ticket_repair_details` (
   `diagnosis_result` text DEFAULT NULL,
   `quote_amount` decimal(10,2) DEFAULT NULL,
   `actual_cost` decimal(10,2) DEFAULT NULL,
+  `customer_quote_amount` decimal(10,2) DEFAULT NULL,
   `repair_notes` text DEFAULT NULL,
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` datetime DEFAULT NULL ON UPDATE CURRENT_TIMESTAMP,

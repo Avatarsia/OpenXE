@@ -17,5 +17,5 @@ try {
 } catch (Exception $e) {
     $app->erp->LogFile('repair_sync', 'Error: ' . $e->getMessage());
 } finally {
-    $app->DB->Update("UPDATE prozessstarter SET mutex = 0, letzteausfuehrung = NOW() WHERE parameter = '{$parameter}'");
+    $app->DB->Update("UPDATE prozessstarter SET mutex = 0, letzteausfuerhung = NOW() WHERE parameter = '{$parameter}'");
 }

@@ -24,17 +24,21 @@ try {
            AND rd.service_delivery_type = 'einsendung'
            AND NOT EXISTS (
                SELECT 1 FROM `ticket_protokoll` tp
-               WHERE tp.ticket = t.id AND tp.grund LIKE '%Erinnerung gesendet%'
+               WHERE tp.ticket = t.id AND tp.grund LIKE '%Erinnerung faellig%'
            )",
         ['cutoff' => $cutoffDate]
     );
 
     foreach ($tickets as $ticket) {
-        $app->erp->TicketProtokoll($ticket['id'], 'Erinnerung gesendet (21 Tage ohne Geraeteingang)');
+        // HINWEIS: Der Kunden-Versand der Erinnerungsmail wird bewusst vom
+        // WP-Plugin geloest (Versender kontakt@partner-3d.de) - OpenXE
+        // protokolliert hier nur den internen Dedup-Marker, damit der Lauf
+        // dasselbe Ticket nicht erneut meldet.
+        $app->erp->TicketProtokoll($ticket['id'], 'Erinnerung faellig (21 Tage ohne Geraeteingang)');
         $app->erp->LogFile('repair_reminders', "Reminder for Ticket #{$ticket['schluessel']}");
     }
 } catch (Exception $e) {
     $app->erp->LogFile('repair_reminders', 'Error: ' . $e->getMessage());
 } finally {
-    $app->DB->Update("UPDATE prozessstarter SET mutex = 0, letzteausfuehrung = NOW() WHERE parameter = '{$parameter}'");
+    $app->DB->Update("UPDATE prozessstarter SET mutex = 0, letzteausfuerhung = NOW() WHERE parameter = '{$parameter}'");
 }

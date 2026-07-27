@@ -1,38 +1,99 @@
 # RepairIntegration — bekannte offene Punkte
 
-Stand 2026-07-27, nach dem Ausbau created_at/Medien-Import/Kundenkonto/Panel
-(Commits ae60e439, 7ada23a0, e533cfe7). Quellen: zwei Verifikations-Reviews
-der Implementierung. Alle Punkte sind bewusst offen gelassen, nicht vergessen.
+Stand 2026-07-27, nach dem Bugfix-Paket (SSRF-Haertung, Queue-Reaper,
+install.php-Cronjob-Fix, Dropdown-Mechanismus, tote Hooks/Enricher entfernt)
+und der Aufnahme von `customer_quote_amount` (Schema 1.3.0). Alle offenen
+Punkte sind bewusst offen gelassen, nicht vergessen.
 
 ## Funktional offen (User-sichtbar)
 
 | Punkt | Detail | Ort |
 |---|---|---|
-| Status-Dropdown-Override wirkungslos | `REPAIRSTATUSDROPDOWN` wird gesetzt, aber kein Template enthaelt den Platzhalter; Set laeuft zudem nach dem PAGE-Parse. Repair-Stati erscheinen nicht im Ticket-Status-Dropdown. Fix braucht Eingriff in `[STATUS]`-Handling des Parents. | `www/pages/ticket_custom.php` (~Z. 50) |
-| API-Adressen ohne Kundennummer | Standalone-Endpoint hat keinen Zugriff auf den Nummernkreis (`GetNextKundennummer` braucht `$app->erp`). Nachvergabe via `ensureKundennummer()` erst beim ersten `createbeleg`/`createadresse` im Web-Kontext. | `www/pages/repairintegration.php` |
 | Test-Tickets auf Live | 14 Stueck (5 Fixtures `20260406xxxx` + WP-Push-Tests). Loeschung zurueckgestellt, vorher SELECT zeigen. | Live-DB |
 
+## Entscheidungen (gewollt, kein Bug)
+
+| Punkt | Begruendung |
+|---|---|
+| API-Adressen ohne Kundennummer | BY DESIGN per User-Entscheid: die Kundennummer wird bewusst erst vergeben, wenn der Kunde wirklich angelegt wird (Geraet eingegangen, KVA wird erstellt) — also beim `createadresse`/`createbeleg` im Web-Kontext via `ensureKundennummer()`. Der Standalone-Endpoint vergibt bewusst keine Nummern. |
+| Erinnerungsmail-Versand liegt beim WP-Plugin | BY DESIGN per User-Entscheid: der Kunden-Versand der 21-Tage-Erinnerung wird vom WP-Plugin geloest (es kennt Eingangsdatum und Status selbst), Versender ist `kontakt@partner-3d.de`. `repair_reminders` schreibt nur den internen Dedup-Marker `Erinnerung faellig` ins Ticket-Protokoll; OpenXE versendet bewusst keine Erinnerungsmail. |
 ## Sicherheit / Robustheit (akzeptierte Risiken)
 
 | Punkt | Detail | Ort |
 |---|---|---|
-| SSRF-Flaeche Medien-Download | `downloadAttachment` prueft nur Scheme http/https, folgt bis 3 Redirects, keine Host-/IP-Allowlist. Akzeptiert, weil WP im LAN haengt und URLs nur via HMAC/Bearer-authentifizierten Payload kommen. Haertung: Host gegen konfigurierte `wp_api_url` pruefen. | `Api/RepairApiController.php` |
 | CSRF bei createbeleg/createadresse | Zustandsaendernde GET-Links ohne Token — entspricht OpenXE-Konvention (`AdresseCreateDokument` identisch). | `www/pages/repairintegration.php` |
-| Kein UNIQUE auf Idempotenz-Marker | Marker `WP-REPAIR-MEDIA-<sha1(url)>` in `datei.nummer`. Bricht der `datei_stichwoerter`-INSERT nach dem `datei`-INSERT ab, bleibt eine unverknuepfte datei-Zeile; naechster Push importiert ein Duplikat. | `Api/RepairApiController.php` |
-| Re-Import bei URL-Wechsel | Ziehen die WP-Uploads um (andere URLs), greift der Marker nicht und Medien werden erneut importiert. | ebd. |
-| Keine Idempotenz bei createbeleg | Reload/Doppelklick legt einen zweiten Beleg an (wie `adresse.php` auch). Vorab-Check in `repair_ticket_beleg` waere die Abhilfe. | `www/pages/repairintegration.php` |
-| Pre-existing `NoRights()`-Aufrufe | 5 Alt-Stellen (RepairList/Settings/Merge/SyncStatus) rufen nicht existentes `$app->erp->NoRights()` → Fatal bei Rechteverweigerung. Faellt nicht auf, weil die zentrale Modul-Rechtepruefung vorher blockt. Die 3 neuen Actions nutzen Redirect+msg. | `www/pages/repairintegration.php` |
+| Medien-Marker `sha1(url)` | Idempotenz-Marker `WP-REPAIR-MEDIA-<sha1(url)>` in `datei.nummer`, weil der Push-Payload keine stabile WP-Attachment-ID liefert. Ziehen die WP-Uploads um (URL-Wechsel), greift der Marker nicht und Medien werden erneut importiert. Abhilfe: WP-Plugin muss eine Attachment-ID liefern (z.B. `media_id` im Payload). | `Api/RepairApiController.php` |
+| `ticket.schluessel` nicht UNIQUE | Zwei parallele Pushes wuerden sonst Duplikat-Tickets anlegen. Mitigiert via benanntem `GET_LOCK('repair_ticket_<nr>')` rund um Find-or-Create; ein DB-seitiger UNIQUE-Index ist wegen Altlasten in `ticket` nicht ohne Weiteres moeglich. | `Api/RepairApiController.php` |
 
 ## UX / Datenqualitaet (kosmetisch)
 
 | Punkt | Detail |
 |---|---|
-| Stiller Verlust bei unparsebarem Betrag | `repair_normalize_amount('ca. 300')` → NULL → bisheriger Wert wird kommentarlos ueberschrieben. |
-| Deutsche Tausendertrennung ohne Nachkomma | `'1.234'` → als 1.23 EUR gespeichert (`decimal(10,2)`). Mit Komma (`1.234,56`) korrekt. |
 | Panel-Stale-Read | Panel liest `ticket.adresse` vor dem Parent-Save; aendert derselbe POST die Adresse, zeigt das Panel den alten Stand (Reload korrigiert). |
-| Leerer Geraete-Link | Hersteller UND Modell leer → Listen-Link auf ein einzelnes Leerzeichen. |
-| Uneinheitliche "erste Nachricht" | Zeit-Korrektur filtert `medium='api'`, `importAttachments` nimmt `MIN(id)` ohne Filter — divergiert nur bei zusammengefuehrten Tickets. |
-| Zeitzonen-Annahme | WP sendet `current_time('mysql')` (Site-TZ), OpenXE interpretiert Europe/Berlin. Bei DE/DE identisch, nicht garantiert. |
+| Zeitzonen-Annahme | WP sendet `current_time('mysql')` (Site-TZ), OpenXE interpretiert `created_at` als Europe/Berlin. Bei DE/DE identisch, nicht garantiert. |
+
+## Abhaengigkeit WP-Plugin
+
+| Punkt | Detail |
+|---|---|
+| `customer_quote_amount` | Das Feld (vom Kunden freigegebener KVA-Preis, Schema 1.3.0) muss die WP-Seite ab dem naechsten Plugin-Release im Push-Payload liefern. Aeltere Plugin-Versionen senden es nicht — die Spalte bleibt dann `NULL`, das Panel zeigt leer. |
+
+## Behoben (2026-07-27)
+
+- SSRF-Haertung Medien-Download (`downloadAttachment`): nur https,
+  Host-Allowlist gegen den Host der konfigurierten `wp_api_url`, aufgeloeste
+  Ziel-IPs muessen oeffentlich sein (privat/reserviert abgelehnt), Redirects
+  (max. 3) werden manuell verfolgt und jedes Ziel erneut geprueft. Die fruehere
+  Akzeptanz-Begruendung "WP haengt im LAN" war eine Fehlannahme — WP ist
+  oeffentlich erreichbar, die Payload-URLs damit angreiferbeeinflussbar.
+- Auth-Bypass Bearer-Pfad geschlossen: bei leerem konfiguriertem Secret
+  waere `hash_equals('', '')` mit einem leeren Bearer-Token wahr gewesen —
+  jetzt `SHARED_SECRET_NOT_CONFIGURED`.
+- Cronjob-Typo `letzteausfuehrung` -> `letzteausfuerhung` in allen drei
+  repair-Cronjobs (mutex blieb haengen, Jobs liefen nie wieder)
+- install.php: prozessstarter-INSERT mit allen NOT-NULL-Spalten,
+  `repair_sync` periode 1440 (taeglich), Self-healing-UPDATEs fuer
+  Bestandsinstallationen (periode/art/typ/mutex)
+- Queue-Reaper: Eintraege, die laenger als 15 Minuten in `processing`
+  haengen (abgestuerzter Lauf), werden wieder auf `pending` gesetzt
+- `max_retries` und `notify_on_permanent_fail` verdrahtet: Retry-Grenze kommt
+  aus der Modul-Konfiguration, bei `permanently_failed` geht eine
+  Benachrichtigungsmail raus
+- `RepairDetailsGateway::update()`: Whitelist fehlte komplett (stillschweigend
+  verworfene Updates), jetzt inkl. `customer_type`/`company_name`/`vat_id`
+- Rate-Limit-Reihenfolge: Limit greift jetzt NACH der Authentifizierung,
+  ungueltige Requests verbrauchen das IP-Kontingent legitimer Pushes nicht
+- Optionale IP-Allowlist inbound (`checkAllowedIps`)
+- Dedup beim Einreihen: noch ausstehende Status-Syncs desselben Tickets
+  werden verworfen, bevor ein neuer Eintrag in `repair_sync_queue` landet
+- Medien-Import atomar: `datei` + `datei_version` + `datei_stichwoerter`
+  laufen in einer Transaktion — kein verwaister `datei`-Datensatz mehr, der
+  den Idempotenz-Marker aushebelt
+- Find-or-Create pro Ticket-Schluessel via `GET_LOCK` serialisiert
+- Inbound-Log befuellt `wp_request_number` (aus Payload bzw. Schluessel)
+- Leerer Geraete-Link in der Reparatur-Liste unterdrueckt (SQL-IF)
+- Betrags-Normalisierung Panel: unparsebare Eingabe behaelt alten Wert +
+  Warnung; `1.234` als deutsche Tausender-Notation erkannt
+- createbeleg-Idempotenz: bestehender Beleg desselben Typs wird direkt
+  geoeffnet statt Duplikat anzulegen
+- `NoRights()`-Alt-Stellen auf redirectNoRights() (welcome/info + msg)
+  umgestellt
+- Tote Hook-Registrierungen `ticket_edit_after`/`ticket_list_after` entfernt
+  (install.php loescht Bestandszeilen self-healing)
+- Toter Mail-Enrichment-Pfad entfernt (TicketCreateHook,
+  RepairTicketEnricher, `isAutoEnrichEnabled()`) — kein Core-Hookpunkt nach
+  Ticket-Anlage aus Mail-Import vorhanden
+- `firma`-Konstanten: Single-Tenant-Annahme als dokumentierte Konstante
+  `FIRMA_ID` statt verstreuter Magic Numbers
+- Status-Dropdown: toter `REPAIRSTATUSDROPDOWN`-Override entfernt;
+  `www/pages/ticket.php` ergaenzt `[STATUS]` jetzt selbst um aktive Slugs aus
+  `ticket_status_config`; der damit ungenutzte
+  `RepairStatusService::renderStatusDropdown()` entfaellt
+- Bulk-Statusaenderung in der Ticketliste stoesst jetzt den WP-Sync an
+- "Erste Nachricht" einheitlich: Anhang-Import filtert wie die
+  `created_at`-Korrektur auf `medium='api'`
+- Ungueltiges `customer_quote_amount` im Push wird ignoriert statt den
+  Request abzulehnen (error_log-Hinweis)
 
 ## Deploy-Pflichten
 
@@ -40,5 +101,16 @@ der Implementierung. Alle Punkte sind bewusst offen gelassen, nicht vergessen.
   (`classes/bootstrap.php` regeneriert die Map nur, wenn die Cache-Datei FEHLT
   → `userdata/tmp/<db>/` leeren bzw. `refreshFileCache.php`) + Apache reload
   (OPcache).
+- Nach DIESEM Deploy zusaetzlich:
+  - `install.php` einmal laufen lassen, damit die Self-healing-UPDATEs die
+    prozessstarter-Zeilen reparieren (mutex-Reset, periode 1440, art/typ).
+    Passiert automatisch beim ersten Aufruf einer Modulseite via
+    `ensureInstalled()` — oder explizit ueber
+    `index.php?module=repairintegration&action=install`.
+  - Container-Service-Cache leeren wegen Bootstrap-Aenderung
+    (RepairTicketEnricher entfernt, RepairSyncService-Signatur geaendert).
+  - Schema 1.3.0 zieht per Migration die Spalte
+    `ticket_repair_details.customer_quote_amount` nach (ebenfalls via
+    `ensureInstalled()`/install.php).
 - production wird per CI force-gepusht → auf dem Server `fetch + reset --hard
   FETCH_HEAD` bzw. Upgrader mit Force, nie `git pull`.

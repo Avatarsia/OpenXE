@@ -15,7 +15,6 @@ use Xentral\Modules\RepairIntegration\Service\RepairConfigService;
 use Xentral\Modules\RepairIntegration\Service\RepairEmailService;
 use Xentral\Modules\RepairIntegration\Service\RepairStatusService;
 use Xentral\Modules\RepairIntegration\Service\RepairSyncService;
-use Xentral\Modules\RepairIntegration\Service\RepairTicketEnricher;
 use Xentral\Modules\RepairIntegration\Service\RepairTicketMergeService;
 
 final class Bootstrap
@@ -28,7 +27,6 @@ final class Bootstrap
             'RepairSyncQueueGateway'    => 'onInitRepairSyncQueueGateway',
             'RepairBelegGateway'        => 'onInitRepairBelegGateway',
             'RepairStatusService'       => 'onInitRepairStatusService',
-            'RepairTicketEnricher'      => 'onInitRepairTicketEnricher',
             'RepairSyncService'         => 'onInitRepairSyncService',
             'RepairEmailService'        => 'onInitRepairEmailService',
             'RepairBelegService'        => 'onInitRepairBelegService',
@@ -69,14 +67,6 @@ final class Bootstrap
         );
     }
 
-    public static function onInitRepairTicketEnricher(ContainerInterface $container): RepairTicketEnricher
-    {
-        return new RepairTicketEnricher(
-            $container->get('Database'),
-            $container->get('RepairDetailsGateway'),
-        );
-    }
-
     public static function onInitRepairSyncService(ContainerInterface $container): RepairSyncService
     {
         return new RepairSyncService(
@@ -85,6 +75,13 @@ final class Bootstrap
             $container->get('RepairStatusConfigGateway'),
             $container->get('RepairDetailsGateway'),
             $container->get('RepairConfigService'),
+            // Benachrichtigung bei permanentem Sync-Fehler ueber die uebliche
+            // Legacy-Mail-API; lazy, damit LegacyApplication erst im
+            // Fehlerfall aufgeloest wird.
+            static function (string $to, string $subject, string $text) use ($container): void {
+                $erp = $container->get('LegacyApplication')->erp;
+                $erp->MailSend($erp->GetFirmaMail(), $erp->GetFirmaAbsender(), $to, $to, $subject, $text);
+            },
         );
     }
 

@@ -20,6 +20,10 @@ final class RepairSyncService
         private readonly RepairStatusConfigGateway $statusConfigGateway,
         private readonly RepairDetailsGateway $detailsGateway,
         private readonly RepairConfigService $configService,
+        // Optional, damit der Service auch ohne $app-Kontext instanziierbar
+        // bleibt; der Versand laeuft ueber $app->erp->MailSend (im Bootstrap
+        // als Closure verdrahtet). Signatur: (string $to, string $subject, string $text): void
+        private readonly ?\Closure $permanentFailMailer = null,
     ) {}
 
     public function checkAndQueueStatusChange(int $ticketId): void
@@ -46,12 +50,28 @@ final class RepairSyncService
             return;
         }
 
+        $baseUrl = $this->configService->getWpApiUrl();
+        if ($baseUrl === '') {
+            // Ohne wp_api_url waere jeder Push ein garantierter Fehlschlag:
+            // nichts einreihen, nur warnen.
+            $this->logWarning(sprintf(
+                'Status-Sync fuer Ticket #%d uebersprungen: wp_api_url ist nicht konfiguriert',
+                $ticketId
+            ));
+            return;
+        }
+
         $payload = json_encode([
             'request_number' => $details['wp_request_number'],
             'status' => $wpStatus,
         ], JSON_THROW_ON_ERROR);
 
-        $targetUrl = $this->configService->getWpApiUrl() . '/wp-json/p3d/v1/requests/status';
+        $targetUrl = $baseUrl . '/wp-json/p3d/v1/requests/status';
+
+        // Dedup: noch ausstehende Status-Syncs desselben Tickets verwerfen,
+        // damit ein veralteter Status nicht nach dem neueren zugestellt wird.
+        // 'failed'-Eintraege bleiben zur Historie stehen.
+        $this->syncQueueGateway->deletePendingForTicket($ticketId, 'status_change');
 
         $this->syncQueueGateway->enqueue(
             $ticketId,
@@ -59,11 +79,17 @@ final class RepairSyncService
             'status_change',
             $payload,
             $targetUrl,
+            $this->configService->getMaxRetries(),
         );
     }
 
     public function processQueue(): int
     {
+        // Reaper: Eintraege, die laenger als 15 Minuten in 'processing'
+        // haengen (Worker abgestuerzt/gekillt), auf 'failed' zuruecksetzen,
+        // damit sie der Retry-Logik wieder zugefuehrt werden.
+        $this->syncQueueGateway->reapStaleProcessing(15);
+
         $entries = $this->syncQueueGateway->getPendingEntries(50);
         $processed = 0;
 
@@ -75,11 +101,23 @@ final class RepairSyncService
             }
 
             try {
-                $this->pushToWordPress($entry);
+                $result = $this->pushToWordPress($entry);
                 $this->syncQueueGateway->markCompleted($entry['id']);
-                $this->logSync('outbound', $entry, true);
+                $this->logSync(
+                    'outbound',
+                    $entry,
+                    true,
+                    '',
+                    $result['http_code'],
+                    $result['body'] !== '' ? substr($result['body'], 0, 1000) : null
+                );
                 $processed++;
-            } catch (SyncFailedException $e) {
+            } catch (\Throwable $e) {
+                // Nicht nur SyncFailedException: auch DB-Fehler oder TypeError
+                // duerfen den Eintrag nicht unsichtbar in 'processing' haengen
+                // lassen — wie ein normaler Retry-Fehler behandeln.
+                $httpCode = $e instanceof SyncFailedException ? $e->httpCode : 0;
+                $responseBody = $e instanceof SyncFailedException ? $e->responseBody : '';
                 $retryCount = (int)$entry['retry_count'] + 1;
                 $maxRetries = (int)$entry['max_retries'];
 
@@ -87,7 +125,9 @@ final class RepairSyncService
                     $this->syncQueueGateway->markPermanentlyFailed(
                         $entry['id'],
                         $e->getMessage(),
+                        $httpCode,
                     );
+                    $this->notifyPermanentlyFailed($entry, $e->getMessage(), $httpCode);
                 } else {
                     $delayIndex = min($retryCount - 1, count(self::RETRY_DELAYS) - 1);
                     $delay = self::RETRY_DELAYS[$delayIndex];
@@ -98,10 +138,17 @@ final class RepairSyncService
                         $retryCount,
                         $nextRetry,
                         $e->getMessage(),
-                        $e->httpCode,
+                        $httpCode,
                     );
                 }
-                $this->logSync('outbound', $entry, false, $e->getMessage());
+                $this->logSync(
+                    'outbound',
+                    $entry,
+                    false,
+                    $e->getMessage(),
+                    $httpCode > 0 ? $httpCode : null,
+                    $responseBody !== '' ? $responseBody : null
+                );
             }
         }
 
@@ -151,13 +198,18 @@ final class RepairSyncService
             'outbound',
             ['ticket_schluessel' => null, 'action' => 'connection_test', 'payload' => $payload],
             $ok,
-            $error
+            $error,
+            $result['http_code'],
+            $result['body'] !== '' ? substr($result['body'], 0, 1000) : null
         );
 
         return $result;
     }
 
-    private function pushToWordPress(array $item): void
+    /**
+     * @return array{http_code: int|null, body: string, error: string|null}
+     */
+    private function pushToWordPress(array $item): array
     {
         $apiKey = $this->configService->getWpApiKey();
         if ($apiKey === '') {
@@ -168,12 +220,21 @@ final class RepairSyncService
         $httpCode = (int)$result['http_code'];
 
         if ($result['error'] !== null || $httpCode < 200 || $httpCode >= 300) {
+            // Bei Transportfehlern (HTTP 0) den eigentlichen Grund
+            // (DNS/TLS/Timeout) aus $result['error'] anhaengen, sonst geht
+            // er fuer die Diagnose verloren.
+            $message = sprintf('WP API returned HTTP %d', $httpCode);
+            if ($result['error'] !== null) {
+                $message .= ': ' . $result['error'];
+            }
             throw new SyncFailedException(
-                sprintf('WP API returned HTTP %d', $httpCode),
+                $message,
                 $httpCode,
                 substr($result['body'], 0, 1000),
             );
         }
+
+        return $result;
     }
 
     /**
@@ -236,17 +297,85 @@ final class RepairSyncService
         return 0;
     }
 
-    private function logSync(string $direction, array $entry, bool $success, string $error = ''): void
+    /**
+     * Schickt eine schlichte Benachrichtigung an die konfigurierte Adresse,
+     * wenn ein Queue-Eintrag endgueltig fehlgeschlagen ist. Der Versand
+     * laeuft ueber die im Konstruktor injizierte Closure
+     * ($app->erp->MailSend), weil der Service selbst keinen Zugriff auf
+     * $app hat. Ein Mail-Fehler darf die Queue-Abarbeitung nicht brechen.
+     */
+    private function notifyPermanentlyFailed(array $entry, string $error, int $httpCode): void
+    {
+        $to = $this->configService->getNotifyOnPermanentFailEmail();
+        if ($to === '' || $this->permanentFailMailer === null) {
+            return;
+        }
+
+        $subject = sprintf(
+            'Repair-Sync endgueltig fehlgeschlagen: Ticket %s',
+            $entry['ticket_schluessel']
+        );
+        $text = sprintf(
+            "Der Outbound-Sync an WordPress ist endgueltig fehlgeschlagen.\n\n"
+            . "Ticket: %s\nAktion: %s\nLetzter HTTP-Code: %s\nFehlermeldung: %s\n",
+            $entry['ticket_schluessel'],
+            $entry['action'],
+            $httpCode > 0 ? (string)$httpCode : '-',
+            $error
+        );
+
+        try {
+            ($this->permanentFailMailer)($to, $subject, $text);
+        } catch (\Throwable $mailError) {
+            $this->logWarning(
+                'Benachrichtigungsmail (permanently_failed) fehlgeschlagen: ' . $mailError->getMessage()
+            );
+        }
+    }
+
+    /**
+     * Schreibt eine Warnung in die `logfile`-Tabelle — dieselbe Ablage wie
+     * $app->erp->LogFile(), das im Service-Kontext ohne $app nicht
+     * verfuegbar ist (Muster wie in AmaInvoiceService).
+     */
+    private function logWarning(string $message): void
     {
         $this->db->perform(
+            "INSERT INTO `logfile`
+             (`meldung`, `dump`, `module`, `action`, `bearbeiter`, `funktionsname`, `datum`)
+             VALUES (:msg, '', 'repair_integration', 'status_sync', '', '', NOW())",
+            ['msg' => $message]
+        );
+    }
+
+    private function logSync(
+        string $direction,
+        array $entry,
+        bool $success,
+        string $error = '',
+        ?int $httpCode = null,
+        ?string $responseReceived = null,
+    ): void {
+        // wp_request_number steckt im Outbound-Payload als 'request_number'.
+        $wpRequestNumber = null;
+        $payload = json_decode((string)($entry['payload'] ?? ''), true);
+        if (is_array($payload) && !empty($payload['request_number'])) {
+            $wpRequestNumber = (string)$payload['request_number'];
+        }
+
+        $this->db->perform(
             "INSERT INTO `repair_sync_log`
-             (`direction`, `ticket_schluessel`, `action`, `payload_sent`, `success`, `error_message`)
-             VALUES (:dir, :key, :action, :payload, :success, :error)",
+             (`direction`, `ticket_schluessel`, `wp_request_number`, `action`, `payload_sent`,
+              `response_received`, `http_code`, `success`, `error_message`)
+             VALUES (:dir, :key, :wpnr, :action, :payload, :response, :code, :success, :error)",
             [
                 'dir' => $direction,
                 'key' => $entry['ticket_schluessel'],
+                'wpnr' => $wpRequestNumber,
                 'action' => $entry['action'],
                 'payload' => $entry['payload'],
+                'response' => $responseReceived,
+                'code' => $httpCode,
                 'success' => $success ? 1 : 0,
                 'error' => $error !== '' ? $error : null,
             ]
