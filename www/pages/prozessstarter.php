@@ -1557,13 +1557,13 @@ class Prozessstarter extends GenProzessstarter {
     if(empty($cronjob['aktiv'])) {
       $button = '';
       if($hasPermission && $withForm) {
-        $button = sprintf('<input type="hidden" name="cronjobid" value="%d" />
-        <input type="submit" name="activatecronjob" value="aktivieren" />', $cronjob['id']);
+        $button = sprintf('<input type="hidden" form="checkActiveCronjob" name="cronjobid" value="%d" />
+        <input type="submit" name="activatecronjob" form="checkActiveCronjob" value="aktivieren" />', $cronjob['id']);
       }
 
       $this->app->Tpl->Add(
         $target,
-        ($withForm?'<form method="post"> ':'').
+        ($withForm?'<form id="checkActiveCronjob" method="post"> ':'').
         sprintf(
           '
           <div class="warning">Der Prozessstarter %s ist nicht aktiv. 
@@ -1661,5 +1661,25 @@ class Prozessstarter extends GenProzessstarter {
       $diffDb = ceil(($nowDb->getTimestamp() - $lastTime->getTimestamp()) / 60);
 
       return $period > $diff || $period > $diffDb;
+  }
+  
+  public function deactivateCronjob($parameter)
+  {
+  
+    if(empty($parameter)) {
+      return false;
+    }
+
+    $hasPermission = $this->app->erp->RechteVorhanden('prozessstarter','edit');
+    if($hasPermission === true) {
+      $this->app->DB->Update(
+        sprintf(
+          "UPDATE prozessstarter SET aktiv = 0, mutex = 0, mutexcounter = 0 WHERE parameter = '%s'",
+          $this->app->DB->real_escape_string($parameter)
+        )
+      );
+      return true;
+    }
+    return false;
   }
 }

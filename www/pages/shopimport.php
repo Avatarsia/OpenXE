@@ -1774,7 +1774,7 @@ class Shopimport {
                 $htmltable->AddCol($saldo_kunde);
                 $htmltable->AddCol($warenkorb['zahlungsweise']);
                 $htmltable->AddCol($warenkorb['affiliate_ref']);
-                $gesamtsumme = (isset($gesamtsumme) ? $gesamtsumme : 0) + $warenkorb['gesamtsumme'];                
+                $gesamtsumme = (isset($gesamtsumme) ? $gesamtsumme : 0) + $warenkorb['gesamtsumme'];
 */
             }
         } else {
@@ -1872,14 +1872,14 @@ class Shopimport {
                                 }
                             } else {
                                 foreach ($result as $cart) {
-                                    $this->create_shopimport_cart_entry($cart, $projekt, $shopId);                                    
+                                    $this->create_shopimport_cart_entry($cart, $projekt, $shopId);
                                 }
                                 $success_count++;
                             }
                         } else {
                             $errors[] = 'Dateiimport fehlgeschlagen: '.$filename." ".print_r($result, true);
                         }
-                    }                      
+                    }
                 } // foreach
 
                 if ($success_count) {

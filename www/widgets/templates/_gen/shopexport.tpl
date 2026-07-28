@@ -280,6 +280,7 @@
               <tr class="lagerkorrektur"><td>{|Lagerkorrektur|}:</td><td>[LAGERKORREKTURWERT][MSGLAGERKORREKTURWERT]</td></tr>
               [HOOK_STORAGE]
               <tr><td><u>{|Artikel &Uuml;bertragung erlauben|}:</u></td><td>[ARTIKELEXPORT][MSGARTIKELEXPORT]<td><i>{|Von OpenXE zu Shop|}</i></td></td></tr>
+              <tr><td>{|Anzahl gleichzeitig übertragene Artikel|}:</td><td>[ARTIKELEXPORTBATCHSIZE][MSGARTIKELEXPORTBATCHSIZE]<td><i>{|Von OpenXE zu Shop|}</i></td></td></tr>
               <tr><td>{|Alle geänderten Artikel automatisch übertragen|}:</td><td>[AUTOSENDARTICLE][MSGAUTOSENDARTICLE]<td><i>{|Von OpenXE zu Shop|}</i></td></td></tr>
               <tr><td><br><strong>{|Ab hier importerspezifische Einstellungen|}:</strong><br><br></td></tr>
               <tr><td>{|Texte &uuml;bertragen|}:</td><td>[TEXTEUEBERTRAGEN][MSGTEXTEUEBERTRAGEN]<td><i>{|Von OpenXE zu Shop|}</i></td></td></tr>

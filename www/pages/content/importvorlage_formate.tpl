@@ -152,10 +152,10 @@
 							<tr><td>stuecklistemenge</td><td>Anzahl des Artikels in Stücklisten</td><td></td></tr>
 							<tr><td>stuecklisteart</td><td>Art der Stückliste:  et = Einkauf, it = Information, bt = Beistellung</td><td></td></tr>
 							<tr><td>vkmeldungunterdruecken</td><td></td><td></td></tr>
-							<tr><td>shop_shopid</td><td></td><td>(shopid ersetzen durch die ID des Shops)</td></tr>
-							<tr><td>aktiv_shopid</td><td></td><td>(shopid ersetzen durch die ID des Shops)</td></tr>
-							<tr><td>fremdnummerX_shopid</td><td></td><td>(shopid ersetzen durch die ID des Shops, X = 1-40)</td></tr>
-							<tr><td>fremdnummerbezeichnungX_shopid</td><td></td><td>(shopid ersetzen durch die ID des Shops, X = 1-40)</td></tr>
+							<tr><td>shopid_X</td><td>Shop ID</td><td>(X = 1-40)</td></tr>
+							<tr><td>shopaktiv_X</td><td></td><td>1 = aktiv, 0 = inaktiv, -1 = Artikel aus Shop entfernen</td></tr>
+                            <tr><td>fremdnummerX_shopid</td><td></td><td>(shopid ersetzen durch die ID des Shops, X = 1-40)</td></tr>
+                            <tr><td>fremdnummerbezeichnungX_shopid</td><td></td><td>(shopid ersetzen durch die ID des Shops, X = 1-40)</td></tr>
 							<tr><td>pseudopreis</td><td>Pseudopreis, auch Streichpreis z.B. zur Anzeige im Onlineshop</td><td></td></tr>
 							<tr><td>freifeldX</td><td>Freifelder des Artikels nach eigener Definition im System, eine Typprüfung findet nicht statt</td><td>(X = 1-40)</td></tr>
 							<tr><td>intern_gesperrt</td><td></td><td></td></tr>

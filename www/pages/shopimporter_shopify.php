@@ -1105,7 +1105,7 @@ class Shopimporter_Shopify extends ShopimporterBase
             $this->adapter->call("products/$productid/images/".$value['id'].'.json', 'DELETE');
           }
           foreach ($tmp[$i]['Dateien'] as $key => $value) {
-            $this->adapter->call("products/$productid/images.json", 'POST',array('image' => array('attachment' => $value['datei'], 'filename' => $value['filename'])));
+            $this->adapter->call("products/$productid/images.json", 'POST',array('image' => array('attachment' => base64_encode(file_get_contents($value['dateipfad'])) , 'filename' => $value['filename'])));
           }
         }
       }

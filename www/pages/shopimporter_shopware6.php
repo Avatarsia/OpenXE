@@ -1539,7 +1539,7 @@ class Shopimporter_Shopware6 extends ShopimporterBase
                 'Authorization:Bearer ' . $accessToken['token'],
             ];
             curl_setopt($ch, CURLOPT_URL, $url);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, base64_decode($internalFile['datei']));
+            curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($internalFile['dateipfad']));
             curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
             curl_setopt($ch, CURLOPT_HTTPHEADER, $setHeaders);
             curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);

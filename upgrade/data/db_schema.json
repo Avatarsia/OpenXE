@@ -92826,6 +92826,17 @@
                     "Comment": ""
                 },
                 {
+                    "Field": "artikelexportbatchsize",
+                    "Type": "int",
+                    "Collation": null,
+                    "Null": "NO",
+                    "Key": "",
+                    "Default": "10",
+                    "Extra": "",
+                    "Privileges": "select,insert,update,references",
+                    "Comment": ""
+                },
+                {
                     "Field": "multiprojekt",
                     "Type": "int(1)",
                     "Collation": null,

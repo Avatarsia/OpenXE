@@ -2913,9 +2913,9 @@ class Artikel extends GenArtikel {
         }
 
         if ($remote_status) {
-            $msg = $this->app->erp->base64_url_encode('<div class="info">' . $remote_message . '</div>');
+            $msg = $this->app->erp->base64_url_encode('<div class="info">' . print_r($remote_message, true) . '</div>');
         } else {
-            $msg = $this->app->erp->base64_url_encode('<div class="error">' . $remote_message . '</div>');
+            $msg = $this->app->erp->base64_url_encode('<div class="error">' .  print_r($remote_message, true) . '</div>');
         }
 
         $artikelnummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id = '$id' LIMIT 1");
