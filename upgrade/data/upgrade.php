@@ -273,14 +273,16 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
         if ($verbose) {
             echo_out("--------------- Upgrade history ---------------\n");
-            $retval = git("log --date=short-local --pretty=%cd%x20(%h):%x20%s HEAD --not HEAD~5 --",$output,$verbose,$verbose,"Error while showing history!");
+            // Quoting noetig: unquotete Klammern in (%h) sind in der Shell
+            // ein Syntax-Fehler (exec laeuft ueber /bin/sh).
+            $retval = git("log --date=short-local --pretty=\"%cd%x20(%h):%x20%s\" HEAD --not HEAD~5 --",$output,$verbose,$verbose,"Error while showing history!");
             if ($retval != 0) {
                 abort("");
                 return(-1);
             }
         } else {
             echo_out("--------------- Current version ---------------\n");
-            $retval = git("log -1 --date=short-local --pretty=%cd%x20(%h):%x20%s HEAD --",$output,$verbose,true,"Error while showing history!");
+            $retval = git("log -1 --date=short-local --pretty=\"%cd%x20(%h):%x20%s\" HEAD --",$output,$verbose,true,"Error while showing history!");
             if ($retval != 0) {
                 return(-1);
             }
@@ -387,7 +389,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
             echo_out("--------------- Pending upgrades: ---------------\n");
 
-            $retval = git("log --date=short-local --pretty=%cd%x20(%h):%x20%s FETCH_HEAD --not HEAD",$output,$verbose,true,"Error while fetching files!");
+            $retval = git("log --date=short-local --pretty=\"%cd%x20(%h):%x20%s\" FETCH_HEAD --not HEAD",$output,$verbose,true,"Error while fetching files!");
             if (empty($output)) {
                 echo_out("No upgrades pending.\n");
             }
