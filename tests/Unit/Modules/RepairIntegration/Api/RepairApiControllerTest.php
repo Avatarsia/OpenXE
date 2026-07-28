@@ -91,4 +91,50 @@ class RepairApiControllerTest extends TestCase
         self::assertNull(RepairApiController::normalizeCustomerQuoteAmount('100000000'));
         self::assertSame('99999999.99', RepairApiController::normalizeCustomerQuoteAmount('99999999.99'));
     }
+
+    public function testAttachmentMarkerUsesMediaIdWhenPresent(): void
+    {
+        self::assertSame(
+            'WP-REPAIR-MEDIA-ID-123',
+            RepairApiController::attachmentMarker('https://example.com/uploads/a.jpg', 123)
+        );
+        // Ohne URL, aber mit ID: der ID-Marker braucht die URL nicht.
+        self::assertSame('WP-REPAIR-MEDIA-ID-1', RepairApiController::attachmentMarker(null, 1));
+    }
+
+    public function testAttachmentMarkerFallsBackToLegacyUrlHash(): void
+    {
+        $url = 'https://example.com/uploads/a.jpg';
+        self::assertSame(
+            'WP-REPAIR-MEDIA-' . sha1($url),
+            RepairApiController::attachmentMarker($url, null)
+        );
+    }
+
+    public function testAttachmentMarkerTreatsInvalidIdsAsMissing(): void
+    {
+        $url = 'https://example.com/uploads/a.jpg';
+        $legacy = 'WP-REPAIR-MEDIA-' . sha1($url);
+        self::assertSame($legacy, RepairApiController::attachmentMarker($url, 0));
+        self::assertSame($legacy, RepairApiController::attachmentMarker($url, -5));
+    }
+
+    public function testNormalizeMediaIdAcceptsPositiveIntsAndDigitStrings(): void
+    {
+        self::assertSame(123, RepairApiController::normalizeMediaId(123));
+        self::assertSame(123, RepairApiController::normalizeMediaId('123'));
+    }
+
+    public function testNormalizeMediaIdReturnsNullForInvalidValues(): void
+    {
+        self::assertNull(RepairApiController::normalizeMediaId(null));
+        self::assertNull(RepairApiController::normalizeMediaId(0));
+        self::assertNull(RepairApiController::normalizeMediaId(-5));
+        self::assertNull(RepairApiController::normalizeMediaId('0'));
+        self::assertNull(RepairApiController::normalizeMediaId('abc'));
+        self::assertNull(RepairApiController::normalizeMediaId('12a'));
+        self::assertNull(RepairApiController::normalizeMediaId(12.5));
+        self::assertNull(RepairApiController::normalizeMediaId(true));
+        self::assertNull(RepairApiController::normalizeMediaId([123]));
+    }
 }

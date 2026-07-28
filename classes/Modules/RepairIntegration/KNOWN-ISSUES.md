@@ -22,7 +22,6 @@ Punkte sind bewusst offen gelassen, nicht vergessen.
 | Punkt | Detail | Ort |
 |---|---|---|
 | CSRF bei createbeleg/createadresse | Zustandsaendernde GET-Links ohne Token — entspricht OpenXE-Konvention (`AdresseCreateDokument` identisch). | `www/pages/repairintegration.php` |
-| Medien-Marker `sha1(url)` | Idempotenz-Marker `WP-REPAIR-MEDIA-<sha1(url)>` in `datei.nummer`, weil der Push-Payload keine stabile WP-Attachment-ID liefert. Ziehen die WP-Uploads um (URL-Wechsel), greift der Marker nicht und Medien werden erneut importiert. Abhilfe: WP-Plugin muss eine Attachment-ID liefern (z.B. `media_id` im Payload). | `Api/RepairApiController.php` |
 | `ticket.schluessel` nicht UNIQUE | Zwei parallele Pushes wuerden sonst Duplikat-Tickets anlegen. Mitigiert via benanntem `GET_LOCK('repair_ticket_<nr>')` rund um Find-or-Create; ein DB-seitiger UNIQUE-Index ist wegen Altlasten in `ticket` nicht ohne Weiteres moeglich. | `Api/RepairApiController.php` |
 
 ## UX / Datenqualitaet (kosmetisch)
@@ -37,6 +36,17 @@ Punkte sind bewusst offen gelassen, nicht vergessen.
 | Punkt | Detail |
 |---|---|
 | `customer_quote_amount` | Das Feld (vom Kunden freigegebener KVA-Preis, Schema 1.3.0) muss die WP-Seite ab dem naechsten Plugin-Release im Push-Payload liefern. Aeltere Plugin-Versionen senden es nicht — die Spalte bleibt dann `NULL`, das Panel zeigt leer. |
+| `media_id` bei Medien | Die stabile WP-Attachment-ID muss die WP-Seite ab dem naechsten Plugin-Release in den Medien-Eintraegen liefern (`media_urls`/`document_url` als Objekte `{"url": ..., "media_id": ...}`). Aeltere Plugin-Versionen senden sie nicht — dann greift weiter der Legacy-Marker `sha1(url)` (Duplikat-Importe bei URL-Wechsel der WP-Uploads). |
+
+## Behoben (2026-07-28)
+
+- Medien-Marker auf stabile WP-Attachment-ID umgestellt: liefert der Push
+  `media_id` in den Medien-Eintraegen, wird `WP-REPAIR-MEDIA-ID-<id>` statt
+  `WP-REPAIR-MEDIA-<sha1(url)>` in `datei.nummer` geschrieben — der Marker
+  ueberlebt damit einen URL-Wechsel der WP-Uploads. Der Dedup-Check prueft
+  weiter beide Formate, Alt-Anhaenge mit Legacy-Marker werden nicht erneut
+  importiert. Voraussetzung: das WP-Plugin liefert `media_id` ab dem
+  naechsten Plugin-Release (siehe "Abhaengigkeit WP-Plugin").
 
 ## Behoben (2026-07-27)
 

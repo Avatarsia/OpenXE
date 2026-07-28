@@ -30,17 +30,19 @@ final class RepairApiController
     private const ATTACHMENT_MAX_COUNT = 20; // @php83: add type int
     private const ATTACHMENT_CREATOR = 'WP-API'; // @php83: add type string
     /**
-     * Praefix in `datei`.`nummer`, ueber das Re-Pushes ihre Importe wiederfinden.
-     *
-     * Marker-Schema: sha1 der Quell-URL, weil der Push-Payload keine stabile
-     * WP-Attachment-ID mitliefert (`media_urls` enthaelt nur URLs bzw. Objekte
-     * mit `url`). Ziehen die WP-Uploads um (URL-Wechsel), greift der Marker
-     * nicht und der Anhang wird erneut importiert — Abhilfe waere ein ID-Feld
-     * im Payload (WP-Seite muesste z.B. `media_id` liefern). Wird das Schema
-     * spaeter auf eine ID umgestellt, matchen die Bestandsmarker nicht mehr:
-     * einmaliger Re-Import aller Alt-Anhaenge.
+     * Legacy-Praefix in `datei`.`nummer`, ueber das Re-Pushes ihre Importe
+     * wiederfinden: sha1 der Quell-URL. Greift nicht mehr, wenn die
+     * WP-Uploads umziehen (URL-Wechsel) — darum schreibt der Import bei
+     * vorhandener `media_id` nur noch den ID-Marker (siehe
+     * ATTACHMENT_MARKER_ID_PREFIX). Das Legacy-Format bleibt fuer den
+     * Dedup-Check gegen Alt-Importe bestehen.
      */
     private const ATTACHMENT_MARKER_PREFIX = 'WP-REPAIR-MEDIA-'; // @php83: add type string
+    /**
+     * Stabiler Marker ueber die WP-Attachment-ID (`media_id` im Payload):
+     * ueberlebt einen URL-Wechsel der WP-Uploads.
+     */
+    private const ATTACHMENT_MARKER_ID_PREFIX = 'WP-REPAIR-MEDIA-ID-'; // @php83: add type string
 
     /**
      * Single-Tenant-Annahme: alle Datensaetze laufen auf Mandant 1. Wird die
@@ -285,6 +287,11 @@ final class RepairApiController
         // `customer_quote_amount` ebenfalls nicht: das optionale Feld wird in
         // normalizeCustomerQuoteAmount() tolerant geparst, ein ungueltiger
         // Wert wird ignoriert (error_log), niemals mit 400 abgelehnt.
+        //
+        // `media_urls`/`document_url` werden hier bewusst nicht validiert:
+        // der Anhang-Import (importAttachments) liest die Eintraege tolerant
+        // aus (blanke URL oder Objekt mit `url`, optional `media_id`),
+        // unverwertbare Eintraege werden uebersprungen, nie mit 400 abgelehnt.
     }
 
     private function processPushDetails(array $data): void
@@ -501,6 +508,49 @@ final class RepairApiController
     }
 
     /**
+     * Baut den Idempotenz-Marker fuer einen importierten Anhang
+     * (`datei`.`nummer`).
+     *
+     * Reine Funktion ohne DB-Zugriff (bewusst statisch, damit sie ohne
+     * Container getestet werden kann). Liefert der Push eine stabile
+     * WP-Attachment-ID (`media_id`), wird der Marker darueber gebildet — er
+     * ueberlebt dann einen URL-Wechsel der WP-Uploads. Ohne verwertbare ID
+     * gilt das Legacy-Format sha1(url). Der Dedup-Check prueft immer beide
+     * Formate, damit Alt-Anhaenge bei der Umstellung nicht erneut importiert
+     * werden.
+     */
+    public static function attachmentMarker(?string $url, ?int $mediaId): string
+    {
+        if ($mediaId !== null && $mediaId > 0) {
+            return self::ATTACHMENT_MARKER_ID_PREFIX . $mediaId;
+        }
+        return self::ATTACHMENT_MARKER_PREFIX . sha1((string)$url);
+    }
+
+    /**
+     * Normalisiert die optionale WP-Attachment-ID eines Medien-Eintrags.
+     *
+     * Reine Funktion ohne DB-Zugriff (bewusst statisch, damit sie ohne
+     * Container getestet werden kann). Akzeptiert positive ints und
+     * Ziffern-Strings; alles andere (0, negativ, float, sonstige Typen) gilt
+     * als nicht vorhanden — der Aufrufer faellt dann auf den Legacy-Marker
+     * sha1(url) zurueck, der Push gilt nicht als fehlerhaft.
+     *
+     * @param mixed $raw Rohwert aus dem JSON-Payload
+     */
+    public static function normalizeMediaId(mixed $raw): ?int
+    {
+        if (is_int($raw)) {
+            return $raw > 0 ? $raw : null;
+        }
+        if (is_string($raw) && ctype_digit($raw)) {
+            $id = (int)$raw;
+            return $id > 0 ? $id : null;
+        }
+        return null;
+    }
+
+    /**
      * Loest einen WP-Status-Slug ueber die Kategorie des Service-Typs in einen
      * OpenXE-Status auf. Null = kein Mapping vorhanden.
      */
@@ -707,9 +757,10 @@ final class RepairApiController
      * Laedt `media_urls` und `document_url` herunter und haengt sie als
      * OpenXE-Dateien an die erste Nachricht des Tickets.
      *
-     * Idempotent: die Quell-URL wird als Marker in `datei`.`nummer` abgelegt,
-     * ein Re-Push erzeugt darum keine Duplikate. Alle Fehler werden nur
-     * protokolliert — der Push bleibt in jedem Fall erfolgreich.
+     * Idempotent: ein Marker aus `media_id` (bzw. Legacy sha1 der Quell-URL)
+     * wird in `datei`.`nummer` abgelegt, ein Re-Push erzeugt darum keine
+     * Duplikate. Alle Fehler werden nur protokolliert — der Push bleibt in
+     * jedem Fall erfolgreich.
      *
      * @param array<string, mixed> $data Validated payload from WP
      * @param string|null $createdAt Geprueftes `created_at`, null = heute
@@ -721,19 +772,30 @@ final class RepairApiController
 
             if (isset($data['media_urls']) && is_array($data['media_urls'])) {
                 foreach ($data['media_urls'] as $entry) {
-                    // Das Plugin sendet je nach Version blanke URLs oder Objekte mit `url`.
+                    // Das Plugin sendet je nach Version blanke URLs oder Objekte
+                    // mit `url` (plus optionaler stabiler `media_id`).
                     $url = is_array($entry) ? ($entry['url'] ?? null) : $entry;
                     if (is_string($url) && trim($url) !== '') {
-                        $jobs[] = ['url' => trim($url), 'types' => self::MEDIA_MIME_TYPES];
+                        $jobs[] = [
+                            'url' => trim($url),
+                            'media_id' => self::normalizeMediaId(
+                                is_array($entry) ? ($entry['media_id'] ?? null) : null
+                            ),
+                            'types' => self::MEDIA_MIME_TYPES,
+                        ];
                     }
                 }
             }
 
-            if (isset($data['document_url']) && is_string($data['document_url'])
-                && trim($data['document_url']) !== ''
-            ) {
+            // document_url: blanke URL oder Objekt mit `url` (+ `media_id`).
+            $documentEntry = $data['document_url'] ?? null;
+            $documentUrl = is_array($documentEntry) ? ($documentEntry['url'] ?? null) : $documentEntry;
+            if (is_string($documentUrl) && trim($documentUrl) !== '') {
                 $jobs[] = [
-                    'url' => trim($data['document_url']),
+                    'url' => trim($documentUrl),
+                    'media_id' => self::normalizeMediaId(
+                        is_array($documentEntry) ? ($documentEntry['media_id'] ?? null) : null
+                    ),
                     'types' => array_merge(self::MEDIA_MIME_TYPES, self::DOCUMENT_MIME_TYPES),
                 ];
             }
@@ -775,6 +837,7 @@ final class RepairApiController
                 try {
                     $this->importSingleAttachment(
                         $job['url'],
+                        $job['media_id'],
                         $job['types'],
                         $ticketSchluessel,
                         $nachrichtId,
@@ -802,6 +865,7 @@ final class RepairApiController
      */
     private function importSingleAttachment(
         string $url,
+        ?int $mediaId,
         array $allowedTypes,
         string $ticketSchluessel,
         int $nachrichtId,
@@ -810,16 +874,26 @@ final class RepairApiController
         // Schema-/Host-/IP-Pruefung der URL erfolgt zentral in
         // downloadAttachment() (nur https, Host = wp_api_url-Host, keine
         // privaten/reservierten Ziel-IPs) — inklusive aller Redirect-Ziele.
-        $marker = self::ATTACHMENT_MARKER_PREFIX . sha1($url);
+        $marker = self::attachmentMarker($url, $mediaId);
+        // Dedup gegen beide Marker-Formate: der ID-Marker ist neu, Alt-Importe
+        // traegt der Legacy-sha1(url)-Marker — ohne den zweiten Check wuerden
+        // bei der Umstellung alle Alt-Anhaenge einmalig erneut importiert.
+        // Bei fehlender media_id sind beide Marker identisch.
+        $legacyMarker = self::attachmentMarker($url, null);
         $alreadyImported = $this->db->fetchValue(
             'SELECT `d`.`id`
                FROM `datei` AS `d`
                INNER JOIN `datei_stichwoerter` AS `ds` ON `ds`.`datei` = `d`.`id`
-              WHERE `d`.`nummer` = :marker
+              WHERE `d`.`nummer` IN (:marker, :legacyMarker)
                 AND `ds`.`objekt` = :objekt
                 AND `ds`.`parameter` = :parameter
               LIMIT 1',
-            ['marker' => $marker, 'objekt' => 'Ticket', 'parameter' => (string)$nachrichtId]
+            [
+                'marker' => $marker,
+                'legacyMarker' => $legacyMarker,
+                'objekt' => 'Ticket',
+                'parameter' => (string)$nachrichtId,
+            ]
         );
         if ($alreadyImported !== false && $alreadyImported !== null) {
             return;

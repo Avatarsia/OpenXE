@@ -101,6 +101,8 @@ Pflicht-Felder:
 Optional:
 - `status` (string, max 30 chars) — WP-Slug, siehe [Status-Uebernahme](#status-uebernahme-inbound). Unbekannte Werte sind kein Fehler.
 - `customer_quote_amount` (Zahl oder numerischer String) — vom Kunden im WP-Frontend freigegebener KVA-Preis. Wird in `ticket_repair_details.customer_quote_amount` gespeichert und im Repair-Panel read-only angezeigt. Tolerant geparst (auch deutsche Schreibweise); ungueltige Werte werden ignoriert (error_log), nie mit 400 abgelehnt. **WP-Plugin muss das Feld ab dem naechsten Plugin-Release liefern** — aeltere Plugin-Versionen senden es nicht, das Feld bleibt dann `NULL`.
+- `media_urls` (Array) — Kunden-Medien (Bilder/Videos), werden heruntergeladen und als Dateien an die erste Ticket-Nachricht gehaengt. Eintraege als blanke URL (`"https://..."`) oder als Objekt `{ "url": "...", "media_id": 123 }`. `media_id` ist optional, aber **empfohlen**: die stabile WP-Attachment-ID wird als Idempotenz-Marker (`WP-REPAIR-MEDIA-ID-<id>` in `datei.nummer`) genutzt und ueberlebt einen URL-Wechsel der WP-Uploads; ohne `media_id` gilt der Legacy-Marker `sha1(url)` (Duplikat-Importe bei URL-Wechsel). **WP-Plugin muss `media_id` ab dem naechsten Plugin-Release liefern.** Erlaubte MIME-Typen: `image/jpeg`, `image/png`, `image/webp`, `video/mp4`, `video/quicktime`; max. 20 Anhaenge (inkl. `document_url`), max. 25 MB pro Datei.
+- `document_url` (String oder Objekt wie bei `media_urls`) — zusaetzliches Dokument (z.B. HTML-Zusammenfassung), zusaetzlich erlaubter MIME-Typ `text/html`.
 
 Feldnamen-Aliase (das Plugin sendet je nach Version die kurze oder lange Variante, `mapInboundData()` akzeptiert beide):
 
