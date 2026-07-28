@@ -124,3 +124,17 @@ Punkte sind bewusst offen gelassen, nicht vergessen.
     `ensureInstalled()`/install.php).
 - production wird per CI force-gepusht → auf dem Server `fetch + reset --hard
   FETCH_HEAD` bzw. Upgrader mit Force, nie `git pull`.
+
+## Upstream-Status: GetTicketBelege (Issue #282)
+
+- Unser fix/ticket-belege-objekt-filter (dst.objekt = 'Ticket') ist OBSOLET und
+  aus Manifest + origin geloescht: upstream 8328f765 fixt beide Funktionen
+  (GetTicketBelege + GetBelegTickets) selbst — allerdings mit
+  `dst.objekt LIKE 'ticket%'`.
+- Restluecke der LIKE-Variante: `ticket_header`-Anhaenge (Dateien-Tab am
+  Ticket, parameter = ticket.id) laufen mit durch, werden aber gegen
+  ticket_nachricht.id gejoint → dieselbe ID-Kollisionsklasse in kleinerem
+  Massstab; Kopf-Anhaenge matchen nur zufaellig. OR-Zweig vorgeschlagen
+  (Issue #282, Kommentar 2026-07-28), Antwort von OpenXE-ERP ausstehend.
+- Bis dahin: falls wieder fremde Belege an Tickets auftauchen, zuerst
+  ticket_header-Kollisionen pruefen.
