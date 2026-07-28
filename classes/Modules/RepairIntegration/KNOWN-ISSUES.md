@@ -131,10 +131,7 @@ Punkte sind bewusst offen gelassen, nicht vergessen.
   aus Manifest + origin geloescht: upstream 8328f765 fixt beide Funktionen
   (GetTicketBelege + GetBelegTickets) selbst — allerdings mit
   `dst.objekt LIKE 'ticket%'`.
-- Restluecke der LIKE-Variante: `ticket_header`-Anhaenge (Dateien-Tab am
-  Ticket, parameter = ticket.id) laufen mit durch, werden aber gegen
-  ticket_nachricht.id gejoint → dieselbe ID-Kollisionsklasse in kleinerem
-  Massstab; Kopf-Anhaenge matchen nur zufaellig. OR-Zweig vorgeschlagen
-  (Issue #282, Kommentar 2026-07-28), Antwort von OpenXE-ERP ausstehend.
-- Bis dahin: falls wieder fremde Belege an Tickets auftauchen, zuerst
-  ticket_header-Kollisionen pruefen.
+- ERLEDIGT (2026-07-28): Die LIKE-Restluecke (`ticket_header`-Kollisionen)
+  wurde nach unserem Issue-Feedback von upstream in 1af21ab4 geschlossen —
+  beide Funktionen filtern jetzt strikt `dst.objekt = 'Ticket'` (unsere
+  urspruengliche Variante). Kein offener Punkt mehr.
