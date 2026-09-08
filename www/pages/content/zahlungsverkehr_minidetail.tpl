@@ -96,7 +96,7 @@ newwin.document.close()
 <style>
 
 .auftrag_cell {
-  color: #636363;border: 1px solid #ccc;padding: 0;
+  color: var(--text-body);border: 1px solid var(--border);padding: 0;
 
 }
 a:hover {cursor:pointer}
@@ -107,7 +107,7 @@ a:hover {cursor:pointer}
 <tr valign="top"><td>
 
 </td><td width="100%">  
-<div style="height:100%; background-color:white; padding:20px;">
+<div class="bg-surface" style="height:100%; padding:20px;">
   <div>
     <h2>{|Buchungen|}</h2><hr><p>[BUCHUNGEN]</p>
   </div>

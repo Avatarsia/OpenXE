@@ -37,7 +37,7 @@ final class DocScanFilesDataTable extends AbstractDataTableType
         $title = Column::searchable('titel', 'Titel', 'left', '30%');
         $title->setFormatter(function ($value, $row) {
             return !empty($value)
-                ? sprintf('%s<br><i style="color:#999;">%s</i>', $value, $row['dateiname'])
+                ? sprintf('%s<br><i class="text-muted">%s</i>', $value, $row['dateiname'])
                 : $row['dateiname'];
         });
 

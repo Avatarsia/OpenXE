@@ -19,7 +19,7 @@
 }
 
 .project-gantt .fn-gantt .bar .fn-label {
-    color: #FFF;
+    color: var(--text-inverse);
     text-shadow: none;
 }
 

@@ -1847,7 +1847,7 @@ class Angebot extends GenAngebot
     $this->app->Tpl->Set('MESSAGE',"<div class=\"warning\">M&ouml;chten Sie eine Angebot jetzt anlegen? &nbsp;
         <input type=\"button\" onclick=\"window.location.href='index.php?module=angebot&action=create&anlegen=1'\" value=\"Ja - Angebot jetzt anlegen\"></div><br>");
     $this->app->Tpl->Set('TAB1',"
-        <table width=\"100%\" style=\"background-color: #fff; border: solid 1px #000;\" align=\"center\">
+        <table width=\"100%\" class=\"bg-surface border-default\" align=\"center\">
         <tr>
         <td align=\"center\">
         <br><b style=\"font-size: 14pt\">Angebote in Bearbeitung</b>

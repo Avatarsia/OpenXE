@@ -1,20 +1,22 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-color-scheme="[COLORSCHEME]">
   <head>
     <meta charset="utf-8">
+    <script src="./themes/[THEME]/js/colorscheme.js?v=1"></script>
+    <meta name="color-scheme" content="light dark">
     <!-- <meta name="viewport" content="width=device-width, initial-scale=1" /> -->
 		[ADDITIONALHEADER]
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' [ADDITIONALCSPHEADER];">
     <title>[HTMLTITLE]</title>
     <link rel="stylesheet" href="./themes/[THEME]/css/normalize.min.css?v=6">
-    <link rel="stylesheet" href="./themes/[THEME]/css/[COLORCSSFILE]?v=7">
+    <link rel="stylesheet" href="./themes/[THEME]/css/[COLORCSSFILE]?v=9">
 <style>
 :root {
  [COLORCSS]
 }
 </style>
 
-    <link rel="stylesheet" href="./themes/[THEME]/css/styles.css?v=32">
+    <link rel="stylesheet" href="./themes/[THEME]/css/styles.css?v=34">
     <link rel="stylesheet" href="./themes/[THEME]/css/resp-menu.css?v=5">
 
 	<script type="text/javascript" src="./js/event.js"></script>
@@ -27,7 +29,7 @@
 	<script type="text/javascript" src="./js/jquery-multidownload.js" ></script>
 
 	<link rel="stylesheet" type="text/css" href="./js/datatables/datatables.min.css"/>
-	<link rel="stylesheet" type="text/css" href="./themes/[THEME]/css/datatables_custom.css?v=2"/>
+	<link rel="stylesheet" type="text/css" href="./themes/[THEME]/css/datatables_custom.css?v=4"/>
 	<link href="./themes/[THEME]/css/jquery.dataTables.min.css" rel="stylesheet" type="text/css" media="screen">
 	<link href="./themes/[THEME]/css/buttons.dataTables.min.css" rel="stylesheet" type="text/css" media="screen">
 	<script type="text/javascript" src="./js/datatables/datatables.min.js?v=2"></script>
@@ -39,7 +41,7 @@
 	<script type="text/javascript" src="./js/jqclock_201.js"></script>
 	<script type="text/javascript" src="./js/chart.min.js" ></script>
 	<script type="text/javascript" src="./js/chart-plugins.js?v=2" ></script>
-    <script type="text/javascript" src="./js/chart-helper.js?v=2"></script>
+    <script type="text/javascript" src="./js/chart-helper.js?v=4"></script>
     <script type="text/javascript" src="./js/textvorlagen.js"></script>
 
 	<link href="./css/bootstrap.min.css?v=4" rel="stylesheet" type="text/css" media="screen">
@@ -53,6 +55,10 @@
 
 	<link type="text/css" href="./themes/[THEME]/css/start/jquery-ui-1.10.3.custom.css?v=3" rel="Stylesheet" />
 	<link href="./themes/[THEME]/css/colorPicker.css" rel="stylesheet" type="text/css" />
+
+	<link rel="stylesheet" href="./themes/[THEME]/css/theme-utilities.css?v=1">
+	<link rel="stylesheet" href="./themes/[THEME]/css/dark-overrides.css?v=2">
+	<link rel="stylesheet" href="./themes/[THEME]/css/dark-icons.css?v=2">
 
 	<script src="./js/ckeditor/ckeditor.js"></script>
 	<script src="./js/ckeditor/adapters/jquery.js"></script>

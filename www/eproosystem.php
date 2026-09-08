@@ -1167,12 +1167,15 @@ if (typeof document.hidden !== \"undefined\") { // Opera 12.10 and Firefox 18 an
     $this->Tpl->Add('COLORCSS','--color2: '.$firmenfarbedunkel.';');
     if($this->erp->Firmendaten('firmenhoherformularkontrast'))
     {
-      $this->Tpl->Add('COLORCSS','--textfield-border: #666;');
+      $this->Tpl->Add('COLORCSS','--textfield-border-light: #666;');
+      $this->Tpl->Add('COLORCSS','--textfield-border-dark: #8A93A6;');
     }else{
-      $this->Tpl->Add('COLORCSS','--textfield-border: #d9d9d9;');
+      $this->Tpl->Add('COLORCSS','--textfield-border-light: #d9d9d9;');
+      $this->Tpl->Add('COLORCSS','--textfield-border-dark: #3A4152;');
     }
 
     $this->Tpl->Set('COLORCSSFILE','color3.css');
+    $this->Tpl->Set('COLORSCHEME', $this->erp->GetUserColorScheme());
 
 
     if(($module!=='welcome' && $action!=='start') && is_file('./themes/new/css/grid_cache.css')){

@@ -16,7 +16,7 @@
 		/*border-left-color: #FFC;*/
 		/**background-color: #FFC;**/
 		border-left-color: #FEF388;
-		background-color: #FFFFFF;
+		background-color: var(--surface);
 		border-radius: 6px;
 	}
 
@@ -37,14 +37,14 @@
 
 	/* Green button class: */
 	a.green-button, a.green-button:visited {
-		color: black;
+		color: var(--text-strong);
 		display: block;
 		font-size: 10px;
 		font-weight: bold;
 		height: 15px;
 		padding: 6px 5px 4px;
 		text-align: center;
-		text-shadow: 1px 1px 1px #DDDDDD;
+		text-shadow: 1px 1px 1px var(--border);
 	}
 
 	a.green-button:hover {
@@ -57,7 +57,7 @@
 		right: 15px;
 		bottom: 5px;
 		padding-right: 3px;
-		color: #666666;
+		color: var(--text-body);
 		font-family: Arial, Verdana, sans-serif;
 		font-size: 12px;
 		background-color: transparent;
@@ -86,8 +86,8 @@
 	}
 
 	h3.popupTitle {
-		border-bottom: 1px solid #DDDDDD;
-		color: #666666;
+		border-bottom: 1px solid var(--border);
+		color: var(--text-body);
 		font-size: 24px;
 		font-weight: normal;
 		padding: 0 0 5px;
@@ -110,8 +110,8 @@
 	}
 
 	.note-form textarea, .note-form input[type=text] {
-		background-color: #FCFCFC;
-		border: 1px solid #AAAAAA;
+		background-color: var(--surface);
+		border: 1px solid var(--border-strong);
 		font-family: Arial, Verdana, sans-serif;
 		font-size: 16px;
 		height: 60px;

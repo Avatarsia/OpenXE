@@ -20,7 +20,7 @@
     display: grid;
     grid-template-columns: 7% repeat(31, 3%);
     box-sizing: border-box;
-    color: #6d6d6f;
+    color: var(--text-body);
 }
 
 #easycalendar-legend {
@@ -58,7 +58,7 @@
     box-sizing: border-box;
     border-top:1px solid  var(--current-grey);
     border-left:1px solid  var(--current-grey);
-    color:#fff;
+    color:var(--text-inverse);
     text-align:center;
 }
 
@@ -110,7 +110,7 @@
 }
 
 #easycalendar .noday {
-    background-color:#fff;
+    background-color:var(--surface);
 }
 #easycalendar-legend .unpaid,
 #easycalendar .unpaid {

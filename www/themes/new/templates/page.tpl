@@ -6,21 +6,23 @@ SPDX-License-Identifier: LicenseRef-EGPL-3.1
 -->
 
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-color-scheme="[COLORSCHEME]">
   <head>
     <meta charset="utf-8">
+    <script src="./themes/[THEME]/js/colorscheme.js?v=1"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' [ADDITIONALCSPHEADER];">
     <title>[HTMLTITLE]</title>
     <link rel="stylesheet" href="./themes/[THEME]/css/normalize.min.css?v=6">
-    <link rel="stylesheet" href="./themes/[THEME]/css/[COLORCSSFILE]?v=7">
+    <link rel="stylesheet" href="./themes/[THEME]/css/[COLORCSSFILE]?v=9">
 <style>
 :root {
  [COLORCSS]
 }
 </style>
 
-    <link rel="stylesheet" href="./themes/[THEME]/css/styles.css?v=32">
+    <link rel="stylesheet" href="./themes/[THEME]/css/styles.css?v=34">
     <link rel="stylesheet" href="./themes/[THEME]/css/resp-menu.css?v=5">
 
 	<script type="text/javascript" src="./js/event.js"></script>
@@ -35,7 +37,7 @@ SPDX-License-Identifier: LicenseRef-EGPL-3.1
 	<script type="text/javascript" src="./js/lib/[VUEJS]"></script>
 
 	<link rel="stylesheet" type="text/css" href="./js/datatables/datatables.min.css"/>
-	<link rel="stylesheet" type="text/css" href="./themes/[THEME]/css/datatables_custom.css?v=3"/>
+	<link rel="stylesheet" type="text/css" href="./themes/[THEME]/css/datatables_custom.css?v=4"/>
 	<link href="./themes/[THEME]/css/jquery.dataTables.min.css" rel="stylesheet" type="text/css" media="screen">
 	<link href="./themes/[THEME]/css/buttons.dataTables.min.css" rel="stylesheet" type="text/css" media="screen">
 	<script type="text/javascript" src="./js/datatables/datatables.min.js?v=3"></script>
@@ -47,7 +49,7 @@ SPDX-License-Identifier: LicenseRef-EGPL-3.1
 	<script type="text/javascript" src="./js/jqclock_201.js"></script>
 	<script type="text/javascript" src="./js/chart.min.js" ></script>
 	<script type="text/javascript" src="./js/chart-plugins.js?v=2" ></script>
-  <script type="text/javascript" src="./js/chart-helper.js?v=2" ></script>
+  <script type="text/javascript" src="./js/chart-helper.js?v=4" ></script>
     <script type="text/javascript" src="./js/textvorlagen.js"></script>
     <script type="text/javascript" src="./js/sidebar.js"></script>
 
@@ -62,6 +64,10 @@ SPDX-License-Identifier: LicenseRef-EGPL-3.1
 
 	<link type="text/css" href="./themes/[THEME]/css/start/jquery-ui-1.10.3.custom.css?v=4" rel="Stylesheet" />
 	<link href="./themes/[THEME]/css/colorPicker.css" rel="stylesheet" type="text/css" />
+
+	<link rel="stylesheet" href="./themes/[THEME]/css/theme-utilities.css?v=1">
+	<link rel="stylesheet" href="./themes/[THEME]/css/dark-overrides.css?v=2">
+	<link rel="stylesheet" href="./themes/[THEME]/css/dark-icons.css?v=2">
 
 	<script src="./js/ckeditor/ckeditor.js"></script>
 	<script src="./js/ckeditor/adapters/jquery.js"></script>
@@ -182,6 +188,20 @@ $(document).ready(function() {
 					</a>
 				</li>
 				[NACHCHATNACHRICHTENBOX]
+				<li id="colorscheme-toggle-wrapper">
+					<a href="#" id="colorscheme-toggle" title="{|Farbschema|}" data-preference="[COLORSCHEME]">
+						<span class="icon-box">
+							<svg class="colorscheme-icon colorscheme-icon-moon" width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<path d="M15.5 11.2A7 7 0 0 1 6.8 2.5a7 7 0 1 0 8.7 8.7z" stroke="var(--header-icon-color, #76899F)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+							<svg class="colorscheme-icon colorscheme-icon-sun" width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+								<circle cx="9" cy="9" r="3.5" stroke="var(--header-icon-color, #76899F)" stroke-width="1.4"/>
+								<path d="M9 1.5v2M9 14.5v2M1.5 9h2M14.5 9h2M3.7 3.7l1.4 1.4M12.9 12.9l1.4 1.4M3.7 14.3l1.4-1.4M12.9 5.1l1.4-1.4" stroke="var(--header-icon-color, #76899F)" stroke-width="1.4" stroke-linecap="round"/>
+							</svg>
+							<span class="colorscheme-auto-badge">A</span>
+						</span>
+					</a>
+				</li>
 
 				<li id="profile-info-wrapper">
 					<div id="profile-info-name">
