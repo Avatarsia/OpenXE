@@ -3,13 +3,13 @@
     border-radius: 4px;
 }
 #repair-details-panel h3 {
-    color: #333;
-    border-bottom: 1px solid #ddd;
+    color: var(--text-strong, #333);
+    border-bottom: 1px solid var(--border, #ddd);
     padding-bottom: 5px;
 }
 .repair-express-badge {
     background: #ff6b35;
-    color: #fff;
+    color: var(--text-inverse, #fff);
     padding: 2px 8px;
     border-radius: 3px;
     font-size: 11px;
@@ -17,7 +17,7 @@
 }
 /* WordPress-Verbindungs-Tab */
 .repairHint {
-    color: #888;
+    color: var(--text-muted, #888);
     font-size: 11px;
     margin-top: 2px;
 }
@@ -27,8 +27,8 @@
 /* Fehlerbeschreibung: scrollbare Box, damit lange Kundentexte die
    Karte nicht sprengen (max. Hoehe, Rest per Scroll). */
 #repair-details-panel .issue-box {
-    background: #fafafa;
-    border: 1px solid #e3e3e3;
+    background: var(--surface-alt, #fafafa);
+    border: 1px solid var(--border, #e3e3e3);
     border-radius: 3px;
     padding: 6px 8px;
     max-height: 110px;
@@ -37,19 +37,19 @@
 /* Vom Kunden im WP-Portal freigegebener KVA-Preis: read-only-Chip,
    bewusst kein Eingabefeld (Wert kommt nur per Push). */
 #repair-details-panel .kva-kunde {
-    background: #e8f5e9;
-    border: 1px solid #2bb673;
+    background: var(--success-soft, #e8f5e9);
+    border: 1px solid var(--success, #2bb673);
     border-radius: 3px;
     padding: 2px 8px;
     font-weight: 600;
-    color: #1b5e20;
+    color: var(--success, #1b5e20);
     white-space: nowrap;
 }
 /* Status-Filterleiste ueber der Reparatur-Liste (Checkboxen je Status,
    Abwahl blendet serverseitig via more_data1/NOT IN aus). */
 #repair-status-filter {
-    background: #fff;
-    border: 1px solid #d6d9de;
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #d6d9de);
     border-radius: 4px;
     padding: 8px 12px;
     margin-bottom: 10px;
@@ -58,9 +58,9 @@
     display: inline-block;
     padding: 2px 12px 2px 8px;
     margin: 2px 8px 2px 0;
-    border: 1px solid #e3e3e3;
+    border: 1px solid var(--border, #e3e3e3);
     border-radius: 4px;
-    background: #fafafa;
+    background: var(--surface-alt, #fafafa);
     white-space: nowrap;
 }
 #repair-status-filter label {
