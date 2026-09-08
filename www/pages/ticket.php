@@ -38,6 +38,34 @@ class Ticket {
       return('<img src="./themes/new/images/status_'.$status.'.png" style="margin-right:1px" title="'.$status.'" border="0">');
     }
 
+    /**
+     * RepairIntegration: ergaenzt das hartcodierte Status-Dropdown aus
+     * erpApi::GetTicketStatusValues() um zusaetzliche aktive Slugs aus
+     * ticket_status_config (Repair-/Wartungs-Stati). Fehlt die Tabelle
+     * (Modul nicht installiert), liefert SelectArr null und das Dropdown
+     * bleibt unveraendert.
+     */
+    private function ticket_status_select_with_config(string $status): string {
+        $html = $this->app->erp->GetStatusTicketSelect($status);
+        $rows = $this->app->DB->SelectArr(
+            "SELECT slug, label_de FROM ticket_status_config WHERE is_active = 1 ORDER BY sort_order, slug"
+        );
+        if (empty($rows)) {
+            return $html;
+        }
+        $coreStati = $this->app->erp->GetTicketStatusValues();
+        foreach ($rows as $row) {
+            $slug = (string)$row['slug'];
+            if (isset($coreStati[$slug])) {
+                continue;
+            }
+            $selected = $slug === $status ? 'selected' : '';
+            $html .= '<option value="' . htmlspecialchars($slug, ENT_QUOTES) . '" ' . $selected . '>'
+                . htmlspecialchars((string)$row['label_de']) . '</option>';
+        }
+        return $html;
+    }
+
 
     public function TableSearch(&$app, $name, $erlaubtevars) {
 
@@ -310,6 +338,22 @@ class Ticket {
                     $sql .= " WHERE id IN (".implode(",",$selectedIds).")";
                     $this->app->DB->Update($sql);
                     $this->ticket_set_self_assigned_status($selectedIds);
+
+                    // RepairIntegration: Bulk-Statusaenderung ebenfalls an
+                    // WordPress melden. Der Service filtert selbst (nur
+                    // Repair-Tickets mit wp_request_number); ist das Modul
+                    // nicht installiert, wirft Container->get und der catch
+                    // ueberspringt still.
+                    foreach ($selectedIds as $selectedId) {
+                        if (($old[$selectedId]['status'] ?? '') === $status) {
+                            continue;
+                        }
+                        try {
+                            $this->app->Container->get('RepairSyncService')->checkAndQueueStatusChange($selectedId);
+                        } catch (\Throwable $e) {
+                            // Modul nicht installiert/konfiguriert -> still ueberspringen
+                        }
+                    }
                 break;
                 case 'spam_filter':
                     if($this->app->erp->RechteVorhanden('ticketregeln','create')) {
@@ -376,7 +420,7 @@ class Ticket {
 
         $this->app->erp->MenuEintrag("index.php", "Zur&uuml;ck");
 
-        $this->app->Tpl->Set('STATUS', $this->app->erp->GetStatusTicketSelect('neu'));
+        $this->app->Tpl->Set('STATUS', $this->ticket_status_select_with_config('neu'));
         $this->app->YUI->AutoComplete("warteschlange","warteschlangename");
 
         if(!$this->app->erp->RechteVorhanden('ticketregeln','create')) {
@@ -795,7 +839,7 @@ class Ticket {
         $this->app->YUI->AutoComplete("adresse","adresse");
         $this->app->YUI->AutoComplete("projekt","projektname",1);
         $this->app->YUI->AutoComplete("status","ticketstatus",1);
-        $this->app->Tpl->Set('STATUS', $this->app->erp->GetStatusTicketSelect('neu'));
+        $this->app->Tpl->Set('STATUS', $this->ticket_status_select_with_config('neu'));
         $this->app->YUI->AutoComplete("warteschlange","warteschlangename");
         $this->app->Tpl->Parse('PAGE', "ticket_create.tpl");
     }
@@ -870,7 +914,7 @@ class Ticket {
         $this->app->YUI->AutoComplete("status","ticketstatus",1);
         $this->app->YUI->TagEditor('tags', array('width'=>370));
 
-        $this->app->Tpl->Set('STATUS', $this->app->erp->GetStatusTicketSelect($ticket_from_db['status']));
+        $this->app->Tpl->Set('STATUS', $this->ticket_status_select_with_config($ticket_from_db['status']));
         $input['projekt'] = $this->app->erp->ReplaceProjekt(false,$input['projekt'],false); // Parameters: Target db?, value, from form?
         $this->app->YUI->AutoComplete("warteschlange","warteschlangename");
         // END Header
