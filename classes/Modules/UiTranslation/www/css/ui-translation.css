@@ -12,7 +12,7 @@
     min-height: 100px;
     border: 2px solid rgb(166, 201, 226);
     background-color: var(--body-background);
-    box-shadow: 3px 3px 10px rgba(0, 0, 0, .33);
+    box-shadow: 3px 3px 10px var(--shadow);
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;
@@ -37,7 +37,7 @@
     border: 2px solid rgb(166, 201, 226);
     margin: 0 20px;
     padding: 5px 10px;
-    box-shadow: 3px 3px 10px rgba(0, 0, 0, .33);
+    box-shadow: 3px 3px 10px var(--shadow);
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;

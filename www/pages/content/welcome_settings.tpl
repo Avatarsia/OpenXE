@@ -98,6 +98,17 @@
                     <td><select name="sprachebevorzugen" id="sprachebevorzugen">[SPRACHEBEVORZUGEN]</select></td>
                   </tr>
                   <tr>
+                    <td>{|Farbschema|}:</td>
+                    <td>
+                      <select name="color_scheme" id="color_scheme" onchange="if(window.openXeColorScheme){window.openXeColorScheme.set(this.value, false);}">
+                        <option value="auto"[COLORSCHEME_AUTO_SELECTED]>{|Automatisch (System)|}</option>
+                        <option value="light"[COLORSCHEME_LIGHT_SELECTED]>{|Hell|}</option>
+                        <option value="dark"[COLORSCHEME_DARK_SELECTED]>{|Dunkel|}</option>
+                      </select>
+                    </td>
+                    <td></td>
+                  </tr>
+                  <tr>
                     <td>{|Eigene Kalenderfarbe|}:</td>
                     <td><input type="text" name="defaultcolor" id="defaultcolor" value="[DEFAULTCOLOR]" size="80"></td>
                     <td></td>

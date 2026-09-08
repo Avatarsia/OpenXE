@@ -1738,7 +1738,7 @@ class Shopimport {
                 $htmltable->AddCol('<input type="radio" name="import[' . $arr[$i]['id'] . ']" value="muell">');
                 $htmltable->AddCol('<input type="radio" name="import[' . $arr[$i]['id'] . ']" value="warten"' . (($doppelteonlinebestellnummer || $auftraegeaufspaeter) ? ' checked="checked" ' : '') . '>');
                 $htmltable->AddCol($arr[$i]['abkuerzung']);
-                $htmltable->AddCol(($doppelteonlinebestellnummer ? '<b style="color:red">' : '') . $warenkorb['onlinebestellnummer'] . ($doppelteonlinebestellnummer ? '</b>' : ''));
+                $htmltable->AddCol(($doppelteonlinebestellnummer ? '<b class="text-error">' : '') . $warenkorb['onlinebestellnummer'] . ($doppelteonlinebestellnummer ? '</b>' : ''));
                 $date = DateTimeImmutable::createFromFormat('Y-m-d', $warenkorb['zeitstempel']);
                 if ($date !== false) {
                     $date = $date->format('d.m.Y');
@@ -1767,7 +1767,7 @@ class Shopimport {
 /*                $htmltable->AddCol(number_format($warenkorb['gesamtsumme'], 2, ',', '.'));
                 $saldo_kunde = round($this->app->erp->SaldoAdresse($kdr_addresse_id), 2);
                 if ($saldo_kunde > 0) {
-                    $saldo_kunde = '<b style="color:red">' . number_format($saldo_kunde, 2, ',', '.') . '</b>';
+                    $saldo_kunde = '<b class="text-error">' . number_format($saldo_kunde, 2, ',', '.') . '</b>';
                 } else {
                     $saldo_kunde = '-';
                 }
@@ -1811,8 +1811,8 @@ class Shopimport {
         $this->app->Tpl->Add('INHALT', $htmltable->Get());
 
         $this->app->Tpl->Add('INHALT', "<br><br>Bedeutung: <ul>
-          <li style=\"color:red\">Kundennummer von Kunde angegeben, eventuell ist diese falsch!</li>
-          <li style=\"color:red\">Doppelte Internetbestellnummer!</li>
+          <li class=\"text-error\">Kundennummer von Kunde angegeben, eventuell ist diese falsch!</li>
+          <li class=\"text-error\">Doppelte Internetbestellnummer!</li>
           <li style=\"color:purple\">Kundennummer bitte manuell pr&uuml;fen!</li>
           <li style=\"color:green\">Kundennummer aufgrund Felder Ort, Strasse, Name, Abteilung und E-Mail eindeutig gefunden!</li>
           </ul>");

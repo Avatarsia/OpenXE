@@ -1,7 +1,7 @@
 #add-more-table {
     float: right;
     background: var(--green);
-    color: #fff;
+    color: var(--text-inverse);
     font-weight: bold;
     padding: 7px 7px 5px;
     border: none;

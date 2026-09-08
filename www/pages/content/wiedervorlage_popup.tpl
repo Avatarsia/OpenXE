@@ -798,7 +798,7 @@
         border-radius: 7px;
     }
     #stage-selection a.active {
-        color: #FFF;
+        color: var(--text-inverse);
         border-color: var(--green);
         background-color: var(--green);
     }

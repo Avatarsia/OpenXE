@@ -1,7 +1,7 @@
   <style>
-  #sortable1, #sortable2, #sortable3, #sortable4 { list-style-type: none; margin: 0; float: left; margin-right: 10px; background: #eee; padding: 5px; width: 143px;}
+  #sortable1, #sortable2, #sortable3, #sortable4 { list-style-type: none; margin: 0; float: left; margin-right: 10px; background: var(--surface-muted); padding: 5px; width: 143px;}
   #sortable1 li, #sortable2 li, #sortable3 li, #sortable4 li { margin: 5px; padding: 5px; font-size: 1.2em; width: 120px; }
-  .sortable_heading {  margin: 0; float: left; margin: 5px; background: #eee; padding: 5px; width: 150px; }
+  .sortable_heading {  margin: 0; float: left; margin: 5px; background: var(--surface-muted); padding: 5px; width: 150px; }
   .sortable_heading_h3 { margin-left:10px; }
   </style>
   <script>

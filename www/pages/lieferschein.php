@@ -68,7 +68,7 @@ class Lieferschein extends GenLieferschein
 
         // SQL statement
         $sql = "SELECT SQL_CALC_FOUND_ROWS l.id,'<img src=./themes/{$app->Conf->WFconf['defaulttheme']}/images/details_open.png class=details>' as open, 'ENTWURF' as belegnr, DATE_FORMAT(l.datum,'%d.%m.%Y') as vom, if(l.lieferantenretoure=1,lfr.lieferantennummer,adr.kundennummer) as kundennummer,
-          CONCAT(" . $app->erp->MarkerUseredit("l.name", "l.useredittimestamp") . ", if(l.internebezeichnung!='',CONCAT('<br><i style=color:#999>',l.internebezeichnung,'</i>'),'')) as kunde,
+          CONCAT(" . $app->erp->MarkerUseredit("l.name", "l.useredittimestamp") . ", if(l.internebezeichnung!='',CONCAT('<br><i class=text-muted>',l.internebezeichnung,'</i>'),'')) as kunde,
               l.land as land, $projectCol as projekt, l.versandart as versandart,  
               l.lieferscheinart as art, UPPER(l.status) as status, l.id
                 FROM  lieferschein AS l 
@@ -100,7 +100,7 @@ class Lieferschein extends GenLieferschein
 
         // SQL statement
         $sql = "SELECT SQL_CALC_FOUND_ROWS l.id,'<img src=./themes/{$app->Conf->WFconf['defaulttheme']}/images/details_open.png class=details>' as open, l.belegnr, DATE_FORMAT(l.datum,'%d.%m.%Y') as vom, if(l.lieferantenretoure=1,lfr.lieferantennummer,adr.kundennummer) as kundennummer,
-          CONCAT(" . $app->erp->MarkerUseredit("l.name", "l.useredittimestamp") . ", if(l.internebezeichnung!='',CONCAT('<br><i style=color:#999>',l.internebezeichnung,'</i>'),'')) as kunde,
+          CONCAT(" . $app->erp->MarkerUseredit("l.name", "l.useredittimestamp") . ", if(l.internebezeichnung!='',CONCAT('<br><i class=text-muted>',l.internebezeichnung,'</i>'),'')) as kunde,
               l.land as land, $projectCol as projekt, l.versandart as versandart,  
               l.lieferscheinart as art, UPPER(l.status) as status, l.id
                 FROM  lieferschein AS l 
@@ -987,15 +987,15 @@ class Lieferschein extends GenLieferschein
                 ROUND(ap2.offen,7) > 0 AND 
                   ROUND(IFNULL(lpi2.menge,0) - IFNULL(r.menge,0) + IFNULL(r2.menge,0),7) < ROUND(ap2.offen,7) 
                   AND ROUND(IFNULL(r2.menge,0),7) < ROUND(ap2.offen,7),
-                CONCAT('<b style=\"color:red;\">',".$this->app->erp->FormatMenge('IFNULL(lpi2.menge,0)').",'</b>'),
+                CONCAT('<b class=\"text-error\">',".$this->app->erp->FormatMenge('IFNULL(lpi2.menge,0)').",'</b>'),
                 ".$this->app->erp->FormatMenge('IFNULL(lpi2.menge,0)')."
               ),
               if(
                 IFNULL(lpi2.menge,0)>0 AND a.lagerartikel=1,
-                CONCAT('<b style=\"color:red;\">',".$this->app->erp->FormatMenge('lpi2.menge').",'</b>'),
+                CONCAT('<b class=\"text-error\">',".$this->app->erp->FormatMenge('lpi2.menge').",'</b>'),
                 if(
                   a.lagerartikel=1,
-                  '<b style=\"color:red;\">aus</b>',
+                  '<b class=\"text-error\">aus</b>',
                   'kein Lagerartikel'
                 )
               )
@@ -2188,7 +2188,7 @@ class Lieferschein extends GenLieferschein
     $this->app->Tpl->Set('MESSAGE',"<div class=\"warning\">M&ouml;chten Sie eine Lieferschein jetzt anlegen? &nbsp;
         <input type=\"button\" onclick=\"window.location.href='index.php?module=lieferschein&action=create&anlegen=1'\" value=\"Ja - Lieferschein jetzt anlegen\"></div><br>");
     $this->app->Tpl->Set('TAB1',"
-        <table width=\"100%\" style=\"background-color: #fff; border: solid 1px #000;\" align=\"center\">
+        <table width=\"100%\" class=\"bg-surface border-default\" align=\"center\">
         <tr>
         <td align=\"center\">
         <br><b style=\"font-size: 14pt\">Lieferscheine in Bearbeitung</b>

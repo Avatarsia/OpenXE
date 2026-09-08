@@ -92,7 +92,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
                   DATE_FORMAT(z.von,'%H:%i') as von, DATE_FORMAT(z.bis,'%H:%i') as bis,
                   format((HOUR(TIMEDIFF(z.bis, z.von))) + MINUTE(TIMEDIFF(z.bis, z.von))/60,2) AS Dauer,
                   a.name as Mitarbeiter,z.art,
-                  if(z.art='Pause','<font color=green>Pause</font>',if(z.adresse_abrechnung!=0,CONCAT('<i style=color:#999>Kunde: ',b.name,' (',b.kundennummer,')</i><br>',z.aufgabe),z.aufgabe)) as Taetigkeit,
+                  if(z.art='Pause','<font color=green>Pause</font>',if(z.adresse_abrechnung!=0,CONCAT('<i class=text-muted>Kunde: ',b.name,' (',b.kundennummer,')</i><br>',z.aufgabe),z.aufgabe)) as Taetigkeit,
                   if(z.abrechnen > 0,'(A)',''),
                   p.abkuerzung,
                   z.id
@@ -174,8 +174,8 @@ class Zeiterfassung { //extends GenZeiterfassung {
         $width = array('1%', '1%', '1%', '1%', '5%', '20%','5%', '40%','5%','5%', '1%');
 
         //$findcols = array('open','Auswahl','z.von','von','bis','Dauer','Mitarbeiter','id');
-        $findcols = array('open', "z.von", 'z.von', 'z.bis', '(HOUR(TIMEDIFF(z.bis, z.von))) + MINUTE(TIMEDIFF(z.bis, z.von))/60', 'a.name','z.art',"if(z.adresse_abrechnung!=0,CONCAT('<i style=color:#999>Kunde: ',b.name,' (',b.kundennummer,')</i><br>',z.aufgabe),z.aufgabe)", "if(z.abrechnen > 0,'(A)','')",'p.abkuerzung', 'z.id');
-        $searchsql = array('z.id', 'z.von', 'z.bis', $this->app->erp->FormatPreis('(HOUR(TIMEDIFF(z.bis, z.von))) + MINUTE(TIMEDIFF(z.bis, z.von))/60',2), 'a.name','z.art', 'a.name', 'z.art', "if(z.adresse_abrechnung!=0,CONCAT('<i style=color:#999>Kunde: ',b.name,' (',b.kundennummer,')</i><br>',z.aufgabe),z.aufgabe)", "if(z.abrechnen > 0,'(A)','')", 'p.abkuerzung', "DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR'))",'b.name','b.kundennummer', );
+        $findcols = array('open', "z.von", 'z.von', 'z.bis', '(HOUR(TIMEDIFF(z.bis, z.von))) + MINUTE(TIMEDIFF(z.bis, z.von))/60', 'a.name','z.art',"if(z.adresse_abrechnung!=0,CONCAT('<i class=text-muted>Kunde: ',b.name,' (',b.kundennummer,')</i><br>',z.aufgabe),z.aufgabe)", "if(z.abrechnen > 0,'(A)','')",'p.abkuerzung', 'z.id');
+        $searchsql = array('z.id', 'z.von', 'z.bis', $this->app->erp->FormatPreis('(HOUR(TIMEDIFF(z.bis, z.von))) + MINUTE(TIMEDIFF(z.bis, z.von))/60',2), 'a.name','z.art', 'a.name', 'z.art', "if(z.adresse_abrechnung!=0,CONCAT('<i class=text-muted>Kunde: ',b.name,' (',b.kundennummer,')</i><br>',z.aufgabe),z.aufgabe)", "if(z.abrechnen > 0,'(A)','')", 'p.abkuerzung', "DATE_FORMAT(z.bis, GET_FORMAT(DATE,'EUR'))",'b.name','b.kundennummer', );
         $defaultorder = 2;
         $defaultorderdesc = 1;
         $menu = "<table cellpadding=0 cellspacing=0><tr><td nowrap><a href=\"index.php?module=zeiterfassung&action=create&id=%value%&back=zeiterfassung\"><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/edit.svg\" border=\"0\"></a>" . "&nbsp;<a href=\"#\" onclick=DeleteDialog(\"index.php?module=zeiterfassung&action=list&do=stornieren&lid=%value%&back=zeiterfassung\");><img src=\"themes/{$this->app->Conf->WFconf['defaulttheme']}/images/delete.svg\" border=\"0\"></a>" . "&nbsp;</td></tr></table>";
@@ -199,7 +199,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
                                             round(HOUR(TIMEDIFF(z.bis, z.von)) + MINUTE(TIMEDIFF(z.bis, z.von))/60,2) AS Dauer,
 
                                            a.name as Mitarbeiter,z.art,
-                                           if(z.adresse_abrechnung!=0,CONCAT('<i style=color:#999>Kunde: ',b.name,' (',b.kundennummer,')</i><br>',z.aufgabe),z.aufgabe) as Taetigkeit,
+                                           if(z.adresse_abrechnung!=0,CONCAT('<i class=text-muted>Kunde: ',b.name,' (',b.kundennummer,')</i><br>',z.aufgabe),z.aufgabe) as Taetigkeit,
                                             if(z.abrechnen > 0,'(A)',''),
                                              p.abkuerzung,
                                                z.id
@@ -1156,7 +1156,7 @@ class Zeiterfassung { //extends GenZeiterfassung {
     //DATE_FORMAT(z.bis, '%d.%m.') AS Datum, 
     $table = new EasyTable($this->app);
     $table->Query("SELECT 
-        if(z.adresse_abrechnung > 0, CONCAT('<i style=color:#999>Kunde: ', a.name, ' (', a.kundennummer,')</i><br />', z.aufgabe), z.aufgabe) as Taetigkeit,
+        if(z.adresse_abrechnung > 0, CONCAT('<i class=text-muted>Kunde: ', a.name, ' (', a.kundennummer,')</i><br />', z.aufgabe), z.aufgabe) as Taetigkeit,
         DATE_FORMAT(z.von,'%H:%i') AS Von,
         CONCAT(TIME_FORMAT(TIMEDIFF(z.bis, z.von),'%H:%i'),IF(z.abrechnen=1,' (A)','')) AS Dauer,
         p.abkuerzung as Projekt,

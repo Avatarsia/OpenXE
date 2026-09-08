@@ -8,7 +8,7 @@
 <!-- erstes tab -->
 
 <div id="tabs-1">
-	<table width="100%" style="background-color: #fff; border: solid 1px #000;" align="center">
+	<table width="100%" class="bg-surface border-default" align="center">
 		<tr><td align="center"><br><b style="font-size: 14pt">Artikelgruppen</b><br><br>Einträge können angelegt, bearbeitet und gelöscht werden.<br><br></td></tr>
 	</table>
 	[TABLE]
@@ -16,7 +16,7 @@
 </div>
 
 <div id="tabs-2">
-	<table width="100%" style="background-color: #fff; border: solid 1px #000;" align="center">
+	<table width="100%" class="bg-surface border-default" align="center">
 		<tr><td align="center"><br><b style="font-size: 14pt">Artikelgruppen:</b><br><br>Artikelgruppen f&uuml;r die Online-Shops.<br><br></td></tr>
 	</table>
 	[MESSAGE]

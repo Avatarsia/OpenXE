@@ -1,10 +1,10 @@
 <style>
   .auftraginfo_cell {
-    color: #636363;border: 1px solid #ccc;padding: 5px;
+    color: var(--text-body);border: 1px solid var(--border);padding: 5px;
   }
 
   .auftrag_cell {
-    color: #636363;border: 1px solid #fff;padding: 0px; margin:0px;
+    color: var(--text-body);border: 1px solid var(--surface);padding: 0px; margin:0px;
   }
 </style>
 <!-- gehort zu tabview -->

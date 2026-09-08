@@ -17,19 +17,19 @@
 		display: block;
 		width: 10px;
 		height: 10px;
-		background-color: #FFF;
+		background-color: var(--surface);
 		-webkit-transition: 0.35s;
 		transition: 0.35s;
 	}
 
 	.switch input + .box {
-		background-color: #eee;
-		color:#000;
+		background-color: var(--surface-muted);
+		color:var(--text-strong);
 	}
 
 	.switch input:checked + .box {
 		background-color: var(--turquoise);
-		color:#fff;
+		color:var(--text-inverse);
 	}
 	.switch .box {
 			border-radius: 2px;
