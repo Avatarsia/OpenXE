@@ -72,6 +72,11 @@ feature/woocommerce-batch-stock-sync
 # #267 Composer-based WC SDK — stacked on #265, must follow it
 refactor/woocommerce-composer-sdk
 
+# UI: Dark Theme (token-based CSS, per-user switch auto/light/dark).
+# Touches theme CSS, page templates and inline styles across www/pages --
+# keep after all feature/fix branches so it merges last.
+feature/dark-theme
+
 # Fork-specific override — MUST stay as the last entry. Sets
 # upgrade/data/remote.json to Avatarsia/OpenXE production so the file
 # matches HEAD after upgrade and the upgrader no longer flags it as
