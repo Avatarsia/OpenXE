@@ -73,27 +73,14 @@
                             {|Status|}: <span class="pill [UPDATE_STATUS_CLASS]">[UPDATE_STATUS]</span>
                         </div>
                     </div>
-                    <div class="card-footer">
-                        <button name="submit" value="reset_remote_origin" class="action-btn btn-primary">{|Quelle auf Original zurücksetzen|}</button>
-                    </div>
                 </section>
-                <section class="card" aria-labelledby="source-title">
-                    <h3 class="card-title" id="source-title">{|Upgrade-Quelle (Git)|}</h3>
+                <section class="card" aria-labelledby="branch-title">
+                    <h3 class="card-title" id="branch-title">{|Upgrade-Zweig|}</h3>
                     <div class="card-body">
-                        <p class="hint hint-spaced">{|Passe Remote-URL und Branch an, wenn du auf einen anderen Stand updaten willst.|}</p>
-                        <div class="form-stack">
-                            <div class="form-row">
-                                <label for="remote_host">Remote-URL</label>
-                                <input id="remote_host" class="input-inline" type="text" name="remote_host" value="[REMOTE_HOST]" autocomplete="off">
-                            </div>
-                            <div class="form-row">
-                                <label for="remote_branch">Branch</label>
-                                <input id="remote_branch" class="input-inline" type="text" name="remote_branch" value="[REMOTE_BRANCH]" autocomplete="off">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-footer">
-                        <button name="submit" value="save_remote" class="action-btn btn-primary">{|Quelle speichern|}</button>
+                        <p class="hint hint-spaced">{|Aktueller Zweig|}: <strong>OpenXE [CURRENTBRANCH]</strong></p>
+                        <p class="hint hint-spaced">{|Ab der Version 1.13 werden mehrere Zweige unterstützt. Beim Wechsel des Zweigs, i.d.R. auf eine höhere Version, wird eine Kompatibilitätsprüfung durchgeführt, bei Erfolg eine Migration, dann das eigentliche Upgrade. Zweige sind untereinander nicht kompatibel, ein Wechsel auf einen alten Zweig ist in der Regel nicht möglich.|}</p>
+                        <p class="hint hint-spaced"><strong class="branch-warning">{|Vor dem Zweigwechsel IMMER ein Backup erstellen!|}</strong></p>
+                        <div class="branch-list">[BRANCHES]</div>
                     </div>
                 </section>
             </div>
@@ -123,7 +110,7 @@
                             {|Für lange Läufe das Protokoll über das Aktualisieren-Symbol neu laden.|}
                             {|Bei hartnäckigen Fehlern hilft der Konsolen-Run:|} <code>./upgrade.sh -do</code> {|im Unterordner|} <code>upgrade</code>.
                             <br><br>
-                            <strong>{|Tipp:|}</strong> {|&bdquo;Quelle auf Original zurücksetzen&ldquo; springt zurück auf den Standard-Stand.|}
+                            <strong>{|Tipp:|}</strong> {|Zweigwechsel: anderen Zweig auswählen und &bdquo;Upgrade starten&ldquo; ausführen. Über die Konsole alternativ im Unterordner|} <code>upgrade</code>: <code>./upgrade.sh -do -m BRANCHNAME</code>
                             {|Rollback setzt nur den Code zurück &ndash; DB-Änderungen müssen separat behandelt werden.|}
                         </div>
                     </details>

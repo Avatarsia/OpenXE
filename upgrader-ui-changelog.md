@@ -1,5 +1,15 @@
 # Upgrader UI Changelog
 
+## 2026-09-08
+- Rebase auf upstream/master (`ac294993`, enthält Upstream `branchupgrade`):
+  - `remote.json` wird im Upstream-Listenformat gelesen (erster Eintrag mit
+    `active: true` ist die Upgrade-Quelle)
+  - Zweigauswahl (Radio-Liste) in eigener Karte, `do_upgrade` mit abweichendem
+    Zweig läuft als Upstream-Migration (`do_migrate`/`upgrade_branch`)
+  - Remote-Editor (`save_remote`/`reset_remote_origin`) entfernt — schrieb das
+    alte Objektformat und hätte die Zweigliste zerstört
+  - Engine: Objekt-Validierung durch `is_array`-Guard auf die Liste ersetzt
+
 ## 2026-05-20
 - Code-Review-Refaktorierung umgesetzt (6 Commits):
   - Admin-Auth-Guard am AJAX-Download-Endpunkt; tote `get_log_status`-Route
