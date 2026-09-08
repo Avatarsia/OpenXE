@@ -19,9 +19,9 @@
     border-radius: 0;
     position: relative;
     border: medium none;
-    box-shadow: rgba(0, 0, 0, 0.3) 0 0 5px 0;
-    color: rgb(255, 255, 255);
-    background-color: #FFF;
+    box-shadow: var(--shadow) 0 0 5px 0;
+    color: var(--text-inverse);
+    background-color: var(--surface);
     border-left: 10px solid transparent;
 
     -webkit-touch-callout: none;
@@ -94,9 +94,9 @@
     margin: 0 6px 0 0;
     padding: 5px 12px;
     border-radius: 5px;
-    color: #48494B;
-    border: 1px solid #D8D8D8;
-    background-color: #FCFCFC;
+    color: var(--text-body);
+    border: 1px solid var(--border);
+    background-color: var(--surface);
     white-space: nowrap;
 }
 
@@ -106,7 +106,7 @@
     bottom: 0;
     width: 100%;
     height: 4px;
-    background-color: #000;
+    background-color: var(--text-strong);
     opacity: 0.2;
 }
 
@@ -116,22 +116,22 @@
 
 .notification.noty_container_type_default,
 .notification.noty_container_type_alert {
-    color: #48494B;
-    background-color: #FCFCFC;
-    border-left: 10px solid #CCC;
+    color: var(--text-body);
+    background-color: var(--surface);
+    border-left: 10px solid var(--border);
 }
 
 .notification.noty_container_type_default .noty_buttons button,
 .notification.noty_container_type_alert .noty_buttons button {
-    color: #48494B;
-    border-color: #CCC;
+    color: var(--text-body);
+    border-color: var(--border);
 }
 
 /**
     TYPE INFORMATION
 */
 .notification.noty_container_type_information {
-    color: #FFF;
+    color: var(--text-inverse);
     background-color: #42B8C4;
     border-left: 10px solid #34929B;
 }
@@ -146,7 +146,7 @@
  */
 
 .notification.noty_container_type_success {
-    color: #FFF;
+    color: var(--text-inverse);
     background-color: #A2D624;
     border-left: 10px solid #82AA1C;
 }
@@ -161,7 +161,7 @@
  */
 
 .notification.noty_container_type_warning {
-    color: #FFF;
+    color: var(--text-inverse);
     background-color: #F0A52E;
     border-left: 10px solid #BE8024;
 }
@@ -176,7 +176,7 @@
  */
 
 .notification.noty_container_type_error {
-    color: #FFF;
+    color: var(--text-inverse);
     background-color: #FD5653;
     border-left: 10px solid #C84441;
 }

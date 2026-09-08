@@ -17,7 +17,7 @@ cyan #27e3e5
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: var(--overlay);
     display: table;
 }
 
@@ -58,7 +58,7 @@ cyan #27e3e5
 .click-by-click-assistant h2,
 .click-by-click-assistant h3 {
     line-height: 22px;
-    color: #25233A;
+    color: var(--text-strong);
     opacity: 0.7;
     text-align: center;
     font-style: normal;
@@ -100,7 +100,7 @@ cyan #27e3e5
 .click-by-click-assistant .errorMsg {
     text-align: center;
     padding-top: 15px;
-    color: #f44336;
+    color: var(--error);
 }
 
 .click-by-click-assistant .container {
@@ -123,8 +123,8 @@ cyan #27e3e5
 
 .click-by-click-assistant .page {
     border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.33);
-    background-color: #fff;
+    box-shadow: 0 2px 8px var(--shadow);
+    background-color: var(--surface);
 }
 
 .click-by-click-assistant .media-youtube {
@@ -177,7 +177,7 @@ cyan #27e3e5
     line-height: 41px;
     padding: 0;
     color: var(--button-secondary-color);
-    border: 1px solid rgba(128, 128, 128, 0.2);
+    border: 1px solid var(--border);
     box-shadow: 5px 5px 15px rgba(128, 128, 128, 0.05);
     font-style: normal;
     font-weight: normal;
@@ -266,7 +266,7 @@ Input Styles
 .click-by-click-assistant .app-row-container .add-row.inactive {
     cursor: auto;
     pointer-events: none;
-    color: #b7b7be;
+    color: var(--text-muted);
 }
 
 .click-by-click-assistant .app-input-row {
@@ -315,7 +315,7 @@ Input Styles
 }
 
 .click-by-click-assistant .container a {
-    color: #929292;
+    color: var(--text-color);
 }
 
 .click-by-click-assistant .app-input {
@@ -340,12 +340,12 @@ Input Styles
 
 
 .click-by-click-assistant .app-input.input-error *:not(input) {
-    color: #f44336;
+    color: var(--error);
 }
 
 .click-by-click-assistant .app-input.input-error input,
 .click-by-click-assistant .app-input.input-error select {
-    border-bottom-color: #f44336;
+    border-bottom-color: var(--error);
 }
 
 .click-by-click-assistant .app-input .input-error {
@@ -378,11 +378,11 @@ Input Styles
     font-weight: normal;
     font-size: 14px;
     line-height: 17px;
-    color: #25233A;
+    color: var(--text-strong);
     padding: 10px 10px 10px 5px;
     display: block;
     border: none;
-    border-bottom: 1px solid #d9d9d9;
+    border-bottom: 1px solid var(--textfield-border);
     border-radius: 0;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -405,7 +405,7 @@ Input Styles
 }
 
 .click-by-click-assistant .app-input label {
-    color: #b7b7be;
+    color: var(--text-muted);
     font-size: 14px;
     line-height: 17px;
     font-weight: normal;
@@ -438,7 +438,7 @@ Input Styles
     right: 0;
     margin-top: -2.5px;
     pointer-events: none;
-    color: #e6e6e6;
+    color: var(--border);
 }
 
 .click-by-click-assistant .app-input input:focus ~ label,
@@ -464,7 +464,7 @@ Input Styles
 
 .click-by-click-assistant .app-pagination div {
     display: inline-block;
-    background-color: #d9d9d9;
+    background-color: var(--border);
     width: 5px;
     height: 5px;
     border-radius: 5px;
@@ -476,7 +476,7 @@ Input Styles
 }
 
 .click-by-click-assistant .app-pagination div.active {
-    background-color: #a0a0a0;
+    background-color: var(--border-strong);
 }
 
 .click-by-click-assistant .spinner {

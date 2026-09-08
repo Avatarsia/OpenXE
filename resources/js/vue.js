@@ -26,6 +26,14 @@ const OpenXePreset = definePreset(Aura, {
                 content: {
                     background: 'transparent'
                 }
+            },
+            dark: {
+                formField: {
+                    color: '#D5D9E2'
+                },
+                content: {
+                    background: 'transparent'
+                }
             }
         }
     }

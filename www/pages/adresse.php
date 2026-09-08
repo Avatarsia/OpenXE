@@ -393,7 +393,7 @@ class Adresse extends GenAdresse {
 
         $where = " u.ustprf_id = '$ustprfid'";
 
-        $sql = "SELECT SQL_CALC_FOUND_ROWS u.id, DATE_FORMAT(u.zeit, '%d.%m.%Y %H:%i:%s'), IF(u.daten != '', CONCAT(u.bemerkung, '<br /><i style=color:#999>', u.daten,'</i>'), u.bemerkung), u.bearbeiter, u.id FROM ustprf_protokoll u";
+        $sql = "SELECT SQL_CALC_FOUND_ROWS u.id, DATE_FORMAT(u.zeit, '%d.%m.%Y %H:%i:%s'), IF(u.daten != '', CONCAT(u.bemerkung, '<br /><i class=text-muted>', u.daten,'</i>'), u.bemerkung), u.bearbeiter, u.id FROM ustprf_protokoll u";
 
         $count = "SELECT COUNT(u.id) FROM ustprf_protokoll u WHERE $where";
     }
@@ -6278,7 +6278,7 @@ function AdresseVerein()
     $interne_bemerkung = $this->app->DB->Select("SELECT interne_bemerkung FROM lieferadressen WHERE id = '$id' AND interne_bemerkung != '' LIMIT 1");
     $hinweis = $this->app->DB->Select("SELECT hinweis FROM lieferadressen WHERE id = '$id' AND interne_bemerkung != '' LIMIT 1");
 
-    $this->app->Tpl->Set('TABELLE', "<table width='100%'><tr><td style='background-color:#e0e0e0'><b>Interne Bemerkung</b></td></tr>");
+    $this->app->Tpl->Set('TABELLE', "<table width='100%'><tr><td class='bg-surface-muted'><b>Interne Bemerkung</b></td></tr>");
 
     if($interne_bemerkung != ''){
         $this->app->Tpl->Add('TABELLE',"<tr><td>".$interne_bemerkung."</td></tr>");
@@ -6286,7 +6286,7 @@ function AdresseVerein()
       $this->app->Tpl->Add('TABELLE', "<tr><td><div class=\"info\">Keine Daten vorhanden!</div></td></tr>");
     }
 
-    $this->app->Tpl->Add('TABELLE', "<table width='100%'><tr><td style='background-color:#e0e0e0'><b>Lieferhinweis</b></td></tr>");
+    $this->app->Tpl->Add('TABELLE', "<table width='100%'><tr><td class='bg-surface-muted'><b>Lieferhinweis</b></td></tr>");
     if($hinweis != ''){
         $this->app->Tpl->Add('TABELLE',"<tr><td>".$hinweis."</td></tr>");
     }else{
@@ -6304,7 +6304,7 @@ function AdresseVerein()
 
     $interne_bemerkung = $this->app->DB->Select("SELECT interne_bemerkung FROM ansprechpartner WHERE id = '$id' AND interne_bemerkung != '' LIMIT 1");
     if($interne_bemerkung != ""){
-      $this->app->Tpl->Set("TABELLE", "<table width='100%'><tr><td style='background-color:#e0e0e0'><b>Interne Bemerkung</b></td></tr><tr><td>".$interne_bemerkung."</td></tr></table>");
+      $this->app->Tpl->Set("TABELLE", "<table width='100%'><tr><td class='bg-surface-muted'><b>Interne Bemerkung</b></td></tr><tr><td>".$interne_bemerkung."</td></tr></table>");
     }else{
       $this->app->Tpl->Set("TABELLE", "<div class=\"info\">Keine Daten vorhanden!</div>");
     }
@@ -6447,7 +6447,7 @@ function AdresseVerein()
     $sql = '
       SELECT
         DATE_FORMAT(a.datum, "%d.%m.%Y %H:%i") AS datum,
-        if(ifnull(a.internebezeichnung,\'\') = \'\', a.title, concat(a.title,\'<br /><i style="color:grey">\',a.internebezeichnung,\'</i>\')) AS bezeichnung,
+        if(ifnull(a.internebezeichnung,\'\') = \'\', a.title, concat(a.title,\'<br /><i class="text-muted">\',a.internebezeichnung,\'</i>\')) AS bezeichnung,
         a.ansprechpartner,
         a.abkuerzung AS projekt,
         a.bearbeiter,

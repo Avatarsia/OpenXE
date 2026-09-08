@@ -1,0 +1,24 @@
+/*
+    Utility classes for token based colors.
+    Token source: color3.css
+*/
+
+.bg-surface        { background-color: var(--surface); }
+.bg-surface-alt    { background-color: var(--surface-alt); }
+.bg-surface-muted  { background-color: var(--surface-muted); }
+.bg-surface-strong { background-color: var(--surface-strong); }
+.bg-muted-strong   { background-color: var(--border-strong); }
+.bg-overlay-muted  { background: var(--overlay-muted); }
+.bg-warning-soft   { background-color: var(--warning-soft); }
+.bg-success-soft   { background-color: var(--success-soft); }
+.bg-error-soft     { background-color: var(--error-soft); }
+.bg-accent-soft    { background-color: var(--accent-soft); }
+.text-strong       { color: var(--text-strong); }
+.text-body         { color: var(--text-body); }
+.text-muted        { color: var(--text-muted); }
+.text-inverse      { color: var(--text-inverse); }
+.text-error        { color: var(--error); }
+.text-success      { color: var(--success); }
+.text-warning      { color: var(--warning-accent); }
+.text-accent       { color: var(--accent); }
+.border-default    { border: 1px solid var(--border); }

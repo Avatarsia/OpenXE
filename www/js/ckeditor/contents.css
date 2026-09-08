@@ -206,3 +206,15 @@ a > img {
 	max-height: 1080px;
 	margin:0 auto;
 }
+
+/* Dark theme: class is set on the editor document by themes/new/js/colorscheme.js */
+html.openXeDarkMode body
+{
+	background-color: #1E2230;
+	color: #D5D9E2;
+}
+
+html.openXeDarkMode a
+{
+	color: #5991FF;
+}

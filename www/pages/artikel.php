@@ -825,7 +825,7 @@ class Artikel extends GenArtikel {
                        ''
                      ),
                      IF(art.mindesthaltbarkeitsdatum = 1,
-                      CONCAT(' <br /><i style=\"color:#aaa;\">', 
+                      CONCAT(' <br /><i class=\"text-muted\">',
                         IFNULL(
                           (
                             SELECT CONCAT(IFNULL(mhddatum,''),' ',IFNULL(charge,'') ) 
@@ -838,7 +838,7 @@ class Artikel extends GenArtikel {
                       ),
                       IF(
                         art.chargenverwaltung > 0,
-                        CONCAT(' <br /><i style=\"color:#aaa;\">',
+                        CONCAT(' <br /><i class=\"text-muted\">',
                           IFNULL(
                             (
                               SELECT IFNULL(bezeichnung,'') 
@@ -870,7 +870,7 @@ class Artikel extends GenArtikel {
                      CONCAT(
                         lpi.referenz,
                                              IF(art.mindesthaltbarkeitsdatum = 1,
-                      CONCAT(' <br /><i style=\"color:#aaa;\">', 
+                      CONCAT(' <br /><i class=\"text-muted\">',
                         IFNULL(
                           (
                             SELECT CONCAT(IFNULL(mhddatum,''),' ',IFNULL(charge,'') ) 
@@ -883,7 +883,7 @@ class Artikel extends GenArtikel {
                       ),
                       IF(
                         art.chargenverwaltung > 0,
-                        CONCAT(' <br /><i style=\"color:#aaa;\">',
+                        CONCAT(' <br /><i class=\"text-muted\">',
                           IFNULL(
                             (
                               SELECT IFNULL(bezeichnung,'') 
@@ -947,7 +947,7 @@ class Artikel extends GenArtikel {
         $sql = "SELECT SQL_CALC_FOUND_ROWS 
                     s.id,  
                     CONCAT('<a href=\"index.php?module=artikel&action=edit&id=',a.id,'\" target=\"_blank\">',a.name_de,'</a>&nbsp;',
-                    IF(s.art='it','<br><i style=color:#999>- Informationsteil/Dienstleistung</i>',''),IF(s.art='bt','<br><i style=color:#999>- Beistellung</i>',''), COALESCE((SELECT GROUP_CONCAT('<br><i style=color:#999>- ', art.nummer, ' ', art.name_de, ' (', alt.reason, ')', '</i>' SEPARATOR '') FROM parts_list_alternative AS alt INNER JOIN artikel AS art ON art.id = alt.alternative_article_id WHERE alt.parts_list_id = s.id), '')) as artikel,
+                    IF(s.art='it','<br><i class=text-muted>- Informationsteil/Dienstleistung</i>',''),IF(s.art='bt','<br><i class=text-muted>- Beistellung</i>',''), COALESCE((SELECT GROUP_CONCAT('<br><i class=text-muted>- ', art.nummer, ' ', art.name_de, ' (', alt.reason, ')', '</i>' SEPARATOR '') FROM parts_list_alternative AS alt INNER JOIN artikel AS art ON art.id = alt.alternative_article_id WHERE alt.parts_list_id = s.id), '')) as artikel,
                     CONCAT('<a href=\"index.php?module=artikel&action=edit&id=',a.id,'\" target=\"_blank\">',a.nummer,'</a>') as nummer,
                     s.referenz,
                     trim(s.menge)+0 as menge, a.einheit,
@@ -1001,7 +1001,7 @@ class Artikel extends GenArtikel {
           $menu .= "</tr>";
         $menu .= "</table>";
         
-        $sql = "SELECT SQL_CALC_FOUND_ROWS p.id, a.nummer, CONCAT(a.name_de, IF(p.reason != '', CONCAT('<br><i style=color:#999>- Grund: ',p.reason,'</i>'),'')), p.id
+        $sql = "SELECT SQL_CALC_FOUND_ROWS p.id, a.nummer, CONCAT(a.name_de, IF(p.reason != '', CONCAT('<br><i class=text-muted>- Grund: ',p.reason,'</i>'),'')), p.id
                 FROM parts_list_alternative p
                 LEFT JOIN stueckliste s ON p.parts_list_id = s.id
                 LEFT JOIN artikel a ON p.alternative_article_id = a.id";
@@ -5001,11 +5001,11 @@ class Artikel extends GenArtikel {
         //$tpl5 .='<td>'.number_format($summe_fehlende_preise_max,2,',','').'</td>';
       }
 
-      $this->app->Tpl->Add('TABELLE',"<tr style=\"background-color:#e0e0e0;display:;\"><td>Anzahl</td>".$tpl.'</tr>');
+      $this->app->Tpl->Add('TABELLE',"<tr class=\"bg-surface-muted\" style=\"display:;\"><td>Anzahl</td>".$tpl.'</tr>');
 
       $this->app->Tpl->Add('TABELLE','<tr><td>Gesamtpreis</td>'.$tpl2.'</tr>');
 
-      $this->app->Tpl->Add('TABELLE',"<tr style=\"background-color:#e0e0e0;display:;\"><td nowrap>Anzahl fehlende Preise f&uuml;r Staffel&nbsp;</td>".$tpl3."</tr>");
+      $this->app->Tpl->Add('TABELLE',"<tr class=\"bg-surface-muted\" style=\"display:;\"><td nowrap>Anzahl fehlende Preise f&uuml;r Staffel&nbsp;</td>".$tpl3."</tr>");
 
       $this->app->Tpl->Add('TABELLE',"<tr><td>Zwischensumme (falls Preise fehlen)</td>".$tpl22."</tr>");
 
@@ -5396,7 +5396,7 @@ class Artikel extends GenArtikel {
     if($seriennummern!=='vomprodukteinlagern' && $chargenverwaltung <1 && $mindesthaltbarkeitsdatum!='1')
     {
       $table->Query("SELECT CONCAT(l.bezeichnung,' / ',lp.kurzbezeichnung, if(lp.sperrlager,' (Kein Auto-Versand Lager)',''),
-        if(lp.poslager,' (POS Lager)',''),if(lp.verbrauchslager,' (Verbrauchslager)',''),if(lp.autolagersperre,' (Nachschublager)',''),if(isnull(lpi.inventur),'',concat(' <i style=\"color:red;\">(Inventurwert: ',(trim(lpi.inventur)+0),')</i>'))) as lager , trim(lpi.menge)+0 as menge, 
+        if(lp.poslager,' (POS Lager)',''),if(lp.verbrauchslager,' (Verbrauchslager)',''),if(lp.autolagersperre,' (Nachschublager)',''),if(isnull(lpi.inventur),'',concat(' <i class=\"text-error\">(Inventurwert: ',(trim(lpi.inventur)+0),')</i>'))) as lager , trim(lpi.menge)+0 as menge,
         $artikelvpe as VPE,
         p.abkuerzung as projekt, 
           lpi.id FROM lager_platz_inhalt lpi 
@@ -7689,9 +7689,9 @@ class Artikel extends GenArtikel {
 
     $this->app->YUI->CkEditor('artikelbeschreibung_de_anzeige','belege');
 
-    $this->app->Tpl->Set('ARTIKEL_DE_ANZEIGE','<input type="text" name="" readonly style="background-color:#eee; border-color:#ddd;" size="70" maxlength="60" value="'.htmlentities($artikel_de_anzeige).'">');
-    $this->app->Tpl->Set('KURZTEXT_DE_ANZEIGE','<textarea readonly rows="2" cols="70" readonly style="background-color:#eee; border-color:#ddd;">'.$kurztext_de_anzeige.'</textarea>');
-    $this->app->Tpl->Set('ARTIKELBESCHREIBUNG_DE_ANZEIGE','<textarea style="background-color:#eee; border-color:#ddd;" readonly rows="5" cols="70" style="color:grey" name="artikelbeschreibung_de_anzeige" id="artikelbeschreibung_de_anzeige">'.$artikelbeschreibung_de_anzeige.'</textarea>');
+    $this->app->Tpl->Set('ARTIKEL_DE_ANZEIGE','<input type="text" name="" readonly class="bg-surface-muted border-default" size="70" maxlength="60" value="'.htmlentities($artikel_de_anzeige).'">');
+    $this->app->Tpl->Set('KURZTEXT_DE_ANZEIGE','<textarea readonly rows="2" cols="70" readonly class="bg-surface-muted border-default">'.$kurztext_de_anzeige.'</textarea>');
+    $this->app->Tpl->Set('ARTIKELBESCHREIBUNG_DE_ANZEIGE','<textarea class="bg-surface-muted border-default text-muted" readonly rows="5" cols="70" name="artikelbeschreibung_de_anzeige" id="artikelbeschreibung_de_anzeige">'.$artikelbeschreibung_de_anzeige.'</textarea>');
 
     parent::ArtikelEdit();
 
@@ -8236,12 +8236,11 @@ class Artikel extends GenArtikel {
 
 
       $findcols .= "
-        <div style=\"background: #eeeeee;
+        <div class=\"bg-surface-muted border-default\" style=\"
 height: 350px;
 overflow: scroll;
           font-size:7pt;
 width: 1050px;
-border: 1px solid #000;
 padding: 10px;\">
            <table border=0 cellpadding=0 cellspacing=0>";       
            while (($data = fgetcsv($handle, 1000, $this->app->User->GetParameter("artikel_stueckliste_delimiter"))) !== FALSE) {
@@ -8249,11 +8248,11 @@ padding: 10px;\">
 
              if($row==1)
              {
-               $findcols .= "<tr><td></td><td colspan=\"".($num)."\" 
-                 style=\"border: 1px solid black; background-color:#ffcc00;font-size:10pt;\">&nbsp;Spalten ausw&auml;hlen</td></tr>";
-               $findcols .= "<tr><td style=\"border: 1px solid black; background-color:#ff6666; font-size:10pt;\" nowrap>&nbsp;Erste Zeile mit Daten&nbsp;<br>&nbsp;ausw&auml;hlen</td>";
+               $findcols .= "<tr><td></td><td colspan=\"".($num)."\" class=\"border-default\"
+                 style=\"background-color:#ffcc00;font-size:10pt;\">&nbsp;Spalten ausw&auml;hlen</td></tr>";
+               $findcols .= "<tr><td class=\"border-default\" style=\"background-color:#ff6666; font-size:10pt;\" nowrap>&nbsp;Erste Zeile mit Daten&nbsp;<br>&nbsp;ausw&auml;hlen</td>";
                for ($c=0; $c < $num; $c++) {
-                 $findcols .= "<td style=\"border: 1px solid black; background-color:#FFCC00; padding:5px;\">
+                 $findcols .= "<td class=\"border-default\" style=\"background-color:#FFCC00; padding:5px;\">
                    &nbsp;&nbsp;<select name=\"cols[$c]\"><option></option>";
 
                  foreach($fields as $key=>$value){
@@ -8274,11 +8273,11 @@ padding: 10px;\">
                $findcols .= '</tr>';
              }
              if($row_post==$row) $checked="checked"; else $checked="";
-             $findcols .= "<tr><td style=\"border: 1px solid black; background-color:#ff6666; padding:5px;\" align=\"center\">
+             $findcols .= "<tr><td class=\"border-default\" style=\"background-color:#ff6666; padding:5px;\" align=\"center\">
                <input type=\"radio\" value=\"$row\" name=\"row\" $checked></td>";
              $row++;
              for ($c=0; $c < $num; $c++) {
-               $findcols .= "<td style=\"border: 1px solid black;\">".$data[$c] . "&nbsp;</td>";
+               $findcols .= "<td class=\"border-default\">".$data[$c] . "&nbsp;</td>";
              }
              $findcols .= '</tr>';
              if($row > 10) {

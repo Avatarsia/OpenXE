@@ -1013,11 +1013,11 @@ class Zahlungsweisen {
 
         if(trim($input['bezeichnung']) == ''){
           $error = "Bitte alle Pflichtfelder ausfüllen!";
-          $this->app->Tpl->Set('MSGBEZEICHNUNG',' <span style="color:red">Pflichtfeld!</span>');
+          $this->app->Tpl->Set('MSGBEZEICHNUNG',' <span class="text-error">Pflichtfeld!</span>');
         }
         if(trim($input['type']) == ''){
           $error = "Bitte alle Pflichtfelder ausfüllen!";
-          $this->app->Tpl->Set('MSGTYP',' <span style="color:red">Pflichtfeld!</span>');
+          $this->app->Tpl->Set('MSGTYP',' <span class="text-error">Pflichtfeld!</span>');
         }
 
         if($error!=''){

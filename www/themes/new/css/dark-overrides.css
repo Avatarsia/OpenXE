@@ -1,0 +1,1014 @@
+/*
+    dark-overrides.css
+
+    Dark-Mode-Overrides fuer Fremdbibliotheken (jQuery UI, DataTables, Bootstrap-Rest,
+    colorPicker, aciTree, FullCalendar, tooltipinline, jsGantt, CKEditor, TinyMCE).
+
+    Regeln:
+    - Alle Selektoren sind mit "html.openXeDarkMode" gescoped. Die Klasse setzt
+      themes/new/js/colorscheme.js (auto|light|dark; auto folgt prefers-color-scheme).
+    - Farben ausschliesslich ueber die Tokens aus color3.css / styles.css (var(--token)).
+    - Die Original-Dateien der Bibliotheken werden NICHT editiert.
+    - Spezifitaet: Die Selektoren spiegeln die Original-Selektoren und ergaenzen einen
+      Wrapper (.dataTables_wrapper, body) bzw. sind identisch aufgebaut und stehen
+      spaeter im Cascade. Kein nth-child.
+    - Bibliotheken, deren CSS erst im Body oder per JS nachgeladen wird (aciTree,
+      FullCalendar, tooltipinline, jsGantt, CKEditor, TinyMCE), stehen im Cascade NACH
+      dieser Datei. Deshalb bekommen deren Selektoren einen "body "-Praefix, der die
+      Spezifitaet um ein Element anhebt und damit unabhaengig von der Reihenfolge gewinnt.
+    - !important nur dort, wo die Bibliothek selbst !important setzt (jeweils kommentiert).
+*/
+
+
+/* ------------------------------------------------------------------
+   1) jQuery UI 1.10.3 - Theme "start"
+   Quelle: themes/new/css/start/jquery-ui-1.10.3.custom.css
+   Laedt vor dieser Datei -> gleiche Spezifitaet genuegt.
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode .ui-widget-content {
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text-body);
+}
+
+html.openXeDarkMode .ui-widget-content a {
+    color: var(--link-color);
+}
+
+/* Original: background: <farbe> url(images/ui-bg_gloss-wave_*.png) */
+html.openXeDarkMode .ui-state-active,
+html.openXeDarkMode .ui-widget-content .ui-state-active,
+html.openXeDarkMode .ui-widget-header .ui-state-active {
+    background-color: var(--surface-strong);
+    background-image: none;
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode .ui-state-highlight,
+html.openXeDarkMode .ui-widget-content .ui-state-highlight,
+html.openXeDarkMode .ui-widget-header .ui-state-highlight {
+    background-color: var(--surface);
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode .ui-state-highlight a,
+html.openXeDarkMode .ui-widget-content .ui-state-highlight a,
+html.openXeDarkMode .ui-widget-header .ui-state-highlight a {
+    color: var(--warning-accent);
+}
+
+/* Fehlerflaeche bleibt rot (Farbsemantik), nur die Bitmap wird entfernt */
+html.openXeDarkMode .ui-state-error,
+html.openXeDarkMode .ui-widget-content .ui-state-error,
+html.openXeDarkMode .ui-widget-header .ui-state-error {
+    background-image: none;
+}
+
+/* Original: background: #aaaaaa url(images/ui-bg_flat_75_aaaaaa_40x100.png) */
+html.openXeDarkMode .ui-widget-overlay {
+    background-color: var(--body-background);
+    background-image: none;
+}
+
+/* Original: background: #999999 url(images/ui-bg_flat_55_999999_40x100.png) */
+html.openXeDarkMode .ui-widget-shadow {
+    background-color: var(--body-background);
+    background-image: none;
+}
+
+html.openXeDarkMode .ui-tooltip {
+    background: var(--surface);
+    color: var(--text-body);
+    border-color: var(--border-strong);
+    -webkit-box-shadow: 0 0 5px var(--shadow);
+    box-shadow: 0 0 5px var(--shadow);
+}
+
+html.openXeDarkMode .ui-datepicker .ui-datepicker-title select {
+    background-color: var(--textfield-background);
+    color: var(--textfield-color);
+    border-color: var(--textfield-border);
+}
+
+html.openXeDarkMode .ui-datepicker td span,
+html.openXeDarkMode .ui-datepicker td a {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode button.ui-state-default.ui-dialog-titlebar-close {
+    background: var(--surface);
+    color: var(--text-body);
+}
+
+html.openXeDarkMode .ui-tabs .ui-tabs-nav li a {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode .ui-menu .ui-menu-item a {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode .ui-menu .ui-menu-divider {
+    border-color: var(--border);
+}
+
+html.openXeDarkMode .ui-selectmenu-menu .ui-menu .ui-selectmenu-optgroup {
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------
+   2) DataTables 1.10.18 (+ Buttons, ColReorder, Responsive, RowGroup)
+   Quellen: js/datatables/datatables.min.css (Praefix .datatable-container),
+            themes/new/css/jquery.dataTables.min.css (ohne Praefix),
+            themes/new/css/buttons.dataTables.min.css
+   Der Wrapper .dataTables_wrapper liegt zwischen .datatable-container und der
+   Tabelle. Die Selektoren spiegeln die Originale mit .dataTables_wrapper statt
+   .datatable-container -> gleiche Spezifitaet, spaeter im Cascade, und gegenueber
+   der praefixlosen Variante eine Klasse mehr.
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable {
+    background: var(--surface);
+    color: var(--text-body);
+}
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable thead th,
+html.openXeDarkMode .dataTables_wrapper table.dataTable thead td {
+    border-top-color: var(--border);
+    border-bottom-color: var(--border);
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable tfoot th,
+html.openXeDarkMode .dataTables_wrapper table.dataTable tfoot td {
+    border-top-color: var(--border);
+    border-bottom-color: var(--border);
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable.no-footer {
+    border-bottom-color: var(--border);
+}
+
+html.openXeDarkMode .dataTables_wrapper.no-footer .dataTables_scrollBody {
+    border-bottom-color: var(--border);
+}
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable tbody tr {
+    background-color: var(--surface);
+}
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable.row-border tbody th,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.row-border tbody td,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody th,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody td {
+    border-top-color: var(--border);
+}
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable.cell-border tbody th,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.cell-border tbody td {
+    border-top-color: var(--border);
+    border-right-color: var(--border);
+}
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable.cell-border tbody tr th:first-child,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.cell-border tbody tr td:first-child {
+    border-left-color: var(--border);
+}
+
+/* Zebra */
+html.openXeDarkMode .dataTables_wrapper table.dataTable.stripe tbody tr.odd,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.odd {
+    background-color: var(--surface-alt);
+    border-bottom-color: var(--border);
+}
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable.stripe tbody tr.even,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.even {
+    background-color: var(--surface);
+}
+
+/* Hover-Zeilen */
+html.openXeDarkMode .dataTables_wrapper table.dataTable.hover tbody tr:hover,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr:hover,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.hover tbody tr.odd:hover,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.hover tbody tr.even:hover,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.odd:hover,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.even:hover {
+    background-color: var(--surface-muted);
+}
+
+/* Sortierte Spalte - Grundzustand */
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column tbody tr > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column tbody tr > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column tbody tr > .sorting_3,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr > .sorting_3 {
+    background-color: var(--surface-alt);
+}
+
+/* Sortierte Spalte - ungerade Zeilen */
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.odd > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.odd > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.odd > .sorting_3,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.stripe tbody tr.odd > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.stripe tbody tr.odd > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.stripe tbody tr.odd > .sorting_3 {
+    background-color: var(--surface-alt);
+}
+
+/* Sortierte Spalte - gerade Zeilen */
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.even > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.even > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.even > .sorting_3,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.stripe tbody tr.even > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.stripe tbody tr.even > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.stripe tbody tr.even > .sorting_3 {
+    background-color: var(--surface);
+}
+
+/* Sortierte Spalte - Hover */
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr:hover > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr:hover > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr:hover > .sorting_3,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.odd:hover > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.odd:hover > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.odd:hover > .sorting_3,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.even:hover > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.even:hover > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.display tbody tr.even:hover > .sorting_3,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.hover tbody tr:hover > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.hover tbody tr:hover > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.hover tbody tr:hover > .sorting_3,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.hover tbody tr.odd:hover > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.hover tbody tr.odd:hover > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.hover tbody tr.odd:hover > .sorting_3,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.hover tbody tr.even:hover > .sorting_1,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.hover tbody tr.even:hover > .sorting_2,
+html.openXeDarkMode .dataTables_wrapper table.dataTable.order-column.hover tbody tr.even:hover > .sorting_3 {
+    background-color: var(--surface-muted);
+}
+
+/* Steuerelemente um die Tabelle */
+html.openXeDarkMode .dataTables_wrapper .dataTables_length,
+html.openXeDarkMode .dataTables_wrapper .dataTables_filter,
+html.openXeDarkMode .dataTables_wrapper .dataTables_info,
+html.openXeDarkMode .dataTables_wrapper .dataTables_processing,
+html.openXeDarkMode .dataTables_wrapper .dataTables_paginate {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode .dataTables_wrapper .dataTables_filter input {
+    border-color: var(--textfield-border);
+    background-color: var(--textfield-background);
+    color: var(--textfield-color);
+}
+
+/* Original setzt einen weissen Verlauf ueber background: -*-gradient(...) */
+html.openXeDarkMode .dataTables_wrapper .dataTables_processing {
+    background-color: var(--surface);
+    background-image: none;
+    color: var(--text-body);
+}
+
+/*
+    !important noetig: die Library setzt "color: ... !important" auf
+    .paginate_button (datatables.min.css und jquery.dataTables.min.css).
+*/
+html.openXeDarkMode .dataTables_wrapper .dataTables_paginate .paginate_button {
+    color: var(--text-body) !important;
+}
+
+html.openXeDarkMode .dataTables_wrapper .dataTables_paginate .paginate_button.current,
+html.openXeDarkMode .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
+    color: var(--text-strong) !important;
+    border-color: var(--border-strong);
+    background-color: var(--surface-alt);
+    background-image: none;
+}
+
+html.openXeDarkMode .dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
+html.openXeDarkMode .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover,
+html.openXeDarkMode .dataTables_wrapper .dataTables_paginate .paginate_button.disabled:active {
+    color: var(--text-muted) !important;
+}
+
+html.openXeDarkMode .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    color: var(--text-inverse) !important;
+    border-color: var(--border-strong);
+    background-color: var(--surface-strong);
+    background-image: none;
+}
+
+html.openXeDarkMode .dataTables_wrapper .dataTables_paginate .paginate_button:active {
+    background-color: var(--surface-muted);
+    background-image: none;
+}
+
+/* Buttons-Extension. Panels liegen ausserhalb von .dataTables_wrapper -> body-Praefix. */
+html.openXeDarkMode body div.dt-button-collection {
+    border-color: var(--border);
+    background-color: var(--surface);
+    -webkit-box-shadow: 3px 3px 5px var(--shadow);
+    box-shadow: 3px 3px 5px var(--shadow);
+}
+
+html.openXeDarkMode body div.dt-button-info {
+    border-color: var(--border-strong);
+    color: var(--text-inverse);
+    -webkit-box-shadow: 3px 3px 8px var(--shadow);
+    box-shadow: 3px 3px 8px var(--shadow);
+}
+
+html.openXeDarkMode body div.dt-button-info h2 {
+    border-bottom-color: var(--border);
+    background-color: var(--surface-alt);
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode body div.dt-button-background {
+    background: var(--overlay);
+}
+
+html.openXeDarkMode body button.dt-button.disabled,
+html.openXeDarkMode body div.dt-button.disabled,
+html.openXeDarkMode body a.dt-button.disabled {
+    color: var(--text-muted);
+    border-color: var(--border);
+    background-color: var(--surface-alt);
+    background-image: none;
+}
+
+html.openXeDarkMode body button.dt-button:active:not(.disabled),
+html.openXeDarkMode body button.dt-button.active:not(.disabled),
+html.openXeDarkMode body div.dt-button:active:not(.disabled),
+html.openXeDarkMode body div.dt-button.active:not(.disabled),
+html.openXeDarkMode body a.dt-button:active:not(.disabled),
+html.openXeDarkMode body a.dt-button.active:not(.disabled) {
+    background-color: var(--surface-strong);
+    background-image: none;
+}
+
+/* RowGroup */
+html.openXeDarkMode .dataTables_wrapper table.dataTable tr.dtrg-group td {
+    background-color: var(--surface-strong);
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode .dataTables_wrapper table.dataTable tr.dtrg-group.dtrg-level-1 td,
+html.openXeDarkMode .dataTables_wrapper table.dataTable tr.dtrg-group.dtrg-level-2 td {
+    background-color: var(--surface-muted);
+}
+
+/* Responsive */
+html.openXeDarkMode .dataTables_wrapper table.dataTable > tbody > tr.child ul.dtr-details > li {
+    border-bottom-color: var(--border);
+}
+
+html.openXeDarkMode body div.dtr-modal div.dtr-modal-display {
+    background-color: var(--surface);
+    border-color: var(--border);
+    color: var(--text-body);
+    -webkit-box-shadow: 0 12px 30px var(--shadow);
+    box-shadow: 0 12px 30px var(--shadow);
+}
+
+html.openXeDarkMode body div.dtr-modal div.dtr-modal-close {
+    border-color: var(--border);
+    background-color: var(--surface-alt);
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body div.dtr-modal div.dtr-modal-close:hover {
+    background-color: var(--surface-muted);
+}
+
+html.openXeDarkMode body div.dtr-modal div.dtr-modal-background {
+    background: var(--overlay);
+}
+
+/* ColReorder */
+html.openXeDarkMode .dataTables_wrapper table.DTCR_clonedTable.dataTable {
+    background-color: var(--surface-alt);
+}
+
+/* ------------------------------------------------------------------
+   3) Bootstrap-Rest (css/bootstrap.min.css)
+   Die Datei ist auf Grid plus einige OpenXE-Container reduziert. Farbig sind
+   nur fieldset.white / .inside_white / fieldset.planzahl / .inside_planzahl.
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode fieldset.white,
+html.openXeDarkMode .inside_white {
+    background-color: var(--surface);
+}
+
+html.openXeDarkMode fieldset.planzahl {
+    background-color: var(--warning-soft);
+    border-color: var(--warning-soft);
+}
+
+html.openXeDarkMode .inside_planzahl {
+    background-color: var(--surface-strong);
+}
+
+/* ------------------------------------------------------------------
+   4) colorPicker (themes/new/css/colorPicker.css)
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode div.colorPicker-picker {
+    border-color: var(--border);
+}
+
+html.openXeDarkMode div.colorPicker-palette {
+    border-color: var(--border-strong);
+    background-color: var(--surface-alt);
+}
+
+html.openXeDarkMode div.colorPicker_hexWrap label {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode div.colorPicker_hexWrap input {
+    border-color: var(--textfield-border);
+    background-color: var(--textfield-background);
+    color: var(--textfield-color);
+}
+
+html.openXeDarkMode div.colorPicker-swatch {
+    border-color: var(--border-strong);
+}
+
+/* ------------------------------------------------------------------
+   5) aciTree (js/aciTree/css/aciTree.css)
+   Wird erst im Body nachgeladen -> body-Praefix fuer die Spezifitaet.
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode body .aciTree .aciTreeButton,
+html.openXeDarkMode body .aciTree .aciTreePush,
+html.openXeDarkMode body .aciTree .aciTreeItem,
+html.openXeDarkMode body .aciTree .aciTreeIcon,
+html.openXeDarkMode body .aciTree .aciTreeText,
+html.openXeDarkMode body .aciTree .aciTreeColumn {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body .aciTree .aciTreeDisabled > .aciTreeLine .aciTreeText,
+html.openXeDarkMode body .aciTree .aciTreeDisabled > .aciTreeLine .aciTreeColumn {
+    color: var(--text-muted);
+}
+
+html.openXeDarkMode body .aciTree .aciTreeLine.aciTreeHover .aciTreeItem {
+    background-color: var(--surface-muted);
+}
+
+html.openXeDarkMode body .aciTree .aciTreeFocus > .aciTreeLine .aciTreeItem {
+    border-color: var(--border);
+}
+
+html.openXeDarkMode body .aciTree .aciTreeSelected > .aciTreeLine .aciTreeItem {
+    background-color: var(--accent-soft);
+}
+
+html.openXeDarkMode body .aciTree.aciTreeFocus .aciTreeSelected > .aciTreeLine .aciTreeItem {
+    background-color: var(--accent-soft);
+}
+
+html.openXeDarkMode body .aciTree.aciTreeFocus .aciTreeFocus > .aciTreeLine .aciTreeItem {
+    border-color: var(--accent);
+}
+
+html.openXeDarkMode body .aciTree.aciTreeFullRow .aciTreeFocus > .aciTreeLine {
+    border-color: var(--border);
+}
+
+/* Original: linear-gradient(...) -> Flaeche statt Verlauf */
+html.openXeDarkMode body .aciTree.aciTreeFullRow .aciTreeLine.aciTreeHover {
+    background: var(--surface-muted);
+    background-image: none;
+}
+
+html.openXeDarkMode body .aciTree.aciTreeFullRow .aciTreeSelected > .aciTreeLine {
+    background: var(--surface-strong);
+    background-image: none;
+}
+
+html.openXeDarkMode body .aciTree.aciTreeFullRow.aciTreeFocus .aciTreeFocus > .aciTreeLine {
+    border-color: var(--accent);
+}
+
+html.openXeDarkMode body .aciTree.aciTreeFullRow.aciTreeFocus .aciTreeSelected > .aciTreeLine {
+    background: var(--accent-soft);
+    background-image: none;
+}
+
+html.openXeDarkMode body .aciTree.aciTreeFullRow.aciTreeFocus .aciTreeSelected > .aciTreeLine.aciTreeHover,
+html.openXeDarkMode body .aciTree.aciTreeFullRow .aciTreeSelected > .aciTreeLine.aciTreeHover {
+    background: var(--accent-soft);
+    background-image: none;
+}
+
+html.openXeDarkMode body .aciTree .aciTreeEdited input[type=text] {
+    border-color: var(--textfield-border);
+    background-color: var(--textfield-background);
+    color: var(--textfield-color);
+}
+
+html.openXeDarkMode body .aciTreeHelper {
+    color: var(--text-strong);
+    background-color: var(--accent-soft);
+    border-color: var(--accent);
+}
+
+html.openXeDarkMode body .aciTree.aciTreeColors .aciTreeOdd > .aciTreeLine {
+    background-color: var(--warning-soft);
+}
+
+html.openXeDarkMode body .aciTree.aciTreeColors .aciTreeEven > .aciTreeLine {
+    background-color: var(--success-soft);
+}
+
+/* ------------------------------------------------------------------
+   6) FullCalendar 1.6.7 (plugins/fullcalendar-1.6.7/fullcalendar.css)
+   Wird im Content nachgeladen -> body-Praefix.
+   Ereignisfarben (.fc-event) bleiben unveraendert (Farbsemantik).
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode body .fc-widget-header,
+html.openXeDarkMode body .fc-widget-content {
+    border-color: var(--border);
+}
+
+html.openXeDarkMode body .fc-state-highlight {
+    background: var(--warning-soft);
+}
+
+html.openXeDarkMode body .fc-cell-overlay {
+    background: var(--accent-soft);
+}
+
+/* Original: background-image: linear-gradient(<weiss>, <hellgrau>) */
+html.openXeDarkMode body .fc-state-default {
+    background-color: var(--surface-alt);
+    background-image: none;
+    border-color: var(--border);
+    color: var(--text-body);
+    text-shadow: none;
+    -webkit-box-shadow: none;
+    box-shadow: none;
+}
+
+html.openXeDarkMode body .fc-state-hover,
+html.openXeDarkMode body .fc-state-down,
+html.openXeDarkMode body .fc-state-active,
+html.openXeDarkMode body .fc-state-disabled {
+    color: var(--text-strong);
+    background-color: var(--surface-muted);
+}
+
+html.openXeDarkMode body .fc-state-down,
+html.openXeDarkMode body .fc-state-active {
+    background-color: var(--surface-strong);
+    background-image: none;
+}
+
+html.openXeDarkMode body .fc-widget-header .fc-agenda-divider-inner {
+    background: var(--surface-muted);
+}
+
+/* ------------------------------------------------------------------
+   7) tooltipinline.css (Inline-Hilfe, css/tooltipinline.css)
+   Wird per SCRIPTJAVASCRIPT nachgeladen -> body-Praefix.
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode body #wawitooltip {
+    background-color: var(--surface);
+    border-color: var(--accent);
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body #inlinehelp {
+    color: var(--text-body);
+    background: var(--surface);
+}
+
+html.openXeDarkMode body #inlinehelpheading {
+    color: var(--text-strong);
+    background-color: var(--surface);
+}
+
+html.openXeDarkMode body #inlinehelpheading .header-actions {
+    border-color: var(--border);
+}
+
+html.openXeDarkMode body #inlinehelpheading .header-headlines {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body #inlinehelpheading .header-headlines strong {
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode body #inlinehelpcontent {
+    background-color: var(--surface-alt);
+    border-color: var(--border);
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body #inlinehelpcontent .inlinehelp-recommendations {
+    border-bottom-color: var(--border);
+}
+
+html.openXeDarkMode body #inlinehelpmenu > div.rTabs > ul > li > a {
+    color: var(--text-muted);
+}
+
+html.openXeDarkMode body #faqaccordion .ui-accordion-header:after {
+    border-top-color: var(--border-strong);
+}
+
+html.openXeDarkMode body ul.firstlvl + hr {
+    border-color: var(--border);
+}
+
+html.openXeDarkMode body input#wikilink {
+    color: var(--text-body);
+}
+
+/* ------------------------------------------------------------------
+   8) jsGantt / fn-gantt (js/jsgantt/css/jsgantt.css)
+   Die Balkenfarben (ganttRed/Green/Gray/Orange) bleiben unveraendert,
+   nur die neutralen Flaechen und Rahmen werden umgesetzt.
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode body .gantt,
+html.openXeDarkMode body .gantt2 {
+    border-color: var(--border);
+}
+
+html.openXeDarkMode body .fn-gantt .leftPanel {
+    border-right-color: var(--border);
+}
+
+html.openXeDarkMode body .fn-gantt .leftPanel .fn-label {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body .fn-gantt .leftPanel .row0 {
+    border-top-color: var(--border);
+}
+
+html.openXeDarkMode body .fn-gantt .leftPanel .name,
+html.openXeDarkMode body .fn-gantt .leftPanel .desc {
+    border-bottom-color: var(--border);
+    background-color: var(--surface-alt);
+}
+
+html.openXeDarkMode body .fn-gantt .spacer {
+    background-color: var(--surface-alt);
+}
+
+html.openXeDarkMode body .fn-gantt .dataPanel {
+    border-right-color: var(--border);
+}
+
+html.openXeDarkMode body .fn-gantt .day,
+html.openXeDarkMode body .fn-gantt .date {
+    border-left-color: var(--border);
+    border-bottom-color: var(--border);
+    color: var(--text-body);
+    text-shadow: none;
+}
+
+html.openXeDarkMode body .fn-gantt .holiday,
+html.openXeDarkMode body .fn-gantt .today {
+    background-color: var(--warning-soft);
+}
+
+html.openXeDarkMode body .fn-gantt .sa,
+html.openXeDarkMode body .fn-gantt .sn {
+    color: var(--text-muted);
+    background-color: var(--surface-muted);
+}
+
+html.openXeDarkMode body .fn-gantt .wd {
+    background-color: var(--surface-alt);
+}
+
+html.openXeDarkMode body .fn-gantt .rightPanel .month,
+html.openXeDarkMode body .fn-gantt .rightPanel .year {
+    border-left-color: var(--border);
+    border-bottom-color: var(--border);
+    background-color: var(--surface-alt);
+    color: var(--text-body);
+    text-shadow: none;
+}
+
+html.openXeDarkMode body .fn-gantt-hint {
+    border-color: var(--warning-accent);
+    background-color: var(--warning-soft);
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body .fn-gantt .bottom {
+    background-color: var(--surface-alt);
+}
+
+html.openXeDarkMode body .fn-gantt .navigate {
+    border-top-color: var(--border);
+}
+
+html.openXeDarkMode body .fn-gantt .navigate .page-number span {
+    color: var(--text-body);
+}
+
+/* ------------------------------------------------------------------
+   9) CKEditor 4 - Chrome (js/ckeditor/skins/moono|moono-lisa|kama/editor.css)
+   Das Skin-CSS wird per JS nachgeladen -> body-Praefix.
+   Die Klassennamen sind bei allen drei Skins identisch.
+   Der Editor-Inhalt (Iframe) wird ueber contents.css behandelt (Task F).
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode body .cke_chrome {
+    border-color: var(--border);
+    -webkit-box-shadow: 0 0 3px var(--shadow);
+    box-shadow: 0 0 3px var(--shadow);
+}
+
+html.openXeDarkMode body .cke_inner {
+    background: var(--surface);
+    background-image: none;
+}
+
+/* Original: background-image: linear-gradient(...) plus heller inset-Schatten */
+html.openXeDarkMode body .cke_top {
+    border-color: var(--border);
+    background: var(--surface-alt);
+    background-image: none;
+    -webkit-box-shadow: none;
+    box-shadow: none;
+}
+
+html.openXeDarkMode body .cke_bottom {
+    border-top-color: var(--border);
+    background: var(--surface-alt);
+    background-image: none;
+    -webkit-box-shadow: none;
+    box-shadow: none;
+}
+
+html.openXeDarkMode body .cke_resizer {
+    border-right-color: var(--border-strong);
+}
+
+html.openXeDarkMode body .cke_resizer_rtl {
+    border-left-color: var(--border-strong);
+}
+
+html.openXeDarkMode body .cke_panel {
+    background-color: var(--surface);
+    border-color: var(--border);
+}
+
+html.openXeDarkMode body .cke_panel_grouptitle {
+    color: var(--text-strong);
+    border-bottom-color: var(--border);
+    background: var(--surface-alt);
+}
+
+html.openXeDarkMode body .cke_panel_listItem.cke_selected a,
+html.openXeDarkMode body .cke_panel_listItem a:hover,
+html.openXeDarkMode body .cke_panel_listItem a:focus,
+html.openXeDarkMode body .cke_panel_listItem a:active {
+    background-color: var(--surface-muted);
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode body a.cke_button_on {
+    background: var(--surface-strong);
+    border-color: var(--border-strong);
+}
+
+html.openXeDarkMode body a.cke_button_off:hover,
+html.openXeDarkMode body a.cke_button_off:focus,
+html.openXeDarkMode body a.cke_button_off:active {
+    background: var(--surface-muted);
+    border-color: var(--border-strong);
+}
+
+html.openXeDarkMode body .cke_button_label,
+html.openXeDarkMode body .cke_combo_text,
+html.openXeDarkMode body a.cke_path_item,
+html.openXeDarkMode body span.cke_path_empty {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body a.cke_path_item:hover,
+html.openXeDarkMode body a.cke_path_item:focus,
+html.openXeDarkMode body a.cke_path_item:active {
+    background-color: var(--surface-muted);
+}
+
+html.openXeDarkMode body .cke_button_arrow,
+html.openXeDarkMode body .cke_combo_arrow {
+    border-top-color: var(--text-body);
+}
+
+html.openXeDarkMode body .cke_toolbar_separator {
+    background-color: var(--border);
+}
+
+html.openXeDarkMode body .cke_combo_on a.cke_combo_button,
+html.openXeDarkMode body .cke_combo_off a.cke_combo_button:hover,
+html.openXeDarkMode body .cke_combo_off a.cke_combo_button:focus,
+html.openXeDarkMode body .cke_combo_off a.cke_combo_button:active {
+    background: var(--surface-muted);
+    border-color: var(--border-strong);
+}
+
+/* ------------------------------------------------------------------
+   10) TinyMCE 4 - Chrome (js/tinymce/skins/lightgray/skin.min.css)
+   Das Skin-CSS wird per JS nachgeladen -> body-Praefix.
+   Der Editor-Inhalt (Iframe) wird ueber content.min.css behandelt (Task F).
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode body .mce-container,
+html.openXeDarkMode body .mce-container *,
+html.openXeDarkMode body .mce-widget,
+html.openXeDarkMode body .mce-widget * {
+    color: var(--text-body);
+}
+
+/* Original: background-image: linear-gradient(<weiss>, <hellgrau>) */
+html.openXeDarkMode body .mce-panel {
+    border-color: var(--border);
+    background-color: var(--surface-alt);
+    background-image: none;
+}
+
+html.openXeDarkMode body .mce-window {
+    -webkit-box-shadow: 0 3px 7px var(--shadow);
+    box-shadow: 0 3px 7px var(--shadow);
+}
+
+html.openXeDarkMode body .mce-window-head {
+    border-bottom-color: var(--border);
+}
+
+html.openXeDarkMode body .mce-window-head .mce-close {
+    color: var(--text-muted);
+}
+
+html.openXeDarkMode body .mce-btn {
+    border-color: var(--border);
+    background-color: var(--surface-alt);
+    background-image: none;
+    text-shadow: none;
+}
+
+html.openXeDarkMode body .mce-btn:hover,
+html.openXeDarkMode body .mce-btn:focus {
+    color: var(--text-strong);
+    background-color: var(--surface-muted);
+    background-image: none;
+}
+
+html.openXeDarkMode body .mce-btn.mce-active,
+html.openXeDarkMode body .mce-btn.mce-active:hover,
+html.openXeDarkMode body .mce-btn:active {
+    background-color: var(--surface-strong);
+    background-image: none;
+}
+
+html.openXeDarkMode body .mce-btn button {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body .mce-btn i {
+    text-shadow: none;
+}
+
+html.openXeDarkMode body .mce-btn-flat:hover,
+html.openXeDarkMode body .mce-btn-flat.mce-active,
+html.openXeDarkMode body .mce-btn-flat:focus,
+html.openXeDarkMode body .mce-btn-flat:active {
+    background: var(--surface-muted);
+}
+
+html.openXeDarkMode body .mce-btn-group .mce-first {
+    border-left-color: var(--border);
+}
+
+html.openXeDarkMode body .mce-btn-group .mce-last {
+    border-right-color: var(--border);
+}
+
+html.openXeDarkMode body .mce-menubar {
+    border-color: var(--border);
+}
+
+html.openXeDarkMode body .mce-menubar .mce-menubtn button span,
+html.openXeDarkMode body .mce-menubtn span {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body .mce-menubar .mce-caret,
+html.openXeDarkMode body .mce-menu-item .mce-caret {
+    border-top-color: var(--text-body);
+}
+
+html.openXeDarkMode body .mce-menubar .mce-menubtn:hover,
+html.openXeDarkMode body .mce-menubar .mce-menubtn.mce-active,
+html.openXeDarkMode body .mce-menubar .mce-menubtn:focus {
+    background: var(--surface-muted);
+}
+
+html.openXeDarkMode body .mce-menu {
+    background: var(--surface);
+    border-color: var(--border);
+}
+
+html.openXeDarkMode body .mce-menu-item,
+html.openXeDarkMode body .mce-menu-item .mce-ico,
+html.openXeDarkMode body .mce-menu-item .mce-text {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body .mce-menu-item.mce-disabled .mce-text,
+html.openXeDarkMode body .mce-menu-item.mce-disabled .mce-ico,
+html.openXeDarkMode body .mce-menu-shortcut {
+    color: var(--text-muted);
+}
+
+html.openXeDarkMode body .mce-menu-item.mce-disabled:hover {
+    background: var(--surface-muted);
+}
+
+html.openXeDarkMode body .mce-menu-item-normal.mce-active {
+    background-color: var(--accent-soft);
+}
+
+html.openXeDarkMode body .mce-menu-item-normal.mce-active .mce-text {
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode body .mce-path-item {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body .mce-path-item:focus {
+    background: var(--surface-muted);
+    color: var(--text-strong);
+}
+
+html.openXeDarkMode body .mce-textbox {
+    background: var(--textfield-background);
+    border-color: var(--textfield-border);
+    color: var(--textfield-color);
+}
+
+html.openXeDarkMode body .mce-textbox.mce-disabled {
+    color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------
+   11) jQuery tag-editor
+   Quelle: css/jquery.tag-editor.css (per SCRIPTJAVASCRIPT im Body geladen,
+   z.B. ticket.php). Ueberschreibt .ui-widget-content erneut mit weiss/#555,
+   deshalb hier mit "body "-Praefix.
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode body .ui-widget-content {
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text-body);
+}
+
+html.openXeDarkMode body .ui-widget-content a {
+    color: var(--link-color);
+}
+
+html.openXeDarkMode body .ui-widget-content .ui-state-hover,
+html.openXeDarkMode body .ui-widget-header .ui-state-hover,
+html.openXeDarkMode body .ui-state-focus,
+html.openXeDarkMode body .ui-widget-content .ui-state-focus,
+html.openXeDarkMode body .ui-widget-header .ui-state-focus {
+    background: var(--surface-alt);
+}
+
+html.openXeDarkMode body .tag-editor {
+    border-color: var(--border);
+    color: var(--text-body);
+    background: var(--textfield-background);
+}
+
+html.openXeDarkMode body .tag-editor .placeholder {
+    color: var(--text-muted);
+}
+
+html.openXeDarkMode body .tag-editor input {
+    color: var(--textfield-color);
+}
+

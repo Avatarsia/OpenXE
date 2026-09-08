@@ -199,7 +199,7 @@ class Wareneingang {
                                    IF(b.bestaetigteslieferdatum != '' AND b.bestaetigteslieferdatum IS NOT NULL AND b.bestaetigteslieferdatum != '0000-00-00', CONCAT('<br>Best. Lieferdatum: ',DATE_FORMAT(b.bestaetigteslieferdatum, '%d.%m.%Y')),'')
                                    )",
                         "if(bp.lieferdatum,bp.lieferdatum,'sofort')", 'p.abkuerzung', 'bp.menge', 'bp.geliefert', 'offen', 'auftrag', 'auftragmenge', 'bp.id');
-                    $searchsql = array('bp.bestellnummer', 'art.nummer', 'art.ean', 'b.belegnr', "CONCAT(art.name_de,'<br>Bei Lieferant: ',bp.bezeichnunglieferant, '<i style=color:#999>',
+                    $searchsql = array('bp.bestellnummer', 'art.nummer', 'art.ean', 'b.belegnr', "CONCAT(art.name_de,'<br>Bei Lieferant: ',bp.bezeichnunglieferant, '<i class=text-muted>',
                                    IF(b.internebemerkung != '' AND b.internebemerkung IS NOT NULL, CONCAT('<br>Interne Bemerkung: ',b.internebemerkung),''),
                                    IF(b.internebezeichnung != '' AND b.internebezeichnung IS NOT NULL, CONCAT('<br>Interne Bezeichnung: ',b.internebezeichnung), ''),
                                    IF(b.bestellungbestaetigtabnummer != '' AND b.bestellungbestaetigtabnummer IS NOT NULL, CONCAT('<br>AB Nummer Lieferant: ',b.bestellungbestaetigtabnummer), ''),
@@ -298,7 +298,7 @@ class Wareneingang {
                             art.name_de,
                             '<br>Bei Lieferant: ',
                             bp.bezeichnunglieferant,
-                            '<i style=color:#999>',
+                            '<i class=text-muted>',
                             IF(
                                 b.internebemerkung != '' AND b.internebemerkung IS NOT NULL,
                                 CONCAT(
@@ -368,7 +368,7 @@ class Wareneingang {
                     }
                 }
                 $rdJoin = '';
-                $colBeschreibung = "CONCAT(art.name_de,'<br>Bei Lieferant: ',bp.bezeichnunglieferant, '<i style=color:#999>',
+                $colBeschreibung = "CONCAT(art.name_de,'<br>Bei Lieferant: ',bp.bezeichnunglieferant, '<i class=text-muted>',
                                    IF(b.internebemerkung != '' AND b.internebemerkung IS NOT NULL, CONCAT('<br>Interne Bemerkung: ',b.internebemerkung),''),
                                    IF(b.internebezeichnung != '' AND b.internebezeichnung IS NOT NULL, CONCAT('<br>Interne Bezeichnung: ',b.internebezeichnung), ''),
                                    IF(b.bestellungbestaetigtabnummer != '' AND b.bestellungbestaetigtabnummer IS NOT NULL, CONCAT('<br>AB Nummer Lieferant: ',b.bestellungbestaetigtabnummer), ''),
@@ -383,7 +383,7 @@ class Wareneingang {
                   AND useredit_time <> '0000-00-00 00:00:00' AND DATE_SUB(NOW(), INTERVAL 600 SECOND) < useredit_time
                   GROUP BY supplier_order_id
               ) AS rd ON b.id = rd.supplier_order_id ";
-                    $colBeschreibung = "CONCAT(art.name_de,'<br>Bei Lieferant: ',bp.bezeichnunglieferant, '<i style=color:#999>',
+                    $colBeschreibung = "CONCAT(art.name_de,'<br>Bei Lieferant: ',bp.bezeichnunglieferant, '<i class=text-muted>',
                                    IF(b.internebemerkung != '' AND b.internebemerkung IS NOT NULL, CONCAT('<br>Interne Bemerkung: ',b.internebemerkung),''),
                                    IF(b.internebezeichnung != '' AND b.internebezeichnung IS NOT NULL, CONCAT('<br>Interne Bezeichnung: ',b.internebezeichnung), ''),
                                    IF(b.bestellungbestaetigtabnummer != '' AND b.bestellungbestaetigtabnummer IS NOT NULL, CONCAT('<br>AB Nummer Lieferant: ',b.bestellungbestaetigtabnummer), ''),

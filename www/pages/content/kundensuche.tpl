@@ -1,6 +1,6 @@
 <table border="0" width="100%">
 <tr><td><table width="100%"><tr><td>
-<table width="100%" style="background-color: #fff; border: solid 1px #000;" align="center">
+<table width="100%" class="bg-surface border-default" align="center">
 <tr>
 <td align="center">
 

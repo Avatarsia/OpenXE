@@ -563,70 +563,70 @@ class Einstellungen  {
     $this->app->Tpl->Set('EMAILBACKUPLINK', 'href="index.php?module=emailbackup&action=list"');
     if(!$this->app->erp->ModulVorhanden('emailbackup')){
       $this->app->Tpl->Set('EMAILBACKUPLINK', '');
-      $this->app->Tpl->Set('GREYEMAILBACKUP','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYEMAILBACKUP','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('TICKETVORLAGENLINK', 'href="index.php?module=ticket_vorlage&action=list"');
     if(!$this->app->erp->ModulVorhanden('ticket_vorlage')){
       $this->app->Tpl->Set('TICKETVORLAGENLINK', '');
-      $this->app->Tpl->Set('GREYTICKETVORLAGEN','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYTICKETVORLAGEN','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('UEBERSETZUNGENLINK', 'href="index.php?module=uebersetzung&action=list"');
     if(!$this->app->erp->ModulVorhanden('uebersetzung')){
       $this->app->Tpl->Set('UEBERSETZUNGENLINK', '');
-      $this->app->Tpl->Set('GREYUEBERSETZUNGEN','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYUEBERSETZUNGEN','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('KOSTENSTELLENLINK', 'href="index.php?module=kostenstellen&action=list"');
     if(!$this->app->erp->ModulVorhanden('kostenstellen')){
       $this->app->Tpl->Set('KOSTENSTELLENLINK', '');
-      $this->app->Tpl->Set('GREYKOSTENSTELLEN','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYKOSTENSTELLEN','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('ZOLLTARIFNUMMERLINK', 'href="index.php?module=zolltarifnummer&action=list"');
     if(!$this->app->erp->ModulVorhanden('zolltarifnummer')){
       $this->app->Tpl->Set('ZOLLTARIFNUMMERLINK', '');
-      $this->app->Tpl->Set('GREYZOLLTARIFNUMMER','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYZOLLTARIFNUMMER','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('WARTESCHLANGENLINK', 'href="index.php?module=warteschlangen&action=list"');
     if(!$this->app->erp->ModulVorhanden('warteschlangen')){
       $this->app->Tpl->Set('WARTESCHLANGENLINK', '');
-      $this->app->Tpl->Set('GREYWARTESCHLANGEN','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYWARTESCHLANGEN','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }        
         
-    $this->app->Tpl->Set('GREYVERRECHNUNGSART','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+    $this->app->Tpl->Set('GREYVERRECHNUNGSART','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
 
     $this->app->Tpl->Set('GRUPPENLINK', 'href="index.php?module=gruppen&action=list"');
     if(!$this->app->erp->ModulVorhanden('gruppen')){
       $this->app->Tpl->Set('GRUPPENLINK', '');
-      $this->app->Tpl->Set('GREYGRUPPEN','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYGRUPPEN','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('ARTIKELKATEGORIENLINK', 'href="index.php?module=artikelkategorien&action=list"');
     if(!$this->app->erp->ModulVorhanden('artikelkategorien')){
       $this->app->Tpl->Set('ARTIKELKATEGORIENLINK', '');
-      $this->app->Tpl->Set('GREYARTIKELKATEGORIEN','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYARTIKELKATEGORIEN','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('USERVORLAGELINK', 'href="index.php?module=uservorlage&action=list"');
     if(!$this->app->erp->ModulVorhanden('uservorlage')){
       $this->app->Tpl->Set('USERVORLAGELINK', '');
-      $this->app->Tpl->Set('GREYUSERVORLAGE','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYUSERVORLAGE','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('KONTENLINK', 'href="index.php?module=konten&action=list"');
     if(!$this->app->erp->ModulVorhanden('konten')){
       $this->app->Tpl->Set('KONTENLINK', '');
-      $this->app->Tpl->Set('GREYKONTEN','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYKONTEN','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('KONTORAHMENLINK', 'href="index.php?module=kontorahmen&action=list"');
     if(!$this->app->erp->ModulVorhanden('kontorahmen')){
       $this->app->Tpl->Set('KONTORAHMENLINK', '');
-      $this->app->Tpl->Set('GREYKONTORAHMEN','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYKONTORAHMEN','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('LIEFERBEDINGUNGENLINK', 'href="index.php?module=lieferbedingungen&action=list"');
     if(!$this->app->erp->ModulVorhanden('lieferbedingungen')){
       $this->app->Tpl->Set('LIEFERBEDINGUNGENLINK', '');
-      $this->app->Tpl->Set('GREYLIEFERBEDINGUNGEN','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYLIEFERBEDINGUNGEN','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     $this->app->Tpl->Set('ARBEITSFREIETAGELINK', 'href="index.php?module=arbeitsfreietage&action=list"');
     if(!$this->app->erp->ModulVorhanden('arbeitsfreietage')){
       $this->app->Tpl->Set('ARBEITSFREIETAGELINK', '');
-      $this->app->Tpl->Set('GREYARBEITSFREIETAGE','<span style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;background: rgba(236,236,236,0.5)" ></span>');
+      $this->app->Tpl->Set('GREYARBEITSFREIETAGE','<span class="bg-overlay-muted" style="left:0;position:absolute;display:inline-block; z-index=2; width:100%;height:100%;" ></span>');
     }
     
     

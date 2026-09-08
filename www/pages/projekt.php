@@ -250,7 +250,7 @@ class Projekt extends GenProjekt {
             SQL_CALC_FOUND_ROWS a.id,
             a.open,
             a.datum,
-            if(ifnull(a.internebezeichnung,\'\') = \'\', a.title, concat(a.title,\'<br /><i style="color:grey">\',a.internebezeichnung,\'</i>\')),
+            if(ifnull(a.internebezeichnung,\'\') = \'\', a.title, concat(a.title,\'<br /><i class="text-muted">\',a.internebezeichnung,\'</i>\')),
             a.ansprechpartner,
             a.abkuerzung,
             a.bearbeiter,
@@ -340,7 +340,7 @@ class Projekt extends GenProjekt {
               SELECT
                 ticket.id,"<img src=./themes/' . $app->Conf->WFconf['defaulttheme'] . '/images/details_open.png class=details>" as open,
                 DATE_FORMAT(ticket.zeit, "%Y-%m-%d %H:%i") as datum,
-                concat(ticket.betreff COLLATE utf8_general_ci,if(ticket.notiz!=\'\',concat(\'<br /><i style="color:grey">\',ticket.notiz,\'</i>\'),\'\')) as title,ticket_nachricht.verfasser as ansprechpartner,
+                concat(ticket.betreff COLLATE utf8_general_ci,if(ticket.notiz!=\'\',concat(\'<br /><i class="text-muted">\',ticket.notiz,\'</i>\'),\'\')) as title,ticket_nachricht.verfasser as ansprechpartner,
                 projekt.abkuerzung as abkuerzung,
                 ticket.bearbeiter,
                 CONCAT("Ticket") as art,
@@ -361,7 +361,7 @@ class Projekt extends GenProjekt {
               SELECT
                 ticket.id,"<img src=./themes/' . $app->Conf->WFconf['defaulttheme'] . '/images/details_open.png class=details>" as open,
                 DATE_FORMAT(ticket_nachricht.zeitausgang, "%Y-%m-%d %H:%i") as datum,
-                concat(\'RE: \',ticket.betreff COLLATE utf8_general_ci,if(ticket.notiz!=\'\',concat(\'<br /><i style="color:grey">\',ticket.notiz,\'</i>\'),\'\')) as title,ticket_nachricht.verfasser as ansprechpartner,
+                concat(\'RE: \',ticket.betreff COLLATE utf8_general_ci,if(ticket.notiz!=\'\',concat(\'<br /><i class="text-muted">\',ticket.notiz,\'</i>\'),\'\')) as title,ticket_nachricht.verfasser as ansprechpartner,
 
                 projekt.abkuerzung as abkuerzung,
                 ticket.bearbeiter,
@@ -1239,7 +1239,7 @@ class Projekt extends GenProjekt {
     asort($arbeitspakete);
 
     $beschreibung = $this->app->DB->Select("SELECT beschreibung FROM projekt WHERE id='".$id."'");
-    $this->app->Tpl->Add('TAB1',"<h1>&Uuml;bersicht</h1><br><style>.border {border: 1px solid black;}</style>");
+    $this->app->Tpl->Add('TAB1',"<h1>&Uuml;bersicht</h1><br><style>.border {border: 1px solid var(--border);}</style>");
 
     $this->app->Tpl->Add('TAB1',"<table width=700><tr><td>".nl2br($beschreibung)."</td></tr></table><br>");
     $this->app->Tpl->Add('TAB1',"<h1>Umfang</h1><br>");
@@ -1805,34 +1805,34 @@ class Projekt extends GenProjekt {
       $v['zeit_offen'] = '<b>'.number_format($offen_summiert,2).'</b>';
       $v['zeit_abgerechnet'] = '<b>'.number_format($abgerechnet_summiert,2).'</b>';
       $v['kosten_geplant'] = '<b>'.number_format($kosten_summiert,2,',','.').'</b>';
-      $v['rohertrag_zeit'] = '<b'.($gesamt_rohertrag_zeit < 0?' style="color:red;"':'').'>'.number_format($gesamt_rohertrag_zeit,2,'.','').'</b>';
-      $v['rohertrag_artikel'] = '<b'.($gesamt_rohertrag_artikel < 0?' style="color:red;"':'').'>'.number_format($gesamt_rohertrag_artikel,2,'.','').'</b>';
-      $v['rohertrag_gesamt'] = '<b'.($gesamt_rohertrag_gesamt < 0?' style="color:red;"':'').'>'.number_format($gesamt_rohertrag_gesamt,2,'.','').'</b>';
+      $v['rohertrag_zeit'] = '<b'.($gesamt_rohertrag_zeit < 0?' class="text-error"':'').'>'.number_format($gesamt_rohertrag_zeit,2,'.','').'</b>';
+      $v['rohertrag_artikel'] = '<b'.($gesamt_rohertrag_artikel < 0?' class="text-error"':'').'>'.number_format($gesamt_rohertrag_artikel,2,'.','').'</b>';
+      $v['rohertrag_gesamt'] = '<b'.($gesamt_rohertrag_gesamt < 0?' class="text-error"':'').'>'.number_format($gesamt_rohertrag_gesamt,2,'.','').'</b>';
 
-      $v['rohertrag_zeit_geplant'] = '<b'.($gesamt_rohertrag_zeit_geplant < 0?' style="color:red;"':'').'>'.number_format($gesamt_rohertrag_zeit_geplant,2,'.','').'</b>';
-      $v['rohertrag_artikel_geplant'] = '<b'.($gesamt_rohertrag_artikel_geplant < 0?' style="color:red;"':'').'>'.number_format($gesamt_rohertrag_artikel_geplant,2,'.','').'</b>';
-      $v['rohertrag_gesamt_geplant'] = '<b'.($gesamt_rohertrag_gesamt_geplant < 0?' style="color:red;"':'').'>'.number_format($gesamt_rohertrag_gesamt_geplant,2,'.','').'</b>';
+      $v['rohertrag_zeit_geplant'] = '<b'.($gesamt_rohertrag_zeit_geplant < 0?' class="text-error"':'').'>'.number_format($gesamt_rohertrag_zeit_geplant,2,'.','').'</b>';
+      $v['rohertrag_artikel_geplant'] = '<b'.($gesamt_rohertrag_artikel_geplant < 0?' class="text-error"':'').'>'.number_format($gesamt_rohertrag_artikel_geplant,2,'.','').'</b>';
+      $v['rohertrag_gesamt_geplant'] = '<b'.($gesamt_rohertrag_gesamt_geplant < 0?' class="text-error"':'').'>'.number_format($gesamt_rohertrag_gesamt_geplant,2,'.','').'</b>';
       $prognose_artikel = $gesamt_artikel_vk_geplant - $gesamt_artikel_ek_geplant;
       $prognose_zeit = $gesamt_zeit_vk_geplant - $gesamt_zeit_ek_gebucht;
       $prognose_zeit_geplant = $gesamt_zeit_vk_geplant - $gesamt_zeit_ek_geplant;
       $prognose_gesamt = $prognose_artikel + $prognose_zeit_geplant;
       $v['zeit_ek_geplant'] = '<b>'.number_format($gesamt_zeit_ek_geplant,2,'.','').'</b>';
       $v['zeit_ek_gebucht'] = '<b>'.number_format($gesamt_zeit_ek_gebucht,2,'.','').'</b>';
-      $v['zeit_ek_offen'] = '<b'.($gesamt_zeit_ek_offen < 0?' style="color:red;"':'').'>'.number_format($gesamt_zeit_ek_offen,2,'.','').'</b>';
+      $v['zeit_ek_offen'] = '<b'.($gesamt_zeit_ek_offen < 0?' class="text-error"':'').'>'.number_format($gesamt_zeit_ek_offen,2,'.','').'</b>';
       $v['zeit_vk_geplant'] = '<b>'.number_format($gesamt_zeit_vk_geplant,2,'.','').'</b>';
       $v['zeit_vk_gebucht'] = '<b>'.number_format($gesamt_zeit_vk_gebucht,2,'.','').'</b>';
-      $v['zeit_vk_offen'] = '<b'.($gesamt_zeit_vk_offen < 0?' style="color:red;"':'').'>'.number_format($gesamt_zeit_vk_offen,2,'.','').'</b>';
+      $v['zeit_vk_offen'] = '<b'.($gesamt_zeit_vk_offen < 0?' class="text-error"':'').'>'.number_format($gesamt_zeit_vk_offen,2,'.','').'</b>';
       
       $v['artikel_ek_geplant'] = '<b>'.number_format($gesamt_artikel_ek_geplant,2,'.','').'</b>';
       $v['artikel_ek_gebucht'] = '<b>'.number_format($gesamt_artikel_ek_gebucht,2,'.','').'</b>';
-      $v['artikel_ek_offen'] = '<b'.($gesamt_artikel_ek_offen < 0?' style="color:red;"':'').'>'.number_format($gesamt_artikel_ek_offen,2,'.','').'</b>';
+      $v['artikel_ek_offen'] = '<b'.($gesamt_artikel_ek_offen < 0?' class="text-error"':'').'>'.number_format($gesamt_artikel_ek_offen,2,'.','').'</b>';
       $v['artikel_vk_geplant'] = '<b>'.number_format($gesamt_artikel_vk_geplant,2,'.','').'</b>';
       $v['artikel_vk_gebucht'] = '<b>'.number_format($gesamt_artikel_vk_gebucht,2,'.','').'</b>';
-      $v['artikel_vk_offen'] = '<b'.($gesamt_artikel_vk_offen < 0?' style="color:red;"':'').'>'.number_format($gesamt_artikel_vk_offen,2,'.','').'</b>';
-      $v['prognose_artikel'] = '<b'.($prognose_artikel < 0?' style="color:red;"':'').'>'.number_format($prognose_artikel,2,'.','').'</b>';
-      $v['prognose_zeit'] = '<b'.($prognose_zeit < 0?' style="color:red;"':'').'>'.number_format($prognose_zeit,2,'.','').'</b>';
-      $v['prognose_zeit_geplant'] = '<b'.($prognose_zeit_geplant < 0?' style="color:red;"':'').'>'.number_format($prognose_zeit_geplant,2,'.','').'</b>';
-      $v['prognose_gesamt'] = '<b'.($prognose_gesamt < 0?' style="color:red;"':'').'>'.number_format($prognose_gesamt,2,'.','').'</b>';
+      $v['artikel_vk_offen'] = '<b'.($gesamt_artikel_vk_offen < 0?' class="text-error"':'').'>'.number_format($gesamt_artikel_vk_offen,2,'.','').'</b>';
+      $v['prognose_artikel'] = '<b'.($prognose_artikel < 0?' class="text-error"':'').'>'.number_format($prognose_artikel,2,'.','').'</b>';
+      $v['prognose_zeit'] = '<b'.($prognose_zeit < 0?' class="text-error"':'').'>'.number_format($prognose_zeit,2,'.','').'</b>';
+      $v['prognose_zeit_geplant'] = '<b'.($prognose_zeit_geplant < 0?' class="text-error"':'').'>'.number_format($prognose_zeit_geplant,2,'.','').'</b>';
+      $v['prognose_gesamt'] = '<b'.($prognose_gesamt < 0?' class="text-error"':'').'>'.number_format($prognose_gesamt,2,'.','').'</b>';
 
       $projekte[] = $v;
     }

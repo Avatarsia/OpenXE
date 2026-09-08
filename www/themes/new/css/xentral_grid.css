@@ -2,15 +2,15 @@
 /* Variables
 ================================== */
 :root {
-    --default-border: #E6EAEE;
-    --separator-border: #c4c4c4;
-    --active-border: #374051;
+    --default-border: var(--border);
+    --separator-border: var(--border);
+    --active-border: var(--text-strong);
 }
 
 /* Card
 ================================== */
 .grid-card {
-    background: #FFFFFF;
+    background: var(--surface);
     border: 1px solid var(--default-border);
     box-sizing: border-box;
     border-radius: 6px;

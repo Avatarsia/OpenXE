@@ -9,7 +9,7 @@
 <div id="tabs-1">
 [MESSAGE]
 <div id="ajaxmessage"></div>
-<table width="100%" align="center" style="background-color:#cfcfd1;">
+<table width="100%" align="center" class="bg-surface-strong">
 <tr>
 <td width="33%"></td>
 <td align="center" nowrap><b style="font-size: 14pt">Schnellproduktion <font color="blue">[ARTIKELNUMMER]</font></b>&nbsp;[ARTIKELNAME]</td>

@@ -86,7 +86,7 @@ bright  #B3E4EB
   #un2 { max-width: 460px;min-width:308px; overflow: hidden; float: left;}
 
   .ob3_1 {
-    background: #ececec;
+    background: var(--surface-muted);
     margin: -5px -5px 0 -5px;
     padding: 10px 0;
   }
@@ -109,7 +109,7 @@ bright  #B3E4EB
   /** GLOBALS **/
   .fcont #ob3 {
     border-top: 0px;
-    background: #FFF;
+    background: var(--surface);
   }
   
   .fcont #ob3 legend {
@@ -193,7 +193,7 @@ bright  #B3E4EB
   
   /** UN1, WARENKORB **/
   #wk {
-    background: #FFF;
+    background: var(--surface);
     width: 99%;
     font-size: 11px;
   }
@@ -203,7 +203,7 @@ bright  #B3E4EB
   }
   
   #wk tbody tr:nth-child(odd) {
-    background: #EEE;
+    background: var(--surface-alt);
   }
   
   #wk .preis, #wk .gesamt, #wk .rabatt {
@@ -239,7 +239,7 @@ bright  #B3E4EB
     display: none;
   }
   #retyp label, #payment label, #un2bottom label {
-    background: #B3E4EB;
+    background: var(--accent-soft);
     float: left;
     display: block;
     padding-top: 10px;
@@ -259,8 +259,8 @@ bright  #B3E4EB
   }
   
   #retyp input:checked + label , #payment input:checked + label, #un2bottom input:checked + label {
-    background: #3FB9CE;
-    color: #F2F2F2;
+    background: var(--accent);
+    color: var(--text-on-accent);
     font-weight: bold;
   }
   
@@ -294,12 +294,12 @@ bright  #B3E4EB
   /** UN2 **/
   #totals div.of {
     overflow: hidden;
-    background: #FFF;
+    background: var(--surface);
   }
   
   
   #totals > div {
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--border-strong);
   }
 
   #totals > div:last-child {
@@ -313,18 +313,18 @@ bright  #B3E4EB
   #totals div.rbutton, div.rbutton {
     padding-top: 8px;
     padding-bottom: 8px;
-    color: #FFF;
+    color: var(--text-inverse);
     font-weight: bold;
     cursor: pointer;
   }
   
   #trabatt, #trabatteur {
-    color: #C22;
+    color: var(--error);
   }
   
   
   #totals #totalrow {
-    background: #D4E5A1;
+    background: var(--success-soft);
     font-size: 13px;
     font-weight: bold;
   }
@@ -335,7 +335,7 @@ bright  #B3E4EB
   }
   
   #abortsale{
-    background: #999;
+    background: var(--border-strong);
     width: 37%;
     margin-top: 5px;
     border-radius: 5px;
@@ -382,5 +382,5 @@ textarea.posNormInput {
 }
 
 #trinkgeld.grey + label {
-  background-color: #ececec;
+  background-color: var(--surface-muted);
 }

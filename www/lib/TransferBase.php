@@ -268,7 +268,7 @@ class TransferBase {
           'size'=> 40,
           'rows'=> 6,
           'bezeichnung'=>'Eingang Template:',
-          'tag' => 'disabled="disabled" style="background-color:#ccc; " ',
+          'tag' => 'disabled="disabled" style="background-color:var(--surface-strong); " ',
           'info' => '<input style="vertical-align: top" type="button" value="bearbeiten" id="editincommingtemplate" />',
         ],
         'incommingdata' => [

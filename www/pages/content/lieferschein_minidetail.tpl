@@ -1,13 +1,13 @@
 <style>
     .auftraginfo_cell {
-        color: #636363;
-        border: 1px solid #ccc;
+        color: var(--text-body);
+        border: 1px solid var(--border);
         padding: 5px;
     }
 
     .auftrag_cell {
-        color: #636363;
-        border: 1px solid #fff;
+        color: var(--text-body);
+        border: 1px solid var(--surface);
         padding: 0px;
         margin: 0px;
     }
@@ -16,7 +16,7 @@
     <br>
     <center>[MENU]</center>
     <br>
-    <table cellspacing="0" cellpadding="0" style="font-size: 8pt; background: white; color: #333333; border-collapse: collapse;" width="100%">
+    <table cellspacing="0" cellpadding="0" class="bg-surface text-strong" style="font-size: 8pt; border-collapse: collapse;" width="100%">
         <tr>
             <td class="auftraginfo_cell" colspan="2" width="50%">
                 <b>{|Allgemein|}</b>
@@ -88,20 +88,20 @@
             <td class="auftraginfo_cell">[TRACKING]</td>
         </tr>
     </table>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <div style="padding:10px"> [LIEFERADRESSE] </div>
     </div>
 </div>
 <div style="float:left; width:50%">
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">Artikel</h2>
         <div style="padding:10px"> [ARTIKEL] </div>
     </div>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">Protokoll</h2>
         <div style="padding:10px;"> [PROTOKOLL] </div>
     </div>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">PDF-Archiv</h2>
         <div style="padding:10px;"> [PDFARCHIV] </div>
     </div>

@@ -123,7 +123,7 @@ class Telefonrueckruf {
 
         $where = " tv.id > 0 AND tv.telefonrueckruf = '$telefonrueckrufid'";
 
-        $sql = "SELECT SQL_CALC_FOUND_ROWS tv.id, '<img src=./themes/".$app->Conf->WFconf['defaulttheme']."/images/details_open.png class=details>' as open, CONCAT(DATE_FORMAT(tv.datum,'%d.%m.%Y'), ' ', tv.zeit), CONCAT('<i style=color:#999>',a.name,'</i><br />', LEFT(tv.beschreibung,50)), tv.id FROM telefonrueckruf_versuche tv LEFT JOIN adresse a ON tv.bearbeiter = a.id";
+        $sql = "SELECT SQL_CALC_FOUND_ROWS tv.id, '<img src=./themes/".$app->Conf->WFconf['defaulttheme']."/images/details_open.png class=details>' as open, CONCAT(DATE_FORMAT(tv.datum,'%d.%m.%Y'), ' ', tv.zeit), CONCAT('<i class=text-muted>',a.name,'</i><br />', LEFT(tv.beschreibung,50)), tv.id FROM telefonrueckruf_versuche tv LEFT JOIN adresse a ON tv.bearbeiter = a.id";
 
         $count = "SELECT count(tv.id) FROM telefonrueckruf_versuche tv WHERE $where";
       break;

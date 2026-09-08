@@ -252,7 +252,7 @@ class Auftrag extends GenAuftrag
             IF(
               a.internebezeichnung != '',
               CONCAT(
-                '<br><i style=color:#999>',
+                '<br><i class=text-muted>',
                 a.internebezeichnung,
                 '</i>'
               ),
@@ -261,7 +261,7 @@ class Auftrag extends GenAuftrag
             IF(
               a.abweichendelieferadresse = 1,
               CONCAT(
-                '<br><i style=color:#999>Abw. Lieferadr.: ',
+                '<br><i class=text-muted>Abw. Lieferadr.: ',
                 a.liefername,', ',
                 a.lieferstrasse,', ',
                 a.lieferland,'-',
@@ -285,7 +285,7 @@ class Auftrag extends GenAuftrag
                   OR ( -(a.saldo) <= (IF(ISNULL(a.skontobetrag),a.gesamtsumme * ( a.zahlungszielskonto) / 100.0,a.skontobetrag)))
                   OR (a.vorabbezahltmarkieren = 1 and a.zahlungsweise = 'vorkasse'),
                   '',
-                  ' style=\"color:red;\" '
+                  ' class=\"text-error\" '
                 ),
                 '>'," :
                 ''
@@ -826,7 +826,7 @@ class Auftrag extends GenAuftrag
 		auftrag_id,
 		DATE_FORMAT(erwartetes_lieferdatum,\"%d.%m.%Y\") erwartetes_lieferdatum_form,
 		CASE
-			WHEN urspruengliches_lieferdatum <> erwartetes_lieferdatum THEN CONCAT(\"<p style=\'color:red;\'>\",DATE_FORMAT(urspruengliches_lieferdatum,\"%d.%m.%Y\"),\"</p>\")
+			WHEN urspruengliches_lieferdatum <> erwartetes_lieferdatum THEN CONCAT(\"<p class=\'text-error\'>\",DATE_FORMAT(urspruengliches_lieferdatum,\"%d.%m.%Y\"),\"</p>\")
 			ELSE DATE_FORMAT(urspruengliches_lieferdatum,\"%d.%m.%Y\")
 			END urspruengliches_lieferdatum_form,
 		kunde,
@@ -837,7 +837,7 @@ class Auftrag extends GenAuftrag
 		menge,
 		umsatz,
 		CASE WHEN menge <= lager THEN CONCAT(\"<a href=index.php?module=artikel&action=lager&id=\",artikel_id,\" target=_blank>\",ROUND(lager,0),\"</a>\")
-		ELSE CONCAT(\"<a href=index.php?module=artikel&action=lager&id=\",artikel_id,\" style=\'color:red;\' target=_blank>\",ROUND(lager,0),\"</a>\")
+		ELSE CONCAT(\"<a href=index.php?module=artikel&action=lager&id=\",artikel_id,\" class=\'text-error\' target=_blank>\",ROUND(lager,0),\"</a>\")
 		END lagermenge,".
         $this->app->YUI->IconsSQL(). 		
 		"autoversand_icon,
@@ -1803,8 +1803,8 @@ class Auftrag extends GenAuftrag
           $table->align[2] = 'right';
           foreach($table->datasets as $dataSetKey => $dataset) {
             if(str_replace(',','.',$dataset[$lastCol]) < str_replace(',','.',$dataset['menge'])) {
-              $table->datasets[$dataSetKey][$lastCol] = '<span style="color:red;">'.$dataset[$lastCol].'</span>';
-              $warning = '<br /><i style="color:red;">Es sind weniger MHD-Mengen als Lagerartikel vorhanden!</i>';
+              $table->datasets[$dataSetKey][$lastCol] = '<span class="text-error">'.$dataset[$lastCol].'</span>';
+              $warning = '<br /><i class="text-error">Es sind weniger MHD-Mengen als Lagerartikel vorhanden!</i>';
             }
           }
         }
@@ -1846,8 +1846,8 @@ class Auftrag extends GenAuftrag
           $table->align[2] = 'right';
           foreach($table->datasets as $dataSetKey => $dataset) {
             if(str_replace(',','.',$dataset[$lastCol]) < str_replace(',','.',$dataset['menge'])) {
-              $table->datasets[$dataSetKey][$lastCol] = '<span style="color:red;">'.$dataset[$lastCol].'</span>';
-              $warning = '<br /><i style="color:red;">Es sind weniger Chargen-Mengen als Lagerartikel vorhanden!</i>';
+              $table->datasets[$dataSetKey][$lastCol] = '<span class="text-error">'.$dataset[$lastCol].'</span>';
+              $warning = '<br /><i class="text-error">Es sind weniger Chargen-Mengen als Lagerartikel vorhanden!</i>';
             }
           }
         }
@@ -1871,7 +1871,7 @@ class Auftrag extends GenAuftrag
 
     return  [
       'inhalt'=>
-        '<div class="inlinetooltiptable"><style> div.inlinetooltiptable > table.mkTable > tbody > tr:nth-child(2n+1) td {background-color:#e0e0e0;} </style>'.$table->DisplayNew('return',$lastCol,'noAction').$warning.'</div>'
+        '<div class="inlinetooltiptable"><style> div.inlinetooltiptable > table.mkTable > tbody > tr:nth-child(2n+1) td {background-color:var(--surface-muted);} </style>'.$table->DisplayNew('return',$lastCol,'noAction').$warning.'</div>'
     ];
   }
 
@@ -3485,7 +3485,7 @@ class Auftrag extends GenAuftrag
     if($produktionsId > 0){
       $this->app->Tpl->Set(
         'VORPRODUKTIONPROTOKOLL',
-        '<div style="background-color:white">
+        '<div class="bg-surface">
           <h2 class="greyh2">{|Produktion Protokoll|}</h2>
         <div style="padding:10px;">'
       );
@@ -3547,7 +3547,7 @@ class Auftrag extends GenAuftrag
       $schreibschutz=0;
       $this->app->Tpl->Set(
         'INTERNEBEMERKUNGEDIT',
-        '<div style="background-color:white">
+        '<div class="bg-surface">
       <h2 class="greyh2">Interne Bemerkung</h2>
       <div style="padding:10px;overflow:auto; width:500px;">
         <textarea id="internebemerkung_'.$id.'"'
@@ -5600,7 +5600,7 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
     $this->app->Tpl->Set('MESSAGE',"<div class=\"warning\">M&ouml;chten Sie ein Auftrag jetzt anlegen? &nbsp;
         <input type=\"button\" onclick=\"window.location.href='index.php?module=auftrag&action=create&anlegen=1'\" value=\"Ja - Auftrag jetzt anlegen\"></div><br>");
     $this->app->Tpl->Set('TAB1',"
-        <table width=\"100%\" style=\"background-color: #fff; border: solid 1px #000;\" align=\"center\">
+        <table width=\"100%\" class=\"bg-surface border-default\" align=\"center\">
         <tr>
         <td align=\"center\">
         <br><b style=\"font-size: 14pt\">Auftr&auml;ge in Bearbeitung</b>

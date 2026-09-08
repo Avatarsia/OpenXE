@@ -8,7 +8,7 @@
 					<input type="checkbox" id="aufgabenmeineprio">
 					<span class="slider round"></span>
 				</label>
-				<label for="aufgabenmeineprio"><b style="color:red">{|Prio|}</b></label>
+				<label for="aufgabenmeineprio"><b class="text-error">{|Prio|}</b></label>
 			</li>
 			<li class="filter-item">
 				<label for="aufgabenmeine" class="switch">

@@ -77,7 +77,7 @@ document.onkeydown = function(evt) {
 [AUTOVERSANDBERECHNEN]
 <form method="post" action="#" id="frmorder">
 [TAB1]
-<i style="float:right; font-size:10px;color:#6d6d6f;"><span style="color:blue">*</span> {|Freitext vorhanden|} <span style="color:red">*</span> {|Interne Bemerkung vorhanden|} (F) {|Lieferung der Zentrale an Fililale|} (FL) {|&quot;Fast-Lane&quot; aktiviert|}</i>
+<i class="text-body" style="float:right; font-size:10px;"><span style="color:blue">*</span> {|Freitext vorhanden|} <span class="text-error">*</span> {|Interne Bemerkung vorhanden|} (F) {|Lieferung der Zentrale an Fililale|} (FL) {|&quot;Fast-Lane&quot; aktiviert|}</i>
 
 	  <div class="clear"></div>	
 <fieldset><legend>{|Stapelverarbeitung|}</legend>

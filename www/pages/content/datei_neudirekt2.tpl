@@ -153,7 +153,7 @@
 #dropped-files .image {
 	height: 0px;
 	width:0px;
-	border: 4px solid #fff;
+	border: 4px solid var(--surface);
 	position: absolute;
 	overflow: hidden;
 }
@@ -177,7 +177,7 @@
 	left: 40px;
 	display: block;
 	border: 20px solid;
-	border-color: transparent transparent #ffffff transparent;
+	border-color: transparent transparent var(--surface) transparent;
 }
 
 

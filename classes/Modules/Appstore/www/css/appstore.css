@@ -1,6 +1,6 @@
 
 body.module-appstore #page_container > div > div.ui-tabs-panel {
-    background-color: #F7F7F7;
+    background-color: var(--surface-alt);
     margin-bottom: 0;
     padding: 0 0 40px 0 !important;
 }
@@ -11,14 +11,14 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
 #appstore h2 {
     font-weight: normal;
     font-size: 18px;
-    color: #6d6d6f;
+    color: var(--text-body);
     margin: 5px 1% 10px 1%;
     padding: 12px 1% 14px 1%;
-    border-bottom: 1px solid rgba(55, 64, 81, 0.1);
+    border-bottom: 1px solid var(--border);
 }
 #appstore h3 {
     clear: both;
-    color: #6d6d6f;
+    color: var(--text-body);
     margin: 20px 0;
     padding: 12px 0 6px 0;
 }
@@ -201,9 +201,9 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
 }
 
 #appstore .module:hover{
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 2px var(--shadow), 0 0 1px var(--shadow);
     border-radius: 3px;
-    background-color: white;
+    background-color: var(--surface);
 }
 
 #appstore .module button {
@@ -299,7 +299,7 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
     padding: 10px 0;
     margin: 30px 1% 10px 1%;
     line-height: 30px;
-    border-bottom: 1px solid rgba(55, 64, 81, 0.1);
+    border-bottom: 1px solid var(--border);
 }
 
 #appstore.category-page .category-page-nav .category-page-back{
@@ -307,7 +307,7 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
     margin-right: 10px;
     width: 30px;
     height: 30px;
-    background: rgba(55, 64, 81, 0.1);
+    background: var(--surface-muted);
     border-radius: 3px;
     text-align: center;
     line-height: 30px;
@@ -324,9 +324,9 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
     width: 14%;
     margin: 0 1% 2% 1%;
     height: 202px;
-    background: #FFFFFF;
-    border: 1px solid #EAEDF7;
-    box-shadow: 0 2px 4px rgba(28, 41, 90, 0.0367952);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    box-shadow: 0 2px 4px var(--shadow);
     border-radius: 5px;
     justify-content: flex-start;
     align-items: center;
@@ -382,7 +382,7 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
     height: 100%;
 }
 #appstore .highlight a span {
-    color: #FFF;
+    color: var(--text-inverse);
     font-weight: bold;
     text-decoration: none;
 }
@@ -433,7 +433,7 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
 
 #appstore .detail .information-right .description {
     margin-bottom: 25px;
-    color: rgba(0, 0, 0, 0.6);
+    color: var(--text-body);
 }
 
 #appstore .detail .screenshots .screenshot {
@@ -485,8 +485,8 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
     white-space: nowrap;
     border: none;
     border-radius: 3px;
-    color: #6D6D6D;
-    background-color: #E0E0E0;
+    color: var(--text-body);
+    background-color: var(--surface-muted);
     outline: 0;
 }
 .dropdown-link .label,
@@ -509,7 +509,7 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
     right: 0;
     width: 26px;
     box-sizing: border-box;
-    border-left: 1px solid #FFF;
+    border-left: 1px solid var(--surface);
     background-image: url('../themes/new/images/caret_dark.png');
     background-position: center;
     background-repeat: no-repeat;
@@ -529,15 +529,15 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
     list-style: none;
     font-size: 14px;
     text-align: left;
-    background-color: #E0E0E0;
+    background-color: var(--surface-muted);
     border-radius: 0 0 4px 4px;
     -webkit-background-clip: padding-box;
     background-clip: padding-box;
-    border-top: 1px solid #FFF;
+    border-top: 1px solid var(--surface);
 }
 .dropdown-menu > li {
     font-size: 11px;
-    background-color: #E0E0E0;
+    background-color: var(--surface-muted);
 }
 .dropdown-menu > li > a {
     display: block;
@@ -545,12 +545,12 @@ body.module-appstore #page_container > div > div.ui-tabs-panel {
     clear: both;
     font-weight: normal;
     line-height: 1.42857143;
-    color: #333333;
+    color: var(--text-strong);
     white-space: nowrap;
 }
 .dropdown-menu > li > a:hover,
 .dropdown-menu > li > a:focus {
-    color: #FFF;
+    color: var(--text-inverse);
     text-decoration: none;
     background-color: #42b8c4;
 }
@@ -564,8 +564,8 @@ a.dropdown-link.deactivated span.caret {
 }
 
 a.testversion, a.testversion > span {
-    background-color: rgb(224, 224, 224) !important;
-    color: rgb(109, 109, 111);
+    background-color: var(--surface-muted) !important;
+    color: var(--text-body);
 }
 
 a.dropdown-link > span.label.testversion, a.dropdown-link > span.label.testversion + span {
@@ -578,7 +578,7 @@ a.dropdown-link > span.label.testversion, a.dropdown-link > span.label.testversi
 **/
 
 #buyversion {
-    background-color: white;
+    background-color: var(--surface);
     font-size: 14px;
 }
 
@@ -606,7 +606,7 @@ a.dropdown-link > span.label.testversion, a.dropdown-link > span.label.testversi
 }
 
 #buyversion table{
-    color: rgba(51, 51, 51, 0.7);
+    color: var(--text-body);
     border-collapse: separate;
     border-spacing: 15px;
     float: left;
@@ -623,12 +623,12 @@ a.dropdown-link > span.label.testversion, a.dropdown-link > span.label.testversi
 }
 
 #buyversion table:first-of-type{
-    border-right: 1px solid rgba(151, 151, 151, 0.2);
+    border-right: 1px solid var(--border);
 }
 
 #buyversion select,
 #buyversion input:not(.counter-component-input){
-    border: 1px solid rgba(37, 35, 58, 0.2);
+    border: 1px solid var(--textfield-border);
     width: 100%;
     height: 30px;
     box-sizing: border-box;
@@ -674,13 +674,13 @@ a.dropdown-link > span.label.testversion, a.dropdown-link > span.label.testversi
 }
 
 #changecustomerinfo{
-    background-color: white;
+    background-color: var(--surface);
     width: 100%;
     height: 50px;
 }
 
 #customerinfocontent .error-hint{
-    background-color: white;
+    background-color: var(--surface);
     margin: 0;
     padding-top: 8px;
     padding-bottom: 8px;
@@ -697,7 +697,7 @@ BUY LICENCE LANDING PAGE
 .buy-licence-landingpage {
     display: flex;
     padding: 30px 40px;
-    color: #7D7F81;
+    color: var(--text-body);
     font-size: 14px;
     line-height: 24px;
 }
@@ -705,7 +705,7 @@ BUY LICENCE LANDING PAGE
 .buy-licence-landingpage h2,
 .buy-licence-landingpage h3,
 .buy-licence-landingpage h3 {
-    color: #646464;
+    color: var(--text-strong);
     padding-left: 0;
     padding-right: 0;
 }
@@ -725,7 +725,7 @@ BUY LICENCE LANDING PAGE
 
 .buy-licence-landingpage strong{
     font-size: 36px;
-    color: #646464;
+    color: var(--text-strong);
 }
 
 .buy-licence-landingpage .user-amount {
@@ -745,10 +745,10 @@ BUY LICENCE LANDING PAGE
 }
 
 .buy-licence-landingpage .highlight-box{
-    background: #FFFFFF;
-    border: 1px solid #F0F0F0;
+    background: var(--surface);
+    border: 1px solid var(--border);
     box-sizing: border-box;
-    box-shadow: 0 0 2px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 0 2px var(--shadow), 0 2px 4px var(--shadow);
     border-radius: 10px;
     max-width: 550px;
 }
@@ -815,7 +815,7 @@ BUY LICENCE LANDING PAGE
 /** jquery ui resets **/
 .ui-dialog.ui-widget-content, .ui-dialog .ui-widget-content, .ui-dialog .ui-dialog-content,
 .ui-draggable .ui-dialog-titlebar{
-    background-color: white;
+    background-color: var(--surface);
 }
 
 .ui-dialog .ui-dialog-buttonpane{
@@ -837,7 +837,7 @@ COUNTER COMPONENT
     width: 131px;
     height: 40px;
 
-    border: 1px solid rgba(128, 128, 128, 0.2);
+    border: 1px solid var(--border);
     box-sizing: border-box;
     border-radius: 10px;
     display: flex;
@@ -869,5 +869,5 @@ COUNTER COMPONENT
     border:none;
     background: none;
     box-shadow: none;
-    color: rgba(51, 51, 51, 0.45);
+    color: var(--text-muted);
 }

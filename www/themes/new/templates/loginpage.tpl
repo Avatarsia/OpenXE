@@ -1,8 +1,10 @@
 <!doctype html>
-<html lang="de">
+<html lang="de" data-color-scheme="auto">
 <head>
+	<script src="themes/new/js/colorscheme.js?v=1"></script>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="color-scheme" content="light dark">
 	<title>OpenXE - Login</title>
 	<link id="shortcuticon" rel="shortcut icon" href="./themes/new/images/favicon/favicon.ico" type="image/x-icon">
 	<link id="favicon" rel="icon" href="./themes/new/images/favicon/favicon.ico" type="image/x-icon">
@@ -12,6 +14,8 @@
 	<script type="text/javascript" src="[JQUERYMIGRATESRC]"></script>
 	<script src="themes/new/js/scripts_login.js"></script>
 	<link rel="stylesheet" href="themes/new/css/normalize.min.css?v=5">
+	<link rel="stylesheet" href="themes/new/css/color3.css?v=9">
+	<link rel="stylesheet" href="themes/new/css/theme-utilities.css?v=1">
 	<link rel="stylesheet" href="themes/new/css/login_styles.css?v=3">
 	<link rel="stylesheet" href="themes/new/css/custom.css?v=3">
 </head>

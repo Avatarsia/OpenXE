@@ -1,9 +1,11 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
     "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
-<html xmlns="http://www.w3.org/1999/xhtml">
+<html xmlns="http://www.w3.org/1999/xhtml" data-color-scheme="[COLORSCHEME]">
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <script src="./themes/[THEME]/js/colorscheme.js?v=1"></script>
+<meta name="color-scheme" content="light dark">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' [ADDITIONALCSPHEADER];">
   [ADDITIONALHEADER]
 <title>[TITLE]</title>
@@ -20,7 +22,7 @@
 <script type="text/javascript" src="./js/jquery.loadingOverlay.js"></script>
 
 <link rel="stylesheet" type="text/css" href="./js/datatables/datatables.min.css"/>
-<link rel="stylesheet" type="text/css" href="./themes/[THEME]/css/datatables_custom.css?v=2"/>
+<link rel="stylesheet" type="text/css" href="./themes/[THEME]/css/datatables_custom.css?v=4"/>
 <link href="./themes/[THEME]/css/jquery.dataTables.min.css" rel="stylesheet" type="text/css" media="screen">
 <link href="./themes/[THEME]/css/buttons.dataTables.min.css" rel="stylesheet" type="text/css" media="screen">
 <script type="text/javascript" src="./js/datatables/datatables.min.js?v=2"></script>
@@ -44,14 +46,17 @@
 <script type="text/javascript" src="./js/jquery-ui-timepicker-addon.js"></script>
 
 <!--[CSSLINKSPOPUP]-->
-  <link rel="stylesheet" href="./themes/[THEME]/css/[COLORCSSFILE]?v=2">
+  <link rel="stylesheet" href="./themes/[THEME]/css/[COLORCSSFILE]?v=4">
   <style>
     :root {
     [COLORCSS]
     }
   </style>
 
-  <link rel="stylesheet" href="./themes/[THEME]/css/styles.css?v=32">
+  <link rel="stylesheet" href="./themes/[THEME]/css/styles.css?v=34">
+  <link rel="stylesheet" href="./themes/[THEME]/css/theme-utilities.css?v=1">
+  <link rel="stylesheet" href="./themes/[THEME]/css/dark-overrides.css?v=2">
+  <link rel="stylesheet" href="./themes/[THEME]/css/dark-icons.css?v=2">
 
 <script type="text/javascript" src="./js/tinymce/tiny_mce.js"></script>
 

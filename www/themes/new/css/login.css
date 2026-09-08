@@ -17,12 +17,12 @@ html {
 }
 
 body {
-    color: #929292;
+    color: var(--text-color);
     font: 12px 'Inter', Verdana, Arial, sans-serif;
     line-height: 1.4em;
     margin: 0;
     padding: 0;
-    background: #fff;
+    background: var(--surface);
 }
 
 .login-wrapper {
@@ -82,7 +82,7 @@ body {
     display: inline-block;
     vertical-align: middle;
     width: 99%;
-    color: #a2a2a2;
+    color: var(--text-muted);
     text-align: left;
     max-width: 400px;
     padding: 2.5%;
@@ -95,7 +95,7 @@ body {
 .loginbox #loginerrormsg {
     display: block;
     margin: 0.5em 0 1em;
-    color: darkred;
+    color: var(--error);
 }
 .loginbox .copyright {
     text-align: center;
@@ -110,7 +110,7 @@ body {
     border-radius: 5px;
     border: 1px solid #5CB59A;
     background-color: #5CB59A;
-    color: #fff;
+    color: var(--text-inverse);
     font-weight: bold;
     font-size: 14px;
     width: 100%;
@@ -120,14 +120,14 @@ body {
 }
 .loginbox .btn.btn-primary,
 .permission-box .btn.btn-primary {
-    color: #fff;
+    color: var(--text-inverse);
     background-color: #5CB59A;
     border-color: #5CB59A;
 }
 .loginbox .btn.btn-secondary,
 .permission-box .btn.btn-secondary {
     color: #5CB59A;
-    background-color: #FFF;
+    background-color: var(--surface);
     border-color: #5CB59A;
 }
 
@@ -142,7 +142,7 @@ body {
 #frmlogin label {
     display: block;
     font-size: 12px;
-    color: #48494b;
+    color: var(--text-body);
 }
 #frmlogin select,
 #frmlogin textarea,
@@ -153,11 +153,11 @@ body {
     padding: 10px 2px;
     font-size: 16px;
     font-weight: bold;
-    color: #707070;
+    color: var(--text-body);
     border-radius: 0;
     border: none;
-    border-bottom: 1px solid #eaeaea;
-    background: #FFF;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
 }
 
 /**
@@ -168,13 +168,13 @@ body {
     max-width: 360px;
     padding: 15px 30px;
     margin: 100px auto;
-    background-color: #F5F6FA;
+    background-color: var(--surface-alt);
     border-radius: 7px;
     border: none;
 }
 .permission-box h1,
 .permission-box h2 {
-    color: #7b7b7b;
+    color: var(--text-body);
     font-size: 18px;
     line-height: 24px;
     font-weight: bold;

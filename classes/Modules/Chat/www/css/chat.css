@@ -43,7 +43,7 @@ body > #tabs {
     flex-direction: column;
     flex-basis: 220px;
     max-width: 240px;
-    background-color: #ECECEC;
+    background-color: var(--surface-muted);
     padding: 10px;
 }
 #sidebar-wrapper h3 {
@@ -97,7 +97,7 @@ body > #tabs {
     white-space: nowrap;
     overflow: hidden;
     cursor: pointer;
-    color: #999;
+    color: var(--text-muted);
     list-style-type: none;
     padding: 6px;
     margin: 0;
@@ -106,7 +106,7 @@ body > #tabs {
 #roomlist li.active,
 #userlist li.active {
     padding: 6px;
-    background-color: #FFF;
+    background-color: var(--surface);
 }
 #roomlist li:before,
 #userlist li:before {
@@ -143,7 +143,7 @@ body > #tabs {
     box-sizing: border-box;
     position: relative;
     height: 0;
-    border-bottom: 1px solid #ECECEC;
+    border-bottom: 1px solid var(--border);
     margin: 20px 0;
     text-align: center;
 }
@@ -151,7 +151,7 @@ body > #tabs {
     position: absolute;
     top: -8px;
     display: inline-block;
-    background-color: #FFF;
+    background-color: var(--surface);
     padding: 0 12px;
     font-size: 13px;
     font-weight: bold;
@@ -165,7 +165,7 @@ body > #tabs {
     width: 100%;
     padding: 5px 10px;
     margin-top: 0;
-    background-color: #ECECEC;
+    background-color: var(--surface-muted);
 }
 #message-header.public {
     color: orangered;
@@ -191,7 +191,7 @@ body > #tabs {
     min-height: 36px;
     padding: 0;
     margin: 9px;
-    background-color: #FFF;
+    background-color: var(--surface);
     -webkit-transition: background-color 5000ms linear;
     -ms-transition: background-color 5000ms linear;
     transition: background-color 5000ms linear;
@@ -213,12 +213,12 @@ body > #tabs {
     content: ' (ungelesen)';
     display: inline;
     font-size: 80%;
-    color: #999;
+    color: var(--text-muted);
 }
 .message.read .text:after {
 }
 .message.new {
-    background-color: #dfffff;
+    background-color: var(--accent-soft);
 }
 .message.new .time:after {
     content: ' NEU';
@@ -235,7 +235,7 @@ body > #tabs {
     padding-left: 44px;
 }
 .message .time {
-    color: #999;
+    color: var(--text-muted);
     font-size: 80%;
     margin: 0 5px;
 }

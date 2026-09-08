@@ -9,7 +9,7 @@
       <tr valign="top" colspan="3">
         <td>
 <br><br>
-<table width="60%" style="background-color: #fff; border: solid 1px #000;" align="center">
+<table width="60%" class="bg-surface border-default" align="center">
 <tr>
 <td align="center">
 <br>

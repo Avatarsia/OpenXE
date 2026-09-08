@@ -44,7 +44,7 @@
       position: relative;
       padding:5px;
       margin-top:5px;
-      background-color:#f0f1f0;
+      background-color:var(--surface-muted);
       min-height:600px;
     }
     .mlmClear {

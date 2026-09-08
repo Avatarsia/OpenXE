@@ -67,8 +67,42 @@ class Ajax {
     $this->app->ActionHandler("getgewicht","AjaxGetGewicht");
     $this->app->ActionHandler("upload","AjaxUpload");
     $this->app->ActionHandler("sidebar","AjaxSidebar");
+    $this->app->ActionHandler("colorscheme","AjaxColorScheme");
     $this->app->ActionHandler("livetable","AjaxLiveTable");
     $this->app->ActionHandlerListen($app);
+  }
+
+  /**
+   * Farbschema-Praeferenz (auto|light|dark) des Benutzers speichern
+   *
+   * @return JsonResponse
+   */
+  public function AjaxColorScheme(): JsonResponse
+  {
+      $userId = $this->app->User->GetID();
+      $cmd = $this->app->Secure->GetGET('cmd');
+
+      switch ($cmd) {
+          case 'set':
+              $value = (string)$this->app->Secure->GetGET('value');
+              if (!in_array($value, ['auto', 'light', 'dark'], true)) {
+                  $value = 'auto';
+              }
+              /** @var Xentral\Modules\User\Service\UserConfigService $userConfig */
+              $userConfig = $this->app->Container->get('UserConfigService');
+              $userConfig->set('color_scheme', $value, $userId);
+              $data = ['success' => true, 'color_scheme' => $value];
+              break;
+
+          default:
+              $data = ['success' => false, 'error' => 'Incomplete request'];
+              break;
+      }
+
+      return new JsonResponse(
+        $data,
+        $data['success'] === false ? JsonResponse::HTTP_BAD_REQUEST : JsonResponse::HTTP_OK
+      );
   }
 
   /**

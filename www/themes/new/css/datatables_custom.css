@@ -158,7 +158,7 @@
  */
 
 .datatable-container table.dataTable tbody tr {
-    background-color: #ffffff;
+    background-color: var(--surface);
 }
 
 /**
@@ -167,7 +167,7 @@
 
 .datatable-container table.dataTable.stripe tbody tr.odd,
 .datatable-container table.dataTable.display tbody tr.odd {
-    background-color: #f9f9f9;
+    background-color: var(--surface-alt);
 }
 
 /**
@@ -258,6 +258,38 @@
 .datatable-container table.dataTable tr.lightlime td {
     background-color: #d4eebb;
 }
+
+/* Dark theme: abgedunkelte Varianten derselben Farbfamilien */
+html.openXeDarkMode .datatable-container table.dataTable tr.lightgray td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightgreen td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightteal td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightcyan td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightblue td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightindigo td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightviolet td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightfuchsia td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightpink td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightred td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightorange td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightyellow td,
+html.openXeDarkMode .datatable-container table.dataTable tr.lightlime td {
+    color: var(--text-body);
+}
+
+html.openXeDarkMode .datatable-container table.dataTable tr.lightgray td { background-color: #3A4152; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightgreen td { background-color: #1F3A26; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightteal td { background-color: #1F3A34; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightcyan td { background-color: #1F3A44; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightblue td { background-color: #1F2A55; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightindigo td { background-color: #262A5A; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightviolet td { background-color: #3A2A4A; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightfuchsia td { background-color: #4A2A4A; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightpink td { background-color: #4A1F3A; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightred td { background-color: #4A1F22; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightorange td { background-color: #4A2E1A; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightyellow td { background-color: #4A3A1A; }
+html.openXeDarkMode .datatable-container table.dataTable tr.lightlime td { background-color: #2E3A1A; }
+
 
 /**
     SORTING ICONS
@@ -365,7 +397,7 @@
 .datatable-container .dataTables_wrapper div.dt-button.active:not(.disabled),
 .datatable-container .dataTables_wrapper a.dt-button:active:not(.disabled),
 .datatable-container .dataTables_wrapper a.dt-button.active:not(.disabled) {
-    background: #E2E2E2;
+    background: var(--surface-muted);
 }
 
 .datatable-container .dataTables_wrapper .dataTables_paginate a.paginate_button,
@@ -374,21 +406,21 @@
     padding: 4px 8px;
     font-size: 11px;
     color: var(--text-color);
-    background: #FFF none;
-    border: 1px solid #FFF;
+    background: var(--surface) none;
+    border: 1px solid var(--surface);
     border-radius: 3px;
 }
 
 .datatable-container .dataTables_wrapper .dataTables_paginate a.paginate_button.current {
     font-weight: bold;
-    color: #FFF !important;
-    border-color: #FFF;
+    color: var(--text-inverse) !important;
+    border-color: var(--surface);
     background: var(--text-color) none;
 }
 
 .datatable-container .dataTables_wrapper .dataTables_paginate a.paginate_button:hover,
 .datatable-container .dataTables_wrapper .dataTables_paginate a.paginate_button.current:hover {
-    color: #FFF !important;
+    color: var(--text-inverse) !important;
     border-color: var(--text-color);
     background: var(--text-color) none;
 }
