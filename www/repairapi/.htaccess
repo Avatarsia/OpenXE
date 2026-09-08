@@ -1,0 +1,20 @@
+# RepairIntegration API — Allow access to index.php
+Order Allow,Deny
+Allow from all
+
+<Files "index.php">
+    Order Allow,Deny
+    Allow from all
+</Files>
+
+# Block everything except index.php
+<FilesMatch "^(?!index\.php$)">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Pass Authorization header to PHP (Apache strips it by default)
+SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
+
+# Support PATH_INFO for /repair-status routing
+AcceptPathInfo On
