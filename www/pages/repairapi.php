@@ -21,6 +21,6 @@ class Repairapi
     {
         $controller = $this->app->Container->get('RepairApiController');
         $controller->handlePushDetails();
-        $this->app->ExitStandard();
+        $this->app->ExitXentral();
     }
 }
