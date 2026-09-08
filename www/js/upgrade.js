@@ -27,7 +27,7 @@
     // Enter in den Textfeldern soll KEIN implizites Form-Submit
     // auslösen — der Browser würde sonst den ersten Submit-Button
     // des Formulars wählen und die Eingaben verwerfen.
-    var textFieldIds = ['remote_host', 'remote_branch', 'log-search'];
+    var textFieldIds = ['log-search'];
     for (var i = 0; i < textFieldIds.length; i++) {
         var field = document.getElementById(textFieldIds[i]);
         if (field) {

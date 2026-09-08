@@ -334,6 +334,12 @@ button.banner-btn:hover {background:rgba(255, 255, 255, .24) !important;}
 .log-header a.log-download:hover {background:#0a325a !important;}
 .rollback-card {border:2px solid var(--upg-warning) !important;}
 
+/* ---------- Zweigauswahl (Upstream branchupgrade) ---------- */
+.branch-warning {color:var(--upg-error);}
+.branch-table {width:100%;border-collapse:collapse;}
+.branch-table th, .branch-table td {text-align:left;padding:var(--upg-s1) var(--upg-s2);border-bottom:1px solid var(--upg-border);vertical-align:top;}
+.branch-table th {font-weight:600;}
+
 /* ---------- Responsive: einspaltig < 900px ---------- */
 @media (max-width: 900px) {
     .grid-2 {grid-template-columns:1fr;}

@@ -35,8 +35,14 @@ fork binary compatible with upstream backend bug fixes.
   `git ls-remote` against the configured upgrade source and shows
   whether the local checkout is aligned with the configured
   remote branch
-- One-click reset to upgrade source and configurable remote
-  host/branch via `upgrade/data/remote.json`
+- Branch selection (upstream `branchupgrade` feature) rendered as a
+  radio list inside the card layout. `upgrade/data/remote.json` is
+  the upstream list format (`name`/`enabled`/`active`/`host`/
+  `branch`/`check`/`migration`); the first entry with `active: true`
+  is the upgrade source shown in the comparison card. Selecting a
+  different branch and starting the upgrade runs the upstream
+  migration path (`do_migrate` / `-m`). The former free-text remote
+  editor was dropped because it wrote the pre-1.13 object format
 
 ## File Layout
 
