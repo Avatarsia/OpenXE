@@ -9,13 +9,10 @@ use Xentral\Components\Database\Exception\QueryFailureException;
 class upgrade {
 
     /**
-     * Validation-Patterns für Remote-Eingabe.
-     * Host: erlaubt Wort-Zeichen, @, Punkte, Doppelpunkt, Slash, Dash
-     * (deckt SSH-URLs und HTTPS-URLs ab). `..` wird absichtlich nicht
-     * separat blockiert — alle git-Aufrufe nutzen escapeshellarg(),
-     * eine Path-Traversal über den Host-Wert ist daher nicht möglich.
+     * Validation-Pattern fuer den per Radio gewaehlten Zweig-Namen aus
+     * upgrade/data/remote.json (Feld "name"). Der Wert wird nur als
+     * String an upgrade_main() durchgereicht, nie an eine Shell.
      */
-    const REMOTE_HOST_PATTERN = '/^[\\w@.:\\/-]+$/';
     const BRANCH_NAME_PATTERN = '/^[A-Za-z0-9._\\/-]+$/';
     // Optionaler numerischer Suffix (-2, -3, ...) entsteht bei
     // Tag-Namenskollisionen innerhalb derselben Sekunde.
@@ -209,8 +206,13 @@ class upgrade {
         $verbose = $no_submit ? true : ($details_post === '1');
         $db_verbose = $no_submit ? true : ($db_details_post === '1');
         $force = $this->app->Secure->GetPOST('erzwingen') === '1';
-        $remote_host_input = trim((string)$this->app->Secure->GetPOST('remote_host'));
-        $remote_branch_input = trim((string)$this->app->Secure->GetPOST('remote_branch'));
+        // Zweigauswahl (Upstream branchupgrade): Radio-Wert aus der Liste
+        // der in remote.json hinterlegten Zweige. Ungueltige Werte werden
+        // verworfen, dann verhaelt sich do_upgrade wie ohne Zweigwechsel.
+        $branch_input = trim((string)$this->app->Secure->GetPOST('branch'));
+        if ($branch_input !== '' && !preg_match(self::BRANCH_NAME_PATTERN, $branch_input)) {
+            $branch_input = '';
+        }
 
         $this->app->Tpl->Set('ERZWINGEN', $force ? "checked" : "");
         $this->app->Tpl->Set('DETAILS_ANZEIGEN', $verbose ? "checked" : "");
@@ -240,9 +242,8 @@ class upgrade {
 
         $remote_host = "";
         $remote_branch = "";
-        $remote_errors = array();
-        $original_remote_host = "";
-        $original_remote_branch = "";
+        $current_branch = "";
+        $branches_html = "";
 
         // Sucht ab __DIR__ aufwärts nach dem Repo-Root (.git-Verzeichnis).
         // Bricht ab, wenn dirname() denselben Pfad zurückgibt (Drive-Root).
@@ -269,13 +270,51 @@ class upgrade {
         $remote_hash = "";
         $remote_hash_short = "";
 
+        // remote.json ist seit Upstream branchupgrade eine Liste von
+        // Zweigen (name/enabled/active/description/host/branch/check/
+        // migration). Der erste Eintrag mit active=true ist die aktuelle
+        // Upgrade-Quelle — dieselbe Regel wie in upgrade_main().
         if (is_readable($remote_config_file)) {
             $remote_data_raw = file_get_contents($remote_config_file);
-            $remote_data = json_decode($remote_data_raw, true) ?: array();
-            $remote_host = $remote_data['host'] ?? "";
-            $remote_branch = $remote_data['branch'] ?? "";
-            $original_remote_host = $remote_data['original_host'] ?? "";
-            $original_remote_branch = $remote_data['original_branch'] ?? "";
+            $remotes = json_decode($remote_data_raw, true);
+            if (!is_array($remotes)) {
+                $remotes = array();
+            }
+            $branch_rows = "";
+            foreach ($remotes as $remote) {
+                if (!is_array($remote) || empty($remote['name'])) {
+                    continue;
+                }
+                $is_active = !empty($remote['active']);
+                $is_enabled = !empty($remote['enabled']);
+                if ($is_active && $current_branch === "") {
+                    $current_branch = (string)$remote['name'];
+                    $remote_host = (string)($remote['host'] ?? "");
+                    $remote_branch = (string)($remote['branch'] ?? "");
+                }
+                $branch_status = $is_active ? "aktiv" : "";
+                if (!$is_enabled) {
+                    $branch_status = "gesperrt";
+                }
+                $name_escaped = $this->esc((string)$remote['name']);
+                $branch_rows .= '<tr>'
+                    .'<td><input type="radio" name="branch" value="'.$name_escaped.'"'
+                    .($is_active ? ' checked' : '').(!$is_enabled ? ' disabled' : '').'></td>'
+                    .'<td>'.$name_escaped.'</td>'
+                    .'<td>'.$this->esc($branch_status).'</td>'
+                    .'<td>'.$this->esc((string)($remote['description']['de'] ?? "")).'</td>'
+                    .'</tr>';
+            }
+            if ($branch_rows !== "") {
+                $branches_html = '<table class="branch-table">'
+                    .'<thead><tr><th></th><th>Name</th><th>Status</th><th>Beschreibung</th></tr></thead>'
+                    .'<tbody>'.$branch_rows.'</tbody></table>';
+            }
+            if ($current_branch === "") {
+                $status_headline = "Hinweis";
+                $status_level = "warning";
+                $status_message = "Kein aktiver Zweig in der Upgrade-Quelle konfiguriert.";
+            }
         } else {
             $status_headline = "Hinweis";
             $status_level = "warning";
@@ -290,7 +329,7 @@ class upgrade {
         // bereits oben via exit raus, danach gibt es kein exit/die mehr in
         // dieser Funktion, daher reicht ein einfaches Release am Ende
         // (kein try/finally).
-        $locked_submits = ['check_upgrade', 'do_upgrade', 'check_db', 'do_db_upgrade', 'rollback_to_tag', 'save_remote', 'reset_remote_origin'];
+        $locked_submits = ['check_upgrade', 'do_upgrade', 'check_db', 'do_db_upgrade', 'rollback_to_tag'];
         $needs_lock = in_array($submit, $locked_submits, true);
         $lock_handle = null;
         if ($needs_lock && $git_root !== "") {
@@ -313,91 +352,6 @@ class upgrade {
                 $status_message = "Anderer Upgrade-Vorgang läuft gerade. Bitte warten und Seite neu laden.";
                 $last_action = "Abgebrochen (Lock belegt)";
                 $submit = null; // verhindert Submit-Dispatch unten
-            }
-        }
-
-        if ($submit === 'save_remote') {
-            if ($remote_host_input === '') {
-                $remote_errors[] = "Git-Remote darf nicht leer sein.";
-            }
-            if ($remote_branch_input === '') {
-                $remote_errors[] = "Branch darf nicht leer sein.";
-            }
-            if ($remote_host_input !== '' && !preg_match(self::REMOTE_HOST_PATTERN, $remote_host_input)) {
-                $remote_errors[] = "Git-Remote enthält ungültige Zeichen.";
-            }
-            if ($remote_branch_input !== '' && !preg_match(self::BRANCH_NAME_PATTERN, $remote_branch_input)) {
-                $remote_errors[] = "Branch enthält ungültige Zeichen.";
-            }
-
-            if (empty($remote_errors)) {
-                // Originalwerte nur beim allerersten Speichern festlegen.
-                // Existieren bereits original_*-Werte, werden sie im Payload
-                // beibehalten — sonst würde reset_remote_origin zur No-Op.
-                // Edge: alte remote.json ohne original_* → die bisherigen
-                // host/branch-Werte sind das werksseitige Original.
-                $original_host_to_store = $original_remote_host !== "" ? $original_remote_host
-                    : ($remote_host !== "" ? $remote_host : $remote_host_input);
-                $original_branch_to_store = $original_remote_branch !== "" ? $original_remote_branch
-                    : ($remote_branch !== "" ? $remote_branch : $remote_branch_input);
-                $payload = json_encode(
-                    array(
-                        'host' => $remote_host_input,
-                        'branch' => $remote_branch_input,
-                        'original_host' => $original_host_to_store,
-                        'original_branch' => $original_branch_to_store
-                    ),
-                    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
-                );
-                if (file_put_contents($remote_config_file, $payload) === false) {
-                    $remote_errors[] = "Upgrade-Quelle konnte nicht gespeichert werden.";
-                } else {
-                    $remote_host = $remote_host_input;
-                    $remote_branch = $remote_branch_input;
-                    $original_remote_host = $original_host_to_store;
-                    $original_remote_branch = $original_branch_to_store;
-                    $status_headline = "Upgrade-Quelle gespeichert";
-                    $status_level = "success";
-                    $status_message = "Remote und Branch wurden übernommen.";
-                }
-            }
-            if (!empty($remote_errors)) {
-                $status_headline = "Eingabefehler";
-                $status_level = "error";
-                $status_message = implode(" ", $remote_errors);
-                // Eingegebene Werte im Formular behalten — sonst verschwindet
-                // die Usereingabe hinter den alten Config-Werten.
-                $remote_host = $remote_host_input;
-                $remote_branch = $remote_branch_input;
-            }
-        } elseif ($submit === 'reset_remote_origin') {
-            if ($original_remote_host === "" || $original_remote_branch === "") {
-                $remote_errors[] = "Kein Original-Remote hinterlegt.";
-            }
-            if (empty($remote_errors)) {
-                $payload = json_encode(
-                    array(
-                        'host' => $original_remote_host,
-                        'branch' => $original_remote_branch,
-                        'original_host' => $original_remote_host,
-                        'original_branch' => $original_remote_branch
-                    ),
-                    JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES
-                );
-                if (file_put_contents($remote_config_file, $payload) === false) {
-                    $remote_errors[] = "Upgrade-Quelle konnte nicht zurückgesetzt werden.";
-                } else {
-                    $remote_host = $original_remote_host;
-                    $remote_branch = $original_remote_branch;
-                    $status_headline = "Upgrade-Quelle zurückgesetzt";
-                    $status_level = "success";
-                    $status_message = "Remote/Branch auf Originalwerte gestellt.";
-                }
-            }
-            if (!empty($remote_errors)) {
-                $status_headline = "Eingabefehler";
-                $status_level = "error";
-                $status_message = implode(" ", $remote_errors);
             }
         }
 
@@ -457,9 +411,15 @@ class upgrade {
 
         // Lookup-Tabelle für die Engine-Aktionen. Jede Action mapped auf
         // ein Set Flags, das nahezu 1:1 an upgrade_main() durchgereicht
-        // wird. Andere Submits (refresh, save_remote, rollback_to_tag)
-        // sind UI-only und werden separat behandelt; unbekannte Submits
-        // laufen wie 'refresh' (kein Status-Overwrite, kein Log-Reset).
+        // wird. Andere Submits (refresh, rollback_to_tag) sind UI-only und
+        // werden separat behandelt; unbekannte Submits laufen wie
+        // 'refresh' (kein Status-Overwrite, kein Log-Reset).
+        //
+        // Zweigwechsel (Upstream branchupgrade): weicht der gewaehlte Zweig
+        // vom aktiven ab, laeuft do_upgrade als Migration (-m) — die Engine
+        // prueft dann check.php, fuehrt migrate.php aus und wechselt den
+        // Zweig, bevor das eigentliche Upgrade startet.
+        $do_migrate = ($branch_input !== '' && $current_branch !== '' && $branch_input !== $current_branch);
         $actions = [
             'check_upgrade' => [
                 'label' => "System-Check (Dateien & Datenbank)",
@@ -472,12 +432,13 @@ class upgrade {
                 'sets_upgrade_db_visible' => false,
             ],
             'do_upgrade' => [
-                'label' => "Upgrade (Dateien & Datenbank)",
+                'label' => $do_migrate ? "Zweigwechsel auf ".$branch_input." (Dateien & Datenbank)" : "Upgrade (Dateien & Datenbank)",
                 'verbose' => $verbose,
                 'check_git' => true,
                 'do_git' => true,
                 'check_db' => true,
                 'do_db' => true,
+                'do_migrate' => $do_migrate,
                 'sets_upgrade_visible' => false,
                 'sets_upgrade_db_visible' => false,
             ],
@@ -561,7 +522,9 @@ class upgrade {
                     force: $force,
                     connection: false,
                     origin: false,
-                    drop_keys: false
+                    drop_keys: false,
+                    do_migrate: !empty($cfg['do_migrate']),
+                    upgrade_branch: !empty($cfg['do_migrate']) ? $branch_input : ''
                 );
             } catch (Throwable $e) {
                 // PHP >= 8.1 wirft z.B. mysqli_sql_exception — das darf den
@@ -584,8 +547,6 @@ class upgrade {
             }
         } elseif ($submit === 'refresh') {
             $last_action = "Anzeige aktualisiert";
-        } elseif ($submit === 'save_remote') {
-            $last_action = "Upgrade-Quelle speichern";
         } elseif ($submit === 'rollback_to_tag') {
             $last_action = "Rollback durchgeführt";
             $rollback_tag = $this->app->Secure->GetPOST('rollback_tag');
@@ -672,9 +633,9 @@ class upgrade {
         $remaining_count = null; // Restdifferenzen nach Upgrade
         $db_error_count = null;  // fehlgeschlagene DB-Statements
 
-        // Status-Klassifikation NUR für Engine-Submits — rollback_to_tag,
-        // save_remote, reset_remote_origin und unbekannte Submits setzen
-        // ihren Status selbst bzw. behalten den Default.
+        // Status-Klassifikation NUR für Engine-Submits — rollback_to_tag
+        // und unbekannte Submits setzen ihren Status selbst bzw. behalten
+        // den Default.
         if ($engine_ran) {
             $diff_count = $this->logNumber(self::RESULT_DIFF_IN_JSON_NOT_DB, $result);
             $obsolete_count = $this->logNumber(self::RESULT_DIFF_IN_DB_NOT_JSON, $result);
@@ -846,6 +807,8 @@ class upgrade {
 
         $this->app->Tpl->Set('REMOTE_HOST', $this->esc($remote_host));
         $this->app->Tpl->Set('REMOTE_BRANCH', $this->esc($remote_branch));
+        $this->app->Tpl->Set('CURRENTBRANCH', $this->esc($current_branch));
+        $this->app->Tpl->Set('BRANCHES', $branches_html !== "" ? $branches_html : '<p class="hint">Keine Zweige in remote.json hinterlegt.</p>');
         $this->app->Tpl->Set('UPDATE_STATUS', $update_status_text);
         $this->app->Tpl->Set('UPDATE_STATUS_CLASS', $update_status_class);
         $this->app->Tpl->Set('LOCAL_HASH_SHORT', $this->esc($local_hash_short));
