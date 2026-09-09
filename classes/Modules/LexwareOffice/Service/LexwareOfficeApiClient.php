@@ -275,7 +275,11 @@ final class LexwareOfficeApiClient
         $content = (string)$response->getBody();
         $decoded = json_decode($content, true);
 
-        if ($decoded === null && json_last_error() !== JSON_ERROR_NONE) {
+        // Deckt Parse-Fehler (json_decode liefert null) und valides, aber
+        // nicht-assoziatives JSON (null/"str"/123/true) in einer Bedingung ab.
+        // Ohne is_array() wuerde der Return-Type array einen uncaught TypeError
+        // werfen statt der LexwareOfficeException, die die Aufrufer behandeln.
+        if (!is_array($decoded)) {
             throw new LexwareOfficeException('Die Antwort von Lexware Office konnte nicht gelesen werden.');
         }
 
