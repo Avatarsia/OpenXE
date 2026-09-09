@@ -349,9 +349,9 @@ class Ticket {
                             continue;
                         }
                         try {
-                            $this->app->Container->get('RepairSyncService')->checkAndQueueStatusChange($selectedId);
+                            $this->app->Container->get('RepairSyncService')->queueAndPushStatusChange($selectedId);
                         } catch (\Throwable $e) {
-                            // Modul nicht installiert/konfiguriert -> still ueberspringen
+                            error_log('Repair status queue failed for ticket #' . $selectedId . ': ' . $e->getMessage());
                         }
                     }
                 break;

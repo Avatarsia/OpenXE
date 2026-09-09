@@ -10,6 +10,11 @@ $app->DB->Update("UPDATE prozessstarter SET mutex = 1 WHERE parameter = '{$param
 
 try {
     $syncService = $app->Container->get('RepairSyncService');
+    try {
+        $syncService->backfillAndQueueCurrentStatuses();
+    } catch (\Throwable $e) {
+        error_log('Repair backfill deferred: ' . $e->getMessage());
+    }
     $processed = $syncService->processQueue();
     if ($processed > 0) {
         $app->erp->LogFile('repair_sync', "Processed {$processed} sync queue entries");

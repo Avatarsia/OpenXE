@@ -228,16 +228,17 @@ Wenn ein OpenXE-Mitarbeiter den Ticket-Status aendert (z.B. "In Reparatur" → "
 - Trigger: `www/pages/ticket_custom.php::ticket_edit()` instanziiert nach dem Speichern direkt `classes/Modules/RepairIntegration/Hook/TicketStatusChangeHook.php::onTicketEditAfter($ticketId, $oldStatus)` (keine `hook_register`-Registrierung — die frueheren, toten `ticket_edit_after`/`ticket_list_after`-Eintraege entfernt `install.php` self-healing per DELETE)
 - Service: `classes/Modules/RepairIntegration/Service/RepairSyncService.php`
 - Queue-Gateway: `classes/Modules/RepairIntegration/Gateway/RepairSyncQueueGateway.php`
-- Cron: `cronjobs/repair_sync.php` (Prozessstarter-Parameter `repair_sync`, einmal taeglich, periode 1440, Mutex-geschuetzt)
+- Cron: `cronjobs/repair_sync.php` (Prozessstarter-Parameter `repair_sync`, alle 2 Minuten, periode 2, Mutex-geschuetzt)
 - Mapping-Quelle: `ticket_status_config.wp_status_mapping` ueber `RepairStatusConfigGateway::getWpMapping()`
 
 ### Ablauf
 
 1. `TicketStatusChangeHook::onTicketEditAfter($ticketId, $oldStatus)` vergleicht alten und aktuellen `ticket.status`; bei Gleichstand passiert nichts.
-2. `RepairSyncService::checkAndQueueStatusChange($ticketId)` bricht ab, wenn das Modul deaktiviert ist, keine `repair_details` existieren oder `wp_request_number` leer ist.
+2. `RepairSyncService::queueAndPushStatusChange($ticketId)` bricht ab, wenn das Modul deaktiviert ist, keine `repair_details` existieren oder `wp_request_number` leer ist.
 3. `getWpMapping(ticket.status)` liefert den WP-Slug. **Ist das Mapping `NULL`, wird nicht synchronisiert** — das ist der bewusste Weg, um interne Status (z.B. `offen`, `warten_e`, `wartung_geplant`) vor dem Kunden-Frontend zu verbergen.
-4. Der Payload wird in `repair_sync_queue` eingereiht (`action = 'status_change'`, Ziel-URL aus `RepairConfigService::getWpApiUrl()` + `/wp-json/p3d/v1/requests/status`).
-5. `cronjobs/repair_sync.php` ruft `RepairSyncService::processQueue()` (max. 50 Eintraege pro Lauf), Ergebnis landet in `repair_sync_log` (`direction = 'outbound'`).
+4. Der Payload wird in `repair_sync_queue` eingereiht (`action = 'status_change'`, Ziel-URL aus `RepairConfigService::getWpApiUrl()` + `/wp-json/p3d/v1/requests/status`) und **noch im Speicher-Request synchron zugestellt** (Timeout 8 s). Schlaegt das fehl, bleibt der Eintrag als `failed` mit `next_retry_at` stehen.
+5. `cronjobs/repair_sync.php` ruft `RepairSyncService::processQueue()` (max. 50 Eintraege pro Lauf) fuer Retries und Backfill, Ergebnis landet in `repair_sync_log` (`direction = 'outbound'`).
+6. `wp_api_url` muss der kanonische Host ohne Redirect sein (z.B. `https://www.partner-3d.de`, nicht `https://partner-3d.de` — dort antwortet nginx mit 301 und der Push kommt nie beim Plugin an).
 
 ### Ziel-Endpoint (im WP-Plugin)
 

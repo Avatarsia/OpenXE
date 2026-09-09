@@ -37,7 +37,7 @@ $db->perform(
 
 // 3. Register cronjobs in prozessstarter
 $cronjobs = [
-    ['repair_sync', 'cronjobs/repair_sync.php', 1440, 'Repair WP Sync'],
+    ['repair_sync', 'cronjobs/repair_sync.php', 2, 'Repair WP Sync'],
     ['repair_reminders', 'cronjobs/repair_reminders.php', 1440, 'Repair Erinnerungsmails'],
     ['repair_retention', 'cronjobs/repair_retention.php', 1440, 'Repair DSGVO Retention'],
 ];
@@ -65,7 +65,7 @@ foreach ($cronjobs as [$parameter, $datei, $periode, $bezeichnung]) {
 }
 
 // Self-healing fuer Bestandsinstallationen (idempotent):
-// - repair_sync soll nur einmal taeglich laufen (periode 1440 statt 2)
+// - repair_sync soll Statusaenderungen zeitnah verarbeiten (periode 2)
 // - durch den frueheren Spalten-Typo im finally-UPDATE der Cronjobs
 //   (letzteausfuehrung statt letzteausfuerhung) blieb mutex ggf. auf 1
 //   haengen und der Job lief nie wieder
@@ -77,7 +77,7 @@ $db->perform(
      WHERE `parameter` IN ('repair_sync', 'repair_reminders', 'repair_retention')"
 );
 $db->perform(
-    "UPDATE `prozessstarter` SET `periode` = '1440' WHERE `parameter` = 'repair_sync'"
+    "UPDATE `prozessstarter` SET `periode` = '2' WHERE `parameter` = 'repair_sync'"
 );
 
 // 4. Register permissions
@@ -106,3 +106,7 @@ foreach ($adminUsers as $adminUser) {
 }
 
 echo "\nRepairIntegration install complete.\n";
+
+// Mapping/schema and cron registration must succeed before data backfill.
+$backfill = $app->Container->get('RepairSyncService')->backfillAndQueueCurrentStatuses();
+echo "Repair status backfill: {$backfill['recovered']} recovered, {$backfill['queued']} queued, {$backfill['skipped']} skipped.\n";
