@@ -79,11 +79,11 @@ class Ticket {
             case "ticket_list":
 
                 $allowed['ticket_list'] = array('list');
-                $heading = array('','','Ticket #', 'Aktion','Adresse', 'Betreff',  'Tags', 'Verant.', 'Nachr.', 'Status', 'Projekt', 'Men&uuml;');
-                $width = array('1%','1%','5%',     '5%',        '5%',      '30%',      '1%',     '5%',     '1%',    '1%',      '1%',      '1%');
+                $heading = array('','','Ticket #', 'Aktion','Adresse', 'Betreff',  'Modell', 'Express', 'Nachr.', 'Status', 'Projekt', 'Men&uuml;');
+                $width = array('1%','1%','5%',     '5%',        '5%',      '30%',      '10%',    '1%',      '1%',    '1%',      '1%',      '1%');
 
-                $findcols = array('t.id','t.id','t.schluessel', 't.zeit', 'a.name', 't.betreff',            't.tags', 'w.warteschlange', 'nachrichten_anz', 't.status', 'p.abkuerzung');
-                $searchsql = array(             't.schluessel', 't.zeit', 'a.name', 't.betreff','t.notiz',  't.tags', 'w.warteschlange', 't.status', 'p.abkuerzung','(SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1)');
+                $findcols = array('t.id','t.id','t.schluessel', 't.zeit', 'a.name', 't.betreff',            'device', 'rd.is_express', 'nachrichten_anz', 't.status', 'p.abkuerzung');
+                $searchsql = array(             't.schluessel', 't.zeit', 'a.name', 't.betreff','t.notiz',  'rd.manufacturer', 'rd.model', 't.status', 'p.abkuerzung','(SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1)');
 
                 $defaultorder = 1;
                 $defaultorderdesc = 0;
@@ -105,9 +105,6 @@ class Ticket {
 
                 $letztemail = $app->erp->FormatDateTimeShort("(SELECT MAX(n.zeit) FROM ticket_nachricht n WHERE n.ticket = t.schluessel AND n.zeit IS NOT NULL)");
 
-                $tagstart = "<li class=\"tag-editor-tag\">";
-                $tagend = "</li>";
-
                 $sql = "SELECT SQL_CALC_FOUND_ROWS
                         t.id,
                         ".$dropnbox.",
@@ -115,8 +112,8 @@ class Ticket {
                         $app->erp->FormatDateTimeShort('zeit')." as aktion,
                         CONCAT(COALESCE(CONCAT(a.name,'<br>'),''),COALESCE((SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1),'')) as combiadresse,
                         CONCAT('<b>',".$priobetreff.",'</b><br/><i>',replace(substring(ifnull(t.notiz,''),1,500),'\n','<br/>'),'</i>'),
-                        CONCAT('<div class=\"ticketoffene\"><ul class=\"tag-editor\">'\n,'".$tagstart."',replace(t.tags,',','".$tagend."<div class=\"tag-editor-spacer\">&nbsp;</div>".$tagstart."'),'".$tagend."','</ul></div>'),
-                        w.warteschlange,
+                        TRIM(CONCAT(COALESCE(rd.manufacturer,''), ' ', COALESCE(rd.model,''))) as device,
+                        IF(rd.is_express = 1, '<b><font color=red>Express</font></b>', '') as is_express,
                         ".$anzahlnachrichten." as `nachrichten_anz`,
                         ".ticket_iconssql().",
                         p.abkuerzung,
@@ -124,7 +121,8 @@ class Ticket {
                         FROM ticket t
                         LEFT JOIN adresse a ON t.adresse = a.id
                         LEFT JOIN warteschlangen w ON t.warteschlange = w.label
-                        LEFT JOIN projekt p on t.projekt = p.id";
+                        LEFT JOIN projekt p on t.projekt = p.id
+                        LEFT JOIN ticket_repair_details rd ON rd.ticket_id = t.id";
 
                 $where = "1";
 
