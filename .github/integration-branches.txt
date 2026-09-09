@@ -63,6 +63,9 @@ fix/bootstrap-static-cross-check
 # #279 Location redirects behind TLS-terminating reverse proxy pointed to
 #   https://host:80/... (SERVER_PORT blindly appended) -> SSL error after actions
 fix/location-redirect-proxy-port
+# SuperSearch: jsonSerialize() without return type -> PHP 8.1+ E_DEPRECATED
+#   prepended to the SuperSearch AJAX JSON when display_errors is on
+fix/supersearch-jsonserialize-returntype
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #267
