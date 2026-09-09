@@ -89,12 +89,18 @@ class TicketCustom extends Ticket
             $this->app->Tpl->Set('REPAIR_QUOTE', htmlspecialchars($details['quote_amount'] ?? ''));
             $this->app->Tpl->Set('REPAIR_ACTUAL_COST', htmlspecialchars($details['actual_cost'] ?? ''));
             // Read-only: der Wert kommt ausschliesslich per Push von WP.
-            // Leer -> Gedankenstrich, damit der Chip im Panel nicht leer steht.
+            // Leer -> eigener KVA-Betrag als unbestaetigter Fallback, sonst
+            // Gedankenstrich, damit der Chip im Panel nicht leer steht.
             $customerQuote = trim((string)($details['customer_quote_amount'] ?? ''));
-            $this->app->Tpl->Set(
-                'REPAIR_CUSTOMER_QUOTE',
-                $customerQuote !== '' ? htmlspecialchars($customerQuote) . ' &euro;' : '&ndash;'
-            );
+            $ownQuote = trim((string)($details['quote_amount'] ?? ''));
+            if ($customerQuote !== '') {
+                $customerQuoteHtml = htmlspecialchars($customerQuote) . ' &euro;';
+            } elseif ($ownQuote !== '') {
+                $customerQuoteHtml = htmlspecialchars($ownQuote) . ' &euro; <i>(nicht vom Kunden best&auml;tigt)</i>';
+            } else {
+                $customerQuoteHtml = '&ndash;';
+            }
+            $this->app->Tpl->Set('REPAIR_CUSTOMER_QUOTE', $customerQuoteHtml);
             $this->app->Tpl->Set('REPAIR_NOTES', htmlspecialchars($details['repair_notes'] ?? ''));
 
             // Customer account and beleg shortcuts
@@ -111,9 +117,26 @@ class TicketCustom extends Ticket
             if (!empty($belege)) {
                 $belegHtml = '';
                 foreach ($belege as $beleg) {
+                    // Belegnummer und Status live aus der Belegtabelle: der Link
+                    // entsteht beim Entwurf (belegnr leer), die Nummer erst bei
+                    // Freigabe. Typ ist ein ENUM aus repair_ticket_beleg.
+                    $belegNr = trim((string)($beleg['beleg_nr'] ?? ''));
+                    $belegStatus = '';
+                    if (in_array($beleg['beleg_typ'], ['angebot', 'auftrag', 'rechnung', 'lieferschein', 'gutschrift'], true)) {
+                        $live = $this->app->DB->SelectRow(
+                            "SELECT belegnr, status FROM `" . $beleg['beleg_typ'] . "` WHERE id = '" . (int)$beleg['beleg_id'] . "' LIMIT 1"
+                        );
+                        if (!empty($live)) {
+                            if (trim((string)$live['belegnr']) !== '') {
+                                $belegNr = trim((string)$live['belegnr']);
+                            }
+                            $belegStatus = (string)$live['status'];
+                        }
+                    }
                     $belegHtml .= '<tr>';
                     $belegHtml .= '<td>' . htmlspecialchars(ucfirst($beleg['beleg_typ'])) . '</td>';
-                    $belegHtml .= '<td><a href="index.php?module=' . htmlspecialchars($beleg['beleg_typ'], ENT_QUOTES, 'UTF-8') . '&action=edit&id=' . (int)$beleg['beleg_id'] . '">' . htmlspecialchars($beleg['beleg_nr'] ?? '-') . '</a></td>';
+                    $belegHtml .= '<td><a href="index.php?module=' . htmlspecialchars($beleg['beleg_typ'], ENT_QUOTES, 'UTF-8') . '&action=edit&id=' . (int)$beleg['beleg_id'] . '">' . htmlspecialchars($belegNr !== '' ? $belegNr : 'Entwurf #' . (int)$beleg['beleg_id']) . '</a>'
+                        . ($belegStatus !== '' ? ' <small>(' . htmlspecialchars($belegStatus) . ')</small>' : '') . '</td>';
                     $belegHtml .= '<td>' . htmlspecialchars($beleg['created_at'] ?? '') . '</td>';
                     $belegHtml .= '</tr>';
                 }

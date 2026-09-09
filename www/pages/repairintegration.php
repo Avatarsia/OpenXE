@@ -474,6 +474,33 @@ class Repairintegration
      * per GET. ticket_edit (www/pages/ticket.php) dekodiert den msg-Parameter
      * und rendert ihn als MESSAGE.
      */
+    /**
+     * Core-Hook DokumentMaskVersendet(typ, id), registriert via hook_register
+     * (Migration 007). Der Core instanziiert die Klasse mit $intern = true,
+     * daher keine Action-Handler und kein ensureInstalled() im Konstruktor.
+     * Fehler duerfen den Belegversand nie abbrechen, nur ins Log.
+     */
+    public function RepairOnBelegVersendet($typ, $id): void
+    {
+        try {
+            $hook = new \Xentral\Modules\RepairIntegration\Hook\BelegVersendetHook(
+                $this->app->Container->get('Database'),
+                $this->app->Container->get('RepairBelegGateway'),
+                $this->app->Container->get('RepairDetailsGateway'),
+                $this->app->Container->get('RepairStatusConfigGateway'),
+                $this->app->Container->get('RepairSyncService'),
+            );
+            $hook->onBelegVersendet((string)$typ, (int)$id);
+        } catch (\Throwable $e) {
+            error_log(sprintf(
+                'RepairIntegration RepairOnBelegVersendet(%s, %d) failed: %s',
+                (string)$typ,
+                (int)$id,
+                $e->getMessage()
+            ));
+        }
+    }
+
     private function redirectToTicket(int $ticketId, string $cssClass, string $text): void
     {
         $msg = $this->app->erp->base64_url_encode(

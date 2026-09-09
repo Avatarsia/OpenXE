@@ -108,10 +108,18 @@ final class RepairSyncService
             return null;
         }
 
-        $payload = json_encode([
+        $payloadData = [
             'request_number' => $details['wp_request_number'],
             'status' => $wpStatus,
-        ], JSON_THROW_ON_ERROR);
+        ];
+        // KVA-Betrag aus OpenXE mitsenden, sobald er gesetzt ist. Das Plugin
+        // nimmt `quote_amount` im Status-Endpoint entgegen und speichert ihn
+        // als customer_quote_amount der Anfrage.
+        $quoteAmount = self::formatQuoteAmount($details['quote_amount'] ?? null);
+        if ($quoteAmount !== null) {
+            $payloadData['quote_amount'] = $quoteAmount;
+        }
+        $payload = json_encode($payloadData, JSON_THROW_ON_ERROR);
 
         $targetUrl = $baseUrl . '/wp-json/p3d/v1/requests/status';
 
@@ -126,6 +134,23 @@ final class RepairSyncService
         );
         $this->syncQueueGateway->supersedeOlderStatuses($ticketId, $latestId);
         return $latestId;
+    }
+
+    /**
+     * Formatiert den DB-Wert von ticket_repair_details.quote_amount fuer den
+     * Payload. DECIMAL kommt vom Treiber als String; leer, nicht numerisch
+     * oder <= 0 wird nicht gesendet.
+     */
+    public static function formatQuoteAmount(mixed $raw): ?string
+    {
+        if ($raw === null || $raw === '' || !is_numeric($raw)) {
+            return null;
+        }
+        $value = (float)$raw;
+        if ($value <= 0) {
+            return null;
+        }
+        return number_format($value, 2, '.', '');
     }
 
     public static function inferWpRequestNumber(string $ticketSchluessel, int $matchingTickets): ?string

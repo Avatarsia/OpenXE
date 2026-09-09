@@ -57,6 +57,18 @@ final class RepairBelegGateway
         );
     }
 
+    /**
+     * Zieht die Belegnummer nach: bei der Anlage aus dem Ticket ist der Beleg
+     * noch ein Entwurf ohne belegnr, die Nummer entsteht erst bei Freigabe.
+     */
+    public function updateBelegNr(int $id, string $belegNr): void
+    {
+        $this->db->perform(
+            'UPDATE `repair_ticket_beleg` SET `beleg_nr` = :bnr WHERE `id` = :id',
+            ['bnr' => $belegNr, 'id' => $id]
+        );
+    }
+
     public function moveToTicket(int $sourceTicketId, int $targetTicketId, string $targetSchluessel): void
     {
         $this->db->perform(

@@ -9,7 +9,7 @@ final class RepairIntegrationMigration
 {
     private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
     private const SCHEMA_VERSION_KEY = 'schema_version'; // @php83: add type string
-    private const SCHEMA_VERSION = '1.4.0'; // @php83: add type string
+    private const SCHEMA_VERSION = '1.5.0'; // @php83: add type string
 
     /**
      * Explizite Upgrade-Kette: gespeicherte Version => auszufuehrender Schritt.
@@ -27,6 +27,7 @@ final class RepairIntegrationMigration
         '1.1.0' => ['sql' => '004_remove_menu_hooks.sql', 'to' => '1.2.0'],
         '1.2.0' => ['sql' => '005_customer_quote_amount.sql', 'to' => '1.3.0'],
         '1.3.0' => ['sql' => '006_repair_status_backfill.sql', 'to' => '1.4.0'],
+        '1.4.0' => ['sql' => '007_register_beleg_versendet_hook.sql', 'to' => '1.5.0'],
     ];
 
     public function __construct(
@@ -37,6 +38,9 @@ final class RepairIntegrationMigration
     {
         $this->executeSqlFile(__DIR__ . '/sql/001_create_tables.sql');
         $this->executeSqlFile(__DIR__ . '/sql/002_seed_status_config.sql');
+        // Hook-Registrierung ist Core-Konfiguration, kein Schema, und fehlt
+        // in 001 - deshalb auch bei Neuinstallation ausfuehren (idempotent).
+        $this->executeSqlFile(__DIR__ . '/sql/007_register_beleg_versendet_hook.sql');
         $this->setVersion(self::SCHEMA_VERSION);
     }
 
