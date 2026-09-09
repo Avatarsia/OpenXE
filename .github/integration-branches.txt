@@ -31,11 +31,6 @@ feature/upgrader-ui-module
 #   upstream and the refactor into a dedicated TicketPortalService is
 #   still pending. Re-enable once the refactor lands.
 
-# RepairIntegration — Inbound endpoint (/repair-status) consumed by the
-# Partner3D WordPress repair-intake plugin. Adds classes/Modules/RepairIntegration/*
-# plus Bootstrap registration; no core PHP touches outside the module folder.
-feature/repair-integration-port
-
 # Mini-patches (small core touches, kept as patch branches without Bootstrap)
 feature/plz-clean
 feature/row-highlight-clean
@@ -77,8 +72,12 @@ refactor/woocommerce-composer-sdk
 
 # UI: Dark Theme (token-based CSS, per-user switch auto/light/dark).
 # Touches theme CSS, page templates and inline styles across www/pages --
-# keep after all feature/fix branches so it merges last.
+# keep after preceding feature/fix branches; RepairIntegration follows below.
 feature/dark-theme
+
+# RepairIntegration — clean branch based on upstream/master. Kept as the last
+# feature so its ticket integration is applied after all other feature branches.
+feature/repair-integration-clean
 
 # Fork-specific override — MUST stay as the last entry. Sets
 # upgrade/data/remote.json to Avatarsia/OpenXE production so the file
