@@ -2523,8 +2523,14 @@ class Rechnung extends GenRechnung
               }
             }
           break;
+          default:
+            // Hook-API fuer Bulk-Aktionen (analog zu Rechnung_Aktion_case fuer
+            // Einzel-Aktionen). Module koennen eigene Stapel-Operationen ueber
+            // RegisterHook('Rechnung_Stapel_case', ...) anbieten.
+            $this->app->erp->RunHook('Rechnung_Stapel_case', 2, $aktion, $auswahl);
+          break;
         }
-      }      
+      }
     } // ende ausfuehren
 
     if($this->app->Secure->GetPOST('zahlungsstatus_berechnen') && $this->app->erp->RechteVorhanden('rechnung', 'edit')) {
@@ -2633,7 +2639,13 @@ class Rechnung extends GenRechnung
     }
 
     $this->app->Tpl->Set('SELDRUCKER', $this->app->erp->GetSelectDrucker($this->app->User->GetParameter('rechnung_list_drucker')));
-    
+
+    // Hook-API fuer Bulk-Aktionen: Module koennen das Stapel-Dropdown
+    // ueber RegisterHook('Rechnung_Stapel_option', ...) hinzufuegen.
+    $stapelOptions = '';
+    $this->app->erp->RunHook('Rechnung_Stapel_option', 1, $stapelOptions);
+    $this->app->Tpl->Set('RECHNUNG_STAPEL_OPTIONS', $stapelOptions);
+
     $this->app->Tpl->Parse('PAGE','rechnunguebersicht.tpl');
   }
   
