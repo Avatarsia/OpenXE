@@ -66,7 +66,7 @@ SPDX-License-Identifier: LicenseRef-EGPL-3.1
 	<link href="./themes/[THEME]/css/colorPicker.css" rel="stylesheet" type="text/css" />
 
 	<link rel="stylesheet" href="./themes/[THEME]/css/theme-utilities.css?v=1">
-	<link rel="stylesheet" href="./themes/[THEME]/css/dark-overrides.css?v=2">
+	<link rel="stylesheet" href="./themes/[THEME]/css/dark-overrides.css?v=3">
 	<link rel="stylesheet" href="./themes/[THEME]/css/dark-icons.css?v=2">
 
 	<script src="./js/ckeditor/ckeditor.js"></script>

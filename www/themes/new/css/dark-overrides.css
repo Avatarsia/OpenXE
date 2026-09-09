@@ -1012,3 +1012,30 @@ html.openXeDarkMode body .tag-editor input {
     color: var(--textfield-color);
 }
 
+
+/* ------------------------------------------------------------------
+   phpwf HtmlTable - Zebra-Zeilen per Inline-Style
+   Quelle: phpwf/htmltags/class.table.php (GetNextColor: #e0e0e0 / #fff)
+   und phpwf/plugins/class.yui.php (jQuery .css('background', ...)).
+   Genutzt u.a. von den Positionstabellen (Angebot/Auftrag/Rechnung),
+   generic.tpl, projekt_kostenstellen.tpl, Lager, Shopimport.
+   !important noetig: Inline-Styles gewinnen sonst gegen jedes Stylesheet.
+   ------------------------------------------------------------------ */
+
+html.openXeDarkMode tr[style*="background-color:#e0e0e0"],
+html.openXeDarkMode td[style*="background:#e0e0e0"] {
+    background-color: var(--surface-alt) !important;
+}
+
+html.openXeDarkMode tr[style*="background-color:#fff"],
+html.openXeDarkMode td[style*="background:#fff"] {
+    background-color: var(--surface) !important;
+}
+
+/* Autocomplete-Eingabefeld: Inline-<style> im Body
+   (auftrag_positionuebersicht.tpl, popup.tpl) setzt #D5ECF2 und laedt nach
+   dieser Datei -> "body "-Praefix hebt die Spezifitaet. */
+html.openXeDarkMode body input.ui-autocomplete-input {
+    background: var(--accent-soft);
+    color: var(--textfield-color);
+}
