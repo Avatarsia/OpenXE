@@ -29,6 +29,8 @@
 <script type="text/javascript" src="./js/jquery.dataTables.columnFilter.js"></script>
 
 <script src="./js/ckeditor/ckeditor.js"></script>
+<!-- Cache-Buster fuer CKEditor-Ressourcen (config.js, contents.css, skins): bei Aenderungen hochzaehlen -->
+<script>CKEDITOR.timestamp = 'HBDG2';</script>
 <script src="./js/ckeditor/adapters/jquery.js"></script>
 	[CKEDITORJS]
 	<link href="./css/bootstrap.min.css?v=4" rel="stylesheet" type="text/css" media="screen">
