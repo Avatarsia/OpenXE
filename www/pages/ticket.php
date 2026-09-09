@@ -79,11 +79,11 @@ class Ticket {
             case "ticket_list":
 
                 $allowed['ticket_list'] = array('list');
-                $heading = array('','','Ticket #', 'Aktion','Adresse', 'Betreff',  'Modell', 'Express', 'Nachr.', 'Status', 'Projekt', 'Men&uuml;');
-                $width = array('1%','1%','5%',     '5%',        '5%',      '30%',      '10%',    '1%',      '1%',    '1%',      '1%',      '1%');
+                $heading = array('','','Ticket #', 'Aktion','Adresse', 'E-Mail',  'Modell', 'Express', 'Nachr.', 'Status', 'Projekt', 'Men&uuml;');
+                $width = array('1%','1%','5%',     '5%',        '20%',     '20%',     '10%',    '1%',      '1%',    '1%',      '1%',      '1%');
 
-                $findcols = array('t.id','t.id','t.schluessel', 't.zeit', 'a.name', 't.betreff',            'device', 'rd.is_express', 'nachrichten_anz', 't.status', 'p.abkuerzung');
-                $searchsql = array(             't.schluessel', 't.zeit', 'a.name', 't.betreff','t.notiz',  'rd.manufacturer', 'rd.model', 't.status', 'p.abkuerzung','(SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1)');
+                $findcols = array('t.id','t.id','t.schluessel', 't.zeit', 'a.name', 'ticket_mail',          'device', 'rd.is_express', 'nachrichten_anz', 't.status', 'p.abkuerzung');
+                $searchsql = array(             't.schluessel', 't.zeit', 'a.name', 't.betreff','t.notiz',  't.mailadresse', 'rd.manufacturer', 'rd.model', 't.status', 'p.abkuerzung','(SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1)');
 
                 $defaultorder = 1;
                 $defaultorderdesc = 0;
@@ -99,8 +99,6 @@ class Ticket {
                 $dropnbox = "'<img src=./themes/new/images/details_open.png class=details>' AS `open`,
                               CONCAT('<input type=\"checkbox\" name=\"auswahl[]\" value=\"',t.id,'\" />') AS `auswahl`";
 
-                $priobetreff = "if(t.prio!=1,REGEXP_REPLACE(t.betreff, '<[^>]*>+', ''),CONCAT('<b><font color=red>',REGEXP_REPLACE(t.betreff, '<[^>]*>+', ''),'</font></b>'))"; //+ #20230916 XSS
-
                 $anzahlnachrichten = "(SELECT COUNT(n.id) FROM ticket_nachricht n WHERE n.ticket = t.schluessel)";
 
                 $letztemail = $app->erp->FormatDateTimeShort("(SELECT MAX(n.zeit) FROM ticket_nachricht n WHERE n.ticket = t.schluessel AND n.zeit IS NOT NULL)");
@@ -110,8 +108,8 @@ class Ticket {
                         ".$dropnbox.",
                         CONCAT('<a href=\"index.php?module=ticket&action=edit&id=',t.id,'\">',t.schluessel,'</a>'),".
                         $app->erp->FormatDateTimeShort('zeit')." as aktion,
-                        CONCAT(COALESCE(CONCAT(a.name,'<br>'),''),COALESCE((SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1),'')) as combiadresse,
-                        CONCAT('<b>',".$priobetreff.",'</b><br/><i>',replace(substring(ifnull(t.notiz,''),1,500),'\n','<br/>'),'</i>'),
+                        COALESCE(a.name,'') as adresse,
+                        COALESCE(NULLIF(t.mailadresse,''),(SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1),'') as ticket_mail,
                         TRIM(CONCAT(COALESCE(rd.manufacturer,''), ' ', COALESCE(rd.model,''))) as device,
                         IF(rd.is_express = 1, '<b><font color=red>Express</font></b>', '') as is_express,
                         ".$anzahlnachrichten." as `nachrichten_anz`,
