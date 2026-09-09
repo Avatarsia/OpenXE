@@ -38,6 +38,34 @@ class Ticket {
       return('<img src="./themes/new/images/status_'.$status.'.png" style="margin-right:1px" title="'.$status.'" border="0">');
     }
 
+    /**
+     * RepairIntegration: ergaenzt das hartcodierte Status-Dropdown aus
+     * erpApi::GetTicketStatusValues() um zusaetzliche aktive Slugs aus
+     * ticket_status_config (Repair-/Wartungs-Stati). Fehlt die Tabelle
+     * (Modul nicht installiert), liefert SelectArr null und das Dropdown
+     * bleibt unveraendert.
+     */
+    private function ticket_status_select_with_config(string $status): string {
+        $html = $this->app->erp->GetStatusTicketSelect($status);
+        $rows = $this->app->DB->SelectArr(
+            "SELECT slug, label_de FROM ticket_status_config WHERE is_active = 1 ORDER BY sort_order, slug"
+        );
+        if (empty($rows)) {
+            return $html;
+        }
+        $coreStati = $this->app->erp->GetTicketStatusValues();
+        foreach ($rows as $row) {
+            $slug = (string)$row['slug'];
+            if (isset($coreStati[$slug])) {
+                continue;
+            }
+            $selected = $slug === $status ? 'selected' : '';
+            $html .= '<option value="' . htmlspecialchars($slug, ENT_QUOTES) . '" ' . $selected . '>'
+                . htmlspecialchars((string)$row['label_de']) . '</option>';
+        }
+        return $html;
+    }
+
 
     public function TableSearch(&$app, $name, $erlaubtevars) {
 
@@ -51,11 +79,11 @@ class Ticket {
             case "ticket_list":
 
                 $allowed['ticket_list'] = array('list');
-                $heading = array('','','Ticket #', 'Aktion','Adresse', 'Betreff',  'Tags', 'Verant.', 'Nachr.', 'Status', 'Projekt', 'Men&uuml;');
-                $width = array('1%','1%','5%',     '5%',        '5%',      '30%',      '1%',     '5%',     '1%',    '1%',      '1%',      '1%');
+                $heading = array('','','Ticket #', 'Aktion','Adresse', 'E-Mail',  'Modell', 'Express', 'Nachr.', 'Status', 'Projekt', 'Men&uuml;');
+                $width = array('1%','1%','5%',     '5%',        '20%',     '20%',     '10%',    '1%',      '1%',    '1%',      '1%',      '1%');
 
-                $findcols = array('t.id','t.id','t.schluessel', 't.zeit', 'a.name', 't.betreff',            't.tags', 'w.warteschlange', 'nachrichten_anz', 't.status', 'p.abkuerzung');
-                $searchsql = array(             't.schluessel', 't.zeit', 'a.name', 't.betreff','t.notiz',  't.tags', 'w.warteschlange', 't.status', 'p.abkuerzung','(SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1)');
+                $findcols = array('t.id','t.id','t.schluessel', 't.zeit', 'a.name', 'ticket_mail',          'device', 'rd.is_express', 'nachrichten_anz', 't.status', 'p.abkuerzung');
+                $searchsql = array(             't.schluessel', 't.zeit', 'a.name', 't.betreff','t.notiz',  't.mailadresse', 'rd.manufacturer', 'rd.model', 't.status', 'p.abkuerzung','(SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1)');
 
                 $defaultorder = 1;
                 $defaultorderdesc = 0;
@@ -71,24 +99,19 @@ class Ticket {
                 $dropnbox = "'<img src=./themes/new/images/details_open.png class=details>' AS `open`,
                               CONCAT('<input type=\"checkbox\" name=\"auswahl[]\" value=\"',t.id,'\" />') AS `auswahl`";
 
-                $priobetreff = "if(t.prio!=1,REGEXP_REPLACE(t.betreff, '<[^>]*>+', ''),CONCAT('<b><font color=red>',REGEXP_REPLACE(t.betreff, '<[^>]*>+', ''),'</font></b>'))"; //+ #20230916 XSS
-
                 $anzahlnachrichten = "(SELECT COUNT(n.id) FROM ticket_nachricht n WHERE n.ticket = t.schluessel)";
 
                 $letztemail = $app->erp->FormatDateTimeShort("(SELECT MAX(n.zeit) FROM ticket_nachricht n WHERE n.ticket = t.schluessel AND n.zeit IS NOT NULL)");
-
-                $tagstart = "<li class=\"tag-editor-tag\">";
-                $tagend = "</li>";
 
                 $sql = "SELECT SQL_CALC_FOUND_ROWS
                         t.id,
                         ".$dropnbox.",
                         CONCAT('<a href=\"index.php?module=ticket&action=edit&id=',t.id,'\">',t.schluessel,'</a>'),".
                         $app->erp->FormatDateTimeShort('zeit')." as aktion,
-                        CONCAT(COALESCE(CONCAT(a.name,'<br>'),''),COALESCE((SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1),'')) as combiadresse,
-                        CONCAT('<b>',".$priobetreff.",'</b><br/><i>',replace(substring(ifnull(t.notiz,''),1,500),'\n','<br/>'),'</i>'),
-                        CONCAT('<div class=\"ticketoffene\"><ul class=\"tag-editor\">'\n,'".$tagstart."',replace(t.tags,',','".$tagend."<div class=\"tag-editor-spacer\">&nbsp;</div>".$tagstart."'),'".$tagend."','</ul></div>'),
-                        w.warteschlange,
+                        COALESCE(a.name,'') as adresse,
+                        COALESCE(NULLIF(t.mailadresse,''),(SELECT mail FROM ticket_nachricht tn WHERE tn.ticket = t.schluessel AND tn.versendet <> 1 LIMIT 1),'') as ticket_mail,
+                        TRIM(CONCAT(COALESCE(rd.manufacturer,''), ' ', COALESCE(rd.model,''))) as device,
+                        IF(rd.is_express = 1, '<b><font color=red>Express</font></b>', '') as is_express,
                         ".$anzahlnachrichten." as `nachrichten_anz`,
                         ".ticket_iconssql().",
                         p.abkuerzung,
@@ -96,7 +119,8 @@ class Ticket {
                         FROM ticket t
                         LEFT JOIN adresse a ON t.adresse = a.id
                         LEFT JOIN warteschlangen w ON t.warteschlange = w.label
-                        LEFT JOIN projekt p on t.projekt = p.id";
+                        LEFT JOIN projekt p on t.projekt = p.id
+                        LEFT JOIN ticket_repair_details rd ON rd.ticket_id = t.id";
 
                 $where = "1";
 
@@ -310,6 +334,22 @@ class Ticket {
                     $sql .= " WHERE id IN (".implode(",",$selectedIds).")";
                     $this->app->DB->Update($sql);
                     $this->ticket_set_self_assigned_status($selectedIds);
+
+                    // RepairIntegration: Bulk-Statusaenderung ebenfalls an
+                    // WordPress melden. Der Service filtert selbst (nur
+                    // Repair-Tickets mit wp_request_number); ist das Modul
+                    // nicht installiert, wirft Container->get und der catch
+                    // ueberspringt still.
+                    foreach ($selectedIds as $selectedId) {
+                        if (($old[$selectedId]['status'] ?? '') === $status) {
+                            continue;
+                        }
+                        try {
+                            $this->app->Container->get('RepairSyncService')->queueAndPushStatusChange($selectedId);
+                        } catch (\Throwable $e) {
+                            error_log('Repair status queue failed for ticket #' . $selectedId . ': ' . $e->getMessage());
+                        }
+                    }
                 break;
                 case 'spam_filter':
                     if($this->app->erp->RechteVorhanden('ticketregeln','create')) {
@@ -376,7 +416,7 @@ class Ticket {
 
         $this->app->erp->MenuEintrag("index.php", "Zur&uuml;ck");
 
-        $this->app->Tpl->Set('STATUS', $this->app->erp->GetStatusTicketSelect('neu'));
+        $this->app->Tpl->Set('STATUS', $this->ticket_status_select_with_config('neu'));
         $this->app->YUI->AutoComplete("warteschlange","warteschlangename");
 
         if(!$this->app->erp->RechteVorhanden('ticketregeln','create')) {
@@ -804,7 +844,7 @@ class Ticket {
         $this->app->YUI->AutoComplete("adresse","adresse");
         $this->app->YUI->AutoComplete("projekt","projektname",1);
         $this->app->YUI->AutoComplete("status","ticketstatus",1);
-        $this->app->Tpl->Set('STATUS', $this->app->erp->GetStatusTicketSelect('neu'));
+        $this->app->Tpl->Set('STATUS', $this->ticket_status_select_with_config('neu'));
         $this->app->YUI->AutoComplete("warteschlange","warteschlangename");
         $this->app->Tpl->Parse('PAGE', "ticket_create.tpl");
     }
@@ -879,7 +919,7 @@ class Ticket {
         $this->app->YUI->AutoComplete("status","ticketstatus",1);
         $this->app->YUI->TagEditor('tags', array('width'=>370));
 
-        $this->app->Tpl->Set('STATUS', $this->app->erp->GetStatusTicketSelect($ticket_from_db['status']));
+        $this->app->Tpl->Set('STATUS', $this->ticket_status_select_with_config($ticket_from_db['status']));
         $input['projekt'] = $this->app->erp->ReplaceProjekt(false,$input['projekt'],false); // Parameters: Target db?, value, from form?
         $this->app->YUI->AutoComplete("warteschlange","warteschlangename");
         // END Header
