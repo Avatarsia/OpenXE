@@ -8,6 +8,22 @@ if (!empty($mutex[0]['mutex']) && $mutex[0]['mutex'] == 1) {
 }
 $app->DB->Update("UPDATE prozessstarter SET mutex = 1 WHERE parameter = '{$parameter}'");
 
+// Schreibt in die `logfile`-Tabelle - $app->erp->LogFile() existiert in
+// OpenXE nicht (Muster: cronjobs/repair_sync.php). Logfehler duerfen den
+// Cronlauf nie abbrechen.
+$logRepair = static function (string $message) use ($app, $parameter): void {
+    try {
+        $app->Container->get('Database')->perform(
+            "INSERT INTO `logfile`
+             (`meldung`, `dump`, `module`, `action`, `bearbeiter`, `funktionsname`, `datum`)
+             VALUES (:msg, '', 'repair_integration', :action, '', '', NOW())",
+            ['msg' => $message, 'action' => $parameter]
+        );
+    } catch (\Throwable $logError) {
+        // bewusst geschluckt
+    }
+};
+
 try {
     $db = $app->Container->get('Database');
     $configService = $app->Container->get('RepairConfigService');
@@ -56,14 +72,14 @@ try {
             );
 
             $db->commit();
-            $app->erp->LogFile('repair_retention', "Anonymized Ticket #{$ticket['ticket_schluessel']}");
-        } catch (Exception $e) {
+            $logRepair("Anonymized Ticket #{$ticket['ticket_schluessel']}");
+        } catch (\Throwable $e) {
             $db->rollBack();
-            $app->erp->LogFile('repair_retention', "Error anonymizing #{$ticket['ticket_schluessel']}: " . $e->getMessage());
+            $logRepair("Error anonymizing #{$ticket['ticket_schluessel']}: " . $e->getMessage());
         }
     }
-} catch (Exception $e) {
-    $app->erp->LogFile('repair_retention', 'Error: ' . $e->getMessage());
+} catch (\Throwable $e) {
+    $logRepair('Error: ' . $e->getMessage());
 } finally {
     $app->DB->Update("UPDATE prozessstarter SET mutex = 0, letzteausfuerhung = NOW() WHERE parameter = '{$parameter}'");
 }
