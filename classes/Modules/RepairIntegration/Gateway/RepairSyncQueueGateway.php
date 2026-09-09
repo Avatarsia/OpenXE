@@ -35,13 +35,25 @@ final class RepairSyncQueueGateway
         return (int)$this->db->fetchValue('SELECT LAST_INSERT_ID()');
     }
 
+    public function getEntry(int $id): ?array
+    {
+        $row = $this->db->fetchRow(
+            'SELECT * FROM `repair_sync_queue` WHERE `id` = :id',
+            ['id' => $id]
+        );
+        return $row ?: null;
+    }
+
     public function getPendingEntries(int $limit = 50): array
     {
         return $this->db->fetchAll(
-            "SELECT * FROM `repair_sync_queue`
-             WHERE `status` IN ('pending', 'failed')
-               AND (`next_retry_at` IS NULL OR `next_retry_at` <= NOW())
-             ORDER BY `created_at` ASC
+            "SELECT q.* FROM `repair_sync_queue` q
+             WHERE q.status IN ('pending', 'failed')
+               AND (q.next_retry_at IS NULL OR q.next_retry_at <= NOW())
+               AND (q.action <> 'status_change' OR NOT EXISTS (
+                   SELECT 1 FROM repair_sync_queue newer WHERE newer.ticket_id = q.ticket_id
+                     AND newer.action = q.action AND newer.id > q.id))
+             ORDER BY q.created_at ASC, q.id ASC
              LIMIT " . (int)$limit
         );
     }
@@ -53,14 +65,45 @@ final class RepairSyncQueueGateway
         // bei markCompleted()/markPermanentlyFailed() mit dem Endzeitpunkt
         // ueberschrieben.
         $affected = $this->db->fetchAffected(
-            "UPDATE `repair_sync_queue`
-             SET `status` = 'processing', `processed_at` = NOW()
-             WHERE `id` = :id AND `status` IN ('pending', 'failed')",
+            "UPDATE `repair_sync_queue` q
+             LEFT JOIN `repair_sync_queue` newer ON newer.ticket_id = q.ticket_id
+                 AND newer.action = q.action AND newer.id > q.id
+             SET q.status = 'processing', q.processed_at = NOW()
+             WHERE q.id = :id AND q.status IN ('pending', 'failed')
+               AND (q.next_retry_at IS NULL OR q.next_retry_at <= NOW())
+               AND (q.action <> 'status_change' OR newer.id IS NULL)",
             ['id' => $id]
         );
         if ($affected === 0) {
             throw new \RuntimeException("Queue entry {$id} already claimed or not found");
         }
+    }
+
+    public function lockTicket(int $ticketId, int $timeout = 20): bool
+    {
+        return (int)$this->db->fetchValue(
+            "SELECT GET_LOCK(CONCAT('repair:', SHA1(DATABASE()), ':', :id), :timeout)",
+            ['id' => $ticketId, 'timeout' => $timeout]
+        ) === 1;
+    }
+
+    public function unlockTicket(int $ticketId): void
+    {
+        $this->db->fetchValue(
+            "SELECT RELEASE_LOCK(CONCAT('repair:', SHA1(DATABASE()), ':', :id))",
+            ['id' => $ticketId]
+        );
+    }
+
+    public function supersedeOlderStatuses(int $ticketId, int $latestId): void
+    {
+        $this->db->perform(
+            "UPDATE repair_sync_queue SET status = 'permanently_failed',
+                 last_error = 'Superseded by newer status', processed_at = NOW()
+             WHERE ticket_id = :tid AND action = 'status_change' AND id < :latest
+               AND status IN ('pending', 'failed', 'processing')",
+            ['tid' => $ticketId, 'latest' => $latestId]
+        );
     }
 
     /**
