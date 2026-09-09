@@ -136,7 +136,8 @@ class Angebot extends GenAngebot
     }
 
     $datum = date('d.m.Y', strtotime($angebot['datum']));
-    $detailResult->setTitle(sprintf('Angebot %s <small>vom %s</small>', $angebot['belegnr'], $datum));
+    $detailResult->setTitle(sprintf('Angebot %s', $angebot['belegnr']));
+    $detailResult->setSubtitle(sprintf('vom %s', $datum));
     $detailResult->addButton('Angebot Details', sprintf('index.php?module=angebot&action=edit&id=%s', $angebot['id']));
     $detailResult->setMiniDetailUrl(sprintf('index.php?module=angebot&action=minidetail&id=%s', $angebot['id']));
   }

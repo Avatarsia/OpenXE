@@ -1,24 +1,44 @@
 /**
 	SuperSearch
+	-----------
+	Layout-Konstanten als CSS-Custom-Properties. JS liest --ssr-min-col-width
+	via getComputedStyle() — einzige Quelle der Wahrheit fuer die
+	Spalten-Mindestbreite. Detail-Pane skaliert per clamp() zwischen
+	Notebook- und 4K-Aufloesungen ohne sichtbare Breakpoint-Spruenge.
  */
 #supersearch-overlay {
+	--ssr-min-col-width: 280px;
+	--ssr-col-gap: 16px;
+	--ssr-detail-min: 420px;
+	--ssr-detail-max: 960px;
+	--ssr-detail-pref: 42vw;
+
+	/*
+	 * Initial versteckt: display:none. Beim Oeffnen setzt JS via jQuery .show()
+	 * den Inline-Style auf display:flex (Layout-Default), das gewuenschte Layout
+	 * ist also Flexbox. Die zweite display-Deklaration weiter unten ist
+	 * Absicht (kein Cosmetic-Fix) — sie definiert den Layout-Default fuer den
+	 * Fall, dass JS .show() ohne expliziten display-Wert aufruft.
+	 */
 	display: none;
 	position: absolute;
 	z-index: 994;
 	top: 55px;
 	left: 18px;
-    width: 250px;
-    height: 440px;
+    width: calc(100vw - 60px);
+    max-width: none;
+    min-width: 0;
+    height: auto;
+    max-height: calc(100vh - 80px);
 	background-color: var(--body-background);
 	box-shadow: 3px 3px 10px rgba(0, 0, 0, .33);
 	-webkit-user-select: none;
 	-moz-user-select: none;
 	-ms-user-select: none;
 	user-select: none;
-}
-
-#supersearch-overlay.has-detail {
-    width: 890px;
+    display: flex;
+    flex-direction: row;
+    gap: 0;
 }
 
 #supersearch-overlay #supersearch-icon-close {
@@ -37,23 +57,54 @@
 }
 
 #supersearch-overlay .result-wrapper {
-    overflow: auto;
-    width: 250px;
-    height: 416px;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: auto;
+    max-height: calc(100vh - 140px);
     background-color: var(--body-background);
+    padding: 8px 8px 36px;
+    box-sizing: border-box;
+}
+#supersearch-overlay .result-columns {
+    display: grid;
+    /*
+     * JS setzt grid-template-columns inline (Apps-Spalten-Constraint).
+     * Dieser Fallback greift, falls JS keinen Wert setzt.
+     */
+    grid-template-columns: repeat(auto-fit, minmax(var(--ssr-min-col-width), 1fr));
+    align-items: start;
+    width: 100%;
+    gap: var(--ssr-col-gap);
+}
+#supersearch-overlay .result-column {
+    min-width: 0;
 }
 #supersearch-overlay .detail-wrapper {
     display: none;
-    position: absolute;
+    position: relative;
     top: 0;
-    left: 250px;
-    width: 640px;
-    height: 440px;
+    left: 0;
+    /*
+     * Fluide Detail-Pane-Breite: 320px auf kleinen Screens, ~30vw als
+     * Praeferenz, max. 720px bis hin zur 4K-Aufloesung. Kein
+     * Breakpoint-Sprung mehr zwischen 1200px und darueber.
+     */
+    flex: 0 1 clamp(var(--ssr-detail-min), var(--ssr-detail-pref), var(--ssr-detail-max));
+    height: 100%;
     overflow-y: auto;
     background-color: var(--fieldset);
 }
 #supersearch-overlay.has-detail .detail-wrapper {
     display: block;
+}
+/*
+ * Wenn das Detail-Pane offen ist, den Result-Wrapper aktiv cappen, damit
+ * keine vierte Spalte erzeugt wird, die nur Whitespace neben dem Detail
+ * produziert. Wert: Viewport minus Detail-Maximalbreite minus Overlay-Padding.
+ */
+#supersearch-overlay.has-detail .result-wrapper {
+    max-width: calc(100vw - var(--ssr-detail-max) - 60px);
 }
 
 #supersearch-overlay .search {
@@ -85,11 +136,12 @@
     bottom: 0;
     left: 0;
     right: 0;
-    width: 250px;
+    width: auto;
     padding: 6px 12px;
     font-size: 10px;
     color: var(--text-color);
     background-color: var(--fieldset-dark);
+    box-sizing: border-box;
 }
 
 #supersearch-overlay .detail {
@@ -250,20 +302,17 @@
     vertical-align: bottom;
 }
 
-/** Overlay ausblenden wenn Sidebar und Suchfeld nicht sichtbar */
+/*
+ * Overlay ausblenden, wenn das Such-Eingabefeld selbst nicht sichtbar ist.
+ * Die 1000px-Schwelle matched das Theme: in styles.css blendet die Regel
+ *   @media (max-width: 1000px) { #header .search-wrapper { display: none } }
+ * den Such-Eingabe-Wrapper aus. Ohne Eingabefeld macht das Overlay keinen
+ * Sinn — Schwelle ist also nicht willkuerlich, sondern an die Theme-CSS
+ * gekoppelt. Bei Theme-Aenderungen beide Stellen anpassen.
+ */
 @media screen and (max-width: 1000px) {
     #supersearch-overlay {
-        display: none;
+        display: none !important;
         visibility: hidden;
-    }
-}
-
-/** Overlay um 200 Pixel verbreitern, wenn genug Platz vorhanden  */
-@media screen and (min-width: 1200px) {
-    #supersearch-overlay.has-detail {
-        width: 1090px;
-    }
-    #supersearch-overlay .detail-wrapper {
-        width: 840px;
     }
 }
