@@ -128,6 +128,21 @@ final class RepairDetailsGateway
         );
     }
 
+    /**
+     * Setzt genau ein Betragsfeld (quote_amount oder actual_cost) aus einem
+     * versendeten Beleg, ohne die uebrigen Diagnosefelder anzufassen.
+     */
+    public function setAmountField(int $ticketId, string $field, string $amount): void
+    {
+        if (!in_array($field, ['quote_amount', 'actual_cost'], true)) {
+            throw new \InvalidArgumentException('Unsupported amount field: ' . $field);
+        }
+        $this->db->perform(
+            "UPDATE `ticket_repair_details` SET `{$field}` = :amount WHERE `ticket_id` = :ticket_id",
+            ['amount' => $amount, 'ticket_id' => $ticketId]
+        );
+    }
+
     public function markAnonymized(int $id): void
     {
         $this->db->perform(
