@@ -28,11 +28,54 @@
     --upg-surface-alt:#f6f8fb;
     --upg-dark:       #0f1720;
 
+    /* abgeleitete Farben (Light), im Dark-Block ueberschrieben */
+    --upg-divider:       #eef1f6;
+    --upg-border-strong: #c4cfde;
+    --upg-text-soft:     #3a4655;
+    --upg-text-faint:    #7a8696;
+    --upg-code-bg:       #e9eef6;
+    --upg-rollback-bg:   #fffaf2;
+    --upg-log-text:      #e5e7eb;
+    /* Akzente als Textfarbe auf Surface (im Dark-Block aufgehellt) */
+    --upg-success-text:  var(--upg-success);
+    --upg-error-text:    var(--upg-error);
+    --upg-info-text:     var(--upg-info);
+
     --upg-s1: 8px; --upg-s2: 16px; --upg-s3: 24px; --upg-s4: 32px; --upg-s5: 40px; --upg-s6: 48px;
 
     --upg-radius: 8px;
     --upg-shadow: 0 1px 3px rgba(15, 23, 32, .08);
     --upg-mono: Consolas, "Courier New", monospace;
+}
+
+/* Dark Theme (Klasse openXeDarkMode auf <html>, siehe themes/new/css/color3.css).
+   Akzent-Hintergruende (Banner, Buttons) bleiben unveraendert. */
+html.openXeDarkMode {
+    --upg-success-bg: #1F3A26;
+    --upg-error-bg:   #4A2323;
+    --upg-warning-bg: #4A3A14;
+    --upg-info-bg:    #1F3450;
+    --upg-warning-text: #F0C46A;
+
+    --upg-text:       #E6E8EE;
+    --upg-text-muted: #A9B1C2;
+    --upg-border:     #3A4152;
+    --upg-surface:    #1E2230;
+    --upg-surface-alt:#262B3A;
+    --upg-dark:       #0f1720;
+    --upg-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+
+    --upg-divider:       #2E3444;
+    --upg-border-strong: #4B5468;
+    --upg-text-soft:     #C5CBD8;
+    --upg-text-faint:    #8B94A7;
+    --upg-code-bg:       #2E3444;
+    --upg-rollback-bg:   #2A2418;
+    --upg-log-text:      #D5D9E2;
+
+    --upg-success-text:  #2DCA73;
+    --upg-error-text:    #E0605F;
+    --upg-info-text:     #7FB3E6;
 }
 
 /*
@@ -111,8 +154,8 @@
     padding-bottom: 12px;
     font-size: 14px;
     font-weight: 700;
-    color: var(--upg-info);
-    border-bottom: 1px solid #eef1f6;
+    color: var(--upg-info-text);
+    border-bottom: 1px solid var(--upg-divider);
     letter-spacing: .02em;
     text-transform: uppercase;
 }
@@ -122,7 +165,7 @@
     justify-content: flex-end;
     margin-top: var(--upg-s2);
     padding-top: var(--upg-s2);
-    border-top: 1px solid #eef1f6;
+    border-top: 1px solid var(--upg-divider);
 }
 
 /* ---------- Grid-Bereiche ---------- */
@@ -133,7 +176,7 @@
 /* ---------- Steps ---------- */
 .step-card {background:var(--upg-surface-alt);gap:12px;}
 .step-head {display:flex;align-items:center;gap:12px;}
-.step-head strong {font-size:15px;color:var(--upg-info);}
+.step-head strong {font-size:15px;color:var(--upg-info-text);}
 .step-check {
     display: flex;
     align-items: center;
@@ -148,13 +191,13 @@
 
 /* ---------- Pills ---------- */
 .pill {display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap;}
-.pill-success {background:var(--upg-success-bg);color:var(--upg-success);}
-.pill-error   {background:var(--upg-error-bg);color:var(--upg-error);}
+.pill-success {background:var(--upg-success-bg);color:var(--upg-success-text);}
+.pill-error   {background:var(--upg-error-bg);color:var(--upg-error-text);}
 .pill-warning {background:var(--upg-warning-bg);color:var(--upg-warning-text);}
-.pill-info    {background:var(--upg-info-bg);color:var(--upg-info);}
+.pill-info    {background:var(--upg-info-bg);color:var(--upg-info-text);}
 
 /* ---------- Force-Checkbox ---------- */
-.force-wrap {font-size:13px;color:var(--upg-info);border-radius:6px;}
+.force-wrap {font-size:13px;color:var(--upg-info-text);border-radius:6px;}
 .force-wrap label {display:inline-flex;align-items:center;gap:8px;cursor:pointer;padding:4px;}
 .force-wrap.force-highlight {
     border: 2px solid var(--upg-error);
@@ -175,8 +218,8 @@
 .kv-grid {display:grid;grid-template-columns:max-content minmax(0, 1fr);column-gap:14px;row-gap:8px;font-size:13px;align-items:baseline;}
 .kv-grid dt {color:var(--upg-text-muted);font-weight:600;white-space:nowrap;}
 .kv-grid dd {margin:0;color:var(--upg-text);overflow-wrap:anywhere;min-width:0;}
-.mono {font-family:var(--upg-mono);font-size:12px;color:#7a8696;}
-.compare-status {margin-top:var(--upg-s2);padding-top:var(--upg-s2);border-top:1px solid #eef1f6;display:flex;align-items:center;gap:var(--upg-s1);font-size:13px;color:var(--upg-text-muted);}
+.mono {font-family:var(--upg-mono);font-size:12px;color:var(--upg-text-faint);}
+.compare-status {margin-top:var(--upg-s2);padding-top:var(--upg-s2);border-top:1px solid var(--upg-divider);display:flex;align-items:center;gap:var(--upg-s1);font-size:13px;color:var(--upg-text-muted);}
 
 /* ---------- Formulare ---------- */
 .form-stack {display:flex;flex-direction:column;gap:12px;}
@@ -185,7 +228,7 @@
 .input-inline, select.input-inline {
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid #c4cfde;
+    border: 1px solid var(--upg-border-strong);
     border-radius: 6px;
     font: inherit;
     font-size: 13px;
@@ -201,7 +244,7 @@
 .tag-select-wrap select {
     width: 100%;
     padding: 8px 10px;
-    border: 1px solid #c4cfde;
+    border: 1px solid var(--upg-border-strong);
     border-radius: 6px;
     font-size: 13px;
     background: var(--upg-surface);
@@ -240,16 +283,16 @@
 .step-btn:hover {background:#0a325a;}
 
 /* ---------- Rollback ---------- */
-.rollback-card {border:2px solid var(--upg-warning);background:#fffaf2;}
+.rollback-card {border:2px solid var(--upg-warning);background:var(--upg-rollback-bg);}
 .hint-rollback {margin:0 0 var(--upg-s2);color:var(--upg-warning-text);}
 
 /* ---------- Hilfe (details/summary, ohne JS noetig) ---------- */
-.help-card {background:var(--upg-surface-alt);border:1px dashed #c4cfde;justify-content:center;}
+.help-card {background:var(--upg-surface-alt);border:1px dashed var(--upg-border-strong);justify-content:center;}
 .help-card details {font-size:13px;}
 .help-card summary {
     cursor: pointer;
     font-weight: 700;
-    color: var(--upg-info);
+    color: var(--upg-info-text);
     font-size: 13px;
     letter-spacing: .02em;
     text-transform: uppercase;
@@ -267,17 +310,17 @@
     transition: transform .15s ease;
 }
 .help-card details[open] summary::before {transform:rotate(90deg);}
-.help-body {margin-top:12px;color:#3a4655;line-height:1.55;}
-.help-body code {background:#e9eef6;padding:1px 6px;border-radius:3px;font-family:var(--upg-mono);font-size:12px;}
+.help-body {margin-top:12px;color:var(--upg-text-soft);line-height:1.55;}
+.help-body code {background:var(--upg-code-bg);padding:1px 6px;border-radius:3px;font-family:var(--upg-mono);font-size:12px;}
 
 /* ---------- Log ---------- */
 .log-header {display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:var(--upg-s2);}
-.log-title {font-weight:700;color:var(--upg-info);}
-.log-meta {font-size:12px;color:#7a8696;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto;}
+.log-title {font-weight:700;color:var(--upg-info-text);}
+.log-meta {font-size:12px;color:var(--upg-text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto;}
 .log-search {
     flex: 0 1 260px;
     padding: 7px 12px;
-    border: 1px solid #c4cfde;
+    border: 1px solid var(--upg-border-strong);
     border-radius: 6px;
     font: inherit;
     font-size: 13px;
@@ -301,7 +344,7 @@
    einzuspielen (XSS-Schutz) und trotzdem Zeilenumbrueche zu zeigen. */
 .log-box {
     background: var(--upg-dark);
-    color: #e5e7eb;
+    color: var(--upg-log-text);
     border-radius: 6px;
     padding: var(--upg-s2);
     max-height: 320px;
@@ -335,7 +378,7 @@ button.banner-btn:hover {background:rgba(255, 255, 255, .24) !important;}
 .rollback-card {border:2px solid var(--upg-warning) !important;}
 
 /* ---------- Zweigauswahl (Upstream branchupgrade) ---------- */
-.branch-warning {color:var(--upg-error);}
+.branch-warning {color:var(--upg-error-text);}
 .branch-table {width:100%;border-collapse:collapse;}
 .branch-table th, .branch-table td {text-align:left;padding:var(--upg-s1) var(--upg-s2);border-bottom:1px solid var(--upg-border);vertical-align:top;}
 .branch-table th {font-weight:600;}
