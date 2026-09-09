@@ -197,6 +197,13 @@ class upgrade {
         }
 
         $submit = $this->app->Secure->GetPOST('submit');
+        // Secure::Syntax() reicht Arrays unveraendert durch, d.h. submit[]=x
+        // liefert hier ein Array und laesst isset($actions[$submit]) weiter
+        // unten mit einem TypeError abbrechen. Nicht-Strings deshalb wie
+        // "kein Submit" behandeln ('' nimmt ueberall denselben Pfad wie null).
+        if (!is_string($submit)) {
+            $submit = '';
+        }
         $details_post = $this->app->Secure->GetPOST('details_anzeigen');
         $db_details_post = $this->app->Secure->GetPOST('db_details_anzeigen');
         // GetPOST liefert '' (nie null), wenn ein Feld nicht gesendet wurde.
@@ -209,7 +216,10 @@ class upgrade {
         // Zweigauswahl (Upstream branchupgrade): Radio-Wert aus der Liste
         // der in remote.json hinterlegten Zweige. Ungueltige Werte werden
         // verworfen, dann verhaelt sich do_upgrade wie ohne Zweigwechsel.
-        $branch_input = trim((string)$this->app->Secure->GetPOST('branch'));
+        // branch[]=x kaeme als Array an; (string) daraus wuerde das Literal
+        // "Array" erzeugen, das BRANCH_NAME_PATTERN passiert.
+        $branch_raw = $this->app->Secure->GetPOST('branch');
+        $branch_input = is_string($branch_raw) ? trim($branch_raw) : '';
         if ($branch_input !== '' && !preg_match(self::BRANCH_NAME_PATTERN, $branch_input)) {
             $branch_input = '';
         }
@@ -550,6 +560,11 @@ class upgrade {
         } elseif ($submit === 'rollback_to_tag') {
             $last_action = "Rollback durchgeführt";
             $rollback_tag = $this->app->Secure->GetPOST('rollback_tag');
+            // rollback_tag[]=x waere ein Array und liesse preg_match() unten
+            // mit einem TypeError abbrechen.
+            if (!is_string($rollback_tag)) {
+                $rollback_tag = '';
+            }
 
             if ($git_root !== "" && !empty($rollback_tag)) {
                 // Validiere Tag-Name (nur pre-upgrade-* Tags erlauben)

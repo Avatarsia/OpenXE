@@ -478,6 +478,9 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
             // Remove files cache
             echo_out("--------------- Cleaning Filescache ---------------\n");
             if (!class_exists('UserdataInfo')) {
+                // conf/user.inc.php setzt $this->WF* per require im Konstruktor
+                // -> ab PHP 8.2 "Creation of dynamic property"-Deprecations.
+                #[\AllowDynamicProperties]
                 class UserdataInfo {
                     function __construct($dir) {
                         require($dir."/../conf/user.inc.php");
@@ -549,6 +552,9 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
         } else {
 
             if (!class_exists('DatabaseConnectionInfo')) {
+                // conf/user.inc.php setzt $this->WF* per require im Konstruktor
+                // -> ab PHP 8.2 "Creation of dynamic property"-Deprecations.
+                #[\AllowDynamicProperties]
                 class DatabaseConnectionInfo {
                     function __construct($dir) {
                         require($dir."/../conf/user.inc.php");
