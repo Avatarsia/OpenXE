@@ -48,8 +48,8 @@ class TicketCustom extends Ticket
                 );
                 $hook->onTicketEditAfter($ticketId, $oldStatus);
             }
-        } catch (\Exception $e) {
-            // RepairIntegration not installed or not configured -- silently skip
+        } catch (\Throwable $e) {
+            error_log('Repair status queue failed for ticket #' . $ticketId . ': ' . $e->getMessage());
         }
     }
 

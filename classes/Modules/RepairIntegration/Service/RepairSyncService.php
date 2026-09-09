@@ -14,6 +14,12 @@ final class RepairSyncService
     /** @var list<int> Retry delays in seconds */
     private const RETRY_DELAYS = [120, 600, 1800, 7200, 28800]; // @php83: add type array
 
+    /** HTTP-Timeout (s) fuer den Cron-Worker */
+    private const WORKER_TIMEOUT = 15;
+
+    /** HTTP-Timeout (s) fuer den synchronen Push im Speicher-Request; Rest macht der Cron */
+    private const IMMEDIATE_TIMEOUT = 8;
+
     public function __construct(
         private readonly Database $db,
         private readonly RepairSyncQueueGateway $syncQueueGateway,
@@ -26,15 +32,56 @@ final class RepairSyncService
         private readonly ?\Closure $permanentFailMailer = null,
     ) {}
 
-    public function checkAndQueueStatusChange(int $ticketId): void
+    public function checkAndQueueStatusChange(int $ticketId): bool
+    {
+        if (!$this->syncQueueGateway->lockTicket($ticketId)) {
+            throw new \RuntimeException('Repair status lock timeout for ticket #' . $ticketId);
+        }
+        try {
+            return $this->queueCurrentStatus($ticketId) !== null;
+        } finally {
+            $this->syncQueueGateway->unlockTicket($ticketId);
+        }
+    }
+
+    /**
+     * Wie checkAndQueueStatusChange(), stellt den neuen Eintrag aber noch im
+     * Speicher-Request synchron an WordPress zu (kurzer Timeout). Schlaegt die
+     * Zustellung fehl, bleibt der Eintrag als 'failed' in der Queue und der
+     * Cron uebernimmt die Retries — der Aufrufer bekommt keine Exception.
+     *
+     * @return bool true, wenn ein Status eingereiht wurde (unabhaengig vom Zustellerfolg)
+     */
+    public function queueAndPushStatusChange(int $ticketId): bool
+    {
+        if (!$this->syncQueueGateway->lockTicket($ticketId)) {
+            throw new \RuntimeException('Repair status lock timeout for ticket #' . $ticketId);
+        }
+        try {
+            $queueId = $this->queueCurrentStatus($ticketId);
+            if ($queueId === null) {
+                return false;
+            }
+            $entry = $this->syncQueueGateway->getEntry($queueId);
+            if ($entry !== null) {
+                $this->deliverEntry($entry, self::IMMEDIATE_TIMEOUT);
+            }
+            return true;
+        } finally {
+            $this->syncQueueGateway->unlockTicket($ticketId);
+        }
+    }
+
+    /** @return int|null Queue-ID des neuen Eintrags, null wenn nichts eingereiht wurde */
+    private function queueCurrentStatus(int $ticketId): ?int
     {
         if (!$this->configService->isEnabled()) {
-            return;
+            return null;
         }
 
         $details = $this->detailsGateway->getByTicketId($ticketId);
         if ($details === null || empty($details['wp_request_number'])) {
-            return;
+            return null;
         }
 
         $ticket = $this->db->fetchRow(
@@ -42,12 +89,12 @@ final class RepairSyncService
             ['id' => $ticketId]
         );
         if (!$ticket) {
-            return;
+            return null;
         }
 
         $wpStatus = $this->statusConfigGateway->getWpMapping($ticket['status']);
         if ($wpStatus === null) {
-            return;
+            return null;
         }
 
         $baseUrl = $this->configService->getWpApiUrl();
@@ -58,7 +105,7 @@ final class RepairSyncService
                 'Status-Sync fuer Ticket #%d uebersprungen: wp_api_url ist nicht konfiguriert',
                 $ticketId
             ));
-            return;
+            return null;
         }
 
         $payload = json_encode([
@@ -68,12 +115,8 @@ final class RepairSyncService
 
         $targetUrl = $baseUrl . '/wp-json/p3d/v1/requests/status';
 
-        // Dedup: noch ausstehende Status-Syncs desselben Tickets verwerfen,
-        // damit ein veralteter Status nicht nach dem neueren zugestellt wird.
-        // 'failed'-Eintraege bleiben zur Historie stehen.
-        $this->syncQueueGateway->deletePendingForTicket($ticketId, 'status_change');
-
-        $this->syncQueueGateway->enqueue(
+        // Insert first: a failed insert must not lose the previous delivery.
+        $latestId = $this->syncQueueGateway->enqueue(
             $ticketId,
             $details['ticket_schluessel'],
             'status_change',
@@ -81,6 +124,95 @@ final class RepairSyncService
             $targetUrl,
             $this->configService->getMaxRetries(),
         );
+        $this->syncQueueGateway->supersedeOlderStatuses($ticketId, $latestId);
+        return $latestId;
+    }
+
+    public static function inferWpRequestNumber(string $ticketSchluessel, int $matchingTickets): ?string
+    {
+        if ($matchingTickets !== 1 || preg_match('/^[0-9]{12}$/', $ticketSchluessel) !== 1) {
+            return null;
+        }
+
+        return $ticketSchluessel;
+    }
+
+    /** @return array{recovered: int, queued: int, skipped: int} */
+    public function backfillAndQueueCurrentStatuses(): array
+    {
+        // Ticket IDs are positive; zero serializes the persistent cursor.
+        if (!$this->syncQueueGateway->lockTicket(0, 0)) {
+            return ['recovered' => 0, 'queued' => 0, 'skipped' => 0];
+        }
+        try {
+            return $this->resumeStatusBackfill();
+        } finally {
+            $this->syncQueueGateway->unlockTicket(0);
+        }
+    }
+
+    private function resumeStatusBackfill(): array
+    {
+        $stats = ['recovered' => 0, 'queued' => 0, 'skipped' => 0];
+        if ($this->configService->get('status_backfill_state') === 'completed'
+            || version_compare($this->configService->get('schema_version', '0'), '1.4.0', '<')
+            || !$this->configService->isEnabled()
+            || $this->configService->getWpApiUrl() === ''
+            || $this->configService->getWpApiKey() === '') {
+            return $stats;
+        }
+        $cursor = (int)$this->configService->get('status_backfill_cursor', '0');
+        $rows = $this->db->fetchAll(
+            "SELECT rd.id, rd.ticket_id, rd.ticket_schluessel, rd.wp_request_number,
+                    t.schluessel actual_key, t.status actual_status,
+                    (SELECT COUNT(*) FROM ticket tx WHERE tx.schluessel = t.schluessel) matching_tickets,
+                    (SELECT COUNT(*) FROM ticket_repair_details other
+                     WHERE other.id <> rd.id AND (other.wp_request_number = COALESCE(NULLIF(rd.wp_request_number, ''), t.schluessel)
+                         OR other.ticket_schluessel = COALESCE(NULLIF(rd.wp_request_number, ''), t.schluessel))) duplicate_requests
+             FROM ticket_repair_details rd LEFT JOIN ticket t ON t.id = rd.ticket_id
+             WHERE rd.id > :cursor ORDER BY rd.id",
+            ['cursor' => $cursor]
+        );
+
+        foreach ($rows as $row) {
+            if ($row['actual_key'] === null || $row['actual_key'] !== $row['ticket_schluessel']
+                || (int)$row['matching_tickets'] !== 1 || (int)$row['duplicate_requests'] > 0) {
+                $this->logWarning('Backfill skipped inconsistent/ambiguous ticket #' . $row['ticket_id']);
+                $stats['skipped']++;
+                $this->configService->set('status_backfill_cursor', (string)$row['id']);
+                continue;
+            }
+            $wpRequestNumber = trim((string)($row['wp_request_number'] ?? ''));
+            if ($wpRequestNumber === '') {
+                $wpRequestNumber = self::inferWpRequestNumber(
+                    (string)$row['actual_key'],
+                    (int)$row['matching_tickets'],
+                ) ?? '';
+                if ($wpRequestNumber === '') {
+                    $this->logWarning('Backfill skipped invalid request number for ticket #' . $row['ticket_id']);
+                    $stats['skipped']++;
+                    $this->configService->set('status_backfill_cursor', (string)$row['id']);
+                    continue;
+                }
+                $this->detailsGateway->update((int)$row['id'], ['wp_request_number' => $wpRequestNumber]);
+                $stats['recovered']++;
+            }
+
+            if ($this->statusConfigGateway->getWpMapping((string)$row['actual_status']) === null) {
+                $this->logWarning('Backfill skipped unmapped status for ticket #' . $row['ticket_id']);
+                $stats['skipped']++;
+            } elseif ($this->checkAndQueueStatusChange((int)$row['ticket_id'])) {
+                $stats['queued']++;
+            } else {
+                $this->logWarning('Backfill deferred unmapped/unconfigured ticket #' . $row['ticket_id']);
+                $stats['skipped']++;
+                return $stats;
+            }
+            $this->configService->set('status_backfill_cursor', (string)$row['id']);
+        }
+
+        $this->configService->set('status_backfill_state', 'completed');
+        return $stats;
     }
 
     public function processQueue(): int
@@ -94,65 +226,90 @@ final class RepairSyncService
         $processed = 0;
 
         foreach ($entries as $entry) {
-            try {
-                $this->syncQueueGateway->markProcessing($entry['id']);
-            } catch (\RuntimeException) {
+            // Same lock as enqueue, held through HTTP and retry persistence.
+            // A worker selected before supersession must still claim afresh.
+            $ticketId = (int)$entry['ticket_id'];
+            if (!$this->syncQueueGateway->lockTicket($ticketId, 0)) {
                 continue;
             }
-
             try {
-                $result = $this->pushToWordPress($entry);
-                $this->syncQueueGateway->markCompleted($entry['id']);
-                $this->logSync(
-                    'outbound',
-                    $entry,
-                    true,
-                    '',
-                    $result['http_code'],
-                    $result['body'] !== '' ? substr($result['body'], 0, 1000) : null
-                );
-                $processed++;
-            } catch (\Throwable $e) {
-                // Nicht nur SyncFailedException: auch DB-Fehler oder TypeError
-                // duerfen den Eintrag nicht unsichtbar in 'processing' haengen
-                // lassen — wie ein normaler Retry-Fehler behandeln.
-                $httpCode = $e instanceof SyncFailedException ? $e->httpCode : 0;
-                $responseBody = $e instanceof SyncFailedException ? $e->responseBody : '';
-                $retryCount = (int)$entry['retry_count'] + 1;
-                $maxRetries = (int)$entry['max_retries'];
-
-                if ($retryCount >= $maxRetries) {
-                    $this->syncQueueGateway->markPermanentlyFailed(
-                        $entry['id'],
-                        $e->getMessage(),
-                        $httpCode,
-                    );
-                    $this->notifyPermanentlyFailed($entry, $e->getMessage(), $httpCode);
-                } else {
-                    $delayIndex = min($retryCount - 1, count(self::RETRY_DELAYS) - 1);
-                    $delay = self::RETRY_DELAYS[$delayIndex];
-                    $nextRetry = date('Y-m-d H:i:s', time() + $delay);
-
-                    $this->syncQueueGateway->markFailed(
-                        $entry['id'],
-                        $retryCount,
-                        $nextRetry,
-                        $e->getMessage(),
-                        $httpCode,
-                    );
+                if ($this->deliverEntry($entry, self::WORKER_TIMEOUT)) {
+                    $processed++;
                 }
-                $this->logSync(
-                    'outbound',
-                    $entry,
-                    false,
-                    $e->getMessage(),
-                    $httpCode > 0 ? $httpCode : null,
-                    $responseBody !== '' ? $responseBody : null
-                );
+            } finally {
+                $this->syncQueueGateway->unlockTicket($ticketId);
             }
         }
 
         return $processed;
+    }
+
+    /**
+     * Stellt einen einzelnen Queue-Eintrag zu und persistiert das Ergebnis
+     * (completed / failed mit Retry / permanently_failed). Der Aufrufer muss
+     * den Ticket-Lock halten. Wirft nie — Fehler landen in Queue und Log.
+     *
+     * @return bool true bei erfolgreicher Zustellung
+     */
+    private function deliverEntry(array $entry, int $timeout): bool
+    {
+        try {
+            $this->syncQueueGateway->markProcessing((int)$entry['id']);
+        } catch (\RuntimeException) {
+            return false;
+        }
+
+        try {
+            $result = $this->pushToWordPress($entry, $timeout);
+            $this->syncQueueGateway->markCompleted((int)$entry['id']);
+            $this->logSync(
+                'outbound',
+                $entry,
+                true,
+                '',
+                $result['http_code'],
+                $result['body'] !== '' ? substr($result['body'], 0, 1000) : null
+            );
+            return true;
+        } catch (\Throwable $e) {
+            // Nicht nur SyncFailedException: auch DB-Fehler oder TypeError
+            // duerfen den Eintrag nicht unsichtbar in 'processing' haengen
+            // lassen — wie ein normaler Retry-Fehler behandeln.
+            $httpCode = $e instanceof SyncFailedException ? $e->httpCode : 0;
+            $responseBody = $e instanceof SyncFailedException ? $e->responseBody : '';
+            $retryCount = (int)$entry['retry_count'] + 1;
+            $maxRetries = (int)$entry['max_retries'];
+
+            if ($retryCount >= $maxRetries) {
+                $this->syncQueueGateway->markPermanentlyFailed(
+                    (int)$entry['id'],
+                    $e->getMessage(),
+                    $httpCode,
+                );
+                $this->notifyPermanentlyFailed($entry, $e->getMessage(), $httpCode);
+            } else {
+                $delayIndex = min($retryCount - 1, count(self::RETRY_DELAYS) - 1);
+                $delay = self::RETRY_DELAYS[$delayIndex];
+                $nextRetry = date('Y-m-d H:i:s', time() + $delay);
+
+                $this->syncQueueGateway->markFailed(
+                    (int)$entry['id'],
+                    $retryCount,
+                    $nextRetry,
+                    $e->getMessage(),
+                    $httpCode,
+                );
+            }
+            $this->logSync(
+                'outbound',
+                $entry,
+                false,
+                $e->getMessage(),
+                $httpCode > 0 ? $httpCode : null,
+                $responseBody !== '' ? $responseBody : null
+            );
+            return false;
+        }
     }
 
     public function getQueueStatus(): array
@@ -209,14 +366,14 @@ final class RepairSyncService
     /**
      * @return array{http_code: int|null, body: string, error: string|null}
      */
-    private function pushToWordPress(array $item): array
+    private function pushToWordPress(array $item, int $timeout = self::WORKER_TIMEOUT): array
     {
         $apiKey = $this->configService->getWpApiKey();
         if ($apiKey === '') {
             throw new SyncFailedException('WP API key not configured');
         }
 
-        $result = $this->request((string)$item['target_url'], (string)$item['payload'], $apiKey, 15);
+        $result = $this->request((string)$item['target_url'], (string)$item['payload'], $apiKey, $timeout);
         $httpCode = (int)$result['http_code'];
 
         if ($result['error'] !== null || $httpCode < 200 || $httpCode >= 300) {
@@ -289,12 +446,15 @@ final class RepairSyncService
 
     private function parseHttpCode(array $headers): int
     {
+        // Bei verfolgten Redirects enthaelt $http_response_header die
+        // Statuszeilen aller Hops; massgeblich ist die letzte Antwort.
+        $code = 0;
         foreach ($headers as $header) {
             if (preg_match('/^HTTP\/[\d.]+ (\d{3})/', $header, $matches) === 1) {
-                return (int)$matches[1];
+                $code = (int)$matches[1];
             }
         }
-        return 0;
+        return $code;
     }
 
     /**

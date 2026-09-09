@@ -9,7 +9,7 @@ final class RepairIntegrationMigration
 {
     private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
     private const SCHEMA_VERSION_KEY = 'schema_version'; // @php83: add type string
-    private const SCHEMA_VERSION = '1.3.0'; // @php83: add type string
+    private const SCHEMA_VERSION = '1.4.0'; // @php83: add type string
 
     /**
      * Explizite Upgrade-Kette: gespeicherte Version => auszufuehrender Schritt.
@@ -26,6 +26,7 @@ final class RepairIntegrationMigration
         '1.0.0' => ['sql' => '003_status_config_upgrade.sql', 'to' => '1.1.0'],
         '1.1.0' => ['sql' => '004_remove_menu_hooks.sql', 'to' => '1.2.0'],
         '1.2.0' => ['sql' => '005_customer_quote_amount.sql', 'to' => '1.3.0'],
+        '1.3.0' => ['sql' => '006_repair_status_backfill.sql', 'to' => '1.4.0'],
     ];
 
     public function __construct(
@@ -61,7 +62,18 @@ final class RepairIntegrationMigration
 
         while (isset(self::UPGRADE_STEPS[$current])) {
             $step = self::UPGRADE_STEPS[$current];
-            $this->executeSqlFile(__DIR__ . '/sql/' . $step['sql']);
+            if ($step['sql'] === '005_customer_quote_amount.sql') {
+                // SQL PREPARE cannot itself be sent through mysqli::prepare.
+                $exists = $this->db->fetchValue(
+                    "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+                     AND TABLE_NAME = 'ticket_repair_details' AND COLUMN_NAME = 'customer_quote_amount'"
+                );
+                if ((int)$exists === 0) {
+                    $this->db->perform('ALTER TABLE ticket_repair_details ADD COLUMN customer_quote_amount DECIMAL(10,2) DEFAULT NULL AFTER actual_cost');
+                }
+            } else {
+                $this->executeSqlFile(__DIR__ . '/sql/' . $step['sql']);
+            }
             $this->setVersion($step['to']);
             $current = $step['to'];
         }
