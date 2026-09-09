@@ -57,7 +57,7 @@
 
   <link rel="stylesheet" href="./themes/[THEME]/css/styles.css?v=34">
   <link rel="stylesheet" href="./themes/[THEME]/css/theme-utilities.css?v=1">
-  <link rel="stylesheet" href="./themes/[THEME]/css/dark-overrides.css?v=2">
+  <link rel="stylesheet" href="./themes/[THEME]/css/dark-overrides.css?v=3">
   <link rel="stylesheet" href="./themes/[THEME]/css/dark-icons.css?v=2">
 
 <script type="text/javascript" src="./js/tinymce/tiny_mce.js"></script>
