@@ -11,7 +11,7 @@
         min-width: 320px;
         max-width: 400px;
         padding: 10px;
-        background-color: #FFF;
+        background-color: var(--surface);
         box-shadow: rgba(0, 0, 0, .25) 0 0 10px;
         border: 2px solid rgb(166, 201, 226);
     }
@@ -137,7 +137,7 @@
     .wiedervorlageitem {
         cursor: pointer;
         border: none;
-        background-color: #FFF !important;
+        background-color: var(--surface) !important;
         border-bottom: 1px solid var(--fieldset-dark);
     }
     .wiedervorlageitem.is-finished,
@@ -163,7 +163,7 @@
         font-weight: bold;
     }
     .item-center .additional-field-value {
-        color: #848484;
+        color: var(--text-muted);
     }
     .item-left {
         position: absolute;
@@ -173,7 +173,7 @@
         height: 100%;
         border-left-style: solid;
         border-left-width: 10px;
-        border-left-color: #eee;
+        border-left-color: var(--surface-muted);
     }
     .item-left img {
         width: 30px;
@@ -228,7 +228,7 @@
         opacity: 0;
         text-align: center;
         transition: all ease-in-out .3s;
-        background-color: dimgrey;
+        background-color: var(--overlay);
         -ms-user-select: none;
         -webkit-user-select: none;
         -moz-user-select: none;
@@ -255,7 +255,7 @@
         padding: 5px;
         margin: 5px;
         border-radius: 15px;
-        color: white;
+        color: var(--text-inverse);
         font-size: 30px;
         text-align: center;
     }
@@ -266,7 +266,7 @@
         background: #E14449;
     }
     .droppable.papierkorb {
-        background: #bcbcbc;
+        background: var(--surface-strong);
     }
     .droppable.highlight {
         background: orange !important;

@@ -4,7 +4,7 @@ div .actionpane  {
 }
 
 .btnGreenNew[disabled] {
-    background-color: lightgrey !important;
+    background-color: var(--surface-strong) !important;
 }
 
 a.btnGreenNew.button {

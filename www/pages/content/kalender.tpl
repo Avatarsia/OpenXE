@@ -73,7 +73,7 @@
                                 <tr>
                                     <td></td>
                                     <td colspan="3">
-                                        <div id="submitError" style="color:red;"></div>
+                                        <div id="submitError" class="text-error"></div>
 																			  <div id="googleStatus"></div>
                                     </td>
                                 </tr>

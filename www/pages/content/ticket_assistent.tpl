@@ -40,7 +40,7 @@ document.getElementById("ticketassistent").submit();
 
 .cke_chrome {
     display: block;
-    border: 0px solid #b6b6b6 !important;
+    border: 0px solid var(--border-strong) !important;
     padding: 0;
     box-shadow: 0 0 0 rgba(0,0,0,0) !important;
 }

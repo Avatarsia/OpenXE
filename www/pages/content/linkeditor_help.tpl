@@ -1,17 +1,17 @@
 <style>
 	table.help {
-		border: 1px solid #cccccc;
+		border: 1px solid var(--border);
 		margin-top: 5px;
 	}
 
 	table.help td {
 		padding: 2px 5px;
-		background-color: #dddddd;
+		background-color: var(--surface-muted);
 	}
 
 	table.help tr.header td {
 		background-color: #6EB6D5;
-		color: white;
+		color: var(--text-inverse);
 		font-weight: 600;
 	}
 

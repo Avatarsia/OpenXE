@@ -1,13 +1,13 @@
 div.wiki h1, h2, h3, h4, h5 {
 	font-weight: 400;
-	color: black;
+	color: var(--text-strong);
 	padding: 0px;
 }
 
 div.wiki h1 {
 	font-size: 160%;
 	margin-bottom: 0.6em;
-	border-bottom: 1px solid #AAAAAA;
+	border-bottom: 1px solid var(--border);
 }
 
 div.wiki h2 {
@@ -18,7 +18,7 @@ div.wiki h2 {
 div.wiki a {
 	font-style: normal;
 	font-weight: 400;
-	color: #0645AD;
+	color: var(--link-color);
 	text-decoration: none;
 }
 
@@ -27,7 +27,7 @@ div.wiki a:hover, a:focus {
 
 div#index {
 	display: inline-block;
-  border: 1px solid #AAAAAA;
+  border: 1px solid var(--border);
   padding: 5px 8px;
   margin: 10px 0px;
   min-width: 30%;

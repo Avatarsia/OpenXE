@@ -13,7 +13,7 @@
 <br>
 <center>
 <form action="" method="post">
-<table width="60%" style="background-color: #fff; border: solid 1px #000;" align="center">
+<table width="60%" class="bg-surface border-default" align="center">
 <tr>
 <td align="center">
 <br><b>Lastschriften erzeugen:</b>
@@ -33,7 +33,7 @@
 [TAB2]
 <br>
 <center>
-<table width="60%" style="background-color: #fff; border: solid 1px #000;" align="center">
+<table width="60%" class="bg-surface border-default" align="center">
 <tr>
 <td align="center">
 <br><b>Sammellastschrift erzeugen:</b>

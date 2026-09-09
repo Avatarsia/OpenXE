@@ -57,7 +57,7 @@
     border-radius: 10px;
     border: 5px solid var(--fieldset);
     background-color: var(--fieldset);
-    box-shadow: 3px 3px 10px rgba(0, 0, 0, .33);
+    box-shadow: 3px 3px 10px var(--shadow);
     -webkit-user-select: none;
     -moz-user-select: none;
     -ms-user-select: none;

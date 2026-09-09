@@ -70,19 +70,19 @@
 <td>
 
 <table border="0" cellpadding="3" id="tableone"
-	cellspacing="1" width="100%" height="" style="font-size: 90%; "><tr style="background-color:#e0e0e0;display:;" id="0">
-<td class="gentable" nowrap><b>Datum</b></td><td class="gentable" nowrap><b>Umsatz</b></td></tr><tr style="background-color:#fff;display:;" id="1">
-<td class="gentable" nowrap>Personal</td><td class="gentable" nowrap>[SUMMEZEIT]</td></tr><tr style="background-color:#e0e0e0;display:;" id="2">
-<td class="gentable" nowrap>Fremdleistung</td><td class="gentable" nowrap></td></tr><tr style="background-color:#fff;display:;" id="3">
+	cellspacing="1" width="100%" height="" style="font-size: 90%; "><tr class="bg-surface-muted" style="display:;" id="0">
+<td class="gentable" nowrap><b>Datum</b></td><td class="gentable" nowrap><b>Umsatz</b></td></tr><tr class="bg-surface" style="display:;" id="1">
+<td class="gentable" nowrap>Personal</td><td class="gentable" nowrap>[SUMMEZEIT]</td></tr><tr class="bg-surface-muted" style="display:;" id="2">
+<td class="gentable" nowrap>Fremdleistung</td><td class="gentable" nowrap></td></tr><tr class="bg-surface" style="display:;" id="3">
 <td class="gentable" nowrap>Verbrauchsmaterial</td><td class="gentable" nowrap>[SUMMEVK]</td></tr>
-<tr style="background-color:#e0e0e0;display:;" id="4">
+<tr class="bg-surface-muted" style="display:;" id="4">
 <td class="gentable" nowrap>Ger&auml;te/Inventur</td><td class="gentable" nowrap></td></tr>
 <td class="gentable" nowrap>Entwicklungsbedarf</td><td class="gentable" nowrap></td></tr>
-<tr style="background-color:#e0e0e0;display:;" id="4">
+<tr class="bg-surface-muted" style="display:;" id="4">
 <td class="gentable" nowrap>Ger&auml;te/Inventur</td><td class="gentable" nowrap></td></tr>
 <tr id="4">
 <td class="gentable" nowrap>Porto</td><td class="gentable" nowrap></td></tr>
-<tr style="background-color:#e0e0e0;display:;" id="4">
+<tr class="bg-surface-muted" style="display:;" id="4">
 <td class="gentable" nowrap>Gesamtkosten</td><td class="gentable" nowrap>[KOSTEN]</td></tr>
 
 </table>
@@ -95,20 +95,20 @@
 
 <td>
 <table border="0" cellpadding="3" id="tableone"
-	cellspacing="1" width="100%" height="" style="font-size: 90%; "><tr style="background-color:#e0e0e0;display:;" id="0">
-<td class="gentable" nowrap><b>Monat</b></td><td class="gentable" nowrap><b>Stunden</b></td></tr><tr style="background-color:#fff;display:;" id="1">
-<td class="gentable" nowrap>01-2013</td><td class="gentable" nowrap>2895,12</td></tr><tr style="background-color:#e0e0e0;display:;" id="2">
-<td class="gentable" nowrap>02-2013</td><td class="gentable" nowrap>55,22</td></tr><tr style="background-color:#fff;display:;" id="3">
+	cellspacing="1" width="100%" height="" style="font-size: 90%; "><tr class="bg-surface-muted" style="display:;" id="0">
+<td class="gentable" nowrap><b>Monat</b></td><td class="gentable" nowrap><b>Stunden</b></td></tr><tr class="bg-surface" style="display:;" id="1">
+<td class="gentable" nowrap>01-2013</td><td class="gentable" nowrap>2895,12</td></tr><tr class="bg-surface-muted" style="display:;" id="2">
+<td class="gentable" nowrap>02-2013</td><td class="gentable" nowrap>55,22</td></tr><tr class="bg-surface" style="display:;" id="3">
 <td class="gentable" nowrap>03-2013</td><td class="gentable" nowrap>444,22</td></tr>
 
-<tr style="background-color:#e0e0e0;display:;" id="4">
+<tr class="bg-surface-muted" style="display:;" id="4">
 <td class="gentable" nowrap>04-2013</td><td class="gentable" nowrap>202,35</td></tr>
 
-<tr style="background-color:#fff;display:;" id="5">
-<td class="gentable" nowrap>05-2013</td><td class="gentable" nowrap>2508,20</td></tr><tr style="background-color:#e0e0e0;display:;" id="6">
+<tr class="bg-surface" style="display:;" id="5">
+<td class="gentable" nowrap>05-2013</td><td class="gentable" nowrap>2508,20</td></tr><tr class="bg-surface-muted" style="display:;" id="6">
 </td></tr>
 
-<tr style="background-color:#e0e0e0;display:;" id="4">
+<tr class="bg-surface-muted" style="display:;" id="4">
 <td class="gentable" nowrap>04-2013</td><td class="gentable" nowrap>202,35</td></tr>
 
 
@@ -118,12 +118,12 @@
 </td>
 <td>
 <table border="0" cellpadding="3" id="tableone"
-	cellspacing="1" width="100%" height="" style="font-size: 90%; "><tr style="background-color:#e0e0e0;display:;" id="0">
-<td class="gentable" nowrap><b>Name</b></td><td class="gentable" nowrap><b>Soll</b></td><td><b>Ist</b></td></tr><tr style="background-color:#fff;display:;" id="1">
-<td class="gentable" nowrap>Peter Mustermann</td><td class="gentable" nowrap>28</td><td>8</td></tr><tr style="background-color:#e0e0e0;display:;" id="2">
-<td class="gentable" nowrap>Petra Meier</td><td class="gentable" nowrap>55</td><td>56</td></tr><tr style="background-color:#fff;display:;" id="3">
-<td class="gentable" nowrap>Lusisa Müller</td><td class="gentable" nowrap>444</td><td>67</td></tr><tr style="background-color:#e0e0e0;display:;" id="4">
-<td class="gentable" nowrap>Max Knoll</td><td class="gentable" nowrap>22</td><td>3</td></tr><tr style="background-color:#e0e0e0;display:;" id="8">
+	cellspacing="1" width="100%" height="" style="font-size: 90%; "><tr class="bg-surface-muted" style="display:;" id="0">
+<td class="gentable" nowrap><b>Name</b></td><td class="gentable" nowrap><b>Soll</b></td><td><b>Ist</b></td></tr><tr class="bg-surface" style="display:;" id="1">
+<td class="gentable" nowrap>Peter Mustermann</td><td class="gentable" nowrap>28</td><td>8</td></tr><tr class="bg-surface-muted" style="display:;" id="2">
+<td class="gentable" nowrap>Petra Meier</td><td class="gentable" nowrap>55</td><td>56</td></tr><tr class="bg-surface" style="display:;" id="3">
+<td class="gentable" nowrap>Lusisa Müller</td><td class="gentable" nowrap>444</td><td>67</td></tr><tr class="bg-surface-muted" style="display:;" id="4">
+<td class="gentable" nowrap>Max Knoll</td><td class="gentable" nowrap>22</td><td>3</td></tr><tr class="bg-surface-muted" style="display:;" id="8">
 </table>
 
 

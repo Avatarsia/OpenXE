@@ -741,7 +741,7 @@ class Wiki {
               d.id, 
               '<img src=\"./themes/{$app->Conf->WFconf['defaulttheme']}/images/details_open.png\" class=\"details\">' AS open,
               {$img}, 
-              IF(d.titel != '', CONCAT(d.titel, '<br><i style=color:#999>', v1.dateiname, '</i>'), v1.dateiname), 
+              IF(d.titel != '', CONCAT(d.titel, '<br><i class=text-muted>', v1.dateiname, '</i>'), v1.dateiname),
               s.subjekt, 
               v1.version, 
               IF(v1.size != '', IF(v1.size > 1024 * 1024, CONCAT(ROUND(v1.size / 1024 / 1024, 2), ' MB'), CONCAT(ROUND(v1.size / 1024, 2),' KB')), '') AS groesse, 
@@ -796,6 +796,18 @@ class Wiki {
     return !empty($result) ? $result : [];
   }
 
+  /**
+   * Head fuer die Minidetail-Iframes: laedt die Farbtokens, damit der Iframe
+   * dem hellen/dunklen Systemschema folgt.
+   */
+  protected function minidetailIframeHead()
+  {
+    return '<meta name="color-scheme" content="light dark">'
+      .'<script src="./themes/new/js/colorscheme.js?v=1"></script>'
+      .'<link rel="stylesheet" type="text/css" href="./themes/new/css/color3.css?v=9"/>'
+      .'<style>body{background:var(--surface);color:var(--text-body);}a{color:var(--link-color,#5991FF);}</style>';
+  }
+
   public function WikiMinidetailChangelog()
   {
     $id = $this->app->Secure->GetGET('id');
@@ -805,7 +817,7 @@ class Wiki {
       $this->app->ExitXentral();
     }
     $content = $this->app->DB->Select(sprintf('SELECT content FROM wiki_changelog WHERE id = %d', $id));
-    echo $content;
+    echo $this->minidetailIframeHead().$content;
     $this->app->ExitXentral();
   }
 
@@ -818,7 +830,7 @@ class Wiki {
       $this->app->ExitXentral();
     }
     $content = $this->app->DB->Select(sprintf('SELECT answer FROM wiki_faq WHERE id = %d', $id));
-    echo $content;
+    echo $this->minidetailIframeHead().$content;
     $this->app->ExitXentral();
   }
 
@@ -831,7 +843,7 @@ class Wiki {
       $this->app->ExitXentral();
     }
     $content = $this->app->DB->Select(sprintf('SELECT content FROM wiki WHERE id = %d', $id));
-    echo $content;
+    echo $this->minidetailIframeHead().$content;
     $this->app->ExitXentral();
   }
 
@@ -2667,7 +2679,7 @@ class Wiki {
             '#(href)="([^:"]*)(?:")#','$1="index.php?module=wiki&action=list&cmd=$2"',
             $navigation
           );
-          $content = "<table width=100%><tr valign=top><td width=200><div id=\"wikinav\"><ul><li style=\"color:white;font-weight:bold;padding-bottom:5px;\">Navigation<br></li></ul>$navigation</div></td><td style=\"padding:0px 15px;\">$content</td></tr></table>";
+          $content = "<table width=100%><tr valign=top><td width=200><div id=\"wikinav\"><ul><li class=\"text-inverse\" style=\"font-weight:bold;padding-bottom:5px;\">Navigation<br></li></ul>$navigation</div></td><td style=\"padding:0px 15px;\">$content</td></tr></table>";
         }
 
         $this->app->Tpl->Set('TAB1',$content); // TODO Wiki Parser!!!!

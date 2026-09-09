@@ -15,7 +15,7 @@
     z-index: 1;
     overflow: hidden;
     position: absolute;
-    background-color: #F0F0F0;
+    background-color: var(--surface-muted);
     border-radius: 5px;
 }
 
@@ -129,7 +129,7 @@
     border-radius: 5px;
     box-sizing: border-box;
     background-color: #5c2699;
-    color: #FFF;
+    color: var(--text-inverse);
     font-weight: bold;
 }
 
@@ -137,7 +137,7 @@
 .dashboard .title h3 {
     margin: 0;
     padding: 0;
-    color: #FFF;
+    color: var(--text-inverse);
 }
 
 .dashboard .dashboard-controls {
@@ -246,7 +246,7 @@
     padding: 0;
     background: unset;
     border-radius: unset;
-    color: #545454;
+    color: var(--text-body);
     text-transform: uppercase;
 }
 

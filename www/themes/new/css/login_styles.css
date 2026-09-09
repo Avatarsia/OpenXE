@@ -16,7 +16,7 @@ img {
 body {
     margin: 0 0;
     padding: 0 0;
-    background: #fff;
+    background: var(--surface);
     font: 12px 'Inter', Verdana, Arial, sans-serif;
 }
 #login-container {
@@ -70,7 +70,7 @@ body {
     width: 36px;
     display: inline-block;
     height: 3px;
-    background: #fff;
+    background: var(--text-inverse);
     opacity: 0.15;
     transition: opacity .4s;
     cursor: pointer;
@@ -83,8 +83,8 @@ body {
 
 .btn {
     border-radius: 5px;
-    background-color: #2DCA73;
-    color: #fff;
+    background-color: var(--success);
+    color: var(--text-inverse);
     font-weight: normal;
     font-size: 14px;
     border: none;
@@ -98,15 +98,15 @@ body {
 /* Login Rechts */
 
 #login-wrapper {
-    background: #fff;
+    background: var(--surface);
     padding: 2.5%;
-    color: #707070;
+    color: var(--text-body);
     display: flex;
     flex: 1;
     flex-flow: column;
 }
 #login-wrapper a {
-    color: #48494b;
+    color: var(--text-body);
     text-decoration: underline;
 }
 
@@ -121,7 +121,7 @@ body {
     font-size: 16px;
     line-height: 1.6em;
     margin-bottom: 30px;
-    color: #707070;
+    color: var(--text-body);
 }
 
 #frmlogin {
@@ -155,7 +155,7 @@ body {
 #frmlogin input[type="password"],
 #frmlogin select {
     border: none;
-    color: #707070;
+    color: var(--text-body);
     background: none;
     font-size: 16px;
     font-weight: 600;
@@ -163,12 +163,12 @@ body {
     height: 36px;
     border-radius: 0;
     width: 100%;
-    border-bottom: 1px solid #eaeaea;
+    border-bottom: 1px solid var(--border);
     transition: border-color .4s;
 }
 #frmlogin select {
     font-weight: 400;
-    color: #a2a2a2;
+    color: var(--text-muted);
     background-position: right 0.8rem center;
     -webkit-appearance: none;
     -moz-appearance: none;
@@ -182,10 +182,10 @@ body {
 #frmlogin input[type="text"]:active,
 #frmlogin select:focus,
 #frmlogin select:active {
-    border-color: #707070;
+    border-color: var(--border-strong);
     outline: none;
     box-shadow: none;
-    color: #707070;
+    color: var(--text-body);
 }
 #frmlogin select:focus,
 #frmlogin select:active {
@@ -193,8 +193,8 @@ body {
 }
 
 #login-wrapper .warning {
-    background-color: #FDCB56;
-    color: #354052;
+    background-color: var(--warning);
+    color: var(--warning-color);
     background-image: url(../images/warning.png);
     background-size: 30px 30px;
 }
@@ -220,14 +220,14 @@ body {
 }
 
 #login-footer {
-    color: #929292;
+    color: var(--text-color);
 }
 #login-footer a,
 #login-footer a:link,
 #login-footer a:visited,
 #login-footer a:hover,
 #login-footer a:active {
-    color: #929292;
+    color: var(--text-color);
     font-weight: normal;
     text-decoration: none;
 }

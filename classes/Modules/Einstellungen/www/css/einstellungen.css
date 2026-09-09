@@ -1,10 +1,10 @@
 .settings-h3{
     font-size: 18px;
     line-height: 28px;
-    color: rgba(55, 64, 81, 0.8);
+    color: var(--text-strong);
     padding-left: 0;
     display: block;
-    border-bottom: 1px solid rgba(55, 64, 81, 0.1);
+    border-bottom: 1px solid var(--border);
 }
 
 .settings-module{

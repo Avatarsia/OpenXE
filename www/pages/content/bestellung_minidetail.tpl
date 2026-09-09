@@ -2,11 +2,11 @@
 <style>
 
 .auftraginfo_cell {
-  color: #636363;border: 1px solid #ccc;padding: 5px;
+  color: var(--text-body);border: 1px solid var(--border);padding: 5px;
 }
 
 .auftrag_cell {
-  color: #636363;border: 1px solid #fff;padding: 0px; margin:0px;
+  color: var(--text-body);border: 1px solid var(--surface);padding: 0px; margin:0px;
 }
 
 </style>
@@ -17,7 +17,7 @@
 <br>
 <table height="250" width="100%">
 <tr valign="top"><td>
-<table cellspacing="0" cellpadding="0" style="font-size: 8pt; background: white; color: #333333; border-collapse: collapse;" width="100%">
+<table cellspacing="0" cellpadding="0" class="bg-surface text-strong" style="font-size: 8pt; border-collapse: collapse;" width="100%">
 <tr><td class="auftraginfo_cell">{|Lieferant|}:</td><td colspan="4" class="auftraginfo_cell">[LIEFERANT]</td></tr>
 <tr><td class="auftraginfo_cell" colspan="2" width="50%"><b>{|Allgemein|}</b></td><td class="auftraginfo_cell" colspan="2"><b>{|Zahlung|}</b></td></tr>
 <tr><td class="auftraginfo_cell">{|Status|}:</td><td class="auftraginfo_cell">[STATUS]</td><td class="auftraginfo_cell" width="25%">{|Zahlweise|}:</td><td class="auftraginfo_cell">[ZAHLWEISE]</td></tr>
@@ -32,7 +32,7 @@
 
 <table width="100%" cellpadding="5">
 <tr><td>
-<div style="background-color:white">
+<div class="bg-surface">
 <div style="padding:10px">
   [RECHNUNGLIEFERADRESSE]
 </div>
@@ -45,8 +45,8 @@
 </div><div style="float:left; width:50%">
 
 <div style="overflow:auto;height:550px">
-<div style="background-color:white">
-<div width="100%" style="background-color:#999;"><h2 class="greyh2">{|Artikel|}</h2></div>
+<div class="bg-surface">
+<div width="100%" class="bg-muted-strong"><h2 class="greyh2">{|Artikel|}</h2></div>
 <div style="padding:10px;">
 <div>
  [ARTIKEL]
@@ -60,7 +60,7 @@
 </div>
 
 <!--
-<div style="background-color:white">
+<div class="bg-surface">
 <h2 class="greyh2">Zahlungseingang</h2>
 <div style="padding:10px">
   [ZAHLUNGEN]
@@ -68,13 +68,13 @@
 </div>
 -->
 
-<div style="background-color:white">
+<div class="bg-surface">
 <h2 class="greyh2">{|Protokoll|}</h2>
 <div style="padding:10px;overflow:auto; width:500px;">
   [PROTOKOLL]
 </div>
 </div>
-<div style="background-color:white">
+<div class="bg-surface">
 <h2 class="greyh2">{|PDF-Archiv|}</h2>
 <div style="padding:10px;overflow:auto; width:500px;">
   [PDFARCHIV]

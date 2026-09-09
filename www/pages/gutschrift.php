@@ -1334,7 +1334,7 @@ class Gutschrift extends GenGutschrift
     $this->app->Tpl->Set('MESSAGE',"<div class=\"warning\">M&ouml;chten Sie eine Gutschrift jetzt anlegen? &nbsp;
         <input type=\"button\" onclick=\"window.location.href='index.php?module=gutschrift&action=create&anlegen=1'\" value=\"Ja - Gutschrift jetzt anlegen\"></div><br>");
     $this->app->Tpl->Set('TAB1',"
-        <table width=\"100%\" style=\"background-color: #fff; border: solid 1px #000;\" align=\"center\">
+        <table width=\"100%\" class=\"bg-surface border-default\" align=\"center\">
         <tr>
         <td align=\"center\">
         <br><b style=\"font-size: 14pt\">Gutschriften in Bearbeitung</b>

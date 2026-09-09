@@ -1,10 +1,13 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-color-scheme="auto">
 <head>
+	<script src="themes/new/js/colorscheme.js?v=1"></script>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta name="color-scheme" content="light dark">
 	<meta http-equiv="Content-Security-Policy" content="default-src 'self';">
 	<title>OpenXE Login</title>
+	<link rel="stylesheet" href="themes/new/css/color3.css?v=9">
 	<link rel="stylesheet" href="themes/new/css/login.css?v=2">
 </head>
 <body>

@@ -3702,6 +3702,27 @@ title: 'Abschicken',
     $this->SetKonfigurationValue('clean_spooler_and_fix_numbers', date('Y-m-d H:i:s'));
   }
 
+  /**
+   * Bevorzugtes Farbschema des angemeldeten Benutzers (userkonfiguration "color_scheme").
+   *
+   * @return string 'auto' | 'light' | 'dark'
+   */
+  public function GetUserColorScheme()
+  {
+    $userId = (!empty($this->app->User) && method_exists($this->app->User, 'GetID')) ? (int)$this->app->User->GetID() : 0;
+    if($userId <= 0) {
+      return 'auto';
+    }
+    try {
+      /** @var \Xentral\Modules\User\Service\UserConfigService $userConfig */
+      $userConfig = $this->app->Container->get('UserConfigService');
+      $value = $userConfig->tryGet('color_scheme', $userId);
+    } catch (Exception $e) {
+      $value = null;
+    }
+    return ($value === 'light' || $value === 'dark') ? $value : 'auto';
+  }
+
   // @refactor Installer Komponente
 
   public function migrateIfFirstInstall()
@@ -6851,7 +6872,7 @@ title: 'Abschicken',
   function ColorPicker() {
     $colors = array('#004704','#C40046','#832BA8','#FF8128','#7592A0');
 
-    $out = "<option value=\"\" style=\"background-color: #FFFFFF;color:red\">Keine</option>";
+    $out = "<option value=\"\" class=\"bg-surface text-error\">Keine</option>";
     for($i=0;$i<(!empty($colors)?count($colors):0);$i++)
       $out .= "<option value=\"{$colors[$i]}\" style=\"background-color: {$colors[$i]}\">".$colors[$i]."</option>";
 
@@ -23268,15 +23289,15 @@ function ChargenMHDAuslagern($artikel, $menge, $lagerplatztyp, $lpid,$typ,$wert,
   {
     $this->app->Tpl->Add('JQUERY','$("#'.$feld.'").removeAttr("disabled","disabled");');
     $this->app->Tpl->Add('JQUERY','$("#'.$feld.'").removeAttr("readonly","readonly");');
-    $this->app->Tpl->Add('JQUERY','$("#'.$feld.'").css("background-color", "white");');
+    $this->app->Tpl->Add('JQUERY','$("#'.$feld.'").css("background-color", "var(--textfield-background)");');
   }
 
 
   function CommonReadonly()
   {
     $this->commonreadonly=1;
-    $this->app->Tpl->Set('COMMONREADONLYINPUT',"readonly disabled style=\"background-color:#eee; border-color:#ddd;\"");
-    $this->app->Tpl->Set('COMMONREADONLYSELECT',"disabled=\"disabled\" style=\"background-color:#eee;\"");
+    $this->app->Tpl->Set('COMMONREADONLYINPUT',"readonly disabled style=\"background-color:var(--surface-muted); border-color:var(--border);\"");
+    $this->app->Tpl->Set('COMMONREADONLYSELECT',"disabled=\"disabled\" style=\"background-color:var(--surface-muted);\"");
 
   }
 
@@ -24702,7 +24723,7 @@ function ChargenMHDAuslagern($artikel, $menge, $lagerplatztyp, $lpid,$typ,$wert,
         $extraspalte = "<td width=40 nowrap><img src=\"themes/new/images/down.png\" onclick=\"daup(".$dv['id'].")\" /><img src=\"themes/new/images/up.png\" onclick=\"dadown(".$dv['id'].")\" /></td>";
       } else $extraspalte="<td width=40>&nbsp;</td>";
 
-        $this->app->Tpl->Add('DATEIANHAENGE','<tr><td width=20 id="td_'.$dv['id'].'"><input type="hidden" name="dateisort_'.$dv['datei'].'" value="'.($dk+1).'" /><input type="checkbox" value="1" name="datei_'.$dv['datei'].'" '.$checked.'></td><td><a target="_blank" style="font-weight:normal;color:black;" href="index.php?module=dateien&action=download&typ='.$dokument.'&id='.$dv['datei'].'">'.$dateiname.'</a></td>'.$extraspalte.'</tr>');
+        $this->app->Tpl->Add('DATEIANHAENGE','<tr><td width=20 id="td_'.$dv['id'].'"><input type="hidden" name="dateisort_'.$dv['datei'].'" value="'.($dk+1).'" /><input type="checkbox" value="1" name="datei_'.$dv['datei'].'" '.$checked.'></td><td><a target="_blank" class="text-strong" style="font-weight:normal;" href="index.php?module=dateien&action=download&typ='.$dokument.'&id='.$dv['datei'].'">'.$dateiname.'</a></td>'.$extraspalte.'</tr>');
 
       }
     } else {
@@ -37810,7 +37831,7 @@ function Firmendaten($field,$projekt="")
 
         $this->app->Tpl->Add($parsetarget,"<table><tr><td style=\"background-color:#BCEE68\">".$this->app->User->GetName()."</td>
             <td style=\"background-color:red\">Prio: Sehr Hoch (".$this->app->User->GetName().")</td>
-            <td style=\"background-color:#ccc\">Allgemein</td></tr></table>");
+            <td class=\"bg-surface-strong\">Allgemein</td></tr></table>");
       }
 
       function getDates($anzWochentage){

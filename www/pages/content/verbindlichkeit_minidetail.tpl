@@ -2,10 +2,10 @@
 [MESSAGE]
 <style>
     .auftraginfo_cell {
-    color: #636363;border: 1px solid #ccc;padding: 5px;
+    color: var(--text-body);border: 1px solid var(--border);padding: 5px;
     }
     .auftrag_cell {
-    color: #636363;border: 1px solid #fff;padding: 0px; margin:0px;
+    color: var(--text-body);border: 1px solid var(--surface);padding: 0px; margin:0px;
     }
 </style>
 <div style="float:left; width:39%; padding-right:1%;">   
@@ -54,19 +54,19 @@
     </table>
 </div>
 <div style="float:left; width:60%">
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">Artikel</h2>
         <div style="padding:10px">
             [ARTIKEL]
         </div>
     </div>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">Buchungen</h2>
         <div style="padding:10px">
             [ZAHLUNGEN]
         </div>
     </div>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">Protokoll</h2>
         <div style="padding:10px;">
             [PROTOKOLL]

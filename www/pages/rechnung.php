@@ -2270,7 +2270,7 @@ class Rechnung extends GenRechnung
     $this->app->Tpl->Set('MESSAGE',"<div class=\"warning\">M&ouml;chten Sie eine Rechnung jetzt anlegen? &nbsp;
         <input type=\"button\" onclick=\"window.location.href='index.php?module=rechnung&action=create&anlegen=1'\" value=\"Ja - Rechnung jetzt anlegen\"></div><br>");
     $this->app->Tpl->Set('TAB1',"
-        <table width=\"100%\" style=\"background-color: #fff; border: solid 1px #000;\" align=\"center\">
+        <table width=\"100%\" class=\"bg-surface border-default\" align=\"center\">
         <tr>
         <td align=\"center\">
         <br><b style=\"font-size: 14pt\">Rechnungen in Bearbeitung</b>

@@ -18,7 +18,7 @@ input[type=text] {
 
 <!-- erstes tab -->
 <div id="tab-1">
-<table width="100%" style="background-color: #fff; border: solid 1px #000;" align="center">
+<table width="100%" class="bg-surface border-default" align="center">
 <tr>
 <td align="center">
 <br><b style="font-size: 14pt">Online-Shop Seiten:</b>
@@ -64,7 +64,7 @@ Text- und Internseiten der Online-Shops.<br>
 </div>
 
 <div id="tab-2">
-<table width="100%" style="background-color: #fff; border: solid 1px #000;" align="center">
+<table width="100%" class="bg-surface border-default" align="center">
 <tr>
 <td align="center">
 <br><b style="font-size: 14pt">Online-Shop Seiten:</b>

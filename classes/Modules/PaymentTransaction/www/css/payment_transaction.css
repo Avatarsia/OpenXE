@@ -3,7 +3,7 @@
     z-index:1000;
     width:900px;
     height:700px;
-    background-color:#fff;
+    background-color:var(--surface);
 }
 #pdfiframe
 {
@@ -18,7 +18,7 @@
     border: none;
     right: 10px;
     top: 10px;
-    color:#333;
+    color:var(--text-strong);
 }
 
 fieldset.maintab div.table-responsive {

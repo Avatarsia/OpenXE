@@ -4,29 +4,29 @@
 <style>
 
 ::-webkit-input-placeholder { /* WebKit, Blink, Edge */
-    color:    #999;
+    color:    var(--text-muted);
     line-height:13px;
     font-size: 0.9em;
 }
 :-moz-placeholder { /* Mozilla Firefox 4 to 18 */
-   color:    #999;
+   color:    var(--text-muted);
    opacity:  1;
    line-height:13px;
    font-size: 0.9em;
 }
 ::-moz-placeholder { /* Mozilla Firefox 19+ */
-   color:    #999;
+   color:    var(--text-muted);
    opacity:  1;
    line-height:13px;
    font-size: 0.9em;
 }
 :-ms-input-placeholder { /* Internet Explorer 10-11 */
-   color:    #999;
+   color:    var(--text-muted);
    line-height:13px;
    font-size: 0.9em;
 }
 ::-ms-input-placeholder { /* Microsoft Edge */
-   color:    #999;
+   color:    var(--text-muted);
    line-height:13px;
    font-size: 0.9em;
 }

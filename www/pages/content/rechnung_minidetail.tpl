@@ -1,13 +1,13 @@
 <style>
     .auftraginfo_cell {
-        color: #636363;
-        border: 1px solid #ccc;
+        color: var(--text-body);
+        border: 1px solid var(--border);
         padding: 5px;
     }
 
     .auftrag_cell {
-        color: #636363;
-        border: 1px solid #fff;
+        color: var(--text-body);
+        border: 1px solid var(--surface);
         padding: 0px;
         margin: 0px;
     }
@@ -16,7 +16,7 @@
     <br>
     <center>[MENU]</center>
     <br>
-    <table style="font-size: 8pt; background: white; color: #333333; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
+    <table class="bg-surface text-strong" style="font-size: 8pt; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
         <tr>
             <td class="auftraginfo_cell" colspan="2" width="50%">
                 <b>Allgemein</b>
@@ -94,31 +94,31 @@
             <td class="auftraginfo_cell"></td>
         </tr>
     </table>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <div style="padding:10px"> [RECHNUNGADRESSE] </div>
     </div>
 </div>
 <div style="float:left; width:50%">
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">Artikel</h2>
         <div style="padding:10px"> [ARTIKEL] </div>
     </div>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">Buchungen</h2>
         <div style="padding:10px"> [ZAHLUNGEN] </div>
     </div>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">Protokoll</h2>
         <div style="padding:10px;"> [PROTOKOLL] </div>
     </div>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">Mahnwesen</h2>
         <div style="padding:10px;"> [MAHNPROTOKOLL] </div>
     </div>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <h2 class="greyh2">PDF-Archiv</h2>
         <div style="padding:10px;"> [PDFARCHIV] </div>
     </div>
     <!--
-    <div style="background-color:white"><h2 class="greyh2">Deckungsbeitrag</h2><div style="padding:10px"><div class="info">Dieses Modul ist erst ab Version Professional verfügbar</div></div></div></div>
+    <div class="bg-surface"><h2 class="greyh2">Deckungsbeitrag</h2><div style="padding:10px"><div class="info">Dieses Modul ist erst ab Version Professional verfügbar</div></div></div></div>
 -->

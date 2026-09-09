@@ -6,7 +6,7 @@
         <td>
           [MESSAGE]
           <br><br>
-          <table width="60%" style="background-color: #fff; border: solid 1px #000;" align="center">
+          <table width="60%" class="bg-surface border-default" align="center">
             <tr>
               <td align="center">
                 <br>
@@ -33,13 +33,13 @@
                 [ETIKETTENDRUCKENSTART]<tr valign="top"><td><br></td><td align="center"></td></tr>
                 <tr valign="top"><td><b>{|Etiketten|}:</b></td><td><select name="etiketten">[ETIKETTEN]</select></td></tr>[ETIKETTENDRUCKENENDE]
                 <tr valign="top"><td><br></td><td align="center"></td></tr>
-                [SHOWMHDSTART]<tr valign="top"><td><b style="color:red">{|MHD|}:</b></td><td><input type="text" value="[MHDFRM]" name="mhd" id="mhd">&nbsp;<br><i>({|Mindesthaltbarkeitsdatum|})</i></td></tr>
+                [SHOWMHDSTART]<tr valign="top"><td><b class="text-error">{|MHD|}:</b></td><td><input type="text" value="[MHDFRM]" name="mhd" id="mhd">&nbsp;<br><i>({|Mindesthaltbarkeitsdatum|})</i></td></tr>
                 <tr valign="top"><td><br></td><td align="center"></td></tr>[SHOWMHDEND]
-                [SHOWCHRSTART]<tr valign="top"><td><b style="color:red">{|Charge|}:</b></td><td><input type="text" value="[CHARGEFRM]" name="charge" id="charge">&nbsp;<br><i>(Chargennummer von Hersteller)</i></td></tr>
+                [SHOWCHRSTART]<tr valign="top"><td><b class="text-error">{|Charge|}:</b></td><td><input type="text" value="[CHARGEFRM]" name="charge" id="charge">&nbsp;<br><i>(Chargennummer von Hersteller)</i></td></tr>
                 <tr valign="top"><td>{|Bemerkung|}:</td><td><input type="text" name="chargesnmhdbemerkung" value="[CHARGESNMHDBEMERKUNG]" id="chargesnmhdbemerkung" style="width:200px">&nbsp;<br><i>({|Infos zur Charge|})</i></td></tr>
                 <tr valign="top"><td><br></td><td align="center"></td></tr>
                 [SHOWCHREND]
-                [SHOWSRNSTART]<tr valign="top"><td><b style="color:red">{|Seriennummern|}:</b></td><td><input type="button" onclick="seriennummern_assistent([MENGE])" value="Assistent verwenden"><br>[SERIENNUMMERN]<i>({|Pro Artikel eine Nummer|})</i></td></tr>
+                [SHOWSRNSTART]<tr valign="top"><td><b class="text-error">{|Seriennummern|}:</b></td><td><input type="button" onclick="seriennummern_assistent([MENGE])" value="Assistent verwenden"><br>[SERIENNUMMERN]<i>({|Pro Artikel eine Nummer|})</i></td></tr>
                 <tr valign="top"><td><br></td><td align="center"></td></tr> [SHOWSRNEND]
 
                 <tr valign="top"><td><b>{|Standardlager|}:</b></td><td><span id="standardlager">[STANDARDLAGER]</span><br><br></td></tr>

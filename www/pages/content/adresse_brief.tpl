@@ -25,7 +25,7 @@
 
 .adresse_brief_left ul li {
 	padding: 6px 10px 6px 10px;
-	border-bottom: 1px solid #FFF;
+	border-bottom: 1px solid var(--surface);
 	position: relative;
 }
 
@@ -38,7 +38,7 @@
 }
 
 .adresse_brief_left ul li.anlegenAktiv {
-	background: #FFF;
+	background: var(--surface);
 }
 
 .adresse_brief_left ul li.anlegenAktiv a {
@@ -93,7 +93,7 @@
 	min-height: 600px;
 	float: left;
 	top: -5px;
-	background: #FFF;
+	background: var(--surface);
 	position: relative;
 }
 
@@ -105,7 +105,7 @@
 	padding: 10px;
 	min-width: 326px;
 	float: left;
-	background: #f5f5f5;
+	background: var(--surface-alt);
 	display: none;
 	position: relative;
 	height: 100vh;
@@ -133,21 +133,21 @@
 }
 
 .preview_ticket_nachricht {
-	background: #f1f1f1;
+	background: var(--surface-alt);
 	padding: 10px;
 	margin: 0 0 10px 0;
 }
 
 table.dataTable.row-border tbody tr.aktivBrief td,
 table.dataTable.display tbody tr.aktivBrief td {
-	border-bottom: 2px solid #f5f5f5 !important;
-	border-top: 2px solid #f5f5f5 !important;
-	background: #f5f5f5 !important;
+	border-bottom: 2px solid var(--surface-alt) !important;
+	border-top: 2px solid var(--surface-alt) !important;
+	background: var(--surface-alt) !important;
 }
 
 table.dataTable.display tbody tr.aktivBrief > .sorting_1,
 table.dataTable.order-column.stripe tbody tr.aktivBrief > .sorting_1 {
-	background: #f5f5f5 !important;
+	background: var(--surface-alt) !important;
 }
 
 table.dataTable.display tbody tr.aktivBrief td:last-child:after {
@@ -634,14 +634,14 @@ function briefSubmit(action) {
 
 	if (betreff.val().length == 0) {
 		betreff
-			.after('<span class="pflichtfeld" style="color: red;">Pflichtfeld!</span>');
+			.after('<span class="pflichtfeld text-error">Pflichtfeld!</span>');
 		errors++;
 	}
 
 	/*
 	if (content.val().length == 0) {
 		content
-			.after('<span class="pflichtfeld" style="color: red;">Pflichtfeld!</span>');
+			.after('<span class="pflichtfeld text-error">Pflichtfeld!</span>');
 		errors++;
 	}
 	*/

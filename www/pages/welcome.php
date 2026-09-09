@@ -1712,6 +1712,11 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     $this->app->Tpl->Set('DEFAULTCOLOR', $settings['defaultcolor']);
     $this->app->Tpl->Set('SPRACHEBEVORZUGEN', $this->languageSelectOptions($settings['sprachebevorzugen']));
 
+    $colorScheme = $this->app->erp->GetUserColorScheme();
+    $this->app->Tpl->Set('COLORSCHEME_AUTO_SELECTED', $colorScheme === 'auto' ? ' selected="selected"' : '');
+    $this->app->Tpl->Set('COLORSCHEME_LIGHT_SELECTED', $colorScheme === 'light' ? ' selected="selected"' : '');
+    $this->app->Tpl->Set('COLORSCHEME_DARK_SELECTED', $colorScheme === 'dark' ? ' selected="selected"' : '');
+
     if($settings['chat_popup']){
       $this->app->Tpl->Set('CHAT_POPUP', ' checked="checked" ');
     }
@@ -3284,6 +3289,13 @@ $this->app->Tpl->Add('TODOFORUSER',"<tr><td width=\"90%\">".$tmp[$i]['aufgabe'].
     if($sprachebevorzugen != ''){
       $sprachebevorzugen = $this->app->Secure->GetPOST('sprachebevorzugen');
       $this->app->DB->Update("UPDATE `user` SET `sprachebevorzugen` = '$sprachebevorzugen' WHERE `id` = '" . $this->app->User->GetID() . "' LIMIT 1");
+    }
+
+    $colorScheme = (string)$this->app->Secure->GetPOST('color_scheme');
+    if($submit_startseite != '' && in_array($colorScheme, ['auto', 'light', 'dark'], true)){
+      /** @var \Xentral\Modules\User\Service\UserConfigService $userConfig */
+      $userConfig = $this->app->Container->get('UserConfigService');
+      $userConfig->set('color_scheme', $colorScheme, $this->app->User->GetID());
     }
 
     if($submit_startseite != ''){
