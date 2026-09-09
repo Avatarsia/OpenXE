@@ -61,6 +61,8 @@
 	<link rel="stylesheet" href="./themes/[THEME]/css/dark-icons.css?v=2">
 
 	<script src="./js/ckeditor/ckeditor.js"></script>
+	<!-- Cache-Buster fuer CKEditor-Ressourcen (config.js, contents.css, skins): bei Aenderungen hochzaehlen -->
+	<script>CKEDITOR.timestamp = 'HBDG2';</script>
 	<script src="./js/ckeditor/adapters/jquery.js"></script>
 
 	<script type="text/javascript" language="javascript" src="./js/keynavigation.js?v=1.3"></script>
