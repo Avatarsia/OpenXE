@@ -139,7 +139,7 @@ final class Bootstrap
      *
      * @return TimeManagementMailerWrapper
      */
-    public function onInitTimeManagementMailer(ContainerInterface $container): TimeManagementMailerWrapper
+    public static function onInitTimeManagementMailer(ContainerInterface $container): TimeManagementMailerWrapper
     {
         /** @var ApplicationCore $app */
         $app = $container->get('LegacyApplication');
