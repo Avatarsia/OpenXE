@@ -1,7 +1,7 @@
 name: Build Production
 
 # Manual rebuild of the production branch from upstream/master plus
-# all integration branches listed in .github/integration-branches.txt.
+# all integration branches listed on feature/ci-workflow.
 #
 # Trigger via:  gh workflow run build-production.yml --repo Avatarsia/OpenXE
 #
@@ -31,11 +31,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout production
+      - name: Checkout CI control branch
         uses: actions/checkout@v6
         with:
           fetch-depth: 0
-          ref: production
+          ref: feature/ci-workflow
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
@@ -58,22 +58,11 @@ jobs:
       - name: Load integration branch manifest
         id: manifest
         run: |
-          if [ ! -f .github/integration-branches.txt ]; then
-            echo "::error::Manifest .github/integration-branches.txt not found on production"
-            exit 1
-          fi
-          BRANCHES=$(grep -vE '^\s*(#|$)' .github/integration-branches.txt)
-          if [ -z "$BRANCHES" ]; then
-            echo "::error::Manifest contains no branches"
-            exit 1
-          fi
-          echo "Loaded integration branches:"
-          echo "$BRANCHES"
-          {
-            echo "branches<<EOF"
-            echo "$BRANCHES"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          CONTROL_SHA=$(git rev-parse refs/remotes/origin/feature/ci-workflow)
+          git checkout --detach "$CONTROL_SHA"
+          echo "Integration configuration: feature/ci-workflow at $CONTROL_SHA"
+          echo "Upstream base: $(git rev-parse upstream/master)"
+          python3 .github/scripts/validate-integration.py --github-output "$GITHUB_OUTPUT"
 
       - name: Pass 1 - isolated merge tests
         id: pass1
@@ -226,6 +215,7 @@ jobs:
       - name: Push production on success
         if: steps.status.outputs.ok == 'true'
         run: |
+          git merge-base --is-ancestor upstream/master production-candidate
           git checkout production
           git reset --hard production-candidate
           git push --force-with-lease origin production
@@ -280,7 +270,7 @@ jobs:
             body += `1. Check out the failing feature branch(es) locally\n`;
             body += `2. Rebase on \`upstream/master\` and resolve conflicts\n`;
             body += `3. Push the fixed branch\n`;
-            body += `4. Either wait for the next nightly run or trigger the workflow manually via Actions -> Build Production -> Run workflow\n\n`;
+            body += `4. Trigger the workflow manually via Actions -> Build Production -> Run workflow (branch feature/ci-workflow)\n\n`;
             body += `The \`production\` branch was NOT updated and still holds the last known-good state.\n`;
 
             await github.rest.issues.create({

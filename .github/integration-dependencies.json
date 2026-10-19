@@ -1,0 +1,12 @@
+{
+  "first": "feature/ci-workflow",
+  "last": "config/production-remote-override",
+  "requires": {
+    "feature/woocommerce-batch-stock-sync": [
+      "fix/woocommerce-order-import-pagination"
+    ],
+    "refactor/woocommerce-composer-sdk": [
+      "feature/woocommerce-batch-stock-sync"
+    ]
+  }
+}
