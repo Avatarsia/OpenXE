@@ -1,4 +1,4 @@
-# Integration branch manifest for the nightly production build.
+# Integration branch manifest for the manually requested production build.
 #
 # One branch per line. Lines starting with # or blank lines are ignored.
 # The workflow merges these branches in order on top of upstream/master
@@ -12,7 +12,7 @@
 #   2. Append its name to this file
 #   3. Commit + push on feature/ci-workflow
 #
-# The next nightly run (or manual workflow_dispatch) will pick it up.
+# The next manual workflow_dispatch reads this branch directly.
 # The ci-workflow branch itself is listed below so the workflow files
 # are automatically reintegrated into production on every rebuild.
 
@@ -63,11 +63,11 @@ fix/location-redirect-proxy-port
 fix/supersearch-jsonserialize-returntype
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
-# #265 Pagination-Fix — foundation for #267
+# #265 Pagination-Fix — foundation for #266 and #267
 fix/woocommerce-order-import-pagination
-# #266 Batch stock sync — independent
+# #266 Batch stock sync — requires #265
 feature/woocommerce-batch-stock-sync
-# #267 Composer-based WC SDK — stacked on #265, must follow it
+# #267 Composer-based WC SDK — stacked on #266, must follow it
 refactor/woocommerce-composer-sdk
 
 # UI: Dark Theme (token-based CSS, per-user switch auto/light/dark).
