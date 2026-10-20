@@ -44,15 +44,17 @@ final class RepairSyncQueueGateway
         return $row ?: null;
     }
 
-    public function getPendingEntries(int $limit = 50): array
+    public function getPendingEntries(int $limit = 50, ?bool $statusExchangeEnabled = null): array
     {
+        $modeFilter = $statusExchangeEnabled === null ? '' : ($statusExchangeEnabled
+            ? " AND q.action <> 'status_change'" : " AND q.action <> 'status_exchange'");
         return $this->db->fetchAll(
             "SELECT q.* FROM `repair_sync_queue` q
              WHERE q.status IN ('pending', 'failed')
                AND (q.next_retry_at IS NULL OR q.next_retry_at <= NOW())
                AND (q.action <> 'status_change' OR NOT EXISTS (
                    SELECT 1 FROM repair_sync_queue newer WHERE newer.ticket_id = q.ticket_id
-                     AND newer.action = q.action AND newer.id > q.id))
+                     AND newer.action = q.action AND newer.id > q.id))" . $modeFilter . "
              ORDER BY q.created_at ASC, q.id ASC
              LIMIT " . (int)$limit
         );

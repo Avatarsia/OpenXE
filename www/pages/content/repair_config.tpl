@@ -2,6 +2,7 @@
     <ul>
         <li><a href="#tabs-1">Einstellungen</a></li>
         <li><a href="#tabs-2">WordPress-Verbindung</a></li>
+        <li><a href="#tabs-3">Artikel und Produkttexte</a></li>
     </ul>
     <div id="tabs-1">
         [MESSAGE]
@@ -95,5 +96,30 @@
                 </td>
             </tr>
         </table>
+    </div>
+    <div id="tabs-3">
+        [POSITION_SETTINGS_MESSAGE]
+        <form method="post" action="index.php?module=repairintegration&amp;action=einstellungen#tabs-3">
+            <input type="hidden" name="repair_settings_csrf" value="[REPAIR_SETTINGS_CSRF]">
+            <div class="row"><div class="row-height">
+                <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
+                    <legend>Artikelzuordnung</legend>
+                    <table class="mkTableFormular" width="100%"><tr>
+                        <td><label for="repair_service_article">Serviceartikel:</label></td>
+                        <td><input type="text" id="repair_service_article" name="repair_service_article" value="[REPAIR_ARTICLE_NUMBER]" size="40"></td>
+                    </tr></table>
+                    <p class="repairHint">Vorhandenen Artikel auswaehlen. Er wird als normale Belegposition eingefuegt. Versand und weitere Artikel ergaenzen Sie im OpenXE-Angebot.</p>
+                </fieldset></div></div>
+                <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
+                    <legend>Produkttext-Vorlagen</legend>
+                    <table class="mkTableFormular" width="100%"><tr>
+                        <td><label for="repair_template_type">Verwendung:</label></td><td><select id="repair_template_type">[REPAIR_TEMPLATE_OPTIONS]</select></td>
+                    </tr><tr><td colspan="2">[REPAIR_TEMPLATE_EDITORS]</td></tr></table>
+                    <p class="repairHint">Platzhalter an der Cursorposition einfuegen. Fehlende Angaben werden vor der Belegerstellung gemeldet. Interne Notizen sind keine Produkttext-Variablen.</p>
+                    <div class="repair-variables">[REPAIR_TEMPLATE_VARIABLES]</div>
+                </fieldset></div></div>
+            </div></div>
+            <button type="submit" class="button" name="submit" value="save_position_settings">Speichern</button>
+        </form>
     </div>
 </div>

@@ -5,12 +5,34 @@
 
 class TicketCustom extends Ticket
 {
+    public $javascript = ['./classes/Modules/RepairIntegration/www/js/repairintegration.js'];
+    public $stylesheet = ['./classes/Modules/RepairIntegration/www/css/repairintegration.css'];
     /** @var string Warnmeldung aus dem Panel-Save, wird im Panel gerendert */
     private string $repairPanelMessage = '';
 
     function __construct($app, $intern = false)
     {
+        if (!$intern) {
+            $app->ModuleScriptCache->IncludeJavascriptFiles('RepairIntegration', $this->javascript);
+            $app->ModuleScriptCache->IncludeStylesheetFiles('RepairIntegration', $this->stylesheet);
+        }
         parent::__construct($app, $intern);
+    }
+
+    function ticket_dateien()
+    {
+        parent::ticket_dateien();
+        if (!empty($_FILES)) $this->repair_queue_images((int)$this->app->Secure->GetGET('id'));
+    }
+
+    private function repair_queue_images(int $ticketId): void
+    {
+        if ($ticketId <= 0) return;
+        try {
+            $service = $this->app->Container->get('RepairReconcileService');
+            $service->queueTicket($ticketId);
+            $service->processPending(1);
+        } catch (\Throwable $e) { error_log('Repair image sync deferred for ticket #' . $ticketId); }
     }
 
     function ticket_edit()
@@ -37,6 +59,8 @@ class TicketCustom extends Ticket
         if ($ticketId <= 0) {
             return;
         }
+
+        if (!empty($_FILES)) $this->repair_queue_images($ticketId);
 
         // Trigger status change hook
         try {
@@ -65,6 +89,8 @@ class TicketCustom extends Ticket
     private function repair_render_panel(int $ticketId): void
     {
         try {
+            $migration = new \Xentral\Modules\RepairIntegration\Migration\RepairIntegrationMigration($this->app->Container->get('Database'));
+            if ($migration->needsUpgrade()) $migration->upgrade();
             $detailsGateway = $this->app->Container->get('RepairDetailsGateway');
             $details = $detailsGateway->getByTicketId($ticketId);
             if ($details === null) {
@@ -76,32 +102,9 @@ class TicketCustom extends Ticket
 
             $this->app->Tpl->Set('REPAIR_MESSAGE', $this->repairPanelMessage);
             $this->app->Tpl->Set('REPAIR_TAB_DISPLAY', 'block');
-            $this->app->Tpl->Set('REPAIR_SERVICE_TYPE', htmlspecialchars(ucfirst($details['service_type'] ?? '')));
-            $this->app->Tpl->Set('REPAIR_MANUFACTURER', htmlspecialchars($details['manufacturer'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_MODEL', htmlspecialchars($details['model'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_SERIAL', htmlspecialchars($details['serial_number'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_ISSUE_CAT', htmlspecialchars($details['issue_category'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_ISSUE_DESC', htmlspecialchars($details['issue_description'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_WARRANTY', htmlspecialchars($details['warranty_status'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_COST_LIMIT', htmlspecialchars($details['cost_limit'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_EXPRESS', $details['is_express'] ? '<span class="repair-express-badge">Ja</span>' : 'Nein');
             $this->app->Tpl->Set('REPAIR_DIAGNOSIS', htmlspecialchars($details['diagnosis_result'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_QUOTE', htmlspecialchars($details['quote_amount'] ?? ''));
-            $this->app->Tpl->Set('REPAIR_ACTUAL_COST', htmlspecialchars($details['actual_cost'] ?? ''));
-            // Read-only: der Wert kommt ausschliesslich per Push von WP.
-            // Leer -> eigener KVA-Betrag als unbestaetigter Fallback, sonst
-            // Gedankenstrich, damit der Chip im Panel nicht leer steht.
-            $customerQuote = trim((string)($details['customer_quote_amount'] ?? ''));
-            $ownQuote = trim((string)($details['quote_amount'] ?? ''));
-            if ($customerQuote !== '') {
-                $customerQuoteHtml = htmlspecialchars($customerQuote) . ' &euro;';
-            } elseif ($ownQuote !== '') {
-                $customerQuoteHtml = htmlspecialchars($ownQuote) . ' &euro; <i>(nicht vom Kunden best&auml;tigt)</i>';
-            } else {
-                $customerQuoteHtml = '&ndash;';
-            }
-            $this->app->Tpl->Set('REPAIR_CUSTOMER_QUOTE', $customerQuoteHtml);
             $this->app->Tpl->Set('REPAIR_NOTES', htmlspecialchars($details['repair_notes'] ?? ''));
+            $this->repair_render_service_fields($details, $ticketId);
 
             // Customer account and beleg shortcuts
             $ticket = $this->app->DB->SelectRow(
@@ -109,11 +112,12 @@ class TicketCustom extends Ticket
             );
             $adresseId = (int)($ticket['adresse'] ?? 0);
             $this->app->Tpl->Set('REPAIR_ADRESSE_BLOCK', $this->repair_adresse_block($ticketId, $adresseId));
-            $this->app->Tpl->Set('REPAIR_BELEG_BUTTONS', $this->repair_beleg_buttons($ticketId, $adresseId));
+            $this->app->Tpl->Set('REPAIR_BELEG_BUTTONS', $this->repair_beleg_buttons($ticketId, $adresseId, (string)$details['service_type']));
 
             // Load beleg links
             $belegGateway = $this->app->Container->get('RepairBelegGateway');
             $belege = $belegGateway->getByTicketId($ticketId);
+            $this->app->Tpl->Set('REPAIR_BELEGE_ROWS', '<tr><td colspan="3">Keine verknuepften Belege.</td></tr>');
             if (!empty($belege)) {
                 $belegHtml = '';
                 foreach ($belege as $beleg) {
@@ -158,6 +162,24 @@ class TicketCustom extends Ticket
         // The parent only saves when a submit button was used -- behave the same
         if ($this->app->Secure->GetPOST('submit') === '') {
             return $details;
+        }
+
+        $token = $this->app->Secure->GetPOST('repair_csrf');
+        if (!is_string($token) || !$this->app->Container->get('Session')->isCsrfTokenValid('repair_beleg', $token)) {
+            $this->repairPanelMessage = '<div class="error">Reparaturformular abgelaufen. Ticket neu laden.</div>';
+            return $details;
+        }
+        $input = [];
+        foreach (\Xentral\Modules\RepairIntegration\Service\RepairBelegService::SERVICE_FIELDS as $field) {
+            if (isset($this->app->Secure->POST['repair_' . $field])) {
+                $input[$field] = $this->app->Secure->GetPOST('repair_' . $field, 'nothtml', '', 1);
+            }
+        }
+        try {
+            $saved = $this->app->Container->get('RepairBelegService')->saveServiceFields($ticketId, $input);
+            $details = array_merge($details, $saved);
+        } catch (\Throwable $e) {
+            $this->repairPanelMessage = '<div class="error">' . htmlspecialchars($e->getMessage()) . '</div>';
         }
 
         $fields = [
@@ -243,6 +265,62 @@ class TicketCustom extends Ticket
         return is_numeric($value) ? $value : false;
     }
 
+    private function repair_render_service_fields(array $details, int $ticketId): void
+    {
+        $tpl = $this->app->Tpl;
+        $tpl->Set('REPAIR_CSRF', htmlspecialchars($this->app->Container->get('Session')->createCsrfToken('repair_beleg'), ENT_QUOTES, 'UTF-8'));
+        $fieldDefaults = \Xentral\Modules\RepairIntegration\Service\RepairPositionTemplate::serviceFieldDefaults((string)($details['service_type'] ?? 'reparatur'));
+        foreach (['public_diagnosis', 'service_work', 'final_check', 'position_net_amount'] as $field) {
+            $value = $details[$field] ?? ($fieldDefaults[$field] ?? '');
+            if ($field === 'position_net_amount' && $value !== '') $value = number_format((float)$value, 2, ',', '.');
+            $tpl->Set('REPAIR_' . strtoupper($field), htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'));
+        }
+        $type = $details['service_type'] ?? 'reparatur';
+        $serviceLabels = ['reparatur' => 'Reparatur', 'wartung' => 'Wartung', 'reverse_engineering' => 'Reverse Engineering', 'individualisierung' => 'Individualisierung'];
+        $facts = ['Service' => $serviceLabels[$type] ?? $type, 'Hersteller' => $details['manufacturer'] ?? '',
+            'Modell' => $details['model'] ?? '', 'Seriennummer' => $details['serial_number'] ?? ''];
+        if ($type === 'reparatur') {
+            $limit = (string)($details['cost_limit'] ?? '');
+            $facts['Kostenfreigabe'] = $limit === 'consult_always' ? 'Vor jeder Reparatur Ruecksprache'
+                : (is_numeric($limit) ? 'Bis ' . $limit . ' EUR, darueber Ruecksprache' : (in_array($limit, ['unlimited', 'no_limit'], true) ? 'Keine Begrenzung' : $limit));
+            $facts['Garantie'] = ['yes' => 'Ja', 'no' => 'Nein'][$details['warranty_status'] ?? ''] ?? '';
+        }
+        $values = \Xentral\Modules\RepairIntegration\Service\RepairPositionTemplate::values($details, (string)($details['ticket_schluessel'] ?? $ticketId));
+        if ($type === 'wartung') $facts['Wartungspaket'] = $values['wartungspaket'];
+        if ($type === 'reverse_engineering') {
+            foreach (['has_original_part' => 'Originalteil', 'has_templates' => 'Vorlagen', 're_tolerance' => 'Toleranz', 're_output_format' => 'Ausgabeformat'] as $key => $label) $facts[$label] = $details[$key] ?? '';
+        }
+        if ($type === 'individualisierung') {
+            foreach (['has_3d_file' => '3D-Datei', 'material_preference' => 'Material', 'color_preference' => 'Farbe', 'functional_requirements' => 'Anforderungen'] as $key => $label) $facts[$label] = $details[$key] ?? '';
+        }
+        $facts['Express'] = !empty($details['is_express']) ? 'Ja' : 'Nein';
+        $rows = '';
+        foreach ($facts as $label => $value) {
+            if ($value === null || trim((string)$value) === '') continue;
+            $rows .= '<tr><td width="145"><strong>' . htmlspecialchars($label) . ':</strong></td><td>' . nl2br(htmlspecialchars((string)$value)) . '</td></tr>';
+        }
+        $tpl->Set('REPAIR_FORM_ROWS', $rows);
+        $priceField = $type === 'wartung' ? 'wartung_paket_price_snapshot' : 'diagnosis_cost_snapshot';
+        $price = $details[$priceField] ?? null;
+        $priceHtml = '';
+        if (in_array($type, ['reparatur', 'wartung'], true)) {
+            $priceHtml = '<strong>' . ($type === 'wartung' ? 'Paketpreis laut Formular: ' : 'KVA-Preis laut Formular: ')
+                . '</strong>' . ($price === null || $price === '' ? 'Nicht uebermittelt' : number_format((float)$price, 2, ',', '.') . ' EUR');
+        }
+        $tpl->Set('REPAIR_FORM_PRICE', $priceHtml);
+        $tpl->Set('REPAIR_DESCRIPTION_LABEL', $type === 'wartung' ? 'Anmerkungen des Kunden:' : 'Fehlerbeschreibung / Anforderung:');
+        $tpl->Set('REPAIR_DESCRIPTION', htmlspecialchars((string)($type === 'wartung' ? ($details['wartung_notes'] ?? '') : ($details['issue_description'] ?? ''))));
+        $config = $this->app->Container->get('RepairConfigService');
+        $number = $config->get('service_article_number');
+        $article = $number !== '' ? $this->app->Container->get('Database')->fetchRow('SELECT nummer, name_de FROM artikel WHERE nummer = :number AND geloescht = 0 LIMIT 1', ['number' => $number]) : [];
+        $tpl->Set('REPAIR_SERVICE_ARTICLE_NUMBER', htmlspecialchars((string)($article['nummer'] ?? '')));
+        $tpl->Set('REPAIR_SERVICE_ARTICLE_NAME', htmlspecialchars((string)($article['name_de'] ?? 'Serviceartikel in Einstellungen hinterlegen')));
+        $defaults = \Xentral\Modules\RepairIntegration\Service\RepairPositionTemplate::defaults();
+        $tpl->Set('REPAIR_POSITION_TEMPLATE', htmlspecialchars($config->get('position_template_' . $type, $defaults[$type] ?? $defaults['reparatur'])));
+        $tpl->Set('REPAIR_POSITION_VALUES', json_encode($values, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE));
+        \Xentral\Components\Http\Session\SessionHandler::commitSession($this->app->Container->get('Session'));
+    }
+
     private function repair_adresse_block(int $ticketId, int $adresseId): string
     {
         if ($adresseId <= 0) {
@@ -264,7 +342,7 @@ class TicketCustom extends Ticket
             . ($kundennummer !== '' ? ' (' . htmlspecialchars($kundennummer) . ')' : '');
     }
 
-    private function repair_beleg_buttons(int $ticketId, int $adresseId): string
+    private function repair_beleg_buttons(int $ticketId, int $adresseId, string $serviceType): string
     {
         if ($adresseId <= 0) {
             return '<i>Erst Kundenkonto verkn&uuml;pfen</i>';
@@ -276,10 +354,12 @@ class TicketCustom extends Ticket
             'rechnung' => 'Rechnung',
         ];
 
+        if ($serviceType === 'reparatur') $typen['fee'] = 'Nur KVA abrechnen';
         $html = '';
         foreach ($typen as $typ => $label) {
-            $html .= '<a class="button" style="margin-right:5px;" href="index.php?module=repairintegration&action=createbeleg&ticket='
-                . $ticketId . '&typ=' . $typ . '">' . $label . '</a>';
+            $html .= '<button type="submit" class="button" name="repair_beleg_typ" value="' . $typ
+                . '" formaction="index.php?module=repairintegration&amp;action=createbeleg&amp;ticket=' . $ticketId
+                . '" formmethod="post">' . $label . '</button> ';
         }
 
         return $html;

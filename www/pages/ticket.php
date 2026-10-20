@@ -345,7 +345,7 @@ class Ticket {
                             continue;
                         }
                         try {
-                            $this->app->Container->get('RepairSyncService')->queueAndPushStatusChange($selectedId);
+                            $this->app->Container->get('RepairSyncService')->queueAndPushStatusChange($selectedId, $old[$selectedId]['status'] ?? null);
                         } catch (\Throwable $e) {
                             error_log('Repair status queue failed for ticket #' . $selectedId . ': ' . $e->getMessage());
                         }

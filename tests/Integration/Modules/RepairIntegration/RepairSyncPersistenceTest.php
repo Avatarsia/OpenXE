@@ -46,8 +46,8 @@ final class RepairSyncPersistenceTest extends TestCase
         self::$db->perform('CREATE TABLE systemconfig (`namespace` varchar(100), `key` varchar(100), `value` text, UNIQUE KEY (`namespace`, `key`))');
         self::$db->perform('CREATE TABLE ticket (id int PRIMARY KEY, schluessel varchar(255), status varchar(50))');
         self::$db->perform('CREATE TABLE logfile (meldung text, dump text, module text, action text, bearbeiter text, funktionsname text, datum datetime)');
-        self::$db->perform('CREATE TABLE hook (id int, name varchar(255))');
-        self::$db->perform('CREATE TABLE hook_register (hook int, module varchar(255))');
+        self::$db->perform('CREATE TABLE hook (id int AUTO_INCREMENT PRIMARY KEY, name varchar(255), alias varchar(255), aktiv int, parametercount int, description text)');
+        self::$db->perform('CREATE TABLE hook_register (id int AUTO_INCREMENT PRIMARY KEY, hook_action int, `function` varchar(255), aktiv int, position int, hook int, module varchar(255), module_parameter int)');
         self::$db->perform('CREATE TABLE hook_navigation (module varchar(255))');
         (new RepairIntegrationMigration(self::$db))->install();
         $this->config = new RepairConfigService(self::$db);

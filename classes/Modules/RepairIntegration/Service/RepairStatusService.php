@@ -52,10 +52,15 @@ final class RepairStatusService
             throw new \InvalidArgumentException(sprintf('Ticket %d not found', $ticketId));
         }
 
-        $this->db->perform(
-            'UPDATE `ticket` SET `status` = :status WHERE `id` = :id',
-            ['status' => $newStatus, 'id' => $ticketId]
-        );
+        $exchange = new RepairStatusExchangeService($this->db, new RepairConfigService($this->db), $this->statusConfigGateway);
+        if ($exchange->isEnabled()) {
+            $exchange->changeLocalStatus($ticketId, $newStatus);
+        } else {
+            $this->db->perform(
+                'UPDATE `ticket` SET `status` = :status WHERE `id` = :id',
+                ['status' => $newStatus, 'id' => $ticketId]
+            );
+        }
 
         return [
             'success' => true,

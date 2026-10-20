@@ -32,6 +32,7 @@ try {
     } catch (\Throwable $e) {
         $logRepair('Backfill deferred: ' . $e->getMessage());
     }
+    $app->Container->get('RepairReconcileService')->runScheduled();
     $processed = $syncService->processQueue();
     if ($processed > 0) {
         $logRepair("Processed {$processed} sync queue entries");

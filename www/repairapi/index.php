@@ -26,7 +26,9 @@ $dbConfig = new \Xentral\Components\Database\DatabaseConfig(
     $conf->WFdbhost,
     $conf->WFdbuser,
     $conf->WFdbpass,
-    $conf->WFdbname
+    $conf->WFdbname,
+    'utf8mb4',
+    $conf->WFdbport ?? 3306
 );
 $adapter = new \Xentral\Components\Database\Adapter\MysqliAdapter($dbConfig);
 $queryFactory = new \Xentral\Components\Database\SqlQuery\QueryFactory('mysql');
@@ -44,6 +46,17 @@ $controller = new \Xentral\Modules\RepairIntegration\Api\RepairApiController(
     $detailsGateway,
     $statusConfigGateway
 );
+
+$exchangePath = trim((string)($_SERVER['PATH_INFO'] ?? ''), '/');
+if (str_starts_with($exchangePath, 'sync/')) {
+    $exchange = new \Xentral\Modules\RepairIntegration\Api\RepairExchangeApiController(
+        $controller, $configService,
+        new \Xentral\Modules\RepairIntegration\Service\RepairStatusExchangeService($db, $configService, $statusConfigGateway),
+        new \Xentral\Modules\RepairIntegration\Service\RepairImageExchangeService($db, $configService)
+    );
+    $exchange->dispatch(substr($exchangePath, 5));
+    return;
+}
 
 // Route — support both ?action=push_details and /repair-status (WP plugin format)
 $action = $_GET['action'] ?? '';

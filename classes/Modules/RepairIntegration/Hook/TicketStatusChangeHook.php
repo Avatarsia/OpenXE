@@ -31,7 +31,7 @@ final class TicketStatusChangeHook
         }
 
         // Queue WP sync + sofortige Zustellung; Retries uebernimmt der Cron
-        $this->syncService->queueAndPushStatusChange($ticketId);
+        $this->syncService->queueAndPushStatusChange($ticketId, $oldStatus);
 
         // Prepare email notification (actual sending done by caller with $app)
         // The caller checks shouldSendNotification() and uses prepareNotificationData()
