@@ -134,12 +134,14 @@ class Repairintegration
         $hiddenDefault = implode(',', $this->getDefaultHiddenStatuses());
         $this->app->Tpl->Add('JAVASCRIPT', "oMoreData1repair_list = '" . $hiddenDefault . "';");
         $this->app->Tpl->Add('JQUERYREADY',
-            "$('.repair-status-filter').change(function() {
-                var hidden = [];
-                $('.repair-status-filter').each(function() {
-                    if (!$(this).prop('checked')) { hidden.push($(this).data('slug')); }
-                });
-                oMoreData1repair_list = hidden.join(',');
+            "$('#repair-show-completed, #repair-status-select').change(function() {
+                var selected = $('#repair-status-select').val();
+                var terminal = $('#repair-status-select option:selected').data('terminal');
+                if (this.id === 'repair-status-select' && terminal) $('#repair-show-completed').prop('checked', true);
+                if (this.id === 'repair-show-completed' && !this.checked && terminal) { selected = ''; $('#repair-status-select').val(''); }
+                var hidden = $('#repair-show-completed').prop('checked') ? [] : $('#repair-status-filter').data('hidden-default').split(',');
+                if (selected) $('#repair-status-select option').each(function() { if (this.value && this.value !== selected) hidden.push(this.value); });
+                oMoreData1repair_list = hidden.length ? hidden.join(',') : 'all';
                 $('#repair_list').dataTable().fnFilter('', 0, 0, 0);
             });"
         );
@@ -165,64 +167,16 @@ class Repairintegration
             return;
         }
 
-        // Nach category gruppieren, damit die Leiste bei vielen Stati
-        // lesbar bleibt. Reihenfolge der Gruppen bewusst festlegen.
-        $categoryLabels = array(
-            'general' => 'Allgemein',
-            'repair' => 'Reparatur',
-            'maintenance' => 'Wartung',
-            'reverse_engineering' => 'Reverse Engineering',
-            'individualization' => 'Individualisierung',
-        );
-
-        $grouped = array();
+        $options = '<option value="">Alle Status</option>';
         foreach ($statuses as $status) {
-            $slug = (string)$status['slug'];
-            if (!preg_match('/^[a-z0-9_]+$/', $slug)) {
-                continue;
-            }
-            $category = (string)($status['category'] ?? 'general');
-            $grouped[$category][] = $status;
+            if (!preg_match('/^[a-z0-9_]+$/', (string)$status['slug'])) continue;
+            $options .= '<option value="' . $status['slug'] . '" data-terminal="' . (int)$status['is_terminal'] . '">'
+                . htmlspecialchars((string)$status['label_de']) . '</option>';
         }
-
-        $hiddenDefault = $this->getDefaultHiddenStatuses($statuses);
-        $groupsHtml = array();
-        foreach ($categoryLabels as $category => $label) {
-            if (empty($grouped[$category])) {
-                continue;
-            }
-            $group = '<span class="filter-group"><strong>' . $label . ':</strong> ';
-            foreach ($grouped[$category] as $status) {
-                $slug = (string)$status['slug'];
-                $checked = in_array($slug, $hiddenDefault, true) ? '' : ' checked';
-                $group .= '<label><input type="checkbox" class="repair-status-filter" data-slug="'
-                    . $slug . '"' . $checked . '> '
-                    . htmlspecialchars((string)$status['label_de']) . '</label> ';
-            }
-            $group .= '</span>';
-            $groupsHtml[] = $group;
-        }
-        // Unbekannte/zukuenftige Kategorien nicht verschlucken
-        foreach ($grouped as $category => $items) {
-            if (isset($categoryLabels[$category])) {
-                continue;
-            }
-            $group = '<span class="filter-group"><strong>' . htmlspecialchars(ucfirst($category)) . ':</strong> ';
-            foreach ($items as $status) {
-                $slug = (string)$status['slug'];
-                $checked = in_array($slug, $hiddenDefault, true) ? '' : ' checked';
-                $group .= '<label><input type="checkbox" class="repair-status-filter" data-slug="'
-                    . $slug . '"' . $checked . '> '
-                    . htmlspecialchars((string)$status['label_de']) . '</label> ';
-            }
-            $group .= '</span>';
-            $groupsHtml[] = $group;
-        }
-
-        $this->app->Tpl->Set(
-            'STATUSFILTER',
-            '<div id="repair-status-filter">' . implode('', $groupsHtml) . '</div>'
-        );
+        $this->app->Tpl->Set('STATUSFILTER', '<div id="repair-status-filter" data-hidden-default="'
+            . htmlspecialchars(implode(',', $this->getDefaultHiddenStatuses($statuses)), ENT_QUOTES, 'UTF-8')
+            . '"><label>Status: <select id="repair-status-select">' . $options . '</select></label>'
+            . '<label><input type="checkbox" id="repair-show-completed"> Erledigte anzeigen</label></div>');
     }
 
     /**
@@ -265,6 +219,7 @@ class Repairintegration
 
         /** @var \Xentral\Modules\RepairIntegration\Service\RepairConfigService */
         $config = $this->app->Container->get('RepairConfigService');
+        $this->renderPositionSettings($config);
 
         // Meldung aus dem Redirect nach dem Generieren (siehe unten).
         $incomingMsg = $this->app->erp->base64_url_decode((string)$this->app->Secure->GetGET('msg'));
@@ -349,6 +304,69 @@ class Repairintegration
 
         $this->app->Tpl->Set('KURZUEBERSCHRIFT', 'RepairIntegration Einstellungen');
         $this->app->Tpl->Parse('PAGE', 'repair_config.tpl');
+    }
+
+    private function renderPositionSettings($config): void
+    {
+        $defaults = \Xentral\Modules\RepairIntegration\Service\RepairPositionTemplate::defaults();
+        $db = $this->app->Container->get('Database');
+        if ($this->app->Secure->GetPOST('submit') === 'save_position_settings') {
+            try {
+                if (!$this->app->Container->get('Session')->isCsrfTokenValid('repair_settings', (string)$this->app->Secure->GetPOST('repair_settings_csrf'))) {
+                    throw new \RuntimeException('Formular abgelaufen. Einstellungen neu laden.');
+                }
+                $number = trim((string)$this->app->Secure->GetPOST('repair_service_article', 'nothtml', '', 1));
+                $article = $db->fetchRow('SELECT nummer FROM artikel WHERE nummer = :number AND geloescht = 0 LIMIT 1', ['number' => $number]);
+                if (!$article) throw new \RuntimeException('Bitte eine vorhandene, nicht geloeschte Artikelnummer auswaehlen.');
+                $templates = [];
+                foreach ($defaults as $key => $default) {
+                    $value = $this->app->Secure->GetPOST('repair_template_' . $key, 'nothtml', '', 1);
+                    if (!is_string($value)) throw new \RuntimeException('Ungueltige Produkttext-Vorlage.');
+                    \Xentral\Modules\RepairIntegration\Service\RepairPositionTemplate::validate($value);
+                    $templates[$key] = $value;
+                }
+                $db->beginTransaction();
+                try {
+                    $config->set('service_article_number', (string)$article['nummer']);
+                    foreach ($templates as $key => $value) $config->set('position_template_' . $key, $value);
+                    $db->commit();
+                } catch (\Throwable $e) {
+                    $db->rollBack();
+                    throw $e;
+                }
+                $this->app->Tpl->Set('POSITION_SETTINGS_MESSAGE', '<div class="info">Artikel und Produkttexte gespeichert.</div>');
+            } catch (\Throwable $e) {
+                $this->app->Tpl->Set('POSITION_SETTINGS_MESSAGE', '<div class="error">' . htmlspecialchars($e->getMessage()) . '</div>');
+            }
+        }
+        $labels = ['reparatur' => 'Reparatur: Angebot / Auftrag', 'reparatur_rechnung' => 'Reparatur: Rechnung / Leistungsnachweis',
+            'fee' => 'Keine Reparatur: nur KVA', 'wartung' => 'Wartung', 'reverse_engineering' => 'Reverse Engineering', 'individualisierung' => 'Individualisierung'];
+        $options = ''; $editors = '';
+        foreach ($defaults as $key => $default) {
+            $value = $config->get('position_template_' . $key, $default);
+            if ($this->app->Secure->GetPOST('submit') === 'save_position_settings') {
+                $posted = $this->app->Secure->GetPOST('repair_template_' . $key, 'nothtml', '', 1);
+                if (is_string($posted)) $value = $posted;
+            }
+            $options .= '<option value="' . $key . '">' . htmlspecialchars($labels[$key]) . '</option>';
+            $editors .= '<textarea class="repair-template-editor" id="repair_template_' . $key . '" name="repair_template_' . $key
+                . '" rows="16" data-repair-template="' . $key . '" aria-label="' . htmlspecialchars($labels[$key], ENT_QUOTES, 'UTF-8') . '"'
+                . ($key !== 'reparatur' ? ' hidden' : '') . '>' . htmlspecialchars($value) . '</textarea>';
+        }
+        $variables = '';
+        foreach (\Xentral\Modules\RepairIntegration\Service\RepairPositionTemplate::VARIABLES as $key => $label) {
+            $variables .= '<button type="button" class="repair-variable button button-secondary" data-variable="' . $key
+                . '" title="' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '">{' . $key . '}</button> ';
+        }
+        $this->app->YUI->AutoComplete('repair_service_article', 'artikelnummer');
+        $this->app->Tpl->Set('REPAIR_SETTINGS_CSRF', htmlspecialchars($this->app->Container->get('Session')->createCsrfToken('repair_settings'), ENT_QUOTES, 'UTF-8'));
+        $number = $config->get('service_article_number');
+        if ($this->app->Secure->GetPOST('submit') === 'save_position_settings') $number = (string)$this->app->Secure->GetPOST('repair_service_article', 'nothtml', '', 1);
+        $this->app->Tpl->Set('REPAIR_ARTICLE_NUMBER', htmlspecialchars($number, ENT_QUOTES, 'UTF-8'));
+        $this->app->Tpl->Set('REPAIR_TEMPLATE_OPTIONS', $options);
+        $this->app->Tpl->Set('REPAIR_TEMPLATE_EDITORS', $editors);
+        $this->app->Tpl->Set('REPAIR_TEMPLATE_VARIABLES', $variables);
+        \Xentral\Components\Http\Session\SessionHandler::commitSession($this->app->Container->get('Session'));
     }
 
     /**
@@ -440,6 +458,133 @@ class Repairintegration
         $this->app->Tpl->Parse('PAGE', 'repair_merge.tpl');
     }
 
+    private function renderExchangeStatus(): string
+    {
+        $service = $this->app->Container->get('RepairReconcileService');
+        $config = $this->app->Container->get('RepairConfigService');
+        $session = $this->app->Container->get('Session');
+        $message = '';
+        $job = (int)$this->app->Secure->GetPOST('exchange_job');
+        $action = (string)$this->app->Secure->GetPOST('exchange_action');
+        if ($action !== '') {
+            try {
+                if (!$session->isCsrfTokenValid('repair_exchange', (string)$this->app->Secure->GetPOST('exchange_csrf'))) {
+                    throw new \RuntimeException('Formular abgelaufen. Seite neu laden.');
+                }
+                if ($action === 'configure') {
+                    if (!$this->app->erp->RechteVorhanden('repairintegration', 'einstellungen')) throw new \RuntimeException('Keine Einstellungsberechtigung.');
+                    $config->set('sync_v2_enabled', $this->app->Secure->GetPOST('exchange_enabled') ? '1' : '0');
+                    $message = 'Status-/Bildsync-Einstellung gespeichert. Auch im WP-Plugin entsprechend einstellen.';
+                } elseif ($action === 'preview' || $action === 'apply') {
+                    $job = $service->start($action);
+                    $service->tick($job, 3, 15);
+                    $message = 'Abgleich gestartet. Der Bestand wird in fortsetzbaren Schritten geprueft.';
+                } elseif ($action === 'view') {
+                    // Show a previous run without starting or continuing a sync.
+                } elseif ($action === 'continue') {
+                    $service->tick($job, 10, 25);
+                } elseif ($action === 'local' || $action === 'remote') {
+                    $result = $service->resolve((string)$this->app->Secure->GetPOST('exchange_number'), $action);
+                    $message = 'Statusentscheidung uebernommen: ' . $result['state'];
+                } else { throw new \RuntimeException('Unbekannte Abgleichaktion.'); }
+            } catch (\Throwable $e) { $message = $e->getMessage(); }
+        }
+        $token = $session->createCsrfToken('repair_exchange');
+        \Xentral\Components\Http\Session\SessionHandler::commitSession($session);
+        $escape = static fn($value) => htmlspecialchars((string)$value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $hidden = '<input type="hidden" name="exchange_csrf" value="' . $escape($token) . '">';
+        $enabled = $service->enabled();
+        $jobs = $service->jobs();
+        if ($job === 0 && $jobs) $job = (int)$jobs[0]['id'];
+        $stateLabels = [
+            'running' => ['info', 'In Bearbeitung'], 'complete' => ['success', 'Abgeschlossen'],
+            'attention' => ['warning', 'Prüfung erforderlich'], 'equal' => ['success', 'Gleicher Status'],
+            'local_newer' => ['info', 'OpenXE-Status neuer'], 'remote_newer' => ['info', 'WP-/App-Status neuer'],
+            'unclear' => ['warning', 'Statusentscheidung nötig'], 'unmapped' => ['warning', 'Statuszuordnung fehlt'],
+            'unlinked' => ['warning', 'Verknüpfung fehlt'], 'waiting_creation' => ['info', 'Ticketanlage ausstehend'],
+            'pending_images' => ['info', 'Bilder werden ergänzt'], 'error' => ['error', 'Fehler'],
+        ];
+        $badge = static function ($state) use ($stateLabels, $escape): string {
+            [$tone, $label] = $stateLabels[$state] ?? ['neutral', $state];
+            return '<span class="repair-sync-badge repair-sync-badge--' . $tone . '">' . $escape($label) . '</span>';
+        };
+        $statusLabels = ['new'=>'Neu', 'in_repair'=>'In Reparatur', 'in_reparatur'=>'In Reparatur',
+            'repaired'=>'Repariert', 'returned'=>'Zurückgesendet', 'versendet'=>'Versendet'];
+        $statusLabel = static fn($status) => $escape($statusLabels[$status] ?? ucfirst(str_replace('_', ' ', $status)));
+        $html = '<section class="repair-sync-section" aria-labelledby="repair-sync-title"><header class="repair-sync-header"><div>'
+            . '<h2 id="repair-sync-title">Status und Reparaturbilder</h2>'
+            . '<p>WordPress, OpenXE und App auf demselben Stand halten.</p></div>'
+            . '<span class="repair-sync-badge repair-sync-badge--' . ($enabled ? 'success' : 'neutral') . '">'
+            . ($enabled ? 'Sync aktiviert' : 'Sync deaktiviert') . '</span></header>';
+        if ($message !== '') $html .= '<div class="info repair-sync-message" role="status">' . $escape($message) . '</div>';
+        $html .= '<div class="repair-sync-rules"><span>Letzte echte Statusänderung zählt</span>'
+            . '<span>Fehlende Bilder ergänzen</span><span>Unklare Altfälle zur Entscheidung</span></div>';
+        $html .= '<details class="repair-sync-settings"' . (!$enabled ? ' open' : '') . '><summary>Sync-Einstellung</summary>'
+            . '<form method="post" class="repair-sync-form">' . $hidden . '<input type="hidden" name="exchange_action" value="configure">'
+            . '<label><input type="checkbox" name="exchange_enabled" value="1"' . ($config->get('sync_v2_enabled', '0') === '1' ? ' checked' : '')
+            . '> Status- und Bildsync aktivieren</label><button type="submit">Einstellung speichern</button></form>'
+            . '<p class="repair-sync-muted">Die Integration und der Status-/Bildsync müssen auch im WP-Plugin aktiviert sein.</p></details>';
+        $html .= '<div class="repair-sync-actions"><div><h3>Bestand abgleichen</h3>'
+            . '<p>Vorschau: Unterschiede prüfen. Abgleich: Status übernehmen und fehlende Bilder ergänzen.</p></div>'
+            . '<form method="post" class="repair-sync-form">' . $hidden
+            . '<button name="exchange_action" value="preview" type="submit"' . (!$enabled ? ' disabled' : '') . '>Vorschau erstellen</button>'
+            . '<button name="exchange_action" value="apply" type="submit" class="btnGreen"' . (!$enabled ? ' disabled' : '') . '>Jetzt abgleichen</button></form></div>';
+        if (!$enabled) $html .= '<p class="repair-sync-muted">Zum Prüfen und Abgleichen zuerst den Sync aktivieren.</p>';
+        $html .= '</section>';
+        if ($job > 0) {
+            $html .= '<section class="repair-sync-section" aria-labelledby="repair-sync-results"><h3 id="repair-sync-results">Ergebnisse · Lauf #' . $job . '</h3>';
+            foreach ($jobs as $row) {
+                if ((int)$row['id'] !== $job) continue;
+                $html .= '<div class="repair-sync-run-summary">' . $badge($row['state']) . '<span>'
+                    . ($row['mode'] === 'preview' ? 'Vorschau' : 'Abgleich') . '</span><span><strong>' . (int)$row['checked']
+                    . '</strong> Vorgänge geprüft</span><span><strong>' . (int)$row['issues'] . '</strong> offene Punkte</span>';
+                if ($row['state'] === 'running' && $enabled) $html .= '<form method="post">' . $hidden . '<input type="hidden" name="exchange_job" value="' . $job
+                    . '"><button name="exchange_action" value="continue">Lauf fortsetzen</button></form>';
+                $html .= '</div>';
+                if ($row['last_error']) $html .= '<div class="error">' . $escape($row['last_error']) . '</div>';
+            }
+            $results = $service->results($job);
+            if (!$results) $html .= '<p class="repair-sync-empty">Für diesen Lauf liegen noch keine Ergebnisse vor.</p>';
+            else {
+                $html .= '<div class="repair-sync-table-scroll" tabindex="0" role="region" aria-label="Ergebnisse des Bestandsabgleichs"><table class="mkTable repair-sync-table"><thead><tr>'
+                    . '<th scope="col">Vorgang</th><th scope="col">Stand bei der Prüfung</th><th scope="col">Status OpenXE / WP und App</th>'
+                    . '<th scope="col">Fehlende Bilder</th><th scope="col">Hinweise / Entscheidung</th></tr></thead><tbody>';
+                foreach ($results as $row) {
+                    $r = $row['result'] ?? [];
+                    $number = $escape($row['request_number']);
+                    if (!empty($row['ticket_id'])) $number = '<a href="index.php?module=ticket&amp;action=edit&amp;id=' . (int)$row['ticket_id'] . '">' . $number . '</a>';
+                    $html .= '<tr><td>' . $number . '</td><td>' . $badge($row['state']) . '</td><td>'
+                        . '<div><span class="repair-sync-muted">OpenXE:</span> ' . $statusLabel($r['local_status'] ?? '—') . '</div>'
+                        . '<div><span class="repair-sync-muted">WP / App:</span> ' . $statusLabel($r['remote_status'] ?? '—') . '</div></td><td>'
+                        . '<div>In OpenXE: <strong>' . (int)($r['missing_local'] ?? 0) . '</strong></div><div>In WP / App: <strong>' . (int)($r['missing_remote'] ?? 0) . '</strong></div></td>'
+                        . '<td class="repair-sync-note">' . $escape($r['error'] ?? implode('; ', $r['errors'] ?? []));
+                    if (($r['status']['state'] ?? '') === 'unclear' && $enabled) {
+                        $html .= '<form method="post" class="repair-sync-decisions">' . $hidden . '<input type="hidden" name="exchange_job" value="' . $job
+                            . '"><input type="hidden" name="exchange_number" value="' . $escape($row['request_number']) . '">'
+                            . '<button name="exchange_action" value="local">OpenXE-Status übernehmen</button>'
+                            . '<button name="exchange_action" value="remote">WP-/App-Status übernehmen</button></form>';
+                    }
+                    $html .= '</td></tr>';
+                }
+                $html .= '</tbody></table></div>';
+            }
+            $html .= '</section>';
+        } else $html .= '<div class="repair-sync-empty"><h3>Noch kein Bestandsabgleich</h3><p>Eine Vorschau zeigt Statusunterschiede und fehlende Bilder, ohne die Vorgänge zu ändern.</p></div>';
+        if ($jobs) {
+            $html .= '<details class="repair-sync-history"><summary>Letzte Abgleichläufe (' . count($jobs) . ')</summary>'
+                . '<div class="repair-sync-table-scroll" tabindex="0" role="region" aria-label="Letzte Abgleichläufe"><table class="mkTable repair-sync-table"><thead><tr>'
+                . '<th scope="col">Lauf</th><th scope="col">Gestartet</th><th scope="col">Modus</th><th scope="col">Stand</th><th scope="col">Geprüft</th><th scope="col">Offene Punkte</th><th scope="col">Aktion</th></tr></thead><tbody>';
+            foreach ($jobs as $row) {
+                $html .= '<tr' . ((int)$row['id'] === $job ? ' class="repair-sync-selected"' : '') . '><td>#' . (int)$row['id'] . '</td><td>' . $escape($row['created_at'])
+                    . '</td><td>' . ($row['mode'] === 'preview' ? 'Vorschau' : 'Abgleich') . '</td><td>' . $badge($row['state']) . '</td><td>'
+                    . (int)$row['checked'] . '</td><td>' . (int)$row['issues'] . '</td><td><form method="post">' . $hidden
+                    . '<input type="hidden" name="exchange_job" value="' . (int)$row['id'] . '"><button name="exchange_action" value="view">Ergebnis anzeigen</button></form></td></tr>';
+            }
+            $html .= '</tbody></table></div></details>';
+        }
+        return $html;
+    }
+
     function SyncStatus()
     {
         if (!$this->app->erp->RechteVorhanden('repairintegration', 'syncstatus')) {
@@ -459,13 +604,13 @@ class Repairintegration
         $this->app->Tpl->Set('SYNC_LAST', $stats['last_successful_sync'] ?? 'Nie');
 
         $this->app->Tpl->Set('KURZUEBERSCHRIFT', 'Sync-Status');
-        $this->app->Tpl->Set('TAB1', '<table class="mkTableFormular">
-            <tr><td width="200">Pending:</td><td>' . (string)$stats['pending'] . '</td></tr>
-            <tr><td>Failed:</td><td>' . (string)$stats['failed'] . '</td></tr>
-            <tr><td>Permanently Failed:</td><td>' . (string)$stats['permanently_failed'] . '</td></tr>
-            <tr><td>Completed:</td><td>' . (string)$stats['completed'] . '</td></tr>
-            <tr><td>Letzter erfolgreicher Sync:</td><td>' . htmlspecialchars($stats['last_successful_sync'] ?? 'Nie') . '</td></tr>
-        </table>');
+        $technical = '<details class="repair-sync-technical"><summary>Technische Details · Übertragungswarteschlange</summary>'
+            . '<dl class="repair-sync-queue"><div><dt>Ausstehend</dt><dd>' . (int)$stats['pending'] . '</dd></div>'
+            . '<div><dt>Fehlgeschlagen</dt><dd>' . (int)$stats['failed'] . '</dd></div>'
+            . '<div><dt>Dauerhaft fehlgeschlagen</dt><dd>' . (int)$stats['permanently_failed'] . '</dd></div>'
+            . '<div><dt>Erfolgreich übertragen</dt><dd>' . (int)$stats['completed'] . '</dd></div>'
+            . '<div><dt>Letzte erfolgreiche Übertragung</dt><dd>' . htmlspecialchars($stats['last_successful_sync'] ?? 'Noch keine', ENT_QUOTES, 'UTF-8') . '</dd></div></dl></details>';
+        $this->app->Tpl->Set('TAB1', '<div class="repair-sync-page">' . $this->renderExchangeStatus() . $technical . '</div>');
         $this->app->Tpl->Parse('PAGE', 'tabview.tpl');
     }
 
@@ -498,6 +643,27 @@ class Repairintegration
                 (int)$id,
                 $e->getMessage()
             ));
+        }
+    }
+
+    public function RepairOnAngebotZuAuftrag($sourceId, $targetId): void
+    {
+        $this->repairLinkConvertedBeleg('angebot', (int)$sourceId, 'auftrag', (int)$targetId);
+    }
+
+    public function RepairOnAuftragZuRechnung($sourceId, $targetId): void
+    {
+        $this->repairLinkConvertedBeleg('auftrag', (int)$sourceId, 'rechnung', (int)$targetId);
+    }
+
+    private function repairLinkConvertedBeleg(string $sourceType, int $sourceId, string $targetType, int $targetId): void
+    {
+        try {
+            $this->app->Container->get('RepairBelegService')->onBelegWeiterfuehren(
+                $sourceType, $sourceId, $targetType, $targetId, null, (string)$this->app->User->GetName()
+            );
+        } catch (\Throwable $e) {
+            error_log('RepairIntegration Belegverknuepfung fehlgeschlagen: ' . $e->getMessage());
         }
     }
 
@@ -538,125 +704,72 @@ class Repairintegration
         }
     }
 
-    /**
-     * Legt aus einem Reparatur-Ticket heraus einen leeren Beleg an
-     * (Angebot/Auftrag/Rechnung), setzt Adresse und Betreff und verknuepft ihn
-     * mit dem Ticket. Positionen werden bewusst nicht befuellt - die
-     * Bearbeitung findet anschliessend im jeweiligen Beleg-Modul statt.
-     */
+    /** Creates a native draft including the configured repair article. */
     function RepairCreateBeleg()
     {
         $ticketId = (int)$this->app->Secure->GetGET('ticket');
-        $typ = (string)$this->app->Secure->GetGET('typ');
-
-        if (!$this->app->erp->RechteVorhanden('repairintegration', 'list')) {
+        $type = (string)$this->app->Secure->GetPOST('repair_beleg_typ');
+        $mode = $type === 'fee' ? 'fee' : 'service';
+        if ($type === 'fee') $type = 'rechnung';
+        if (!in_array($type, ['angebot', 'auftrag', 'rechnung'], true) || $ticketId <= 0) {
+            $this->redirectToTicket($ticketId, 'error', 'Bitte Beleg ueber die Reparaturmaske anlegen.');
+            return;
+        }
+        if (!$this->app->erp->RechteVorhanden('repairintegration', 'list')
+            || !$this->app->erp->RechteVorhanden('ticket', 'edit')
+            || !$this->app->erp->RechteVorhanden($type, 'edit')) {
             $this->redirectToTicket($ticketId, 'error', 'Keine Berechtigung.');
             return;
         }
-
-        // Whitelist vor dem zweiten Rechtecheck: $typ wird weiter unten als
-        // Tabellenname im SQL und als Modulname in der Redirect-URL verwendet.
-        if (!in_array($typ, array('angebot', 'auftrag', 'rechnung'), true)) {
-            $this->redirectToTicket($ticketId, 'error', 'Unbekannte Belegart.');
+        $token = $this->app->Secure->GetPOST('repair_csrf');
+        if (!is_string($token) || !$this->app->Container->get('Session')->isCsrfTokenValid('repair_beleg', $token)) {
+            $this->redirectToTicket($ticketId, 'error', 'Formular abgelaufen. Ticket neu laden.');
             return;
         }
-
-        if (!$this->app->erp->RechteVorhanden($typ, 'edit')) {
-            $this->redirectToTicket($ticketId, 'error', 'Keine Berechtigung fuer Belegart ' . $typ . '.');
-            return;
-        }
-
-        // Idempotenz: existiert fuer das Ticket bereits ein Beleg desselben
-        // Typs, direkt dorthin weiterleiten, statt bei Reload/Doppelklick
-        // einen zweiten Beleg anzulegen.
-        $belegGateway = $this->app->Container->get('RepairBelegGateway');
-        foreach ($belegGateway->getByTicketId($ticketId) as $bestehenderBeleg) {
-            if ($bestehenderBeleg['beleg_typ'] === $typ && (int)$bestehenderBeleg['beleg_id'] > 0) {
-                $this->app->Location->execute(
-                    'index.php?module=' . $typ . '&action=edit&id=' . (int)$bestehenderBeleg['beleg_id']
-                );
-                return;
+        $db = $this->app->Container->get('Database');
+        $lock = 'repair_beleg_' . $ticketId;
+        $locked = false;
+        $belegId = 0;
+        try {
+            $locked = (int)$db->fetchValue('SELECT GET_LOCK(:name, 10)', ['name' => $lock]) === 1;
+            if (!$locked) throw new \RuntimeException('Beleg wird bereits angelegt. Bitte erneut versuchen.');
+            foreach ($this->app->Container->get('RepairBelegGateway')->getByTicketId($ticketId) as $existing) {
+                if ($existing['beleg_typ'] === $type && (int)$existing['beleg_id'] > 0) {
+                    $existingId = (int)$existing['beleg_id'];
+                    if ((int)$db->fetchValue("SELECT id FROM `$type` WHERE id = :id", ['id' => $existingId]) !== $existingId) {
+                        $db->perform('DELETE FROM repair_ticket_beleg WHERE id = :id', ['id' => (int)$existing['id']]);
+                        continue;
+                    }
+                    $belegId = $existingId;
+                    break;
+                }
             }
-        }
-
-        /** @var \Xentral\Modules\RepairIntegration\Service\RepairBelegService $belegService */
-        $belegService = $this->app->Container->get('RepairBelegService');
-        try {
-            $prepared = $belegService->prepareBelegCreation($ticketId, $typ);
+            if ($belegId === 0) {
+                $service = $this->app->Container->get('RepairBelegService');
+                $input = [];
+                foreach (\Xentral\Modules\RepairIntegration\Service\RepairBelegService::SERVICE_FIELDS as $field) {
+                    $post = 'repair_' . $field;
+                    if (isset($this->app->Secure->POST[$post])) {
+                        $input[$field] = $this->app->Secure->GetPOST($post, 'nothtml', '', 1);
+                    }
+                }
+                $service->saveServiceFields($ticketId, $input);
+                $prepared = $service->prepareBelegCreation($ticketId, $type, $mode);
+                $this->ensureKundennummer((int)$prepared['adresse_id']);
+                $belegId = \Xentral\Modules\RepairIntegration\Service\RepairDraftCreator::create(
+                    $this->app, $prepared, (string)$this->app->User->GetName()
+                );
+            }
         } catch (\Throwable $e) {
-            // Haeufigster Fall: RepairIntegrationException, weil am Ticket
-            // keine Adresse haengt. Dann erst action=createadresse aufrufen.
-            $this->redirectToTicket($ticketId, 'error', $e->getMessage());
+            $error = $e->getMessage();
+        } finally {
+            if ($locked) $db->fetchValue('SELECT RELEASE_LOCK(:name)', ['name' => $lock]);
+        }
+        if (isset($error)) {
+            $this->redirectToTicket($ticketId, 'error', $error);
             return;
         }
-
-        $adresseId = (int)$prepared['adresse_id'];
-        $this->ensureKundennummer($adresseId);
-
-        // Gleiches Muster wie AdresseCreateDokument in www/pages/adresse.php:
-        // Beleg mit Adresse anlegen, danach die Standardwerte der Adresse
-        // (Zahlungsziel, Steuersaetze, Lieferadresse ...) nachziehen.
-        switch ($typ) {
-            case 'angebot':
-                $belegId = (int)$this->app->erp->CreateAngebot($adresseId);
-                if ($belegId > 0) {
-                    $this->app->erp->LoadAngebotStandardwerte($belegId, $adresseId);
-                }
-                break;
-            case 'auftrag':
-                $belegId = (int)$this->app->erp->CreateAuftrag($adresseId);
-                if ($belegId > 0) {
-                    $this->app->erp->LoadAuftragStandardwerte($belegId, $adresseId);
-                }
-                break;
-            default:
-                $belegId = (int)$this->app->erp->CreateRechnung($adresseId);
-                if ($belegId > 0) {
-                    $this->app->erp->LoadRechnungStandardwerte($belegId, $adresseId);
-                }
-                break;
-        }
-
-        if ($belegId <= 0) {
-            $this->redirectToTicket($ticketId, 'error', 'Beleg konnte nicht angelegt werden.');
-            return;
-        }
-
-        $betreff = (string)$prepared['betreff'];
-        if ($betreff !== '') {
-            $this->app->DB->Update(
-                "UPDATE `" . $typ . "` SET betreff = '"
-                . $this->app->DB->real_escape_string($betreff)
-                . "' WHERE id = " . $belegId . " LIMIT 1"
-            );
-        }
-
-        // Die Belegnummer vergibt OpenXE erst bei der Freigabe, ein frisch
-        // angelegter Beleg ist ein Entwurf mit leerer belegnr. Der Wert wird
-        // trotzdem gelesen, damit die Verknuepfung korrekt ist, falls in der
-        // Firmenkonfiguration eine Schnellfreigabe aktiv ist.
-        $belegNr = (string)$this->app->DB->Select(
-            "SELECT belegnr FROM `" . $typ . "` WHERE id = " . $belegId . " LIMIT 1"
-        );
-
-        try {
-            $belegService->linkBelegToTicket(
-                $ticketId,
-                (string)$prepared['ticket_schluessel'],
-                $typ,
-                $belegId,
-                $belegNr === '' ? null : $belegNr,
-                (string)$this->app->User->GetName()
-            );
-        } catch (\Throwable $e) {
-            // Der Beleg existiert an dieser Stelle bereits. Ein Fehler beim
-            // Verknuepfen darf den Anwender nicht auf einen Fehlerbildschirm
-            // werfen - die Verknuepfung laesst sich nachziehen, der Fehler
-            // landet im Log.
-            error_log('RepairIntegration linkBelegToTicket failed: ' . $e->getMessage());
-        }
-
-        $this->app->Location->execute('index.php?module=' . $typ . '&action=edit&id=' . $belegId);
+        $this->app->Location->execute('index.php?module=' . $type . '&action=edit&id=' . $belegId . '#tabs-2');
     }
 
     /**
@@ -743,6 +856,8 @@ class Repairintegration
                 // einzeln escaped -> NOT IN ist injection-sicher.
                 $statusFilter = '';
                 $hiddenRaw = (string)$this->app->Secure->GetGET('more_data1');
+                if ($hiddenRaw === '') $hiddenRaw = implode(',', $this->getDefaultHiddenStatuses());
+                if ($hiddenRaw === 'all') $hiddenRaw = '';
                 if ($hiddenRaw !== '') {
                     $hidden = array();
                     foreach (explode(',', $hiddenRaw) as $slug) {

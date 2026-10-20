@@ -50,7 +50,8 @@ final class RepairDetailsGateway
             'color_preference', 'functional_requirements', 'warranty_status',
             'invoice_number', 'purchase_date', 'seller', 'cost_limit',
             'is_express', 'express_price', 'travel_distance_km', 'travel_fee',
-            'customer_quote_amount',
+            'customer_quote_amount', 'diagnosis_cost_snapshot', 'wartung_paket_price_snapshot',
+            'travel_fee_per_km_snapshot',
         ];
 
         $filteredData = array_intersect_key($data, array_flip($columns));
@@ -84,7 +85,8 @@ final class RepairDetailsGateway
             'functional_requirements', 'warranty_status', 'invoice_number',
             'purchase_date', 'seller', 'cost_limit', 'is_express', 'express_price',
             'travel_distance_km', 'travel_fee', 'wp_request_number',
-            'customer_quote_amount',
+            'customer_quote_amount', 'diagnosis_cost_snapshot', 'wartung_paket_price_snapshot',
+            'travel_fee_per_km_snapshot',
         ];
 
         $filteredData = array_intersect_key($data, array_flip($allowed));
@@ -93,7 +95,8 @@ final class RepairDetailsGateway
         }
 
         $setParts = array_map(
-            static fn(string $k): string => "`{$k}` = :{$k}",
+            static fn(string $k): string => in_array($k, ['diagnosis_cost_snapshot', 'wartung_paket_price_snapshot', 'travel_fee_per_km_snapshot'], true)
+                ? "`{$k}` = COALESCE(`{$k}`, :{$k})" : "`{$k}` = :{$k}",
             array_keys($filteredData)
         );
         $filteredData['id'] = $id;
@@ -102,6 +105,16 @@ final class RepairDetailsGateway
             'UPDATE `ticket_repair_details` SET ' . implode(', ', $setParts) . ' WHERE `id` = :id',
             $filteredData
         );
+    }
+
+    public function updateServiceFields(int $ticketId, array $data): void
+    {
+        $allowed = ['public_diagnosis', 'service_work', 'final_check', 'position_net_amount'];
+        $data = array_intersect_key($data, array_flip($allowed));
+        if ($data === []) return;
+        $parts = array_map(static fn(string $key): string => "`$key` = :$key", array_keys($data));
+        $data['ticket_id'] = $ticketId;
+        $this->db->perform('UPDATE ticket_repair_details SET ' . implode(', ', $parts) . ' WHERE ticket_id = :ticket_id', $data);
     }
 
     public function updateDiagnosisFields(

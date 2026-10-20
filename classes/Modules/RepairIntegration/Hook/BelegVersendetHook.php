@@ -9,6 +9,8 @@ use Xentral\Modules\RepairIntegration\Gateway\RepairBelegGateway;
 use Xentral\Modules\RepairIntegration\Gateway\RepairDetailsGateway;
 use Xentral\Modules\RepairIntegration\Gateway\RepairStatusConfigGateway;
 use Xentral\Modules\RepairIntegration\Service\RepairSyncService;
+use Xentral\Modules\RepairIntegration\Service\RepairConfigService;
+use Xentral\Modules\RepairIntegration\Service\RepairStatusExchangeService;
 
 /**
  * Reagiert auf den Core-Hook DokumentMaskVersendet(typ, id): wurde ein aus
@@ -115,18 +117,23 @@ final class BelegVersendetHook
             $current = $currentSlug !== '' ? $this->statusConfigGateway->getBySlug($currentSlug) : null;
 
             $newStatus = null;
+            $exchange = new RepairStatusExchangeService($this->db, new RepairConfigService($this->db), $this->statusConfigGateway);
             if ($target !== null && self::shouldAdvance($current, $target)) {
                 $newStatus = (string)$target['slug'];
-                $this->db->perform(
-                    'UPDATE `ticket` SET `status` = :status WHERE `id` = :id',
-                    ['status' => $newStatus, 'id' => $ticketId]
-                );
+                if ($exchange->isEnabled()) {
+                    $exchange->changeLocalStatus($ticketId, $newStatus);
+                } else {
+                    $this->db->perform(
+                        'UPDATE `ticket` SET `status` = :status WHERE `id` = :id',
+                        ['status' => $newStatus, 'id' => $ticketId]
+                    );
+                }
             }
 
             // Push bei Statuswechsel oder neuem KVA-Betrag (quote_amount ist
             // Teil des Status-Payloads, siehe RepairSyncService).
-            if ($newStatus !== null || ($amountWritten !== null && $amountField === 'quote_amount')) {
-                $this->syncService->queueAndPushStatusChange($ticketId);
+            if ($newStatus !== null || (!$exchange->isEnabled() && $amountWritten !== null && $amountField === 'quote_amount')) {
+                $this->syncService->queueAndPushStatusChange($ticketId, $newStatus !== null ? $currentSlug : null);
             }
 
             $results[] = [

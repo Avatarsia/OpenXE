@@ -32,13 +32,13 @@ final class RepairSyncService
         private readonly ?\Closure $permanentFailMailer = null,
     ) {}
 
-    public function checkAndQueueStatusChange(int $ticketId): bool
+    public function checkAndQueueStatusChange(int $ticketId, ?string $oldStatus = null): bool
     {
         if (!$this->syncQueueGateway->lockTicket($ticketId)) {
             throw new \RuntimeException('Repair status lock timeout for ticket #' . $ticketId);
         }
         try {
-            return $this->queueCurrentStatus($ticketId) !== null;
+            return $this->queueCurrentStatus($ticketId, $oldStatus) !== null;
         } finally {
             $this->syncQueueGateway->unlockTicket($ticketId);
         }
@@ -52,13 +52,23 @@ final class RepairSyncService
      *
      * @return bool true, wenn ein Status eingereiht wurde (unabhaengig vom Zustellerfolg)
      */
-    public function queueAndPushStatusChange(int $ticketId): bool
+    public function queueAndPushStatusChange(int $ticketId, ?string $oldStatus = null): bool
     {
         if (!$this->syncQueueGateway->lockTicket($ticketId)) {
             throw new \RuntimeException('Repair status lock timeout for ticket #' . $ticketId);
         }
         try {
-            $queueId = $this->queueCurrentStatus($ticketId);
+            $queueId = $this->queueCurrentStatus($ticketId, $oldStatus);
+            // Atomic service writes already persisted their outbox entry before this call.
+            if ($queueId === null && $this->configService->get('sync_v2_enabled', '0') === '1') {
+                $current = (new RepairStatusExchangeService($this->db, $this->configService, $this->statusConfigGateway))
+                    ->getSnapshot($ticketId)['status_event'];
+                $pending = $this->db->fetchRow("SELECT * FROM repair_sync_queue WHERE ticket_id=:id
+                    AND action='status_exchange' AND status IN ('pending','failed') ORDER BY id DESC LIMIT 1", ['id' => $ticketId]);
+                if ($current !== null && $pending && (json_decode($pending['payload'], true)['event_id'] ?? null) === $current['event_id']) {
+                    $queueId = (int)$pending['id'];
+                }
+            }
             if ($queueId === null) {
                 return false;
             }
@@ -73,10 +83,20 @@ final class RepairSyncService
     }
 
     /** @return int|null Queue-ID des neuen Eintrags, null wenn nichts eingereiht wurde */
-    private function queueCurrentStatus(int $ticketId): ?int
+    private function queueCurrentStatus(int $ticketId, ?string $oldStatus = null): ?int
     {
         if (!$this->configService->isEnabled()) {
             return null;
+        }
+
+        if ($this->configService->get('sync_v2_enabled', '0') === '1') {
+            $event = (new RepairStatusExchangeService($this->db, $this->configService, $this->statusConfigGateway))
+                ->captureLocalChange($ticketId, $oldStatus);
+            if ($event === null) {
+                return null;
+            }
+            return (int)$this->db->fetchValue("SELECT id FROM repair_sync_queue WHERE ticket_id=:id
+                AND action='status_exchange' ORDER BY id DESC LIMIT 1", ['id' => $ticketId]);
         }
 
         $details = $this->detailsGateway->getByTicketId($ticketId);
@@ -247,7 +267,7 @@ final class RepairSyncService
         // damit sie der Retry-Logik wieder zugefuehrt werden.
         $this->syncQueueGateway->reapStaleProcessing(15);
 
-        $entries = $this->syncQueueGateway->getPendingEntries(50);
+        $entries = $this->syncQueueGateway->getPendingEntries(50, $this->configService->get('sync_v2_enabled', '0') === '1');
         $processed = 0;
 
         foreach ($entries as $entry) {
@@ -278,6 +298,10 @@ final class RepairSyncService
      */
     private function deliverEntry(array $entry, int $timeout): bool
     {
+        $v2 = $this->configService->get('sync_v2_enabled', '0') === '1';
+        if (($entry['action'] === 'status_exchange' && !$v2) || ($entry['action'] === 'status_change' && $v2)) {
+            return false;
+        }
         try {
             $this->syncQueueGateway->markProcessing((int)$entry['id']);
         } catch (\RuntimeException) {
@@ -286,6 +310,18 @@ final class RepairSyncService
 
         try {
             $result = $this->pushToWordPress($entry, $timeout);
+            if ($entry['action'] === 'status_exchange') {
+                $response = json_decode($result['body'], true);
+                if (!is_array($response) || ($response['success'] ?? false) !== true || !is_array($response['event'] ?? null)) {
+                    throw new SyncFailedException('Invalid status exchange acknowledgement');
+                }
+                $sent = json_decode($entry['payload'], true, 512, JSON_THROW_ON_ERROR);
+                if (($response['event']['request_number'] ?? null) !== $sent['request_number']) {
+                    throw new SyncFailedException('Status exchange request mismatch');
+                }
+                (new RepairStatusExchangeService($this->db, $this->configService, $this->statusConfigGateway))
+                    ->receive($response['event']);
+            }
             $this->syncQueueGateway->markCompleted((int)$entry['id']);
             $this->logSync(
                 'outbound',

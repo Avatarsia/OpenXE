@@ -35,7 +35,37 @@ final class Bootstrap
             'RepairConfigService'       => 'onInitRepairConfigService',
             'RepairApiAuth'             => 'onInitRepairApiAuth',
             'RepairApiController'       => 'onInitRepairApiController',
+            'RepairStatusExchangeService' => 'onInitRepairStatusExchangeService',
+            'RepairImageExchangeService' => 'onInitRepairImageExchangeService',
+            'RepairExchangeTransport' => 'onInitRepairExchangeTransport',
+            'RepairReconcileService' => 'onInitRepairReconcileService',
+            'RepairExchangeApiController' => 'onInitRepairExchangeApiController',
         ];
+    }
+
+    public static function onInitRepairStatusExchangeService(ContainerInterface $container): \Xentral\Modules\RepairIntegration\Service\RepairStatusExchangeService
+    {
+        return new \Xentral\Modules\RepairIntegration\Service\RepairStatusExchangeService($container->get('Database'), $container->get('RepairConfigService'), $container->get('RepairStatusConfigGateway'));
+    }
+
+    public static function onInitRepairImageExchangeService(ContainerInterface $container): \Xentral\Modules\RepairIntegration\Service\RepairImageExchangeService
+    {
+        return new \Xentral\Modules\RepairIntegration\Service\RepairImageExchangeService($container->get('Database'), $container->get('RepairConfigService'));
+    }
+
+    public static function onInitRepairExchangeTransport(ContainerInterface $container): \Xentral\Modules\RepairIntegration\Service\RepairExchangeTransport
+    {
+        return new \Xentral\Modules\RepairIntegration\Service\RepairExchangeTransport($container->get('RepairConfigService'));
+    }
+
+    public static function onInitRepairReconcileService(ContainerInterface $container): \Xentral\Modules\RepairIntegration\Service\RepairReconcileService
+    {
+        return new \Xentral\Modules\RepairIntegration\Service\RepairReconcileService($container->get('Database'), $container->get('RepairConfigService'), $container->get('RepairStatusExchangeService'), $container->get('RepairImageExchangeService'), $container->get('RepairExchangeTransport'));
+    }
+
+    public static function onInitRepairExchangeApiController(ContainerInterface $container): \Xentral\Modules\RepairIntegration\Api\RepairExchangeApiController
+    {
+        return new \Xentral\Modules\RepairIntegration\Api\RepairExchangeApiController($container->get('RepairApiController'), $container->get('RepairConfigService'), $container->get('RepairStatusExchangeService'), $container->get('RepairImageExchangeService'));
     }
 
     public static function onInitRepairDetailsGateway(ContainerInterface $container): RepairDetailsGateway
@@ -100,6 +130,7 @@ final class Bootstrap
             $container->get('Database'),
             $container->get('RepairDetailsGateway'),
             $container->get('RepairBelegGateway'),
+            $container->get('RepairConfigService'),
         );
     }
 

@@ -84,6 +84,13 @@ final class RepairApiController
         private readonly ?RepairAdresseService $adresseService = null,
     ) {}
 
+    public function authenticateExchange(string $rawBody): void
+    {
+        $this->authenticate($rawBody);
+        $this->checkAllowedIps();
+        $this->checkRateLimit();
+    }
+
     public function handlePushDetails(): void
     {
         try {
@@ -296,6 +303,10 @@ final class RepairApiController
 
     private function processPushDetails(array $data): void
     {
+        $exchangeInitial = $this->configService->get('sync_v2_enabled', '0') === '1';
+        if ($exchangeInitial && ($data['exchange_initial'] ?? false) !== true) {
+            throw new ValidationException('LEGACY_DETAIL_PUSH_DISABLED');
+        }
         $ticketSchluessel = $data['request_number'];
         $createdAt = self::normalizeCreatedAt($data['created_at'] ?? null);
 
@@ -312,13 +323,29 @@ final class RepairApiController
             throw new \RuntimeException('Ticket-Lock nicht erhalten: ' . $lockName);
         }
 
+        $initialTransaction = false;
         try {
             // Find existing ticket by schluessel
             $ticket = $this->db->fetchRow(
-                'SELECT `id`, `schluessel`, `quelle`, `adresse` FROM `ticket` WHERE `schluessel` = :key',
+                'SELECT `id`, `schluessel`, `quelle`, `adresse`, `privat` FROM `ticket` WHERE `schluessel` = :key',
                 ['key' => $ticketSchluessel]
             );
 
+            if ($exchangeInitial && $ticket) {
+                $binding = $this->detailsGateway->getByTicketId((int)$ticket['id']);
+                $matches = (int)$this->db->fetchValue('SELECT COUNT(*) FROM ticket WHERE schluessel=:key', ['key'=>$ticketSchluessel]);
+                if (!empty($ticket['privat']) || $matches !== 1 || $binding === null
+                    || ($binding['ticket_schluessel'] ?? '') !== $ticketSchluessel
+                    || ($binding['wp_request_number'] ?? '') !== $ticketSchluessel) {
+                    throw new ForbiddenException('INITIAL_REQUEST_KEY_CONFLICT');
+                }
+                // A retried create-only request must never overwrite a later repair snapshot.
+                return;
+            }
+            if ($exchangeInitial) {
+                $this->db->beginTransaction();
+                $initialTransaction = true;
+            }
             $isNewTicket = false;
             if (!$ticket) {
                 // No ticket found — create one from the WP payload.
@@ -356,23 +383,33 @@ final class RepairApiController
                     ['zeit' => $createdAt, 'schluessel' => (string)$ticket['schluessel']]
                 );
             }
+
+            $existing = $this->detailsGateway->getByTicketId((int)$ticket['id']);
+            if ($existing !== null) {
+                // Update existing details
+                $this->detailsGateway->update((int)$existing['id'], $this->mapInboundData($data));
+            } else {
+                // Create new details
+                $details = array_merge(
+                    ['ticket_id' => (int)$ticket['id'], 'ticket_schluessel' => $ticket['schluessel']]
+                        + ($exchangeInitial ? ['wp_request_number' => $ticketSchluessel] : []),
+                    $this->mapInboundData($data)
+                );
+                $this->detailsGateway->create($details);
+            }
+            if ($initialTransaction) {
+                $this->db->commit();
+                $initialTransaction = false;
+            }
+        } catch (\Throwable $error) {
+            if ($initialTransaction) {
+                $this->db->rollBack();
+            }
+            throw $error;
         } finally {
             // Release auch im Fehlerfall, sonst blockiert der Lock bis zum
             // Verbindungsende (Standalone: Request-Ende).
             $this->db->fetchValue('SELECT RELEASE_LOCK(:name)', ['name' => $lockName]);
-        }
-
-        $existing = $this->detailsGateway->getByTicketId((int)$ticket['id']);
-        if ($existing !== null) {
-            // Update existing details
-            $this->detailsGateway->update((int)$existing['id'], $this->mapInboundData($data));
-        } else {
-            // Create new details
-            $details = array_merge(
-                ['ticket_id' => (int)$ticket['id'], 'ticket_schluessel' => $ticket['schluessel']],
-                $this->mapInboundData($data)
-            );
-            $this->detailsGateway->create($details);
         }
 
         // Adresse: bei Neuanlage immer, bei Bestandstickets nur solange dort
@@ -1408,6 +1445,10 @@ final class RepairApiController
 
         if (isset($data['service_details']) && is_array($data['service_details'])) {
             $s = $data['service_details'];
+            foreach (['diagnosis_cost_snapshot', 'wartung_paket_price_snapshot', 'travel_fee_per_km_snapshot'] as $field) {
+                $amount = self::normalizeCustomerQuoteAmount($s[$field] ?? null);
+                if ($amount !== null) $mapped[$field] = $amount;
+            }
             $fields = [
                 'issue_category', 'issue_description', 'warranty_status',
                 'cost_limit', 'wartung_paket', 'wartung_notes',

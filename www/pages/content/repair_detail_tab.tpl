@@ -1,104 +1,50 @@
 <div id="repair-details-panel" style="display:[REPAIR_TAB_DISPLAY]; margin-top:15px;">
     [REPAIR_MESSAGE]
-    <div class="row">
-        <div class="row-height">
-            <div class="col-xs-14 col-md-6 col-md-height">
-                <div class="inside inside-full-height">
-                    <fieldset>
-                        <legend>Reparatur-Details</legend>
-                        <table width="100%" border="0" class="mkTableFormular">
-                            <tr>
-                                <td width="130"><strong>Service-Typ:</strong></td>
-                                <td>[REPAIR_SERVICE_TYPE]</td>
-                                <td width="130"><strong>Hersteller:</strong></td>
-                                <td>[REPAIR_MANUFACTURER]</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Modell:</strong></td>
-                                <td>[REPAIR_MODEL]</td>
-                                <td><strong>Seriennummer:</strong></td>
-                                <td>[REPAIR_SERIAL]</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Fehlerkategorie:</strong></td>
-                                <td>[REPAIR_ISSUE_CAT]</td>
-                                <td><strong>Garantie:</strong></td>
-                                <td>[REPAIR_WARRANTY]</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Kostenrahmen:</strong></td>
-                                <td>[REPAIR_COST_LIMIT]</td>
-                                <td><strong>Express:</strong></td>
-                                <td>[REPAIR_EXPRESS]</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Fehler&shy;beschreibung:</strong></td>
-                                <td colspan="3"><div class="issue-box">[REPAIR_ISSUE_DESC]</div></td>
-                            </tr>
-                        </table>
-                    </fieldset>
-                </div>
-            </div>
-            <div class="col-xs-14 col-md-6 col-md-height">
-                <div class="inside inside-full-height">
-                    <fieldset>
-                        <legend>Diagnose &amp; Kosten (intern)</legend>
-                        <table width="100%" border="0" class="mkTableFormular">
-                            <tr>
-                                <td><strong>KV-Betrag:</strong></td>
-                                <td nowrap><input type="text" name="repair_quote_amount" value="[REPAIR_QUOTE]" size="8"> &euro;</td>
-                                <td><strong>Tats. Kosten:</strong></td>
-                                <td nowrap><input type="text" name="repair_actual_cost" value="[REPAIR_ACTUAL_COST]" size="8"> &euro;</td>
-                                <td><strong>KVA-Preis Kunde:</strong></td>
-                                <td><span class="kva-kunde">[REPAIR_CUSTOMER_QUOTE]</span></td>
-                            </tr>
-                            <tr>
-                                <td colspan="6" class="repairHint">KVA-Preis Kunde wird vom Kunden im WP-Portal freigegeben (read-only)</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Diagnose-Ergebnis:</strong></td>
-                                <td colspan="5"><textarea name="repair_diagnosis_result" rows="3" style="width:100%">[REPAIR_DIAGNOSIS]</textarea></td>
-                            </tr>
-                            <tr>
-                                <td><strong>Reparatur-Notizen:</strong></td>
-                                <td colspan="5"><textarea name="repair_notes" rows="2" style="width:100%">[REPAIR_NOTES]</textarea></td>
-                            </tr>
-                        </table>
-                    </fieldset>
-                </div>
-            </div>
-        </div>
-    </div>
-    <div class="row">
-        <div class="row-height">
-            <div class="col-xs-14 col-md-6 col-md-height">
-                <div class="inside inside-full-height">
-                    <fieldset>
-                        <legend>Kundenkonto &amp; Belege</legend>
-                        <table width="100%" border="0" class="mkTableFormular">
-                            <tr>
-                                <td width="130"><strong>Adresse:</strong></td>
-                                <td>[REPAIR_ADRESSE_BLOCK]</td>
-                            </tr>
-                            <tr>
-                                <td><strong>Beleg anlegen:</strong></td>
-                                <td>[REPAIR_BELEG_BUTTONS]</td>
-                            </tr>
-                        </table>
-                    </fieldset>
-                </div>
-            </div>
-            <div class="col-xs-14 col-md-6 col-md-height">
-                <div class="inside inside-full-height">
-                    <fieldset>
-                        <legend>Verkn&uuml;pfte Belege</legend>
-                        <table class="mkTable" width="100%">
-                            <thead><tr><th>Typ</th><th>Nr.</th><th>Datum</th></tr></thead>
-                            <tbody>[REPAIR_BELEGE_ROWS]</tbody>
-                        </table>
-                    </fieldset>
-                </div>
-            </div>
-        </div>
-    </div>
+    <input type="hidden" name="repair_csrf" value="[REPAIR_CSRF]">
+    <div class="row"><div class="row-height">
+        <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
+            <legend>Reparatur-Details &middot; Formularangaben</legend>
+            <table width="100%" class="mkTableFormular">[REPAIR_FORM_ROWS]</table>
+            <div class="repair-form-price">[REPAIR_FORM_PRICE]</div>
+            <div class="repair-customer-description"><strong>[REPAIR_DESCRIPTION_LABEL]</strong><div class="issue-box">[REPAIR_DESCRIPTION]</div></div>
+        </fieldset></div></div>
+        <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
+            <legend>Bearbeitung (intern)</legend>
+            <table width="100%" class="mkTableFormular">
+                <tr><td><label for="repair_diagnosis_result">Diagnose-Notiz:</label></td><td><textarea id="repair_diagnosis_result" name="repair_diagnosis_result" rows="3">[REPAIR_DIAGNOSIS]</textarea></td></tr>
+                <tr><td><label for="repair_notes">Interne Notizen:</label></td><td><textarea id="repair_notes" name="repair_notes" rows="3">[REPAIR_NOTES]</textarea></td></tr>
+            </table>
+            <p class="repairHint">Interne Notizen werden nicht in den Produkttext &uuml;bernommen.</p>
+        </fieldset></div></div>
+    </div></div>
+    <div class="row"><div class="row-height">
+        <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
+            <legend>Leistungsdaten f&uuml;r den Produkttext</legend>
+            <table width="100%" class="mkTableFormular">
+                <tr><td><label for="repair_public_diagnosis">Eingangsdiagnose:</label></td><td><textarea id="repair_public_diagnosis" name="repair_public_diagnosis" rows="6">[REPAIR_PUBLIC_DIAGNOSIS]</textarea></td></tr>
+                <tr><td><label for="repair_service_work">Reparatur- /<br>Wartungsarbeiten:</label></td><td><textarea id="repair_service_work" name="repair_service_work" rows="5">[REPAIR_SERVICE_WORK]</textarea></td></tr>
+                <tr><td><label for="repair_final_check">Endkontrolle:</label></td><td><textarea id="repair_final_check" name="repair_final_check" rows="5">[REPAIR_FINAL_CHECK]</textarea></td></tr>
+                <tr><td><label for="repair_position_net_amount">Positionspreis netto (EUR):</label></td><td><input type="text" id="repair_position_net_amount" name="repair_position_net_amount" value="[REPAIR_POSITION_NET_AMOUNT]" size="12" inputmode="decimal"><div class="repairHint">Leer: hinterlegten Artikelpreis verwenden. Dieser Preis betrifft nur die Serviceposition.</div></td></tr>
+            </table>
+        </fieldset></div></div>
+        <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
+            <legend>Belegposition &middot; Produkttext</legend>
+            <p class="repairHint">Vorschau f&uuml;r das Angebot. Vorlagen unter Reparaturen &gt; Einstellungen &gt; Artikel und Produkttexte.</p>
+            <div class="repair-product-preview"><span>[REPAIR_SERVICE_ARTICLE_NUMBER]</span><div><strong>[REPAIR_SERVICE_ARTICLE_NAME]</strong><p id="repair_position_preview"></p></div></div>
+            <p id="repair_position_warning" class="repair-position-warning" role="status"></p>
+            <textarea id="repair_position_template" hidden>[REPAIR_POSITION_TEMPLATE]</textarea>
+            <script type="application/json" id="repair_position_values">[REPAIR_POSITION_VALUES]</script>
+        </fieldset></div></div>
+    </div></div>
+    <div class="row"><div class="row-height">
+        <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
+            <legend>Kundenkonto &amp; Belege</legend>
+            <table width="100%" class="mkTableFormular"><tr><td>Adresse:</td><td>[REPAIR_ADRESSE_BLOCK]</td></tr><tr><td>Beleg anlegen:</td><td>[REPAIR_BELEG_BUTTONS]</td></tr></table>
+            <p class="repairHint">Leistungsdaten werden bei der Belegerstellung gespeichert. Der normale OpenXE-Positionseditor &ouml;ffnet sich mit dem Serviceartikel. Dort k&ouml;nnen Sie Versand und weitere Artikel erg&auml;nzen.</p>
+        </fieldset></div></div>
+        <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
+            <legend>Verkn&uuml;pfte Belege</legend>
+            <table class="mkTable" width="100%"><thead><tr><th>Typ</th><th>Nr.</th><th>Datum</th></tr></thead><tbody>[REPAIR_BELEGE_ROWS]</tbody></table>
+        </fieldset></div></div>
+    </div></div>
 </div>

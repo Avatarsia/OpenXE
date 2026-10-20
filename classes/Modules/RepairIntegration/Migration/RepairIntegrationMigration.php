@@ -9,7 +9,7 @@ final class RepairIntegrationMigration
 {
     private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
     private const SCHEMA_VERSION_KEY = 'schema_version'; // @php83: add type string
-    private const SCHEMA_VERSION = '1.5.0'; // @php83: add type string
+    private const SCHEMA_VERSION = '1.8.0'; // @php83: add type string
 
     /**
      * Explizite Upgrade-Kette: gespeicherte Version => auszufuehrender Schritt.
@@ -28,6 +28,9 @@ final class RepairIntegrationMigration
         '1.2.0' => ['sql' => '005_customer_quote_amount.sql', 'to' => '1.3.0'],
         '1.3.0' => ['sql' => '006_repair_status_backfill.sql', 'to' => '1.4.0'],
         '1.4.0' => ['sql' => '007_register_beleg_versendet_hook.sql', 'to' => '1.5.0'],
+        '1.5.0' => ['sql' => '008_beleg_positions.sql', 'to' => '1.6.0'],
+        '1.6.0' => ['sql' => '009_status_exchange.sql', 'to' => '1.7.0'],
+        '1.7.0' => ['sql' => '010_media_exchange.sql', 'to' => '1.8.0'],
     ];
 
     public function __construct(
@@ -41,6 +44,10 @@ final class RepairIntegrationMigration
         // Hook-Registrierung ist Core-Konfiguration, kein Schema, und fehlt
         // in 001 - deshalb auch bei Neuinstallation ausfuehren (idempotent).
         $this->executeSqlFile(__DIR__ . '/sql/007_register_beleg_versendet_hook.sql');
+        $this->ensurePositionFields();
+        $this->executeSqlFile(__DIR__ . '/sql/008_beleg_positions.sql');
+        $this->executeSqlFile(__DIR__ . '/sql/009_status_exchange.sql');
+        $this->executeSqlFile(__DIR__ . '/sql/010_media_exchange.sql');
         $this->setVersion(self::SCHEMA_VERSION);
     }
 
@@ -76,6 +83,9 @@ final class RepairIntegrationMigration
                     $this->db->perform('ALTER TABLE ticket_repair_details ADD COLUMN customer_quote_amount DECIMAL(10,2) DEFAULT NULL AFTER actual_cost');
                 }
             } else {
+                if ($step['sql'] === '008_beleg_positions.sql') {
+                    $this->ensurePositionFields();
+                }
                 $this->executeSqlFile(__DIR__ . '/sql/' . $step['sql']);
             }
             $this->setVersion($step['to']);
@@ -84,6 +94,27 @@ final class RepairIntegrationMigration
 
         if ($current !== self::SCHEMA_VERSION) {
             error_log('RepairIntegration upgrade: no upgrade path from version ' . $current . ' to ' . self::SCHEMA_VERSION);
+        }
+    }
+
+    private function ensurePositionFields(): void
+    {
+        $columns = [
+            'public_diagnosis' => 'TEXT DEFAULT NULL', 'service_work' => 'TEXT DEFAULT NULL',
+            'final_check' => 'TEXT DEFAULT NULL', 'position_net_amount' => 'DECIMAL(10,2) DEFAULT NULL',
+            'diagnosis_cost_snapshot' => 'DECIMAL(10,2) DEFAULT NULL',
+            'wartung_paket_price_snapshot' => 'DECIMAL(10,2) DEFAULT NULL',
+            'travel_fee_per_km_snapshot' => 'DECIMAL(10,2) DEFAULT NULL',
+        ];
+        foreach ($columns as $column => $definition) {
+            $exists = $this->db->fetchValue(
+                "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+                 AND TABLE_NAME = 'ticket_repair_details' AND COLUMN_NAME = :column",
+                ['column' => $column]
+            );
+            if ((int)$exists === 0) {
+                $this->db->perform("ALTER TABLE ticket_repair_details ADD COLUMN `$column` $definition");
+            }
         }
     }
 
