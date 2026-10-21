@@ -19,6 +19,16 @@ use Xentral\Modules\Onlineshop\Data\OrderStatus;
 use Xentral\Modules\Onlineshop\Data\OrderStatusUpdateRequest;
 use Xentral\Components\Logger\Logger;
 use Xentral\Components\WooCommerce\ClientWrapper;
+use Xentral\Components\WooCommerce\ImportStateStore;
+use Xentral\Components\WooCommerce\OrderReconciler;
+use Xentral\Components\WooCommerce\RefundStateStore;
+use Xentral\Components\WooCommerce\RefundSynchronizer;
+use Xentral\Components\WooCommerce\RefundPreflight;
+use Xentral\Components\WooCommerce\RefundRetryQueue;
+use Xentral\Components\WooCommerce\ProductSynchronizer;
+use Xentral\Components\WooCommerce\CategorySynchronizer;
+use Xentral\Components\WooCommerce\VariationMedia;
+use Xentral\Components\WooCommerce\DownloadSettings;
 use Automattic\WooCommerce\HttpClient\HttpClientException;
 
 class Shopimporter_Woocommerce extends ShopimporterBase
@@ -44,6 +54,11 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public $statusProcessing;
   public $statusCompleted;
   public $priceType;
+  public $feeArticleNumber = '';
+  private $refundSync = false;
+  private $categorySyncMode = 'additive';
+  private $exportDownloads = false;
+  private $importModifiedFrom = '';
 
   /**
    * Stores the preferences that the user can change when editing this shop importer
@@ -61,6 +76,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   protected $app;
   protected $dump;
 
+  private $downloadSettings;
+
   /*
    * Variables for wordpress API
    */
@@ -75,7 +92,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public $backorders_array = array("no","notify","yes");
 
   /** @var bool $ssl_ignore Whether to ignore SSL certificate validation */
-  public $ssl_ignore;
+  public $ssl_ignore = false;
 
   /** @var string $lastImportTimestamp ISO-8601 UTC timestamp of the last successful import */
   public $lastImportTimestamp;
@@ -100,143 +117,44 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     exit;
   }
 
-  /**
-   * Returns the total number of orders pending import since the last import
-   * timestamp. Uses the WC v3 after= parameter and reads the count from
-   * the X-WP-Total response header (per_page=1 to minimise payload).
-   *
-   * @return int
-   */
+  /** Number of remaining modification events, excluding already processed timestamp peers. */
   public function ImportGetAuftraegeAnzahl()
   {
     $this->migrateAbNummerIfNeeded();
-
-    $configuredStatuses = array_map('trim', explode(';', (string) $this->statusPending));
-
-    if (!empty($this->lastImportOrderIds)) {
-      $cursorTs = strtotime($this->lastImportTimestamp);
-      if ($cursorTs === false) {
-        $this->logger->error('WooCommerce ImportGetAuftraegeAnzahl: invalid lastImportTimestamp cursor', ['cursor' => $this->lastImportTimestamp]);
-        return 0;
-      }
-      $afterTs = gmdate('Y-m-d\TH:i:s', max(0, $cursorTs - 1));
-      $queryArgs = [
-        'status'   => $configuredStatuses,
-        'after'    => $afterTs,
-        'per_page' => 1,
-        'exclude'  => array_values($this->lastImportOrderIds),
-      ];
-    } else {
-      $queryArgs = [
-        'status'   => $configuredStatuses,
-        'after'    => $this->lastImportTimestamp,
-        'per_page' => 1,
-      ];
+    $count = $this->getOrderReconciler()->count();
+    if ($this->refundSync && $this->getRefundRetryQueue()->hasDue()) {
+      $count = max(1, $count);
     }
-
-    try {
-      $this->client->get('orders', $queryArgs);
-    } catch (Exception $e) {
-      $this->logger->warning('WooCommerce ImportGetAuftraegeAnzahl: API request failed: ' . $e->getMessage());
-      return 0;
-    }
-
-    $wcResponse = $this->client->getLastResponse();
-    if ($wcResponse === null) {
-      $this->logger->warning('WooCommerce ImportGetAuftraegeAnzahl: getLastResponse() returned null');
-      return 0;
-    }
-
-    $total = $wcResponse->getHeader('x-wp-total');
-    if ($total === null) {
-      $this->logger->warning('WooCommerce ImportGetAuftraegeAnzahl: X-WP-Total header missing');
-      return 0;
-    }
-
-    return (int) $total;
+    return $count;
   }
 
   /**
-   * Queries the WooCommerce API for the oldest pending order since the last
-   * import timestamp and returns it as a Xentral-formatted array with at most
-   * one element. The caller (shopimport.php::RemoteGetAuftrag loop) expects
-   * $result[0] per iteration; this contract must be maintained.
-   *
-   * The after-filter advances per order so each caller-iteration fetches the
-   * next order. A crash between RemoteGetAuftrag() and the shopimport_auftraege
-   * INSERT loses at most this one order (consistent with pre-#262 behaviour).
-   *
-   * @return array Array with at most one order entry, or empty array if none.
+   * Returns at most one unimported order from the modification feed.
+   * Delivery is fenced until the caller stores the cart and acknowledges it.
+   * The durable checkpoint only advances after storage is verified.
    */
   public function ImportGetAuftrag()
   {
-    $data = $this->CatchRemoteCommand('data');
-
     $this->migrateAbNummerIfNeeded();
-
-    $configuredStatuses = array_map('trim', explode(';', (string) $this->statusPending));
-
-    if (!empty($this->lastImportOrderIds)) {
-      $cursorTs = strtotime($this->lastImportTimestamp);
-      if ($cursorTs === false) {
-        $this->logger->error('WooCommerce ImportGetAuftrag: invalid lastImportTimestamp cursor', ['cursor' => $this->lastImportTimestamp]);
-        return null;
+    $refundQueue = $this->refundSync ? $this->getRefundRetryQueue() : null;
+    if ($refundQueue !== null) {
+      $this->drainRefundQueue($refundQueue);
+    }
+    $statuses = array_values(array_filter(array_map('trim', explode(';', (string) $this->statusPending))));
+    $wcOrder = $this->getOrderReconciler()->next($statuses, function ($order) use ($refundQueue) {
+      if ($refundQueue !== null && !empty($order->refunds)) {
+        // Durably queue before advancing the modification checkpoint. Booking errors are isolated.
+        $refundQueue->enqueue((string) $order->id);
       }
-      $afterTs = gmdate('Y-m-d\TH:i:s', max(0, $cursorTs - 1));
-      $queryArgs = [
-        'status'   => $configuredStatuses,
-        'after'    => $afterTs,
-        'per_page' => 1,
-        'page'     => 1,
-        'orderby'  => 'date',
-        'order'    => 'asc',
-        'exclude'  => array_values($this->lastImportOrderIds),
-      ];
-    } else {
-      $queryArgs = [
-        'status'   => $configuredStatuses,
-        'after'    => $this->lastImportTimestamp,
-        'per_page' => 1,
-        'page'     => 1,
-        'orderby'  => 'date',
-        'order'    => 'asc',
-      ];
-    }
-
-    try {
-      $pageOrders = $this->client->get('orders', $queryArgs);
-    } catch (Exception $e) {
-      $this->logger->warning('WooCommerce ImportGetAuftrag: ' . $e->getMessage());
-      return null;
-    }
-
-    if (empty($pageOrders)) {
-      return null;
-    }
-
-    if (!is_array($pageOrders)) {
-      $this->logger->warning('WooCommerce ImportGetAuftrag: unexpected orders response type');
-      return null;
-    }
-
-    $wcOrder = $pageOrders[0] ?? null;
+    });
     if ($wcOrder === null) {
       return null;
     }
-
     $order = $this->parseOrder($wcOrder);
-
-    // Persist tuple cursor so the next Caller-iteration advances past this order.
-    // Using ts-1s in the query means same-second peers are still fetched, while
-    // the exclude=[id] parameter prevents re-delivering this exact order.
-    if (!empty($wcOrder->date_created_gmt) && !empty($wcOrder->id)) {
-      $this->persistLastImportCursor((string) $wcOrder->date_created_gmt, (int) $wcOrder->id);
-    }
-
     return [[
-      'id'        => $order['auftrag'],
+      'id' => $order['auftrag'],
       'sessionid' => '',
-      'logdatei'  => '',
+      'logdatei' => '',
       'warenkorb' => base64_encode(serialize($order)),
     ]];
   }
@@ -385,42 +303,24 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $order['transaktionsnummer'] = $wcOrder->transaction_id;
     $order['onlinebestellnummer'] = $wcOrder->number;
     $order['versandkostenbrutto'] = $wcOrder->shipping_total + $wcOrder->shipping_tax;
+    $order['versandkostennetto'] = (float) $wcOrder->shipping_total;
+    $order['versandkostensteuersatz'] = (float) $wcOrder->shipping_total != 0.0
+      ? round(100 * (float) $wcOrder->shipping_tax / (float) $wcOrder->shipping_total, 6) : 0.0;
     $order['internebemerkung'] = $wcOrder->customer_note;
 
     if (!empty((string) $wcOrder->currency)) {
-      $warenkorb['waehrung'] = (string) $wcOrder->currency;
+      $order['waehrung'] = (string) $wcOrder->currency;
     }
-    //
-
-    //
-    // Coupon Codes
-    //
-    $discount_total = (float) $wcOrder->discount_total;
-    $discount_tax = (float) $wcOrder->discount_tax;
-
-    if ($discount_total != 0) { // Discount was applied to this order
-
-      // Calculate coupon amount
-      if ($discount_tax == 0) {
-        // Tax calculations are not enabled for any used coupon
-        $order['rabattnetto'] = -abs((float) $discount_total);
-      } else {
-        // At least one used coupon has tax calculations enabled
-        $order['rabattbrutto'] = -abs((float) $discount_total);
-        $order['rabattbrutto'] += -abs((float) $discount_tax);
+    // Coupon amounts are already included in each WooCommerce line total.
+    $order['coupon_codes'] = [];
+    foreach ($wcOrder->coupon_lines ?? [] as $couponLine) {
+      if (isset($couponLine->code) && (string) $couponLine->code !== '') {
+        $order['coupon_codes'][] = (string) $couponLine->code;
       }
-
-      // Set coupon name
-      $couponLine = $wcOrder->coupon_lines;
-
-      // Check if we have a valid coupon line just to be sure and set the coupon name
-      if ($couponLine && is_array($couponLine) && isset($couponLine[0]) && (String) $couponLine[0]->code !== '') {
-        $order['rabattname'] = (String) $couponLine[0]->code;
-      }
-
     }
-
-
+    if (!empty($order['coupon_codes'])) {
+      $order['rabattname'] = implode(', ', $order['coupon_codes']);
+    }
 
     $seperateShippingAddress = !self::compareObjects(
       $wcOrder->billing,
@@ -464,43 +364,96 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $order['ustid'] = $vatId;
     }
 
-    foreach ($wcOrder->line_items as $wcOrderItem) {
-      $order['articlelist'][] = $this->parseItem($wcOrderItem);
+    $taxRates = [];
+    foreach ($wcOrder->tax_lines ?? [] as $taxLine) {
+      if (isset($taxLine->rate_id, $taxLine->rate_percent)) {
+        $taxRates[$taxLine->rate_id] = [
+          'rate' => (float) $taxLine->rate_percent,
+          'compound' => !empty($taxLine->compound),
+        ];
+      }
     }
+    $order['articlelist'] = [];
+    foreach ($wcOrder->line_items as $wcOrderItem) {
+      $order['articlelist'][] = $this->parseItem($wcOrderItem, $taxRates);
+    }
+    foreach ($wcOrder->fee_lines ?? [] as $feeLine) {
+      if (empty($this->feeArticleNumber)) {
+        throw new RuntimeException('WooCommerce feeArticleNumber muss einer vorhandenen ERP-Artikelnummer entsprechen.');
+      }
+      $feeItem = (object) [
+        'id' => $feeLine->id,
+        'sku' => $this->feeArticleNumber,
+        'name' => $feeLine->name,
+        'quantity' => 1,
+        'subtotal' => $feeLine->total,
+        'subtotal_tax' => $feeLine->total_tax,
+        'total' => $feeLine->total,
+        'total_tax' => $feeLine->total_tax,
+        'taxes' => $feeLine->taxes ?? [],
+      ];
+      $position = $this->parseItem($feeItem, $taxRates);
+      $position['wc_line_type'] = 'fee';
+      $order['articlelist'][] = $position;
+    }
+    $order['woocommerce_position_taxes'] = true;
 
     $order['zahlungsweise'] = $wcOrder->payment_method;
-    $order['lieferung'] = $wcOrder->shipping_lines[0]->method_id;
+    $order['lieferung'] = $wcOrder->shipping_lines[0]->method_id ?? '';
 
     return $order;
   }
 
-  function parseItem($wcOrderItem)
+  function parseItem($wcOrderItem, array $taxRates = [])
   {
-    // The WC API doesnt expose the net price of a single product in the get order endpoint.
-    // We could query each individual product and get the price, but that would result in a
-    // huge amount of HTTP requests.
-    //
-    // We could use the price_netto attribute in the order item, but we get a higher precision using
-    // this custom calculation as we have access to the exact `total_tax` amount.
-    // Passing the net value of the line eliminates rounding issues if the position happens to have large quantites
+    $quantity = (float) $wcOrderItem->quantity;
+    if ($quantity <= 0) {
+      throw new UnexpectedValueException('WooCommerce order line quantity must be greater than zero.');
+    }
 
-    switch ($this->priceType) {
-      case 'grosscalculated':
-        $priceValue = ((float) $wcOrderItem->subtotal + (float) $wcOrderItem->subtotal_tax) / (float) $wcOrderItem->quantity;
-        $priceType = 'price';
-        break;
-      case 'netcalculated':
-      default:
-        $priceType = 'price_netto';
-        $priceValue = (float) $wcOrderItem->subtotal / (float) $wcOrderItem->quantity;
-        break;
+    // WooCommerce totals are authoritative and already include line discounts.
+    $total = (float) $wcOrderItem->total;
+    $tax = (float) $wcOrderItem->total_tax;
+    $subtotal = (float) $wcOrderItem->subtotal;
+    $subtotalTax = (float) $wcOrderItem->subtotal_tax;
+    $taxRate = $subtotal != 0.0 ? round(100 * $subtotalTax / $subtotal, 2)
+      : ($total != 0.0 ? round(100 * $tax / $total, 2) : 0.0);
+    $mappedRates = [];
+    $allRatesMapped = true;
+    foreach ($wcOrderItem->taxes ?? [] as $lineTax) {
+      if (isset($taxRates[$lineTax->id])) {
+        $mappedRates[$lineTax->id] = $taxRates[$lineTax->id];
+      } else {
+        $allRatesMapped = false;
+      }
+    }
+    if (!empty($mappedRates) && $allRatesMapped) {
+      $taxRate = 0.0;
+      foreach ($mappedRates as $rate) {
+        if (!$rate['compound']) {
+          $taxRate += $rate['rate'];
+        }
+      }
+      foreach ($mappedRates as $rate) {
+        if ($rate['compound']) {
+          $taxRate = (100 + $taxRate) * (100 + $rate['rate']) / 100 - 100;
+        }
+      }
+      $taxRate = round($taxRate, 6);
     }
 
     $orderItem = array();
     $orderItem['articleid'] = $wcOrderItem->sku;
     $orderItem['name'] = $wcOrderItem->name;
-    $orderItem[$priceType] = $priceValue;
+    $orderItem['price_netto'] = $total / $quantity;
+    if ($this->priceType === 'grosscalculated') {
+      $orderItem['price'] = ($total + $tax) / $quantity;
+    }
     $orderItem['quantity'] = $wcOrderItem->quantity;
+    $orderItem['rabatt'] = 0;
+    $orderItem['steuersatz'] = $taxRate;
+    $orderItem['webid'] = (string) $wcOrderItem->id;
+    $orderItem['wc_line_type'] = 'product';
 
     // The item could be a variable product in which case we have to retrieve the sku of the variation product
     if (!empty($wcOrderItem->variation_id)) {
@@ -519,14 +472,16 @@ class Shopimporter_Woocommerce extends ShopimporterBase
    */
   public function ImportDeleteAuftrag()
   {
-    $orderId = $this->CatchRemoteCommand('data')['auftrag'];
-
-    if (!empty($orderId)) {
-      $this->client->put('orders/' . $orderId, [
-        'status' => $this->statusProcessing,
-      ]);
+    $orderId = (int) ($this->CatchRemoteCommand('data')['auftrag'] ?? 0);
+    if ($orderId <= 0) {
+      return 'failed';
     }
-
+    $store = new ImportStateStore($this->app->Container->get('Database'), (int) $this->shopid);
+    if (!$store->isStored($orderId)) {
+      throw new LogicException('WooCommerce order is not durably stored; acknowledgement refused');
+    }
+    $this->client->put('orders/' . $orderId, ['status' => $this->statusProcessing]);
+    $this->getOrderReconciler()->acknowledge($orderId);
     return 'ok';
   }
 
@@ -544,37 +499,50 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if ($data->orderStatus !== OrderStatus::Completed)
       return;
 
-    if (isset($data->shipments)) {
-      $trackingCode = $data->shipments[0]?->trackingNumber;
+    $shipments = [];
+    foreach ($data->shipments as $shipment) {
+      $shipments[] = [
+        'tracking_code' => $shipment->trackingNumber ?? '',
+        'shipping_carrier' => $shipment->shippingMethod ?? '',
+        'tracking_url' => $shipment->trackingUrl ?? '',
+      ];
     }
 
-    if (!empty($trackingCode)) {
-      $this->client->post('orders/' . $data->shopOrderId . '/notes', [
-        'note' => 'Tracking Code: ' . $trackingCode
-      ]);
-
-      $this->logger->info(
-        "WooCommerce Tracking Code Rückmeldung für Auftrag: " . $data->orderId,
-        [
-          'orderId' => $data->shopOrderId,
-          'trackingCode' => $trackingCode
-        ]
-      );
+    $updateData = ['status' => $this->statusCompleted];
+    if (!empty($shipments)) {
+      $remoteOrder = $this->client->get('orders/' . $data->shopOrderId);
+      $previousShipments = $this->get_wc_meta($remoteOrder, 'openxe_shipments') ?? [];
+      $previousCodes = [];
+      foreach ($previousShipments as $shipment) {
+        $shipment = (array) $shipment;
+        if (!empty($shipment['tracking_code'])) {
+          $previousCodes[] = (string) $shipment['tracking_code'];
+        }
+      }
+      // Older connector versions stored only one tracking number.
+      $previousCode = $this->get_wc_meta($remoteOrder, 'tracking_code');
+      if (!empty($previousCode)) {
+        $previousCodes[] = (string) $previousCode;
+      }
+      foreach ($shipments as $shipment) {
+        $trackingCode = (string) $shipment['tracking_code'];
+        if ($trackingCode !== '' && !in_array($trackingCode, $previousCodes, true)) {
+          $this->client->post('orders/' . $data->shopOrderId . '/notes', [
+            'note' => 'Tracking Code: ' . $trackingCode
+          ]);
+          $previousCodes[] = $trackingCode;
+          $this->logger->info(
+            "WooCommerce Tracking Code Rueckmeldung fuer Auftrag: " . $data->orderId,
+            ['orderId' => $data->shopOrderId, 'trackingCode' => $trackingCode]
+          );
+        }
+      }
+      $updateData['meta_data'] = [
+        ['key' => 'tracking_code', 'value' => $shipments[0]['tracking_code']],
+        ['key' => 'shipping_carrier', 'value' => $shipments[0]['shipping_carrier']],
+        ['key' => 'openxe_shipments', 'value' => $shipments],
+      ];
     }
-
-    $updateData = [
-      'status' => $this->statusCompleted,
-      'meta_data' => [
-        [
-          'key' => 'tracking_code',
-          'value' => $trackingCode
-        ],
-        [
-          'key' => 'shipping_carrier',
-          'value' => $data->shipments[0]?->shippingMethod
-        ]
-      ],
-    ];
     $this->client->put('orders/' . $data->shopOrderId, $updateData);
 
     $this->logger->info(
@@ -982,44 +950,27 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         ['key' => '_yoast_wpseo_title', 'value' => $meta_title],
       ];
 
-        foreach ($tmp[$i]['meta_data'] as $key => $value) {
+        foreach ($tmp[$i]['meta_data'] ?? [] as $key => $value) {
             $commonMetaData[] = ['key' => $this->metadataprefix.$key, 'value' => $value];
         }
 
-      // Attributes that are used for both updating an existing product as well as creating a new one
-      $commonProductAtts = [
-        'name' => $name_de,
-        'description' => $description,
-        'status' => ($aktiv ? 'publish' : 'private'),
-        'regular_price' => number_format($pseudopreis, 2, '.', ''),
-        'sale_price' => number_format($preis, 2, '.', ''),
-        'short_description' => $kurzbeschreibung,
-        'weight' => $weight_kg,
-        'dimensions' => [
-          'length' => $dim_length,
-          'width' => $dim_width,
-          'height' => $dim_height
-        ],
-        'global_unique_id' => $tmp[$i]['ean'],
-        'meta_data' => $commonMetaData,
-      ];
-
-      if ($lageranzahl === 0) {
-        $commonProductAtts['stock_status'] = 'outofstock';
-        $commonProductAtts['manage_stock'] = true;
-      } elseif ($lageranzahl === '') {
-        $commonProductAtts['stock_status'] = 'instock';
-        $commonProductAtts['manage_stock'] = false;
-      } else {
-        $commonProductAtts['stock_status'] = 'instock';
-        $commonProductAtts['manage_stock'] = true;
+      $productSync = new ProductSynchronizer($this->client);
+      $productOptions = ['backorders' => $this->backorders, 'metadataprefix' => $this->metadataprefix];
+      $productData = $tmp[$i];
+      if ($this->exportDownloads && $this->downloadSettings !== null) {
+        $productData = $this->downloadSettings->apply($productData);
       }
-
-      $commonProductAtts['backorders'] = $this->backorders_array[$this->backorders];
-
-      if ($lageranzahl !== '') {
-        $commonProductAtts['stock_quantity'] = (int) $lageranzahl;
+      if (!$this->exportDownloads) {
+        unset($productData['downloadable'], $productData['downloads'], $productData['virtual']);
+        foreach ($productData['artikel_varianten'] ?? [] as $key => $variant) {
+          unset($productData['artikel_varianten'][$key]['downloadable'], $productData['artikel_varianten'][$key]['downloads'], $productData['artikel_varianten'][$key]['virtual']);
+        }
+        foreach ($productData['matrix_varianten']['artikel'] ?? [] as $key => $rows) {
+          unset($productData['matrix_varianten']['artikel'][$key][0]['downloadable'], $productData['matrix_varianten']['artikel'][$key][0]['downloads'], $productData['matrix_varianten']['artikel'][$key][0]['virtual']);
+        }
       }
+      $commonProductAtts = $productSync->map($productData, $productOptions);
+      $commonProductAtts['meta_data'] = $commonMetaData;
 
       if (isset($tmp[$i]['Dateien'])) {
         if (!empty($uploaded_files['files'])) {
@@ -1056,127 +1007,25 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         }
       }
 
-      if (!is_null($product_id)) {
-        // Product exists - check if it's a variation or regular product
-        $this->logger->debug("WooCommerce ImportSendList update product");
-        if ($isVariant && !empty($parent_id)) {
-          // This is a VARIATION - use the variations endpoint
-          // Variations don't support certain attributes (they inherit from parent)
-          $variationAtts = [
-            'regular_price' => $commonProductAtts['regular_price'],
-            'sale_price' => $commonProductAtts['sale_price'],
-            'weight' => $commonProductAtts['weight'],
-            'dimensions' => $commonProductAtts['dimensions'],
-            'stock_status' => $commonProductAtts['stock_status'],
-            'manage_stock' => $commonProductAtts['manage_stock'],
-          ];
-          if (isset($commonProductAtts['stock_quantity'])) {
-            $variationAtts['stock_quantity'] = $commonProductAtts['stock_quantity'];
-          }
-          // Update status: 'publish' for variations is handled differently
-          if (!$aktiv) {
-            $variationAtts['status'] = 'private';
-          }
+      $productOptions['variationPayloads'] = (new VariationMedia())->upload(
+        $productData,
+        array_values(array_filter($this->dateienuebertragen)),
+        function ($files) { return $this->uploadFiles($files); }
+      );
+      $productResult = $productSync->sync($productData, $commonProductAtts, $productOptions);
+      $product_id = $productResult['id'];
+      $this->logger->info("WooCommerce Artikel synchronisiert: $nummer / $product_id");
 
-          $this->client->put('products/' . $parent_id . '/variations/' . $product_id, $variationAtts);
-
-          $this->logger->info("WooCommerce Variante geändert für Artikel: $nummer / Variation: $product_id (Parent: $parent_id), noch ".($ctmp - $i -1 )." Artikel");
-        } else {
-          // This is a regular product
-          $this->client->put('products/' . $product_id, array_merge([
-
-          ], $commonProductAtts));
-
-          $this->logger->info("WooCommerce Artikel geändert für Artikel: $nummer / $product_id, noch ".($ctmp - $i -1 )." Artikel");
+      if ($this->kategorienuebertragen && !$isVariant) {
+        $categories = $tmp[$i]['kategorien'] ?? [];
+        if ($this->categorySyncMode !== 'replace' && empty($categories) && !empty($tmp[$i]['kategoriename'])) {
+          $categories = [['name' => $tmp[$i]['kategoriename']]];
         }
-      } else {
-        // create a new product
-        $this->logger->debug("WooCommerce ImportSendList create product");
-        $product_id = $this->client->post('products/', array_merge([
-          'sku' => $nummer,
-        ], $commonProductAtts))->id;
-        $this->logger->info("WooCommerce neuer Artikel angelegt: $nummer, noch ".($ctmp - $i - 1)." Artikel");
-      }
-
-      // TODO: Kategoriebaum wird noch nicht uebertragen
-
-      // if(isset($tmp[$i]['kompletter_kategorienbaum'])){
-      //   $baum = $tmp[$i]['kompletter_kategorienbaum'];
-      //   $this->updateKategorieBaum($baum);
-      // }
-
-      // Update the associated product categories
-
-      if ($this->kategorienuebertragen) {
-          $chosenCats = array();
-          if (isset($tmp[$i]['kategorien']) || isset($tmp[$i]['kategoriename'])) {
-            $kategorien = $tmp[$i]['kategorien'];
-            if (!($kategorien) && !self::emptyString($tmp[$i]['kategoriename'])) {
-              $kategorien = array(
-                array(
-                  'name' => $tmp[$i]['kategoriename'],
-                )
-              );
-            }
-            if ((!empty($kategorien) ? count($kategorien) : 0) > 0) {
-              // Retrive all WC categories via API
-              $allWooCommerceCategories = $this->client->get('products/categories', ['per_page' => '100']);
-
-              $searchWpCategories = [];
-              foreach ($allWooCommerceCategories as $a) {
-                $searchWpCategories[$a->id] = $a->name;
-              }
-              // searchWPCategories is an assoc array of type WCCatId(Int) -> WCCatName(string)
-
-              // Iterate over the categories that are choosen in xentral
-              foreach ($kategorien as $k => $v) {
-                $wawi_cat_name = $v['name'];
-
-                $wcCatId = null;
-
-                // If WC has a matching category. We match based on name!
-                if (array_search($wawi_cat_name, array_values($searchWpCategories)) !== false) {
-                  // get  id of that WC Category
-                  $wcCatId = array_search($wawi_cat_name, $searchWpCategories);
-
-                } else {
-                  // No matching category exists
-                  $wcCatId = $this->client->post('products/categories', [
-                    'name' => $wawi_cat_name,
-                  ])->id;
-
-                }
-
-                if ($wcCatId) {
-                  // update category. We first retrieve the product and append the new product category, not replace the entire category array.
-                  $alreadyAssignedWCCats = $this->client->get('products/' . $product_id, [
-                    'per_page' => 1,
-                  ])->categories;
-
-                  // Get ids of existing categories
-                  $existingCategoryIds = [];
-                  foreach ($alreadyAssignedWCCats as $cat) {
-                    $existingCategoryIds[] = $cat->id;
-                  }
-
-                  $allCatIds = array_merge($existingCategoryIds, array($wcCatId));
-
-                  // prepare data to be in correct format for WC api. should be individual items with key 'id' and id as value
-                  $allCatIdsWCAPIRep = array();
-                  foreach ($allCatIds as $id) {
-                    $allCatIdsWCAPIRep[] = ['id' => $id];
-                  }
-
-                  // Update category assignment
-                  $this->client->put('products/' . $product_id, [
-                    'categories' => $allCatIdsWCAPIRep,
-                  ]);
-
-                  $chosenCats[] = $wcCatId;
-                }
-              }
-            }
-        } // kategorienuebertragen
+        $categorySync = new CategorySynchronizer($this->client, $this->shopid);
+        $categoryIds = $categorySync->sync($categories, $tmp[$i]['kompletter_kategorienbaum'] ?? []);
+        if ($categoryIds !== [] || $this->categorySyncMode === 'replace') {
+          $categorySync->assign($product_id, $categoryIds, $this->categorySyncMode);
+        }
       }
     }
     return $return;
@@ -1197,7 +1046,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     }
 
     if (!empty($this->ImportWordpressUserName)) {
-        $result = $this->wordpress_request('users/me', debug: true, ssl_ignore: true);
+        $result = $this->wordpress_request('users/me', debug: true, ssl_ignore: $this->ssl_ignore);
         if ($result['status'] != 1) {
             return 'failed: Verbindung zur Wordpress API '.$result['message'];
         }
@@ -1252,6 +1101,14 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $this->timeout = (int) $felder['timeout'] ?? SELF::TIMEOUT;
 
     $this->priceType = $felder['priceType'] ?? null;
+    $this->feeArticleNumber = trim((string) ($felder['feeArticleNumber'] ?? ''));
+    $this->refundSync = !empty($felder['refundSync']);
+    $this->categorySyncMode = ($felder['categorySyncMode'] ?? '') === 'replace' ? 'replace' : 'additive';
+    $this->exportDownloads = !empty($felder['exportDownloads']);
+    $this->downloadSettings = $this->exportDownloads
+      ? new DownloadSettings($this->app->Container->get('Database'), (int) $this->shopid)
+      : null;
+    $this->importModifiedFrom = trim((string) ($felder['importModifiedFrom'] ?? ''));
 
     $this->backorders = $felder['backorders'];
 
@@ -1291,6 +1148,41 @@ class Shopimporter_Woocommerce extends ShopimporterBase
    * @param string $isoUtcDate ISO-8601 UTC timestamp, e.g. '2026-04-20T12:34:56'
    * @return void
    */
+  private function getRefundRetryQueue()
+  {
+    return new RefundRetryQueue($this->app->Container->get('Database'), (int) $this->shopid);
+  }
+
+  private function drainRefundQueue($queue)
+  {
+    $result = $queue->drain(function ($orderId) {
+      $database = $this->app->Container->get('Database');
+      $shopimport = $this->app->erp->LoadModul('shopimport');
+      $preflight = new RefundPreflight($database, (int) $this->shopid);
+      $refunds = new RefundSynchronizer(
+        $this->client,
+        (int) $this->shopid,
+        new RefundStateStore($database),
+        function ($data) use ($shopimport) { return $shopimport->Refund((int) $this->shopid, $data); },
+        [$preflight, 'validate']
+      );
+      $refunds->sync($this->client->get('orders/' . $orderId));
+    });
+    foreach ($result['failed'] as $orderId => $message) {
+      $this->logger->error('WooCommerce refund deferred', ['shop' => $this->shopid, 'order' => $orderId, 'reason' => $message]);
+    }
+  }
+
+  private function getOrderReconciler()
+  {
+    return new OrderReconciler(
+      $this->client,
+      new ImportStateStore($this->app->Container->get('Database'), (int) $this->shopid),
+      null,
+      $this->importModifiedFrom !== '' ? $this->importModifiedFrom : $this->lastImportTimestamp
+    );
+  }
+
   public function persistLastImportTimestamp($isoUtcDate)
   {
     $this->persistLastImportCursor($isoUtcDate, null);
@@ -1367,6 +1259,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $shopArr['demomodus'] = 0;
     $shopArr['anzgleichzeitig'] = 1;
     $shopArr['cronjobaktiv'] = 1;
+    $shopArr['positionsteuersaetzeerlauben'] = 1;
 
     return $shopArr;
   }
@@ -1508,6 +1401,11 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         'statusPending' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung offen|}:', 'size' => 40, 'default' => 'pending', 'info' => '({|ggfs. getrennt durch ";": pending;on-hold|})'),
         'statusProcessing' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung in Bearbeitung|}:', 'size' => 10, 'default' => 'processing'),
         'statusCompleted' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung fertig|}:', 'size' => 10, 'default' => 'completed'),
+        'feeArticleNumber' => ['typ' => 'text', 'bezeichnung' => '{|ERP-Artikelnummer fuer WooCommerce-Gebuehren|}:', 'size' => 40],
+        'refundSync' => ['typ' => 'checkbox', 'bezeichnung' => '{|WooCommerce-Erstattungen als Gutschriften uebernehmen|}:', 'info' => 'Erfordert vorhandene Rechnung und importierte Woo-Positions-IDs. Keine Zahlung oder Lagerbuchung im Shop.'],
+        'categorySyncMode' => ['typ' => 'select', 'bezeichnung' => '{|Kategoriezuordnung|}:', 'optionen' => ['additive' => 'Ergaenzen', 'replace' => 'Durch OpenXE-Zuordnung ersetzen']],
+        'exportDownloads' => ['typ' => 'checkbox', 'bezeichnung' => '{|Explizite WooCommerce-Downloadfelder exportieren|}:'],
+        'importModifiedFrom' => ['typ' => 'text', 'bezeichnung' => '{|Erster Aenderungsabgleich ab UTC|}:', 'info' => 'Optional YYYY-MM-DDTHH:MM:SS; wirkt nur vor dem ersten Abgleich. Sonst bisheriger Importcursor.'],
         'priceType' => array('typ' => 'select', 'bezeichnung' => '{|Preisberechnungsgrundlage bei Auftragsimport|}', 'optionen' => array('netcalculated' => '{|Nettopreis zurückrechnen (Standard)|}', 'grosscalculated' => '{|Bruttopreis zurückrechnen|}')),
         'timeout' => array('typ' => 'text', 'bezeichnung' => '{|Timeout in Sekunden|}:', 'size' => 40, 'default' => '30', 'info' => ''),
         'backorders' => array('typ' => 'select', 'bezeichnung' => '{|Einstellungen für Backorders|}:', 'optionen' => $this->backorders_array, 'info' => ''),
@@ -1566,73 +1464,44 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   }
 
   function wordpress_request(string $endpoint, $postdata = null, $method = null, $getdata = null, string $content_disposition = null, string $content_type = null, $debug = false, $debugurl = null, bool $ssl_ignore = false, int $timeout_seconds = 30) {
-    $ch = curl_init();
-    $url_addition = "";
-
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-    curl_setopt($ch, CURLOPT_USERPWD, $this->ImportWordpressUserName . ":" . $this->ImportWordpressApplicationPassword);
-
-    if (!empty($getdata)) {
-        $url_addition = "?";
-        $ampersand = "";
-        foreach ($getdata as $key => $value) {
-            $url_addition .= $ampersand . $key . "=" . $value;
-            $ampersand = "&";
-        }
-    }
-    if (!empty($postdata)) {
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $method);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $postdata);
-        $headers[] = 'Content-Type: ' . $content_type;
-        if (!empty($content_disposition)) {
-            $headers[] = 'Content-Disposition: '.$content_disposition;
-        }
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-    }
-
-    if ($debugurl) {
-        $url = $debugurl;
-    } else {
-        $url = $this->shopUrl;
-    }
-
-    curl_setopt($ch, CURLOPT_URL, $url . $this->url. $this->wordpress_api_path . $endpoint . $url_addition);
-
-    curl_setopt($ch, CURLINFO_HEADER_OUT, true);
-    curl_setopt($ch, CURLOPT_VERBOSE, true);
-
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, !$ssl_ignore);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, !$ssl_ignore);
-
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout_seconds);
-    curl_setopt($ch, CURLOPT_TIMEOUT, $timeout_seconds);
-
-    $response = curl_exec($ch);
-    if (curl_error($ch)) {
-        $this->error[] = curl_error($ch);
-    } else {
-        $response = json_decode($response, associative: true);
-    }
-    curl_close($ch);
-
-    $information = curl_getinfo($ch);
-
-    $result = [
-        'status' => ($information['http_code'] >= 200  && $information['http_code'] <= 299),
-        'response' => $response,
-        'message' => $response['message']
+    $baseUrl = rtrim((string) ($debugurl ?: $this->url), '/');
+    $query = !empty($getdata) ? '?' . http_build_query($getdata, '', '&', PHP_QUERY_RFC3986) : '';
+    $ch = curl_init($baseUrl . '/' . $this->wordpress_api_path . ltrim($endpoint, '/') . $query);
+    $headers = [];
+    $options = [
+      CURLOPT_RETURNTRANSFER => true,
+      CURLOPT_USERPWD => (string) $this->ImportWordpressUserName . ':' . (string) $this->ImportWordpressApplicationPassword,
+      CURLOPT_SSL_VERIFYPEER => !$ssl_ignore,
+      CURLOPT_SSL_VERIFYHOST => $ssl_ignore ? 0 : 2,
+      CURLOPT_CONNECTTIMEOUT => $timeout_seconds,
+      CURLOPT_TIMEOUT => $timeout_seconds,
     ];
-
-    if ($debug) {
-        $result['curl_getinfo'] = $information;
-        $result['curl_postdata_500_bytes'] = mb_substr($postdata,0,500);
-        $this->logger->debug(
-                'Woocommerce Wordpress debug',
-                $result
-        );
+    if ($postdata !== null) {
+      $options[CURLOPT_CUSTOMREQUEST] = $method ?: 'POST';
+      $options[CURLOPT_POSTFIELDS] = $postdata;
+      $headers[] = 'Content-Type: ' . ($content_type ?: 'application/octet-stream');
+      if ($content_disposition !== null) {
+        $headers[] = 'Content-Disposition: ' . $content_disposition;
+      }
+      $options[CURLOPT_HTTPHEADER] = $headers;
     }
-
+    curl_setopt_array($ch, $options);
+    $raw = curl_exec($ch);
+    $error = curl_error($ch);
+    $information = curl_getinfo($ch);
+    curl_close($ch);
+    $response = $raw === false ? null : json_decode($raw, true);
+    $result = [
+      'status' => $error === '' && $information['http_code'] >= 200 && $information['http_code'] <= 299 && is_array($response),
+      'response' => $response,
+      'message' => $error !== '' ? $error : (is_array($response) ? ($response['message'] ?? '') : 'Invalid WordPress JSON response'),
+      'http_code' => $information['http_code'],
+    ];
+    if ($debug) {
+      unset($information['request_header']);
+      $result['curl_getinfo'] = $information;
+      $this->logger->debug('WooCommerce WordPress API request', $result);
+    }
     return $result;
   }
 
@@ -1659,16 +1528,16 @@ class Shopimporter_Woocommerce extends ShopimporterBase
             $result = $this->wordpress_request(
                     endpoint: 'media',
                     getdata: [
-                        'search' => urlencode($datei['filename'])
+                        'search' => $datei['filename']
                     ],
                     debug: true,
-                    ssl_ignore: true
+                    ssl_ignore: $this->ssl_ignore
             );
 
             if ($result['status'] == 1) {
                 $response = $result['response'];
 
-                $file_wordpress_id = $response[0]['id'];
+                $file_wordpress_id = $response[0]['id'] ?? null;
 
                 if (is_numeric($file_wordpress_id)) { // File exists -> update
                     $result = $this->wordpress_request(
@@ -1678,7 +1547,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
                             content_disposition: 'attachment; filename="' . $datei['filename'] . '"',
                             content_type: $datei['mimetype'] ?: 'application:octet-stream',
                             debug: true,
-                            ssl_ignore: true
+                            ssl_ignore: $this->ssl_ignore
                     );
 
                     $response = $result['response'];
@@ -1700,16 +1569,17 @@ class Shopimporter_Woocommerce extends ShopimporterBase
                             content_disposition: 'attachment; filename="' . $datei['filename'] . '"',
                             content_type: $datei['mimetype'] ?: 'application:octet-stream',
                             debug: true,
-                            ssl_ignore: true
+                            ssl_ignore: $this->ssl_ignore
                     );
-                    if ($result['http_code'] >= 200 && $result['http_code'] <= 299) {
+                    $response = $result['response'] ?? [];
+                    if (!empty($result['status']) && !empty($response['id'])) {
                         $fileResult['status'] = 'created';
                         $fileResult['wordpressid'] = $response['id'];
                         $fileResult['url'] = $response['guid']['rendered'];
                     } else {
                         $uploadFilesResult['success'] = false;
                         $fileResult['success'] = false;
-                        $fileResult['status'] = 'file creation failed'.($result['http_code']?(" http code".$result['http_code']):'');
+                        $fileResult['status'] = 'file creation failed'.(!empty($result['http_code'])?(" http code".$result['http_code']):'');
                     }
                 }
             } else {

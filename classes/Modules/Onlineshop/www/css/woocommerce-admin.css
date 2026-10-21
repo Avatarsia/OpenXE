@@ -1,0 +1,21 @@
+.wc-admin { padding: 1rem; }
+.wc-admin fieldset { min-inline-size: 0; }
+.wc-admin p { max-width: 75ch; line-height: 1.5; }
+.wc-admin-nav { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1.5rem; }
+.wc-admin-nav [aria-current="page"] { font-weight: bold; text-decoration: underline; }
+.wc-admin-search { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-bottom: 1rem; }
+.wc-admin-results { padding-left: 1.5rem; line-height: 1.8; }
+.wc-admin-scroll { overflow-x: auto; max-width: 100%; }
+.wc-admin table { width: 100%; border-collapse: collapse; }
+.wc-admin th, .wc-admin td { padding: .65rem; text-align: left; vertical-align: top; border-bottom: 1px solid #999; }
+.wc-admin th { font-weight: bold; }
+.wc-download-table { min-width: 560px; }
+.wc-download-table input { width: 100%; box-sizing: border-box; }
+.wc-download-table th:nth-child(1) { width: 30%; }
+.wc-download-table th:nth-child(2) { width: 55%; }
+.wc-refund-table { min-width: 850px; }
+.wc-refund-table td:last-child { max-width: 28rem; overflow-wrap: anywhere; }
+.wc-admin-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
+.wc-admin-pages { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
+.wc-admin button, .wc-admin input:not([type="checkbox"]) { min-height: 32px; }
+.wc-admin :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }

@@ -31,12 +31,14 @@ class Onlineshops extends GenShopexport {
   public $stylesheet = [
     './classes/Modules/Onlineshop/www/css/feature.css',
     './classes/Modules/Onlineshop/www/css/shopsettings.css',
+    './classes/Modules/Onlineshop/www/css/woocommerce-admin.css',
     './classes/Modules/Appstore/www/css/tilegrid.css',
   ];
 
   public $javascript = [
     './classes/Modules/Onlineshop/www/js/onlineshop_appnew.js',
     './classes/Modules/Onlineshop/www/js/shopsettings.js',
+    './classes/Modules/Onlineshop/www/js/woocommerce-admin.js',
     './classes/Modules/Onlineshop/www/js/onlineshop_create.js',
   ];
 
@@ -3116,6 +3118,9 @@ INNER JOIN shopexport s ON
       $this->app->erp->Headlines('', $name);
       //$this->app->Tpl->Add('KURZUEBERSCHRIFT2',$name);
       $this->app->erp->MenuEintrag('index.php?module=onlineshops&action=edit&id='.$id,'Details');
+      if ($this->app->Container->get('Database')->fetchValue('SELECT modulename FROM shopexport WHERE id = :shop', ['shop' => (int) $id]) === 'shopimporter_woocommerce') {
+        $this->app->erp->MenuEintrag('index.php?module=onlineshops&action=edit&id='.(int)$id.'&cmd=woocommerce', 'WooCommerce');
+      }
       //$this->app->erp->MenuEintrag("index.php?module=shopexport&action=export&id=$id","Export");
       $this->app->erp->MenuEintrag('index.php?module=onlineshops&action=artikellist&id='.$id,'Artikelliste');
       $this->app->erp->MenuEintrag('index.php?module=shopexport&action=artikeluebertragung&id='.$id,'Artikel &Uuml;bertragung');
@@ -3201,6 +3206,13 @@ INNER JOIN shopexport s ON
   public function ShopexportEdit()
   {
     $cmd = $this->app->Secure->GetGET('cmd');
+    if ($cmd === 'woocommerce') {
+      $this->ShopexportMenu();
+      $page = new \Xentral\Components\WooCommerce\AdminPage($this->app, (int) $this->app->Secure->GetGET('id'));
+      $this->app->Tpl->Set('WOOCOMMERCECONTENT', $page->render());
+      $this->app->Tpl->Parse('PAGE', 'onlineshops_woocommerce.tpl');
+      return;
+    }
     if($cmd === 'loadDefaultTemplate') {
       return $this->HandleLoadDefaultTemplateAjaxAction();
     }
