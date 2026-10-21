@@ -8,7 +8,7 @@ name: Build Production
 # Strategy: three passes, all-or-nothing.
 #   Pass 1 - isolated merge test against upstream/master for each branch
 #   Pass 2 - full integration merge in manifest order
-#   Pass 3 - PHP lint + payload dump test
+#   Pass 3 - PHP lint + payload dump and WooCommerce regression tests
 #
 # All three passes run to completion even on failure, so a single failing
 # run reports ALL issues (not just the first one). Only a fully green run
@@ -180,6 +180,19 @@ jobs:
             echo "::endgroup::"
           fi
 
+          if [ -f tests/woocommerce/run.php ]; then
+            echo "::group::WooCommerce regression tests"
+            if php tests/woocommerce/run.php > /tmp/woocommerce-out 2>&1; then
+              tail -15 /tmp/woocommerce-out
+              echo "WooCommerce tests OK"
+            else
+              echo "FAIL  WooCommerce tests"
+              cat /tmp/woocommerce-out
+              TEST_FAILED="${TEST_FAILED}"$'\n'"WooCommerce test failed"$'\n'"$(tail -30 /tmp/woocommerce-out)"
+            fi
+            echo "::endgroup::"
+          fi
+
           echo "lint_errors=${LINT_ERRORS}" >> "$GITHUB_OUTPUT"
           {
             echo "test_output<<EOF"
@@ -262,7 +275,7 @@ jobs:
             }
 
             if (test && test.trim()) {
-              body += `## Pass 3 - payload dump test failure\n\n`;
+              body += `## Pass 3 - test failures\n\n`;
               body += '```\n' + test.trim() + '\n```\n\n';
             }
 

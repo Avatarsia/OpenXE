@@ -69,6 +69,8 @@ fix/woocommerce-order-import-pagination
 feature/woocommerce-batch-stock-sync
 # #267 Composer-based WC SDK — stacked on #266, must follow it
 refactor/woocommerce-composer-sdk
+# Functional parity and WooCommerce administration UI, based on the Composer SDK
+feature/woocommerce-functional-parity
 
 # UI: Dark Theme (token-based CSS, per-user switch auto/light/dark).
 # Touches theme CSS, page templates and inline styles across www/pages --

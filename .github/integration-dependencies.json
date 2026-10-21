@@ -7,6 +7,9 @@
     ],
     "refactor/woocommerce-composer-sdk": [
       "feature/woocommerce-batch-stock-sync"
+    ],
+    "feature/woocommerce-functional-parity": [
+      "refactor/woocommerce-composer-sdk"
     ]
   }
 }
