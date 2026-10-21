@@ -14,6 +14,7 @@ CI = "feature/ci-workflow"
 PAGINATION = "fix/woocommerce-order-import-pagination"
 BATCH = "feature/woocommerce-batch-stock-sync"
 SDK = "refactor/woocommerce-composer-sdk"
+PARITY = "feature/woocommerce-functional-parity"
 OVERRIDE = "config/production-remote-override"
 
 
@@ -32,8 +33,8 @@ class IntegrationConfigTest(unittest.TestCase):
         self.git("commit", "-qm", "upstream")
         self.base = self.git("rev-parse", "HEAD")
         self.git("update-ref", "refs/remotes/upstream/master", self.base)
-        self.branches = [CI, PAGINATION, BATCH, SDK, OVERRIDE]
-        parents = {BATCH: PAGINATION, SDK: BATCH}
+        self.branches = [CI, PAGINATION, BATCH, SDK, PARITY, OVERRIDE]
+        parents = {BATCH: PAGINATION, SDK: BATCH, PARITY: SDK}
         self.tips = {}
         for branch in self.branches:
             parent = self.tips.get(parents.get(branch), self.base)
@@ -43,7 +44,7 @@ class IntegrationConfigTest(unittest.TestCase):
         self.rules = {
             "first": CI,
             "last": OVERRIDE,
-            "requires": {BATCH: [PAGINATION], SDK: [BATCH]},
+            "requires": {BATCH: [PAGINATION], SDK: [BATCH], PARITY: [SDK]},
         }
         self.manifest = self.root / "manifest.txt"
         self.dependencies = self.root / "dependencies.json"
@@ -185,6 +186,32 @@ class IntegrationConfigTest(unittest.TestCase):
         result = self.run_workflow_script("Pass 1 - isolated merge tests")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(BATCH + ":upstream-patch.txt", self.output.read_text(encoding="utf-8"))
+
+    def test_optional_woocommerce_suite_is_skipped_when_absent(self):
+        result = self.run_workflow_script("Pass 3 - lint and tests")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("WooCommerce", self.output.read_text(encoding="utf-8"))
+
+    def test_woocommerce_suite_runs_successfully_on_candidate_files(self):
+        suite = self.repo / "tests" / "woocommerce"
+        suite.mkdir(parents=True)
+        (suite / "run.php").write_text(
+            "<?php file_put_contents(__DIR__ . '/executed', 'yes'); echo 'suite passed';\n",
+            encoding="utf-8",
+        )
+        result = self.run_workflow_script("Pass 3 - lint and tests")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((suite / "executed").exists(), result.stdout + result.stderr)
+        self.assertIn("suite passed", result.stdout)
+        self.assertNotIn("WooCommerce test failed", self.output.read_text(encoding="utf-8"))
+
+    def test_woocommerce_failure_without_output_is_reported(self):
+        suite = self.repo / "tests" / "woocommerce"
+        suite.mkdir(parents=True)
+        (suite / "run.php").write_text("<?php exit(1);\n", encoding="utf-8")
+        result = self.run_workflow_script("Pass 3 - lint and tests")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("WooCommerce test failed", self.output.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
