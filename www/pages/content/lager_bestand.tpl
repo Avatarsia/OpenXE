@@ -21,7 +21,7 @@
 
 [MESSAGE]
 [TAB1]
-	<i style="color:#999;">{|<sup>*</sup>bezieht sich auf den gesamten Artikelbestand|}</i>
+	<i class="text-muted">{|<sup>*</sup>bezieht sich auf den gesamten Artikelbestand|}</i>
 </div>
 
 

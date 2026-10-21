@@ -2,11 +2,11 @@
 
 
 .auftraginfo_cell {
-  color: #636363;border: 1px solid #ccc;padding: 5px;
+  color: var(--text-body);border: 1px solid var(--border);padding: 5px;
 }
 
 .auftrag_cell {
-  color: #636363;border: 1px solid #fff;padding: 0px; margin:0px;
+  color: var(--text-body);border: 1px solid var(--surface);padding: 0px; margin:0px;
 }
 
 </style>
@@ -32,7 +32,7 @@
 </td><td width="550">  
 
 <div style="overflow:scroll; height:550px; width:500px;">
-<div style="background-color:white">
+<div class="bg-surface">
 <h2 class="greyh2">Funktionen</h2>
 <div style="padding:10px;"><center>
 [BUTTONAUSLAGERN]<br>

@@ -33,6 +33,10 @@ CKEDITOR.editorConfig = function( config ) {
   config.removeButtons = 'Subscript,Superscript,Textarea,Form,BidiLtr,BidiRtl,Language,Flash,Smiley,PageBreak,Iframe,SelectAll,NewPage,Save,Templates,Checkbox,Radio,TextField,Button,Select,ImageButton,HiddenField,Outdent,Indent,Blockquote,CreateDiv,Print,Preview,ShowBlocks,About';
 
   config.removePlugins = 'elementspath'; 
+  // contents.css wird sonst beim Laden von ckeditor.js mit dem eingebauten
+  // Build-Timestamp aufgeloest; hier neu aufloesen, damit CKEDITOR.timestamp
+  // (Cache-Buster aus page.tpl/popup.tpl/popup_js.tpl) auch fuer den Editor-Inhalt greift.
+  config.contentsCss = CKEDITOR.getUrl( 'contents.css' );
 };
 
 CKEDITOR.on( 'instanceReady', function( ev ) {

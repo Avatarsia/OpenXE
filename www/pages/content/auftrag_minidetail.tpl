@@ -1,13 +1,13 @@
 <style>
     .auftraginfo_cell {
-        color: #636363;
-        border: 1px solid #ccc;
+        color: var(--text-body);
+        border: 1px solid var(--border);
         padding: 5px;
     }
 
     .auftrag_cell {
-        color: #636363;
-        border: 1px solid #fff;
+        color: var(--text-body);
+        border: 1px solid var(--surface);
         padding: 0px;
         margin: 0px;
     }
@@ -16,7 +16,7 @@
     <br>
     <center>[MENU]</center>
     <br>
-    <table style="font-size: 8pt; background: white; color: #333333; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
+    <table class="bg-surface text-strong" style="font-size: 8pt; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
         <tr>
             <td class="auftraginfo_cell" colspan="2" width="50%">
                 <b>{|Allgemein|}</b>
@@ -121,22 +121,22 @@
     <table width="100%">
         <tr> [RMAIF] <td style="background:[RMAFARBE]; padding: 5px; color: white; font-weight: bold;">RMA: <br>[RMATEXT] </td> [RMAELSE] <td style="" width="50%">[VERSANDTEXT]</td> [RMAENDIF] </tr>
     </table>
-    <div style="background-color:white">
+    <div class="bg-surface">
         <div style="padding:10px"> [RECHNUNGLIEFERADRESSE] </div>
     </div>
 </div>
 <div style="float:left; width:50%">
     <div style="overflow:auto;max-height:550px;">
-        <div style="background-color:white;">
+        <div class="bg-surface">
             <h2 class="greyh2">Artikel</h2>
-            <div style="padding:10px;"> [ARTIKEL] <i style="color:#999" [LAGERHIDDEN]>* Die linke Zahl zeigt die für den Kunden reservierten Einheiten und die rechte Zahl die global reservierte Anzahl.</i>
+            <div style="padding:10px;"> [ARTIKEL] <i class="text-muted" [LAGERHIDDEN]>* Die linke Zahl zeigt die für den Kunden reservierten Einheiten und die rechte Zahl die global reservierte Anzahl.</i>
             </div>
             <div [KOMMISSIONIERUNGHIDDEN]>
                 <h2 class="greyh2">Kommissionierung <a href="index.php?module=kommissionierung&action=print&id=[KOMMISSIONIERUNGID]">[KOMMISSIONIERUNGID]</a>
                 </h2>
                 <div style="padding:10px;"> [KOMMISSIONIERUNG] </div>
             </div>
-        </div> [MINIDETAILNACHARTIKEL] <div style="background-color:white" [DBHIDDEN]>
+        </div> [MINIDETAILNACHARTIKEL] <div class="bg-surface" [DBHIDDEN]>
             <h2 class="greyh2">{|Deckungsbeitrag (netto)|}</h2>
             <table width="100%">
                 <tbody>
@@ -155,20 +155,20 @@
                 </tbody>
             </table>
         </div>
-        <div style="background-color:white">
+        <div class="bg-surface">
             <h2 class="greyh2">{|Zahlungen|}</h2>
             <div style="padding:10px"> [ZAHLUNGEN] </div>
         </div>
-        <div style="background-color:white">
+        <div class="bg-surface">
             <h2 class="greyh2">{|Protokoll|}</h2>
             <div style="padding:10px;"> [PROTOKOLL] </div>
         </div> [VORPRODUKTIONPROTOKOLL] [PRODUKTIONPROTOKOLL] [NACHPRODUKTIONPROTOKOLL]
         <!--
-<div style="background-color:white"><h2 class="greyh2">{|RMA Prozess|}</h2><div style="padding:10px">
+<div class="bg-surface"><h2 class="greyh2">{|RMA Prozess|}</h2><div style="padding:10px">
       [RMA]
     </div></div>
 -->
-        <div style="background-color:white">
+        <div class="bg-surface">
             <h2 class="greyh2">{|PDF-Archiv|}</h2>
             <div style="padding:10px;overflow:auto;"> [PDFARCHIV] </div>
         </div> [INTERNEBEMERKUNGEDIT]
