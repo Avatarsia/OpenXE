@@ -25615,9 +25615,12 @@ function MailSendFinal($from,$from_name,$to,$to_name,$betreff,$text,$files="",$p
 
   function BeschriftungSprache($sprache='')
   {
-    if ($sprache == '') {
-        $this->beschriftung_sprache='deutsch';
-    } else {
+    if (empty($sprache)) {
+        if (empty($this->beschriftung_sprache)) {
+            $this->beschriftung_sprache='deutsch';
+        }
+    }
+    else {
         $this->beschriftung_sprache=strtolower(trim($sprache));
     }
   }
@@ -25886,8 +25889,6 @@ function MailSendFinal($from,$from_name,$to,$to_name,$betreff,$text,$files="",$p
     }
     return "Beschriftung fehlt (".$this->beschriftung_sprache."): ".$field; // Not found!
   }
-
-
 
   function FirmendatenSet($field,$value)
   {
