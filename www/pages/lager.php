@@ -2654,6 +2654,13 @@ class Lager extends GenLager {
       //z.B. es liegen 1 1 5 und man will 6 haben
       $checkregal = $this->app->DB->Select("SELECT id FROM lager_platz WHERE id='$regal' LIMIT 1");
       $checkregalneu = $this->app->DB->Select("SELECT id FROM lager_platz WHERE id='$regalneu' LIMIT 1");
+
+        if ($checkregal == $checkregalneu && !empty($checkregal)) {
+            $menge = $this->app->erp->ArtikelImLagerPlatz($artikel,$regal)+0;
+            $this->app->Tpl->Add('MESSAGE', "<div class=\"info\">{|Alle Artikel gewählt.|}</div>");
+            $regalneu = '';
+        }
+
       if (($regal != '' && $checkregal == $regal) && $error == 0) {
         //regal gibt schon mal liegt jetzt der artikel noch in diesem regal?
         $summe = $this->app->DB->Select("SELECT SUM(menge) FROM lager_platz_inhalt WHERE lager_platz='$regal' AND artikel='$artikel'")+0;
@@ -3195,15 +3202,6 @@ $check_charge=="2" || $check_charge=="1" || $check_mhd=="1")
           $this->app->Tpl->Add('ZWISCHENLAGERINFO', "<tr ><td>Regalvorschlag:</td><td align=\"left\"><input type=\"button\" onclick=\"document.getElementById('regal').value='$lagerbezeichnung'\" value=\"$lagerbezeichnung\" >$mengeimregal Stück<br>$standardlageranzeigenohnemenge</td></tr>");
 
           $this->app->Tpl->Set('FOCUSFIELD','document.getElementById("regal").focus();');
-          if ($menge == 1) {
-              $menge = $this->app->erp->ArtikelImLagerPlatz($artikel,$regal)+0;
-              $mengecolor = "#FFAAAA";
-              $mengereadonly = "false";
-              $mengefontsize = "document.getElementById('menge').style.fontSize = '200%';";
-          } else {
-              $mengecolor = "#ececec";
-              $mengereadonly = "true";
-          }
 
           // Umlagern Zielregal
           $this->app->Tpl->Add('ZWISCHENLAGERINFO', "<tr valign=\"top\"><td><b>Zielregal:</b></td><td align=\"left\"><input type=\"text\" style=\"width:200px;border: 2px solid red\" name=\"regalneu\" id=\"regal\" value=\"\"><script type=\"text/javascript\">
