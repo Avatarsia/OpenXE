@@ -1,8 +1,12 @@
 # Production Build Workflow
 
 Manually started GitHub Actions workflow that rebuilds the `production` branch
-from the current `upstream/master` plus all active feature branches
+from the current `upstream/1.13` plus all active feature branches
 listed in `.github/integration-branches.txt` on `feature/ci-workflow`.
+
+The production build is based on the openxe-org/openxe branch `1.13`
+(configured once as `UPSTREAM_BASE` in `build-production.yml`) and
+requires PHP 8.3+.
 
 ## When it runs
 
@@ -29,7 +33,7 @@ branch's Git history. Disabled child branches do not require their parents.
 
 ### Pass 1 - isolated merge tests
 
-Each integration branch is merged against `upstream/master` alone on a
+Each integration branch is merged against `upstream/1.13` alone on a
 throwaway branch. This detects conflicts between the branch and the upstream
 base (i.e. upstream has moved in a way that no longer matches the branch).
 
@@ -50,7 +54,7 @@ Only runs if Pass 2 is clean.
 ### Push
 
 Only runs if all three passes are clean. `production-candidate` is
-checked to contain the freshly fetched `upstream/master`, then force-pushed
+checked to contain the freshly fetched `upstream/1.13`, then force-pushed
 onto `origin/production` via `--force-with-lease`. Upstream is always the build
 base; the workflow never automatically rebases or force-pushes feature branches.
 Merge conflicts require a targeted update of the affected feature branch.
@@ -115,12 +119,12 @@ restore the branch or remove it from the manifest on `feature/ci-workflow`.
 
 ### Workflow keeps failing on a feature branch
 
-Rebase that feature branch on the current `upstream/master` manually:
+Rebase that feature branch on the current `upstream/1.13` manually:
 
 ```bash
 git fetch upstream
 git checkout feature/xyz
-git rebase upstream/master
+git rebase upstream/1.13
 # resolve conflicts
 git push --force-with-lease
 ```

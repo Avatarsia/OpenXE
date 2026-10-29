@@ -16,6 +16,8 @@ BATCH = "feature/woocommerce-batch-stock-sync"
 SDK = "refactor/woocommerce-composer-sdk"
 PARITY = "feature/woocommerce-functional-parity"
 OVERRIDE = "config/production-remote-override"
+UPSTREAM_BASE = "1.13"
+UPSTREAM_REF = "refs/remotes/upstream/" + UPSTREAM_BASE
 
 
 class IntegrationConfigTest(unittest.TestCase):
@@ -32,7 +34,7 @@ class IntegrationConfigTest(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-qm", "upstream")
         self.base = self.git("rev-parse", "HEAD")
-        self.git("update-ref", "refs/remotes/upstream/master", self.base)
+        self.git("update-ref", UPSTREAM_REF, self.base)
         self.branches = [CI, PAGINATION, BATCH, SDK, PARITY, OVERRIDE]
         parents = {BATCH: PAGINATION, SDK: BATCH, PARITY: SDK}
         self.tips = {}
@@ -90,7 +92,7 @@ class IntegrationConfigTest(unittest.TestCase):
             bash = str(Path(shutil.which("git")).parents[1] / "bin" / "bash.exe")
         return subprocess.run(
             [bash, "-eo", "pipefail", "-c", script], cwd=self.repo,
-            env={**os.environ, "GITHUB_OUTPUT": self.output.as_posix()},
+            env={**os.environ, "GITHUB_OUTPUT": self.output.as_posix(), "UPSTREAM_BASE": UPSTREAM_BASE},
             capture_output=True, text=True, encoding="utf-8",
         )
 
@@ -166,7 +168,7 @@ class IntegrationConfigTest(unittest.TestCase):
         self.git("add", ".")
         self.git("commit", "-qm", "new upstream patch")
         upstream = self.git("rev-parse", "HEAD")
-        self.git("update-ref", "refs/remotes/upstream/master", upstream)
+        self.git("update-ref", UPSTREAM_REF, upstream)
         result = self.run_workflow_script("Pass 2 - full integration build")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.git("merge-base", upstream, "production-candidate"), upstream)
@@ -182,7 +184,7 @@ class IntegrationConfigTest(unittest.TestCase):
         (self.repo / "upstream-patch.txt").write_text("new upstream fix\n", encoding="utf-8")
         self.git("add", ".")
         self.git("commit", "-qm", "upstream changes same line")
-        self.git("update-ref", "refs/remotes/upstream/master", self.git("rev-parse", "HEAD"))
+        self.git("update-ref", UPSTREAM_REF, self.git("rev-parse", "HEAD"))
         result = self.run_workflow_script("Pass 1 - isolated merge tests")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(BATCH + ":upstream-patch.txt", self.output.read_text(encoding="utf-8"))

@@ -1,12 +1,13 @@
 name: Build Production
 
-# Manual rebuild of the production branch from upstream/master plus
+# Manual rebuild of the production branch from upstream/$UPSTREAM_BASE
+# (openxe-org/openxe branch 1.13, see env.UPSTREAM_BASE) plus
 # all integration branches listed on feature/ci-workflow.
 #
 # Trigger via:  gh workflow run build-production.yml --repo Avatarsia/OpenXE
 #
 # Strategy: three passes, all-or-nothing.
-#   Pass 1 - isolated merge test against upstream/master for each branch
+#   Pass 1 - isolated merge test against upstream/$UPSTREAM_BASE for each branch
 #   Pass 2 - full integration merge in manifest order
 #   Pass 3 - PHP lint + payload dump and WooCommerce regression tests
 #
@@ -25,6 +26,9 @@ permissions:
   contents: write
   issues: write
 
+env:
+  UPSTREAM_BASE: '1.13'
+
 jobs:
   build:
     name: Build and test production
@@ -40,7 +44,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.1'
+          php-version: '8.3'
           tools: none
           coverage: none
 
@@ -52,7 +56,7 @@ jobs:
       - name: Add upstream remote and fetch all refs
         run: |
           git remote add upstream https://github.com/openxe-org/openxe.git
-          git fetch upstream --no-tags master
+          git fetch upstream --no-tags "$UPSTREAM_BASE"
           git fetch origin --no-tags
 
       - name: Load integration branch manifest
@@ -61,7 +65,7 @@ jobs:
           CONTROL_SHA=$(git rev-parse refs/remotes/origin/feature/ci-workflow)
           git checkout --detach "$CONTROL_SHA"
           echo "Integration configuration: feature/ci-workflow at $CONTROL_SHA"
-          echo "Upstream base: $(git rev-parse upstream/master)"
+          echo "Upstream base: upstream/$UPSTREAM_BASE at $(git rev-parse "upstream/$UPSTREAM_BASE")"
           python3 .github/scripts/validate-integration.py --github-output "$GITHUB_OUTPUT"
 
       - name: Pass 1 - isolated merge tests
@@ -75,7 +79,7 @@ jobs:
             [ -z "$BRANCH" ] && continue
             echo "::group::Pass 1 - testing $BRANCH in isolation"
 
-            git checkout -q -B integration-test upstream/master
+            git checkout -q -B integration-test "upstream/$UPSTREAM_BASE"
 
             if ! git rev-parse --verify "origin/$BRANCH" >/dev/null 2>&1; then
               echo "::warning::Branch origin/$BRANCH does not exist on remote"
@@ -85,8 +89,8 @@ jobs:
             fi
 
             if git merge --no-ff --no-commit "origin/$BRANCH" >/dev/null 2>&1; then
-              echo "OK  $BRANCH merges cleanly against upstream/master"
-              git reset --hard upstream/master >/dev/null 2>&1
+              echo "OK  $BRANCH merges cleanly against upstream/$UPSTREAM_BASE"
+              git reset --hard "upstream/$UPSTREAM_BASE" >/dev/null 2>&1
             else
               CONFLICT_FILES=$(git diff --name-only --diff-filter=U | tr '\n' ',' | sed 's/,$//')
               if [ -z "$CONFLICT_FILES" ]; then
@@ -94,7 +98,7 @@ jobs:
               fi
               echo "FAIL  $BRANCH has conflicts in: $CONFLICT_FILES"
               CONFLICTS="${CONFLICTS}|${BRANCH}:${CONFLICT_FILES}"
-              git merge --abort 2>/dev/null || git reset --hard upstream/master >/dev/null 2>&1
+              git merge --abort 2>/dev/null || git reset --hard "upstream/$UPSTREAM_BASE" >/dev/null 2>&1
             fi
 
             echo "::endgroup::"
@@ -103,7 +107,7 @@ jobs:
           if [ -n "$CONFLICTS" ]; then
             echo "Pass 1 found conflicts"
           else
-            echo "Pass 1 clean - all branches merge against upstream/master"
+            echo "Pass 1 clean - all branches merge against upstream/$UPSTREAM_BASE"
           fi
           echo "conflicts=${CONFLICTS}" >> "$GITHUB_OUTPUT"
 
@@ -113,7 +117,7 @@ jobs:
         run: |
           set +e
 
-          git checkout -q -B production-candidate upstream/master
+          git checkout -q -B production-candidate "upstream/$UPSTREAM_BASE"
 
           FAILED=""
           while IFS= read -r BRANCH; do
@@ -228,7 +232,7 @@ jobs:
       - name: Push production on success
         if: steps.status.outputs.ok == 'true'
         run: |
-          git merge-base --is-ancestor upstream/master production-candidate
+          git merge-base --is-ancestor "upstream/$UPSTREAM_BASE" production-candidate
           git checkout production
           git reset --hard production-candidate
           git push --force-with-lease origin production
@@ -263,7 +267,7 @@ jobs:
               return section + '\n';
             };
 
-            body += renderConflicts('Pass 1 - isolated merge conflicts against upstream/master', pass1);
+            body += renderConflicts('Pass 1 - isolated merge conflicts against upstream/${{ env.UPSTREAM_BASE }}', pass1);
             body += renderConflicts('Pass 2 - cross-feature integration conflicts', pass2);
 
             if (lint && lint.trim()) {
@@ -281,7 +285,7 @@ jobs:
 
             body += `## Next steps\n\n`;
             body += `1. Check out the failing feature branch(es) locally\n`;
-            body += `2. Rebase on \`upstream/master\` and resolve conflicts\n`;
+            body += `2. Rebase on \`upstream/${{ env.UPSTREAM_BASE }}\` and resolve conflicts\n`;
             body += `3. Push the fixed branch\n`;
             body += `4. Trigger the workflow manually via Actions -> Build Production -> Run workflow (branch feature/ci-workflow)\n\n`;
             body += `The \`production\` branch was NOT updated and still holds the last known-good state.\n`;

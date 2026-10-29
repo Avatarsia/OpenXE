@@ -1,8 +1,9 @@
 # Integration branch manifest for the manually requested production build.
 #
 # One branch per line. Lines starting with # or blank lines are ignored.
-# The workflow merges these branches in order on top of upstream/master
-# (https://github.com/openxe-org/openxe master).
+# The workflow merges these branches in order on top of upstream/1.13
+# (https://github.com/openxe-org/openxe branch 1.13, see UPSTREAM_BASE
+# in .github/workflows/build-production.yml).
 #
 # Order matters when branches have dependencies between each other.
 # Put foundational branches first, mini-patches last.
