@@ -10,6 +10,9 @@
     ],
     "feature/woocommerce-functional-parity": [
       "refactor/woocommerce-composer-sdk"
+    ],
+    "fix/woocommerce-digital-order-import": [
+      "feature/woocommerce-functional-parity"
     ]
   }
 }

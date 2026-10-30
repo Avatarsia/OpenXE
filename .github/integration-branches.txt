@@ -72,6 +72,8 @@ feature/woocommerce-batch-stock-sync
 refactor/woocommerce-composer-sdk
 # Functional parity and WooCommerce administration UI, based on the Composer SDK
 feature/woocommerce-functional-parity
+# Targeted digital order recovery and completed-status preservation; requires functional parity
+fix/woocommerce-digital-order-import
 
 # UI: Dark Theme (token-based CSS, per-user switch auto/light/dark).
 # Touches theme CSS, page templates and inline styles across www/pages --
