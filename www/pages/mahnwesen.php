@@ -67,7 +67,7 @@ class Mahnwesen {
                     r.belegnr, 
                     ".$app->erp->FormatDateShort('r.datum')." as vom,
                     if(r.kundennummer <> '',r.kundennummer,adr.kundennummer),
-                    CONCAT(" . $app->erp->MarkerUseredit("r.name", "r.useredittimestamp") . ", if(r.internebezeichnung!='',CONCAT('<br><i style=color:#999>',r.internebezeichnung,'</i>'),'')) as kunde,
+                    CONCAT(" . $app->erp->MarkerUseredit("r.name", "r.useredittimestamp") . ", if(r.internebezeichnung!='',CONCAT('<br><i class=text-muted>',r.internebezeichnung,'</i>'),'')) as kunde,
                     r.land as land,
                     p.abkuerzung as projekt,
                     r.zahlungsweise as zahlungsweise,

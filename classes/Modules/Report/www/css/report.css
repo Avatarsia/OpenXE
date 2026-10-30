@@ -8,12 +8,12 @@
 }
 
 #reportEditResult {
-    background-color: #d3d3d345;
+    background-color: var(--surface-muted);
 }
 
 #reportEditResult[error="true"] {
     color: orangered;
-    background-color: #d3d3d345;
+    background-color: var(--surface-muted);
 }
 
 #dirtyWarning {
@@ -34,7 +34,7 @@ textarea {
 }
 
 textarea[readonly] {
-    background-color: #d3d3d345;
+    background-color: var(--surface-muted);
 }
 
 .textarea-label {
@@ -164,7 +164,7 @@ a.table-button-delete {
 }
 
 .svg-favorite.favorite-on .svg-fill {
-    fill: #ffb628;
+    fill: var(--warning-accent);
 }
 
 .report .tooltip-content {

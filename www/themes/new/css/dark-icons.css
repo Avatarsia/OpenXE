@@ -1,0 +1,219 @@
+/*
+ * dark-icons.css - Icon-Anpassung fuer das Dark Theme.
+ *
+ * Steuerung ueber die Klasse "openXeDarkMode" auf <html> (gesetzt von
+ * themes/new/js/colorscheme.js; "auto" folgt prefers-color-scheme).
+ *
+ * Ansatz: Bitmap- und SVG-Icons, die als <img> eingebunden sind, werden per
+ * CSS-Filter invertiert. Die SVG-Quelldateien werden NICHT veraendert:
+ * ein Umbau auf fill="currentColor" hat bei <img>-Einbindung keine Wirkung
+ * (der Farbkontext des Dokuments wird nicht in das SVG-Dokument vererbt) und
+ * wuerde die Icons stattdessen schwarz rendern.
+ *
+ * Klassifikation der 481 Dateien in www/themes/new/images:
+ *   (a) monochrom grau/schwarz auf hellem oder transparentem Grund -> invertieren (168)
+ *   (b) farbig / Signal / Logo / Foto / weiss-auf-hell -> unveraendert (309)
+ *   (--) leere Platzhalter (spacer.gif, blindgif.gif, 1x1t.gif, none.png) -> egal (4)
+ *
+ * Die Ausnahmen unten sind nach Namensmustern gruppiert. Sie stehen bewusst
+ * NACH der Basisregel: gleiche Spezifitaet, spaetere Regel gewinnt.
+ *
+ * Nicht abgedeckt: Icons, die per background-image in styles.css gesetzt werden
+ * (39 Stellen). Die bleiben unveraendert und werden separat behandelt.
+ */
+
+
+/* --- Basisregel -------------------------------------------------------
+ * Die src-Pfade in Templates und PHP-Seiten lauten "./themes/new/images/",
+ * "themes/new/images/", "/themes/[THEME]/images/" oder
+ * "./themes/[THEME]/images/". [THEME] wird zur Laufzeit durch den
+ * Theme-Namen ersetzt (aktuell existiert nur "new"), damit endet jede
+ * Variante im gerenderten HTML auf "/new/images/".
+ */
+html.openXeDarkMode img[src*="/new/images/"] {
+    filter: invert(0.85) hue-rotate(180deg);
+}
+
+/* --- Ausnahme 1: Fotos, Logos, Branding, Dokument-Vorschauen ---------- */
+html.openXeDarkMode img[src$=".jpg"],
+html.openXeDarkMode img[src$=".jpeg"],
+html.openXeDarkMode img[src*="xentral" i],
+html.openXeDarkMode img[src*="openxe" i],
+html.openXeDarkMode img[src*="logo_gruen"],
+html.openXeDarkMode img[src*="favicon"],
+html.openXeDarkMode img[src*="app-icon"],
+html.openXeDarkMode img[src*="appstore"],
+html.openXeDarkMode img[src*="wawibox"],
+html.openXeDarkMode img[src*="consultant"],
+html.openXeDarkMode img[src*="embedded_projects"],
+html.openXeDarkMode img[src*="background_alert"],
+html.openXeDarkMode img[src*="dateien"],
+html.openXeDarkMode img[src*="module=dateien"],
+html.openXeDarkMode .sidebar-logo,
+html.openXeDarkMode .sidebar-logo img,
+html.openXeDarkMode #sidebar img {
+    filter: none;
+}
+
+/* --- Ausnahme 2: Farbnamen im Dateinamen (Signalfarben) --------------- */
+html.openXeDarkMode img[src*="_green"],
+html.openXeDarkMode img[src*="_red"],
+html.openXeDarkMode img[src*="_gruen"],
+html.openXeDarkMode img[src*="_rot"],
+html.openXeDarkMode img[src*="_gelb"],
+html.openXeDarkMode img[src*="_blau"],
+html.openXeDarkMode img[src*="_grey"],
+html.openXeDarkMode img[src*="grey.png"],
+html.openXeDarkMode img[src*="blue.png"],
+html.openXeDarkMode img[src*="orange.png"],
+html.openXeDarkMode img[src*="semaphore"],
+html.openXeDarkMode img[src*="ampel"] {
+    filter: none;
+}
+
+/* --- Ausnahme 3: Go/Stop-Ampeln -------------------------------------- */
+html.openXeDarkMode img[src*="go.png"],
+html.openXeDarkMode img[src*="stop.png"],
+html.openXeDarkMode img[src*="go.svg"],
+html.openXeDarkMode img[src*="go_"],
+html.openXeDarkMode img[src*="gostop"],
+html.openXeDarkMode img[src*="checkgo"],
+html.openXeDarkMode img[src*="checkstop"],
+html.openXeDarkMode img[src*="check_stop"] {
+    filter: none;
+}
+
+/* --- Ausnahme 4: fachliche Status-Icon-Familien ----------------------- *
+ * Diese Familien enthalten farbige (gruen/rot/gelb) und graue Zustaende,
+ * die nebeneinander in derselben Tabellenspalte stehen. Sie werden als
+ * Ganzes ausgenommen, damit die Familie optisch konsistent bleibt.
+ */
+html.openXeDarkMode img[src*="auftrag_"],
+html.openXeDarkMode img[src*="lager"],
+html.openXeDarkMode img[src*="gelagert"],
+html.openXeDarkMode img[src*="einlagern"],
+html.openXeDarkMode img[src*="ware_"],
+html.openXeDarkMode img[src*="zeit"],
+html.openXeDarkMode img[src*="status"],
+html.openXeDarkMode img[src*="warten"],
+html.openXeDarkMode img[src*="support_"],
+html.openXeDarkMode img[src*="pluspaket_"],
+html.openXeDarkMode img[src*="vertrag_"],
+html.openXeDarkMode img[src*="sales_"],
+html.openXeDarkMode img[src*="delivery"],
+html.openXeDarkMode img[src*="lieferung"],
+html.openXeDarkMode img[src*="liefersperre"],
+html.openXeDarkMode img[src*="termin"],
+html.openXeDarkMode img[src*="nachnahme"],
+html.openXeDarkMode img[src*="kreditlimit"],
+html.openXeDarkMode img[src*="porto"],
+html.openXeDarkMode img[src*="ustgo"],
+html.openXeDarkMode img[src*="uststop"],
+html.openXeDarkMode img[src*="vorkasse"],
+html.openXeDarkMode img[src*="summe_"],
+html.openXeDarkMode img[src*="packing"],
+html.openXeDarkMode img[src*="bestellung"],
+html.openXeDarkMode img[src*="autoversand"],
+html.openXeDarkMode img[src*="mahnung"],
+html.openXeDarkMode img[src*="versand"],
+html.openXeDarkMode img[src*="versenden"],
+html.openXeDarkMode img[src*="dokument"],
+html.openXeDarkMode img[src*="abgeschlossen"],
+html.openXeDarkMode img[src*="closed_"],
+html.openXeDarkMode img[src*="storno"],
+html.openXeDarkMode img[src*="health-"],
+html.openXeDarkMode img[src*="sign-"],
+html.openXeDarkMode img[src*="in_shop"],
+html.openXeDarkMode img[src*="able.png"],
+html.openXeDarkMode img[src*="ok.png"],
+html.openXeDarkMode img[src*="produkt"]:not([src*="_aktion_"]) {
+    filter: none;
+}
+
+/* --- Ausnahme 5: ganze Verzeichnisse ---------------------------------- *
+ * nav/      farbige Pfeil-Buttons
+ * sidebar/  weisse bzw. hellgraue Strich-Icons auf dunkler Navigation
+ *           (werden ueberwiegend inline eingebunden, Regel ist Absicherung)
+ * einstellungen/*.svg  bunte Kategorie-Icons; die Icons_dunkel_*.gif im
+ *           selben Ordner sind dunkelgrau und bleiben invertiert
+ * module/   bunte Modul-Icons und weisse Icon_*_64.gif; nur die
+ *           _dunkel-Varianten und Icon_Logout_gross.gif werden invertiert
+ */
+html.openXeDarkMode img[src*="/nav/"],
+html.openXeDarkMode img[src*="/sidebar/"],
+html.openXeDarkMode img[src*="/einstellungen/"][src$=".svg"],
+html.openXeDarkMode img[src*="/module/"]:not([src*="_dunkel"]):not([src*="Logout"]) {
+    filter: none;
+}
+
+/* --- Ausnahme 6: weisse bzw. sehr helle Icons auf transparentem Grund - *
+ * Diese wuerden durch die Inversion schwarz und damit unsichtbar.
+ * Identifiziert ueber SVG-fill/stroke (#FFFFFF, #F8FFFF, #CCCCCC, #D6D7D9)
+ * bzw. ueber den Anteil heller Pixel bei Bitmaps.
+ */
+html.openXeDarkMode img[src*="menue_arrow"],
+html.openXeDarkMode img[src*="menue_hgr"],
+html.openXeDarkMode img[src*="caret_light"],
+html.openXeDarkMode img[src*="mobile-close"],
+html.openXeDarkMode img[src*="loading"],
+html.openXeDarkMode img[src*="_disabled"],
+html.openXeDarkMode img[src*="warning"],
+html.openXeDarkMode img[src$="/info.png"],
+html.openXeDarkMode img[src$="/error.png"],
+html.openXeDarkMode img[src*="dialog_"],
+html.openXeDarkMode img[src*="links_"],
+html.openXeDarkMode img[src*="@1x.svg"],
+html.openXeDarkMode img[src*="@2x"],
+html.openXeDarkMode img[src*="icon-checkmark"],
+html.openXeDarkMode img[src*="icon-progress"],
+html.openXeDarkMode img[src*="icon-remove"],
+html.openXeDarkMode img[src*="icon-close"],
+html.openXeDarkMode img[src*="icon-thin-arrow"],
+html.openXeDarkMode img[src*="remove-icon"] {
+    filter: none;
+}
+
+/* --- Ausnahme 7: farbige SVG-Icons ------------------------------------ */
+html.openXeDarkMode img[src*="-icon.svg"],
+html.openXeDarkMode img[src*="icon-ok"],
+html.openXeDarkMode img[src*="icon-invisible"],
+html.openXeDarkMode img[src*="icon-slim-arrow"],
+html.openXeDarkMode img[src*="question-circle"],
+html.openXeDarkMode img[src*="thanks-smiley"],
+html.openXeDarkMode img[src*="bank_"] {
+    filter: none;
+}
+
+/* --- Ausnahme 8: einzelne farbige Bitmaps ohne gemeinsames Muster ----- */
+html.openXeDarkMode img[src*="chat_prio"],
+html.openXeDarkMode img[src*="mail-mark"],
+html.openXeDarkMode img[src*="reload_all_tabs"],
+html.openXeDarkMode img[src*="btn_los"],
+html.openXeDarkMode img[src*="delete.gif"],
+html.openXeDarkMode img[src*="forderungsverlust"],
+html.openXeDarkMode img[src*="icons_neu_klein"],
+html.openXeDarkMode img[src*="hilfe.png"],
+html.openXeDarkMode img[src*="neu.png"],
+html.openXeDarkMode img[src*="offen.png"],
+html.openXeDarkMode img[src*="split.png"],
+html.openXeDarkMode img[src*="loeschen"],
+html.openXeDarkMode img[src*="success.png"],
+html.openXeDarkMode img[src*="disable.png"],
+html.openXeDarkMode img[src*="wizard-step"],
+html.openXeDarkMode img[src$="/up.png"],
+html.openXeDarkMode img[src$="/down.png"],
+html.openXeDarkMode img[src$="/right.png"],
+html.openXeDarkMode img[src$="/arrow.png"],
+html.openXeDarkMode img[src$="/expand.png"] {
+    filter: none;
+}
+
+/* Monochrome CSS-Background-Icons aus styles.css (nur Elemente ohne Text/Kinder).
+   Nicht gefiltert: #sidebar .sidebar-submenu:before (Sidebar ist in beiden Modi dunkel),
+   input.search-input und input.ui-autocomplete-input (Filter wuerde Eingabetext invertieren). */
+html.openXeDarkMode #back-to-overview:before,
+html.openXeDarkMode .filter-title .filter-icon,
+html.openXeDarkMode .icon.icon-tooltip {
+    filter: invert(0.85) hue-rotate(180deg);
+}
+

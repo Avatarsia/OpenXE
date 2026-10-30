@@ -1,11 +1,11 @@
 <style>
 
 .auftraginfo_cell {
-  color: #636363;border: 1px solid #ccc;padding: 5px;
+  color: var(--text-body);border: 1px solid var(--border);padding: 5px;
 }
 
 .auftrag_cell {
-  color: #636363;border: 1px solid #fff;padding: 0px; margin:0px;
+  color: var(--text-body);border: 1px solid var(--surface);padding: 0px; margin:0px;
 }
 
 </style>
@@ -17,7 +17,7 @@
 <br>
 <table height="250" width="100%">
 <tr valign="top"><td>
-<table cellspacing="0" cellpadding="0" style="font-size: 8pt; background: white; color: #333333; border-collapse: collapse;" width="100%">
+<table cellspacing="0" cellpadding="0" class="bg-surface text-strong" style="font-size: 8pt; border-collapse: collapse;" width="100%">
 <tr><td class="auftraginfo_cell" width="100">Aufgabe: </td><td colspan="4"  class="auftraginfo_cell">[AUFGABE]</td></tr>
 <tr><td class="auftraginfo_cell">Mitarbeiter: </td><td colspan="4"  class="auftraginfo_cell">[MITARBEITER]</td></tr>
 <tr><td class="auftraginfo_cell">Kunde: </td><td colspan="4"  class="auftraginfo_cell">[KUNDE]</td></tr>
@@ -37,7 +37,7 @@
 
  <div style="overflow:auto; max-height:550px">
 <!--
-<div style="background-color:white">
+<div class="bg-surface">
 <h2 class="greyh2">Artikel</h2>
 <div style="padding:10px;overflow:auto; width:500px;">
   [ARTIKEL]
@@ -46,19 +46,19 @@
 
 
 
-<div style="background-color:white">
+<div class="bg-surface">
 <h2 class="greyh2">Protokoll</h2>
 <div style="padding:10px;overflow:auto; width:500px;">
   [PROTOKOLL]
 </div>
 </div>
-<div style="background-color:white">
+<div class="bg-surface">
 <h2 class="greyh2">PDF-Archiv</h2>
 <div style="padding:10px;overflow:auto; width:500px;">
   [PDFARCHIV]
 </div>
 </div>
-<div style="background-color:white">
+<div class="bg-surface">
 <h2 class="greyh2">Deckungsbeitrag</h2>
 <div style="padding:10px">
 -->

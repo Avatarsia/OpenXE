@@ -11,13 +11,13 @@
 
 #learning-dashboard-container,
 #learning-dashboard-container h4 {
-    color: rgba(55, 64, 81, 0.6);
+    color: var(--text-body);
 }
 
 #learning-dashboard-container h2,
 #learning-dashboard-container h3,
 #learning-dashboard-container h4 {
-    color: #374051;
+    color: var(--text-strong);
     font-weight: normal;
     padding: 0;
     margin: 0;
@@ -101,7 +101,7 @@
 #learning-dashboard-container .progress-ring-border-circle {
     transform: rotate(130deg);
     transform-origin: 50% 50%;
-    stroke: rgba(204, 204, 204, 0.5);
+    stroke: var(--border);
     stroke-dasharray: 270, 270;
 }
 
@@ -177,7 +177,7 @@
 }
 
 #learning-dashboard-container .dashboard-lesson.active h4 {
-    color: #374051
+    color: var(--text-strong)
 }
 
 #learning-dashboard-container .dashboard-lesson.active path {
@@ -195,7 +195,7 @@
 }
 
 #learning-dashboard-container .cta-button {
-    color: white;
+    color: var(--text-inverse);
     height: 35px;
     width: 100%;
     border-radius: 3px;
@@ -231,7 +231,7 @@
 }
 
 #learning-dashboard-container .task:hover {
-    box-shadow: 0 2px 4px rgba(28, 41, 90, 0.2);
+    box-shadow: 0 2px 4px var(--shadow);
 }
 
 #learning-dashboard-container .task .button {
@@ -256,7 +256,7 @@
     height: 22px;
     right: 20px;
     top: 20px;
-    background: #D7DFE9;
+    background: var(--surface-strong);
     border-radius: 22px;
     line-height: 23px;
     text-align: center;
@@ -287,7 +287,7 @@
 #learning-dashboard-container .task .task-details{
     position: absolute;
     width: 100%;
-    background-color: white;
+    background-color: var(--surface);
     top:0;
     left: 0;
     right:0;
@@ -300,7 +300,7 @@
 }
 
 #learning-dashboard-container .task-details .task-details-header{
-    border-bottom: 1px solid #EBEFF2;
+    border-bottom: 1px solid var(--border);
 }
 
 #learning-dashboard-container .task-details .task-details-content{

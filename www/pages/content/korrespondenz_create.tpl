@@ -1,6 +1,6 @@
 <style>
 	* {
-	color: #000000;
+	color: var(--text-strong);
 font-family: "Arial", "Helvetica", sans-serif;
 font-size: 8pt;
 line-height: 1.4;
