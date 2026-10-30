@@ -133,7 +133,7 @@ final class ResultDetail implements JsonSerializable
     /**
      * @return array|false
      */
-    public function jsonSerialize()
+    public function jsonSerialize(): mixed
     {
         if (!$this->isValid()) {
             return false;
