@@ -27,6 +27,7 @@ class Prozessstarter extends GenProzessstarter {
   protected $currentCronjobName;
   /** @var int */
   protected $parentId;
+  protected $runtimeMini = false;
 
   private \Psr\Log\LoggerInterface $logger;
 
@@ -533,6 +534,12 @@ class Prozessstarter extends GenProzessstarter {
    * @return string
    */
   protected function getChart($dateFrom, $dateTo, $cronjobId = 0, $limit = 0, $mini = false) {
+    if($this->runtimeMini) {
+      $now = new DateTimeImmutable();
+      $dateFrom = $now->sub(new DateInterval('P30D'))->format('Y-m-d H:i:s');
+      $dateTo = $now->format('Y-m-d H:i:s');
+      $mini = true;
+    }
     $from = new DateTimeImmutable($dateFrom);
     $to = new DateTimeImmutable($dateTo);
     if($to <= $from) {
@@ -635,11 +642,15 @@ class Prozessstarter extends GenProzessstarter {
   }
 
   public function ProzessstarterMinidetail() {
+    $this->runtimeMini = true;
     $cronjobId = (int)$this->app->Secure->GetGET('id');
-    $to = new DateTimeImmutable();
-    $from = $to->sub(new DateInterval('P30D'));
-    echo $this->getChart($from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s'), $cronjobId, 0, true);
-
+    $dateFrom = $this->getDatesFromForm('','',true);
+    $dateFrom = reset($dateFrom);
+    $dateTo = $this->getDatesFromForm('','',false);
+    $dateTo = reset($dateTo);
+    echo $this->getChart($dateFrom, $dateTo, $cronjobId);
+    echo '<script type="text/javascript" src="./js/chart-helper.js?v=2" ></script>';
+
     $lastCronjobLogs = $this->app->DB->SelectFirstCols(
       sprintf(
         'SELECT `id` FROM `cronjob_log` WHERE `cronjob_id` = %d AND `parent_id` = 0 ORDER BY `id` DESC LIMIT 5',
