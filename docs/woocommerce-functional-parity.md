@@ -21,6 +21,21 @@ Branch: `feature/woocommerce-functional-parity`, based on `refactor/woocommerce-
 - **Kategoriezuordnung** (`categorySyncMode`): `additive` preserves existing shop assignments; `replace` explicitly makes the exported OpenXE category list authoritative, including an empty list.
 - **Explizite WooCommerce-Downloadfelder exportieren** (`exportDownloads`): disabled by default for parent products and variants. When enabled, explicitly supplied `downloadable`, `virtual` and `downloads` fields are mapped. Public document attachments are never inferred to be paid downloads. The WooCommerce shop administration now provides per-article download names and HTTP/HTTPS file URLs. Articles without a UI override retain their existing Smarty JSON transformation; download file URLs must be provisioned appropriately on the shop.
 - **Erster Aenderungsabgleich ab UTC** (`importModifiedFrom`): optional `YYYY-MM-DDTHH:MM:SS` used only before the first modification journal is created.
+- **Abgeschlossene Bestellungen mit abholen** (`importCompletedOrders`): disabled by default. Enable this to import native `completed` orders and the configured finished status in addition to the existing import-status list. Import acknowledgement preserves completed/finished statuses and download access. Existing shop status settings are not rewritten.
+
+## Recovering a missed order
+
+1. In the WooCommerce shop administration, select **Auftrag nachholen**. This opens the existing single-import form and also works with **Abholmodus: nach Status**.
+2. Enter the actual WooCommerce order ID from the order URL (for example `9429`), not a separately formatted display number.
+3. Select **Auftrag abholen**, then review and release the saved cart in the **Shopauftrag-Liste**. Single recovery deliberately queues the order for manual approval, even if normal imports are automatic.
+
+The source status must be eligible under the shop's import settings; for a completed source enable the option above. This also applies to the legacy API `putOrderToXentral`: its `allStati=true` does not bypass the WooCommerce status filter. Leave **Nach abholen Status aendern** unchecked to preserve the source status. Even when checked, completed/finished and cancelled/refunded/failed states are not overwritten. Feedback failures after successful storage retain the cart, show a warning and log the shop/order IDs with sanitized error details; review the shop status instead of creating another order.
+
+Status feedback rereads the current source status before writing. WooCommerce offers no conditional status update, so a source change between that GET and the subsequent PUT can still be overwritten. Leaving the status-change checkbox unchecked avoids this write during manual recovery.
+
+Recovery reads exactly `orders/<id>` and does not rewind, advance or acknowledge the automatic modification checkpoint. Duplicate detection covers both saved carts and ERP orders in the same shop. It shares the automatic import's delivery lock, so a concurrent delivery cannot create a second cart. Invalid IDs, disallowed statuses, denied project access and invalid form tokens do not import an order. A source status change before a completed modification checkpoint is still recovered by the ordinary modification feed when it becomes eligible later.
+
+The older creation-date importer at `6dc91a56` cannot recover an earlier skipped order merely by changing its status after newer orders have been imported. The modification feed and the single-import changes must be deployed before the steps above are available. Deploying this code and importing a live order are separate operational steps; the code tests do not prove a live import.
 
 Existing shop flags for categories, variants, properties, pictures and file types still control the source export. Newly implemented capabilities are enabled in the capability matrix and source filtering.
 

@@ -59,6 +59,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   private $categorySyncMode = 'additive';
   private $exportDownloads = false;
   private $importModifiedFrom = '';
+  private $importCompletedOrders = false;
 
   /**
    * Stores the preferences that the user can change when editing this shop importer
@@ -140,7 +141,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if ($refundQueue !== null) {
       $this->drainRefundQueue($refundQueue);
     }
-    $statuses = array_values(array_filter(array_map('trim', explode(';', (string) $this->statusPending))));
+    $statuses = $this->getImportStatuses();
     $wcOrder = $this->getOrderReconciler()->next($statuses, function ($order) use ($refundQueue) {
       if ($refundQueue !== null && !empty($order->refunds)) {
         // Durably queue before advancing the modification checkpoint. Booking errors are isolated.
@@ -157,6 +158,79 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       'logdatei' => '',
       'warenkorb' => base64_encode(serialize($order)),
     ]];
+  }
+
+  /** Recovers one source ID without reading or changing the automatic checkpoint. */
+  public function ImportSingleOrder()
+  {
+    $data = $this->CatchRemoteCommand('data');
+    $value = $data['nummer'] ?? '';
+    $orderId = (is_string($value) || is_int($value)) && preg_match('/^[1-9][0-9]*$/D', (string) $value)
+      ? filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]) : false;
+    if ($orderId === false) {
+      return ['status' => 0, 'error' => 'Eine positive WooCommerce-Bestell-ID eingeben.'];
+    }
+    $store = new ImportStateStore($this->app->Container->get('Database'), (int) $this->shopid);
+    try {
+      return $store->locked(function () use ($store, $orderId, $data) {
+        if (!$store->holdDelivery()) {
+          throw new RuntimeException('Fuer diesen Shop laeuft bereits ein Import. Bitte spaeter erneut versuchen.');
+        }
+        try {
+          if ($store->isStored($orderId)) {
+            return ['status' => 0, 'error' => 'Bestellung bereits in OpenXE oder in der Shopauftrag-Liste vorhanden.'];
+          }
+          $source = $this->client->get('orders/' . $orderId);
+          if (!is_object($source) || (int) ($source->id ?? 0) !== $orderId) {
+            throw new UnexpectedValueException('WooCommerce lieferte nicht die angeforderte Bestell-ID.');
+          }
+          if (!in_array($source->status ?? '', $this->getImportStatuses(), true)) {
+            return ['status' => 0, 'error' => 'Bestellstatus ist nicht fuer den Import freigegeben.'];
+          }
+          $order = $this->parseOrder($source);
+          $cart = [
+            'id' => $order['auftrag'], 'sessionid' => '', 'logdatei' => '', 'warenkorbjson' => '',
+            'warenkorb' => base64_encode(serialize($order)),
+          ];
+          $projectId = (int) $this->app->Container->get('Database')->fetchValue(
+            'SELECT projekt FROM shopexport WHERE id = :shop', ['shop' => (int) $this->shopid]
+          );
+          $result = $this->app->erp->LoadModul('shopimport')->create_shopimport_cart_entry(
+            $cart, $projectId, (int) $this->shopid
+          );
+          if (empty($result['status']) || empty($result['id']) || !$store->isStored($orderId)) {
+            throw new RuntimeException('Bestellung konnte nicht dauerhaft fuer den Import gespeichert werden.');
+          }
+          if (!empty($data['change_status'])) {
+            try {
+              $this->markOrderImported($orderId);
+            } catch (Throwable $error) {
+              // The durable cart is recoverable; retrying this command must not enqueue it twice.
+              $this->logger->error('WooCommerce single import status feedback failed', [
+                'shop' => (int) $this->shopid, 'order' => $orderId,
+                'reason' => \Xentral\Components\WooCommerce\RefundStatusService::sanitizeError($error->getMessage()),
+              ]);
+              $result['info'] .= ' Statusrueckmeldung fehlgeschlagen; Shopstatus pruefen.';
+            }
+          }
+          return $result;
+        } finally {
+          $store->releaseDelivery();
+        }
+      });
+    } catch (Throwable $error) {
+      return ['status' => 0, 'error' => \Xentral\Components\WooCommerce\RefundStatusService::sanitizeError($error->getMessage())];
+    }
+  }
+
+  private function getImportStatuses(): array
+  {
+    $statuses = array_map('trim', explode(';', (string) $this->statusPending));
+    if ($this->importCompletedOrders) {
+      $statuses[] = 'completed';
+      $statuses[] = trim((string) $this->statusCompleted);
+    }
+    return array_values(array_unique(array_filter($statuses, static fn($status) => $status !== '')));
   }
 
   /**
@@ -466,10 +540,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     return $orderItem;
   }
 
-  /**
-   * Sets the Order status to processing, meaning we've successfully imported
-   * the order into our DB. This prevents the order from beeing imported again.
-   */
+  /** Acknowledge durable storage without regressing an already completed source order. */
   public function ImportDeleteAuftrag()
   {
     $orderId = (int) ($this->CatchRemoteCommand('data')['auftrag'] ?? 0);
@@ -480,9 +551,24 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if (!$store->isStored($orderId)) {
       throw new LogicException('WooCommerce order is not durably stored; acknowledgement refused');
     }
-    $this->client->put('orders/' . $orderId, ['status' => $this->statusProcessing]);
+    $this->markOrderImported($orderId);
     $this->getOrderReconciler()->acknowledge($orderId);
     return 'ok';
+  }
+
+  private function markOrderImported(int $orderId): void
+  {
+    // WooCommerce offers no conditional status PUT; a change between GET and PUT can still race.
+    $source = $this->client->get('orders/' . $orderId);
+    $status = $source->status ?? '';
+    if (in_array($status, ['completed', $this->statusCompleted, 'cancelled', 'refunded', 'failed'], true)
+      || $status === $this->statusProcessing) {
+      return;
+    }
+    if (!in_array($status, $this->getImportStatuses(), true)) {
+      throw new UnexpectedValueException('WooCommerce-Bestellstatus hat sich seit dem Abholen geaendert.');
+    }
+    $this->client->put('orders/' . $orderId, ['status' => $this->statusProcessing]);
   }
 
   /**
@@ -1113,6 +1199,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       ? new DownloadSettings($this->app->Container->get('Database'), (int) $this->shopid)
       : null;
     $this->importModifiedFrom = trim((string) ($felder['importModifiedFrom'] ?? ''));
+    $this->importCompletedOrders = !empty($felder['importCompletedOrders']);
 
     $this->backorders = $felder['backorders'];
 
@@ -1405,6 +1492,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         'statusPending' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung offen|}:', 'size' => 40, 'default' => 'pending', 'info' => '({|ggfs. getrennt durch ";": pending;on-hold|})'),
         'statusProcessing' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung in Bearbeitung|}:', 'size' => 10, 'default' => 'processing'),
         'statusCompleted' => array('typ' => 'text', 'bezeichnung' => '{|Statusname Bestellung fertig|}:', 'size' => 10, 'default' => 'completed'),
+        'importCompletedOrders' => ['typ' => 'checkbox', 'bezeichnung' => '{|Abgeschlossene Bestellungen mit abholen|}:', 'info' => 'Holt auch completed und den konfigurierten Fertig-Status ab. Abgeschlossene Bestellungen behalten ihren Shopstatus und Downloadzugang.'],
         'feeArticleNumber' => ['typ' => 'text', 'bezeichnung' => '{|ERP-Artikelnummer fuer WooCommerce-Gebuehren|}:', 'size' => 40],
         'refundSync' => ['typ' => 'checkbox', 'bezeichnung' => '{|WooCommerce-Erstattungen als Gutschriften uebernehmen|}:', 'info' => 'Erfordert vorhandene Rechnung und importierte Woo-Positions-IDs. Keine Zahlung oder Lagerbuchung im Shop.'],
         'categorySyncMode' => ['typ' => 'select', 'bezeichnung' => '{|Kategoriezuordnung|}:', 'optionen' => ['additive' => 'Ergaenzen', 'replace' => 'Durch OpenXE-Zuordnung ersetzen']],

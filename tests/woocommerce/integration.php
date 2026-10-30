@@ -78,6 +78,7 @@ function integratedConnector(int $shop = 1, &$db = null): IntegratedConnector
     $connector->client = new ConnectorApi(); $connector->logger = new ConnectorLogger();
     $connector->shopid = $shop; $connector->data = [];
     $connector->statusPending = 'processing'; $connector->statusProcessing = 'processing';
+    $connector->statusCompleted = 'completed';
     $connector->lastImportTimestamp = '2025-01-01T00:00:00';
     $connector->lastImportTimestampIsFallback = false;
     return $connector;
@@ -95,6 +96,42 @@ function connectorWithDeferredRefund(&$db): IntegratedConnector
 }
 
 runTests([
+    'completed orders stay excluded until explicitly enabled' => static function () {
+        $connector = integratedConnector(1, $db); $connector->client->order->status = 'completed';
+        same(null, $connector->ImportGetAuftrag()); same([], $db->stored);
+    },
+    'old completed order after newer imports is recovered once after a later modification' => static function () {
+        $connector = integratedConnector(1, $db);
+        (new ReflectionProperty(Shopimporter_Woocommerce::class, 'importCompletedOrders'))->setValue($connector, true);
+        $connector->client->order->status = 'completed';
+        $db->journal['woocommerce_import_1'] = '{"timestamp":"2026-01-03T00:00:00","ids":[9500]}';
+        same(null, $connector->ImportGetAuftrag());
+        $connector->client->order->date_modified_gmt = '2026-01-04T00:00:00';
+        same(7, $connector->ImportGetAuftrag()[0]['id']);
+        $db->stored[1]['7'] = true; $connector->data = ['auftrag' => 7];
+        same('ok', $connector->ImportDeleteAuftrag());
+        same(null, $connector->ImportGetAuftrag());
+        same([7], json_decode($db->journal['woocommerce_import_1'], true)['ids']);
+        foreach ($connector->client->calls as [$endpoint, $query]) {
+            check(!isset($query['after']), 'Creation-date filter must not return');
+            check(($query['status'] ?? '') !== 'processing', 'Completed source must not be reset by PUT');
+        }
+    },
+    'acknowledgement rechecks source status and preserves completion since selection' => static function () {
+        $connector = integratedConnector(1, $db); $connector->statusProcessing = 'xentral';
+        same(7, $connector->ImportGetAuftrag()[0]['id']);
+        $db->stored[1]['7'] = true; $connector->data = ['auftrag' => 7];
+        $connector->client->order->status = 'completed';
+        same('ok', $connector->ImportDeleteAuftrag());
+        foreach ($connector->client->calls as [$endpoint, $query]) { check(($query['status'] ?? '') !== 'xentral'); }
+    },
+    'configured completed status remains terminal even with a different processing status' => static function () {
+        $connector = integratedConnector(1, $db); $connector->statusProcessing = 'xentral';
+        $connector->statusCompleted = 'fulfilled'; $connector->client->order->status = 'fulfilled';
+        $db->stored[1]['7'] = true; $connector->data = ['auftrag' => 7];
+        same('ok', $connector->ImportDeleteAuftrag());
+        foreach ($connector->client->calls as [$endpoint, $query]) { check(($query['status'] ?? '') !== 'xentral'); }
+    },
     'real connector reads modifications and saves pending without advancing checkpoint' => static function () {
         $connector = integratedConnector(1, $db);
         same(7, $connector->ImportGetAuftrag()[0]['id']);
