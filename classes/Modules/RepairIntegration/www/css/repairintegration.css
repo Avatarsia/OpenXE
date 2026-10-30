@@ -1,0 +1,147 @@
+/* RepairIntegration Module Styles */
+#repair-details-panel {
+    border-radius: 4px;
+}
+#repair-details-panel h3 {
+    color: var(--text-strong, #333);
+    border-bottom: 1px solid var(--border, #ddd);
+    padding-bottom: 5px;
+}
+.repair-express-badge {
+    background: #ff6b35;
+    color: var(--text-inverse, #fff);
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: bold;
+}
+/* WordPress-Verbindungs-Tab */
+.repairHint {
+    color: var(--text-muted, #888);
+    font-size: 11px;
+    margin-top: 2px;
+}
+.repairGenForm {
+    display: inline;
+}
+/* Fehlerbeschreibung: scrollbare Box, damit lange Kundentexte die
+   Karte nicht sprengen (max. Hoehe, Rest per Scroll). */
+#repair-details-panel .issue-box {
+    background: var(--surface-alt, #fafafa);
+    border: 1px solid var(--border, #e3e3e3);
+    border-radius: 3px;
+    padding: 6px 8px;
+    max-height: 110px;
+    overflow: auto;
+}
+/* Vom Kunden im WP-Portal freigegebener KVA-Preis: read-only-Chip,
+   bewusst kein Eingabefeld (Wert kommt nur per Push). */
+#repair-details-panel .kva-kunde {
+    background: var(--success-soft, #e8f5e9);
+    border: 1px solid var(--success, #2bb673);
+    border-radius: 3px;
+    padding: 2px 8px;
+    font-weight: 600;
+    color: var(--success, #1b5e20);
+    white-space: nowrap;
+}
+/* Status-Filterleiste ueber der Reparatur-Liste (Checkboxen je Status,
+   Abwahl blendet serverseitig via more_data1/NOT IN aus). */
+#repair-status-filter {
+    background: var(--surface, #fff);
+    border: 1px solid var(--border, #d6d9de);
+    border-radius: 4px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+}
+#repair-status-filter .filter-group {
+    display: inline-block;
+    padding: 2px 12px 2px 8px;
+    margin: 2px 8px 2px 0;
+    border: 1px solid var(--border, #e3e3e3);
+    border-radius: 4px;
+    background: var(--surface-alt, #fafafa);
+    white-space: nowrap;
+}
+#repair-status-filter label {
+    margin-right: 10px;
+    white-space: nowrap;
+    cursor: pointer;
+    font-weight: normal;
+}
+#repair-status-filter input {
+    vertical-align: -2px;
+}
+
+/* Native Formulare und Kunden-Produkttext, ohne globale Theme-Regeln. */
+#repair-details-panel .mkTableFormular td:first-child { width:145px; vertical-align:top; }
+#repair-details-panel .mkTableFormular td { padding:3px 5px 3px 0; }
+#repair-details-panel textarea, .repair-template-editor { width:100%; box-sizing:border-box; }
+.repair-template-editor[hidden], #repair_position_template[hidden] { display:none !important; }
+.repair-form-price { clear:both; padding:10px 0; }
+.repair-customer-description { clear:both; padding-top:6px; }
+.repair-product-preview { clear:both; display:grid; grid-template-columns:60px minmax(0,1fr); gap:14px; background:#fff; color:#111; padding:18px 14px; margin-top:12px; font:12px/1.25 Arial,Helvetica,sans-serif; overflow-wrap:anywhere; }
+.repair-product-preview > div { max-width:340px; }
+.repair-product-preview strong { font-weight:bold; }
+#repair_position_preview { white-space:pre-wrap; margin:0; font-size:11px; line-height:1.3; }
+.repair-position-warning { clear:both; color:var(--warning-text, #a66700); font-size:11px; padding-top:8px; }
+.repair-variables { clear:both; padding-top:8px; }
+.repair-variables .button { font-size:11px; margin:3px; }
+#repair-status-filter select { max-width:300px; }
+@media(max-width:600px) {
+    #repair-details-panel .mkTableFormular td:first-child { width:110px; }
+    .repair-product-preview { grid-template-columns:45px minmax(0,1fr); gap:8px; padding:12px 9px; }
+    #repair-status-filter label { display:block; margin:5px 0; }
+}
+
+/* Sync-Uebersicht: native Typografie und Tabellen, nur im Modul gekapselt. */
+.repair-sync-page { display:flow-root; clear:both; color:var(--text-strong, #333); }
+.repair-sync-page h2, .repair-sync-page h3 { float:none; clear:none; width:auto; padding:0; border:0; }
+.repair-sync-page h2 { margin:0 0 8px; font-size:18px; line-height:1.4; }
+.repair-sync-page h3 { margin:0 0 8px; font-size:14px; line-height:1.4; }
+.repair-sync-page p { margin:0; line-height:1.5; max-width:75ch; }
+.repair-sync-section { margin:0 0 24px; }
+.repair-sync-header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.repair-sync-rules { display:flex; flex-wrap:wrap; gap:8px 24px; padding:16px 0; color:var(--text-muted, #555); }
+.repair-sync-settings { border-top:1px solid var(--border, #ddd); border-bottom:1px solid var(--border, #ddd); padding:12px 0; }
+.repair-sync-page summary { cursor:pointer; font-weight:600; padding:4px 0; }
+.repair-sync-page summary:focus-visible, .repair-sync-page button:focus-visible, .repair-sync-page a:focus-visible, .repair-sync-page input:focus-visible, .repair-sync-table-scroll:focus-visible { outline:2px solid var(--link-color, #2864b4); outline-offset:3px; }
+.repair-sync-form, .repair-sync-decisions { display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin:0; }
+.repair-sync-settings .repair-sync-form { margin:12px 0 8px; }
+.repair-sync-form label { display:flex; align-items:center; gap:8px; font-weight:normal; }
+.repair-sync-page button { min-height:32px; margin:0; white-space:normal; }
+.repair-sync-page button:disabled { cursor:not-allowed; opacity:.55; }
+.repair-sync-actions { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px 24px; padding:20px 0 12px; }
+.repair-sync-actions p, .repair-sync-muted { color:var(--text-muted, #555); }
+.repair-sync-message { margin:16px 0 0; }
+.repair-sync-badge { display:inline-block; font-size:12px; font-weight:600; line-height:1.5; padding:4px 8px; border-radius:3px; }
+.repair-sync-badge--neutral { background:var(--surface-alt, #f0f1f2); color:var(--text-strong, #444); }
+.repair-sync-badge--success { background:var(--success-soft, #e8f5e9); color:#1b5e20; }
+.repair-sync-badge--info { background:#eaf2fa; color:#245580; }
+.repair-sync-badge--warning { background:#fff4db; color:#795000; }
+.repair-sync-badge--error { background:#fdebea; color:#922b21; }
+.repair-sync-empty { padding:20px; margin:0 0 24px; background:var(--surface-alt, #f7f8f9); }
+.repair-sync-run-summary { display:flex; flex-wrap:wrap; align-items:center; gap:12px 20px; margin:12px 0 16px; }
+.repair-sync-run-summary form, .repair-sync-table form { margin:0; }
+.repair-sync-table-scroll { max-width:100%; overflow-x:auto; }
+.repair-sync-page .repair-sync-table { float:none; width:100%; border-collapse:collapse; line-height:1.5; }
+.repair-sync-page .repair-sync-table th, .repair-sync-page .repair-sync-table td { text-align:left; vertical-align:top; padding:10px 12px; border-bottom:1px solid var(--border, #ddd); }
+.repair-sync-page .repair-sync-table th { background:var(--surface-alt, #f3f4f5); font-weight:600; }
+.repair-sync-page .repair-sync-table td:first-child { white-space:nowrap; }
+.repair-sync-note { min-width:180px; max-width:360px; overflow-wrap:anywhere; }
+.repair-sync-decisions { margin-top:8px; gap:8px; }
+.repair-sync-selected { background:var(--surface-alt, #f7f8f9); }
+.repair-sync-history, .repair-sync-technical { margin-top:20px; border-top:1px solid var(--border, #ddd); padding-top:12px; }
+.repair-sync-history .repair-sync-table-scroll { margin-top:12px; }
+.repair-sync-queue { display:flex; flex-wrap:wrap; gap:16px 32px; margin:16px 0; }
+.repair-sync-queue div { display:flex; flex-direction:column; gap:4px; }
+.repair-sync-queue dt { color:var(--text-muted, #555); }
+.repair-sync-queue dd { margin:0; font-weight:600; }
+@media(max-width:700px) {
+    .repair-sync-header { gap:12px; }
+    .repair-sync-actions { display:block; }
+    .repair-sync-actions .repair-sync-form { margin-top:16px; }
+    .repair-sync-settings .repair-sync-form { align-items:flex-start; flex-direction:column; }
+    .repair-sync-page .repair-sync-table { min-width:760px; }
+    .repair-sync-empty { padding:16px; }
+}
