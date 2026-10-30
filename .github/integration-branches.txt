@@ -84,6 +84,9 @@ feature/dark-theme
 # feature so its ticket integration is applied after all other feature branches.
 feature/repair-integration-clean
 
+# Per-run cronjob runtime bars, exact durations and automatic axis scaling
+feature/prozessstarter-runtime-chart
+
 # Fork-specific override — MUST stay as the last entry. Sets
 # upgrade/data/remote.json to Avatarsia/OpenXE production so the file
 # matches HEAD after upgrade and the upgrader no longer flags it as

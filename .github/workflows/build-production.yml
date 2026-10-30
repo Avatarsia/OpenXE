@@ -197,6 +197,19 @@ jobs:
             echo "::endgroup::"
           fi
 
+          if [ -f tests/prozessstarter/run.php ]; then
+            echo "::group::Prozessstarter runtime regression tests"
+            if { php -l www/pages/prozessstarter.php && php tests/prozessstarter/run.php && node --check www/js/prozessstarter-runtime.js && node tests/prozessstarter/chart.test.cjs; } > /tmp/runtime-out 2>&1; then
+              cat /tmp/runtime-out
+              echo "Runtime chart tests OK"
+            else
+              echo "FAIL  runtime chart tests"
+              cat /tmp/runtime-out
+              TEST_FAILED="${TEST_FAILED}"$'\n'"Runtime chart test failed"$'\n'"$(tail -30 /tmp/runtime-out)"
+            fi
+            echo "::endgroup::"
+          fi
+
           echo "lint_errors=${LINT_ERRORS}" >> "$GITHUB_OUTPUT"
           {
             echo "test_output<<EOF"
