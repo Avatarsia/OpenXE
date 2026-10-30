@@ -40,6 +40,9 @@
                     <td>
                         <input type="submit" name="load" value="{|Filtern|}" />
                     </td>
+                    <td><input type="submit" name="last24h" value="{|24 Stunden|}" /></td>
+                    <td><input type="submit" name="last7d" value="{|7 Tage|}" /></td>
+                    <td><input type="submit" name="last30d" value="{|30 Tage|}" /></td>
                     <td>
                         <input type="submit" name="last12h" value="{|letzte 12 Stunden|}" />
                     </td>
