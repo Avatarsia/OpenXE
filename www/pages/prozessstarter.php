@@ -650,7 +650,7 @@ class Prozessstarter extends GenProzessstarter {
     $dateTo = reset($dateTo);
     echo $this->getChart($dateFrom, $dateTo, $cronjobId);
     echo '<script type="text/javascript" src="./js/chart-helper.js?v=2" ></script>';
-
+
     $lastCronjobLogs = $this->app->DB->SelectFirstCols(
       sprintf(
         'SELECT `id` FROM `cronjob_log` WHERE `cronjob_id` = %d AND `parent_id` = 0 ORDER BY `id` DESC LIMIT 5',
