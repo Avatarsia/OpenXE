@@ -113,12 +113,21 @@
             var previous = element.querySelector('.runtime-previous');
             var next = element.querySelector('.runtime-next');
             var rangeLabel = element.querySelector('.runtime-range');
+            var logsButton = element.querySelector('.runtime-logs-button');
+            var logsPanel = element.querySelector('.runtime-log-panel');
+            logsPanel.id = 'runtime-logs-' + Math.random().toString(36).slice(2);
+            logsButton.setAttribute('aria-controls', logsPanel.id);
 
             function select(index) {
                 selected = Math.max(0, Math.min(index, visible.length - 1));
                 var run = visible[selected];
                 previous.disabled = !run || selected === 0;
                 next.disabled = !run || selected === visible.length - 1;
+                logsButton.disabled = !run;
+                logsButton.setAttribute('aria-expanded', 'false');
+                logsButton.textContent = 'Logs zu diesem Lauf';
+                logsPanel.hidden = true;
+                logsPanel.textContent = '';
                 details.textContent = run ? run.job + ' | Start: ' + run.start + ' | Ende: ' + (run.end || 'unbekannt')
                     + ' | Dauer: ' + duration(run.duration) + ' | ' + labels[run.state]
                     + (run.message ? ' | Letzte Meldung: ' + run.message : '') : 'Keine Ausführungen im gewählten Zeitraum.';
@@ -157,6 +166,43 @@
             }
             previous.onclick = function () { select(selected - 1); };
             next.onclick = function () { select(selected + 1); };
+            logsButton.onclick = function () {
+                var run = visible[selected];
+                if (!run) { return; }
+                if (!logsPanel.hidden) {
+                    logsPanel.hidden = true;
+                    logsButton.setAttribute('aria-expanded', 'false');
+                    logsButton.textContent = 'Logs zu diesem Lauf';
+                    return;
+                }
+                var document = window.document;
+                var table = document.createElement('table');
+                var caption = document.createElement('caption');
+                caption.textContent = 'Prozessstarter-Meldungen: ' + run.job + ' | Start: ' + run.start;
+                table.appendChild(caption);
+                var header = table.createTHead().insertRow();
+                ['Zeitpunkt', 'Meldung'].forEach(function (text) {
+                    var cell = document.createElement('th');
+                    cell.scope = 'col';
+                    cell.textContent = text;
+                    header.appendChild(cell);
+                });
+                var body = table.createTBody();
+                (run.logs || []).forEach(function (log) {
+                    var row = body.insertRow();
+                    row.insertCell().textContent = log.time;
+                    row.insertCell().textContent = log.status;
+                });
+                logsPanel.textContent = '';
+                if (run.logs && run.logs.length) {
+                    logsPanel.appendChild(table);
+                } else {
+                    logsPanel.textContent = 'Keine protokollierten Meldungen zu diesem Lauf vorhanden.';
+                }
+                logsPanel.hidden = false;
+                logsButton.setAttribute('aria-expanded', 'true');
+                logsButton.textContent = 'Logs ausblenden';
+            };
             element.querySelectorAll('[data-runtime-days]').forEach(function (button) {
                 button.onclick = function () { render(Number(button.dataset.runtimeDays)); };
             });

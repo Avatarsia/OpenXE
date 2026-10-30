@@ -48,6 +48,11 @@ check('duration includes final completion after error', $runs[3]['duration'], 15
 check('legacy started status', $runs[4]['duration'], 8);
 check('wrong-job child ignored', $runs[4]['state'], 'completed');
 check('raw intermediate status retained', $runs[2]['message'], 'mutex1');
+check('run log includes start, intermediate and completion only', array_column($runs[0]['logs'] ?? [], 'status'), ['start', 'Daten holen', 'abgeschlossen']);
+check('run log retains exact timestamps', $runs[0]['logs'][2]['time'] ?? null, '2026-10-30 00:00:07');
+check('interleaved job logs remain separate', array_column($runs[1]['logs'] ?? [], 'status'), ['start', 'abgeschlossen']);
+check('error history is preserved after completion', array_column($runs[3]['logs'] ?? [], 'status'), ['start', 'error', 'abgeschlossen']);
+check('wrong-job log never appears in selected run', count($runs[4]['logs'] ?? []), 2);
 check('empty logs', CronjobRuntimeData::fromLogs([]), []);
 check('invalid completion', CronjobRuntimeData::fromLogs([
     row(1, 0, 'start', '2026-10-30 10:00:00'), row(2, 1, 'abgeschlossen', 'bad')
@@ -96,6 +101,9 @@ check('embedded labels cannot close JSON script', strpos($html, $unsafe), false)
 check('SQL does not truncate timestamps', strpos($probe->app->DB->sql, 'DATE_FORMAT'), false);
 check('SQL filters selected job', strpos($probe->app->DB->sql, 'p.id = 1') !== false, true);
 check('mini chart offers day ranges', substr_count($html, 'data-runtime-days='), 3);
+check('legend does not reuse global error class', strpos($html, 'class="error"'), false);
+check('legend uses scoped status marker', strpos($html, 'class="runtime-status-error"') !== false, true);
+check('selected run has a logs button', strpos($html, 'class="runtime-logs-button"') !== false, true);
 check('only actual runs rendered', count($payload['runs']), 1);
 $boundary = (new RuntimeChartProbe([
     row(1, 0, 'start', '2026-10-30 23:59:58'), row(2, 1, 'abgeschlossen', '2026-10-31 00:00:07')

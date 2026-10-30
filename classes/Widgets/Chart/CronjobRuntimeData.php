@@ -28,6 +28,7 @@ class CronjobRuntimeData
                 'duration' => null,
                 'state' => 'unknown',
                 'message' => '',
+                'logs' => [['time' => $log['change_time'], 'status' => $log['status']]],
             ];
         }
         foreach ($logs as $log) {
@@ -41,6 +42,7 @@ class CronjobRuntimeData
                 continue;
             }
             $status = $log['status'];
+            $runs[$parent]['logs'][] = ['time' => $log['change_time'], 'status' => $status];
             $runs[$parent]['message'] = $status;
             if (!in_array($status, ['abgeschlossen', 'error', 'teilfehler'], true)) {
                 continue;

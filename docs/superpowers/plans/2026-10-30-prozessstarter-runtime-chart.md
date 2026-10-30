@@ -7,9 +7,17 @@ Spec: Approved conversation design, 2026-10-30. Existing theme, day-based window
 - [x] Add standalone regression tests for same-minute/zero/overnight durations, interleaved jobs, intermediate/mutex events, missing completion, sticky errors and invalid timestamps.
 - [x] Add PHP log adapter and replace only getChart data path. Preserve the existing last-five-event table and global date filters. Default mini detail to seven days, provide 24h/7d/30d window selection.
 - [x] Add isolated Chart.js runtime renderer. True timestamp X, auto nice Y with seconds/minutes/hours, no invented durations, per-run statuses and safe text details. Test scale extremes, timeframe changes, config and interactions with Node.
-- [ ] Run all feature tests, changed-PHP lint, JS syntax, one fresh branch review, merge-compatibility check against production. Commit and push feature branch.
-- [ ] Add manifest entry on feature/ci-workflow before final remote override and include regression suite in Pass 3. Validate, commit, push, dispatch Build Production and verify result.
+- [x] Run all feature tests, changed-PHP lint, JS syntax, one fresh branch review, merge-compatibility check against production. Commit and push feature branch.
+- [x] Add manifest entry on feature/ci-workflow before final remote override and include regression suite in Pass 3. Validate, commit, push, dispatch Build Production and verify result.
 
 Review focus: Unknown endpoints must never imply zero or success; error followed by completion must remain error; no clock rounding or aggregation; HTML/script escaping; dark-theme and repeated AJAX initialization must keep working.
 
 Validation: PHP 21/21 assertions; Node 9/9 tests; three changed PHP files lint clean; JS syntax clean; 11 actual Chart.js browser checks and 4 theme lifecycle checks passed. One fresh review found three issues (Chart.js 2.7 numeric bar positions, completion beyond filter end, theme listener order); all corrected and regression-covered without a second review.
+
+## Approved follow-up: selected run logs and legend marker
+
+- [x] Preserve per-run start/child status events in the existing JSON payload; no extra endpoint, time-window approximation or additional permissions. Tests cover interleaved jobs, intermediate status, error history and exact timestamps.
+- [x] Add an accessible toggle button and a text-only log table below the selected run. Changing the selected run or period closes stale logs; empty selection disables the button. Use scoped status marker classes to avoid global .error notification CSS. Bump asset versions.
+- [ ] Verify PHP/Node and actual browser behavior including real global theme CSS, once-only review, push feature and trigger existing production workflow (manifest already includes the branch).
+
+Follow-up validation: PHP 29 assertions and Node 9 tests passed; 16 real Chromium checks passed for full-theme marker dimensions, log toggling, exact run association, selection/period reset, missing data and XSS-safe message rendering.

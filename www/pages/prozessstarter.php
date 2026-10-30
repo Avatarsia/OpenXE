@@ -587,20 +587,22 @@ class Prozessstarter extends GenProzessstarter {
       .'<button type="button" data-runtime-days="7">7 Tage</button>'
       .'<button type="button" data-runtime-days="30">30 Tage</button>' : '';
 
-    return '<link rel="stylesheet" href="./css/prozessstarter-runtime.css?v=1">'
+    return '<link rel="stylesheet" href="./css/prozessstarter-runtime.css?v=2">'
       .'<div class="cronjob-runtime"><div class="chart-title">Laufzeiten</div>'
       .'<div class="runtime-toolbar">'.$buttons.'<span class="runtime-range"></span></div>'
-      .'<div class="runtime-legend"><span><i class="completed"></i>Abgeschlossen</span>'
-      .'<span><i class="error"></i>Fehler</span><span><i class="partial"></i>Teilfehler</span></div>'
+      .'<div class="runtime-legend"><span><i class="runtime-status-completed"></i>Abgeschlossen</span>'
+      .'<span><i class="runtime-status-error"></i>Fehler</span><span><i class="runtime-status-partial"></i>Teilfehler</span></div>'
       .'<div class="runtime-canvas"><canvas role="img" aria-label="Laufzeit je Ausfuehrung. Details mit den Schaltflaechen darunter auswaehlen."></canvas></div>'
       .'<div class="runtime-help">Jede S&auml;ule steht f&uuml;r einen Lauf. H&ouml;he: Laufzeit. Farbe: protokollierter Cronjob-Status.</div>'
       .'<div class="runtime-summary" aria-live="polite"></div>'
       .'<div class="runtime-details" aria-live="polite"></div>'
       .'<div class="runtime-navigation"><button type="button" class="runtime-previous">Vorheriger Lauf</button>'
-      .'<button type="button" class="runtime-next">N&auml;chster Lauf</button></div>'
+      .'<button type="button" class="runtime-next">N&auml;chster Lauf</button>'
+      .'<button type="button" class="runtime-logs-button" aria-expanded="false">Logs zu diesem Lauf</button></div>'
+      .'<div class="runtime-log-panel" hidden></div>'
       .'<div class="runtime-help">Ohne Abschlussmeldung bleibt die Dauer unbekannt. Abgeschlossen bedeutet nicht, dass alle Bestellungen erfolgreich importiert wurden.</div>'
       .'<script type="application/json">'.$json.'</script></div>'
-      .'<script src="./js/prozessstarter-runtime.js?v=1"></script>';
+      .'<script src="./js/prozessstarter-runtime.js?v=2"></script>';
   }
 
   public function ProzessstarterChart() {
