@@ -61,6 +61,18 @@ var SuperSearch = (function ($) {
                     me.hideOverlay();
                 }
             });
+
+            // Overlay bei Klick ausserhalb schliessen (Overlay und Suchfeld ausgenommen)
+            $(document).off('mousedown.SuperSearch').on('mousedown.SuperSearch', function (e) {
+                if (me.storage.$overlay === null || me.storage.isOpen !== true) {
+                    return;
+                }
+                var $target = $(e.target);
+                if ($target.closest(me.storage.$overlay).length || $target.closest(me.storage.$input).length) {
+                    return;
+                }
+                me.hideOverlay();
+            });
         },
 
         /**
