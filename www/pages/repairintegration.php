@@ -315,7 +315,7 @@ class Repairintegration
                 if (!$this->app->Container->get('Session')->isCsrfTokenValid('repair_settings', (string)$this->app->Secure->GetPOST('repair_settings_csrf'))) {
                     throw new \RuntimeException('Formular abgelaufen. Einstellungen neu laden.');
                 }
-                $number = trim((string)$this->app->Secure->GetPOST('repair_service_article', 'nothtml', '', 1));
+                $number = (string)strtok(trim((string)$this->app->Secure->GetPOST('repair_service_article', 'nothtml', '', 1)), ' ');
                 $article = $db->fetchRow('SELECT nummer FROM artikel WHERE nummer = :number AND geloescht = 0 LIMIT 1', ['number' => $number]);
                 if (!$article) throw new \RuntimeException('Bitte eine vorhandene, nicht geloeschte Artikelnummer auswaehlen.');
                 $templates = [];
