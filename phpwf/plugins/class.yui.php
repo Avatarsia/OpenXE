@@ -1863,6 +1863,24 @@ class YUI {
               $preis = round($preis / (1+ (float)$docArr['steuersatz_normal']/100),8);
             }
           }
+          // Netto/Brutto-Eingabe: zuletzt bearbeitetes Feld gewinnt
+          $preiseingabe = $this->app->Secure->GetPOST('preiseingabe');
+          $preisbrutto = $this->app->Secure->GetPOST('preisbrutto');
+          if($preiseingabe === 'netto') {
+            $preis = $this->app->erp->FromFormatZahlToDB($this->app->Secure->GetPOST('preis'));
+          }
+          elseif($preiseingabe === 'brutto' && $preisbrutto != '') {
+            $preis = (float)$this->app->erp->FromFormatZahlToDB($preisbrutto);
+            if(!$this->app->erp->$funktion($id)) {
+              // Beleg ohne USt: brutto = netto
+            }
+            elseif($articleArr['umsatzsteuer'] === 'ermaessigt') {
+              $preis = round($preis / (1+ (float)$docArr['steuersatz_ermaessigt']/100),8);
+            }
+            elseif($articleArr['umsatzsteuer'] !== 'befreit') {
+              $preis = round($preis / (1+ (float)$docArr['steuersatz_normal']/100),8);
+            }
+          }
         }
 
         $this->app->erp->RunHook('AARLGPositionenPreis', 3, $module, $id, $preis);
@@ -14902,7 +14920,7 @@ source: "index.php?module=ajax&action=filter&filtername=' . $filter . $extendurl
       if ($module == "angebot" || $module == "auftrag" || $module == "rechnung" || $module == "gutschrift" || $module == "proformarechnung") {
         
         if ($schreibschutz != 1) {
-          $addrow = array('<form action="" method="post" id="myform"><input type="number" min="1" size="4" name="insertbefore">', '[ARTIKELSTART]<input type="text" size="30" name="artikel" id="artikel" onblur="window.setTimeout(\'selectafterblur()\',200);">[ARTIKELENDE]', '<input type="text" name="projekt" id="projekt" size="10" readonly onclick="checkhere()" >', '<input type="text" name="nummer" id="nummer" size="7">', '<input type="text" size="8" name="lieferdatum" id="lieferdatum">', '<input type="text" name="menge" id="menge" size="5" onblur="window.setTimeout(\'selectafterblurmenge()\',200); document.getElementById(\'preis\').style.background =\'none\';">', '<input type="text" name="preis" id="preis" size="10" onclick="checkhere();">', '<input type="text" name="waehrung" id="waehrung" size="10" onclick="checkhere();">' ,'<input type="text" name="rabatt" id="rabatt" size="7">','','');
+          $addrow = array('<form action="" method="post" id="myform"><input type="number" min="1" size="4" name="insertbefore">', '[ARTIKELSTART]<input type="text" size="30" name="artikel" id="artikel" onblur="window.setTimeout(\'selectafterblur()\',200);">[ARTIKELENDE]', '<input type="text" name="projekt" id="projekt" size="10" readonly onclick="checkhere()" >', '<input type="text" name="nummer" id="nummer" size="7">', '<input type="text" size="8" name="lieferdatum" id="lieferdatum">', '<input type="text" name="menge" id="menge" size="5" onblur="window.setTimeout(\'selectafterblurmenge()\',200); document.getElementById(\'preis\').style.background =\'none\';">', '<input type="text" name="preis" id="preis" size="10" onclick="checkhere();" placeholder="Preis (netto)" title="Preis (netto)" oninput="preisNettoBruttoSync(\'netto\');"><br><input type="text" name="preisbrutto" id="preisbrutto" size="10" placeholder="Preis (brutto)" title="Preis (brutto)" oninput="preisNettoBruttoSync(\'brutto\');"><input type="hidden" name="preiseingabe" id="preiseingabe" value="">', '<input type="text" name="waehrung" id="waehrung" size="10" onclick="checkhere();">' ,'<input type="text" name="rabatt" id="rabatt" size="7">','','');
           $addrow[] = '<input type="submit" value="einf&uuml;gen" name="ajaxbuchen">
             <script type="text/javascript">
             document.onkeydown = function(evt) {
@@ -14917,6 +14935,8 @@ source: "index.php?module=ajax&action=filter&filtername=' . $filter . $extendurl
             document.getElementById("preis").value="";
             document.getElementById("waehrung").value="";
             document.getElementById("rabatt").value="";
+            document.getElementById("preisbrutto").value="";
+            document.getElementById("preiseingabe").value="";
             }
             if (evt.keyCode == 160) { // pfeil rechts
               document.getElementById("menge").focus();
@@ -14929,8 +14949,44 @@ source: "index.php?module=ajax&action=filter&filtername=' . $filter . $extendurl
             }
             if(typeof aktuallisierePreise != \'undefined\')setTimeout(function(){aktuallisierePreise()},200);
             };
+            // Netto/Brutto-Umrechnung, Steuersatz kommt aus artikel ajaxwerte
+            var preisSteuersatz = null;
+            function preisParse(v) {
+              v = (""+v).trim();
+              if(v === "") return null;
+              if(v.indexOf(",") >= 0) v = v.replace(/\./g, "").replace(",", ".");
+              var n = parseFloat(v);
+              return isNaN(n) ? null : n;
+            }
+            function preisFormat(n) {
+              return n.toFixed(4).replace(".", ",");
+            }
+            function preisNettoBruttoSync(quelle) {
+              var netto = document.getElementById("preis");
+              var brutto = document.getElementById("preisbrutto");
+              document.getElementById("preiseingabe").value = quelle;
+              if(preisSteuersatz === null) return;
+              var f = 1 + preisSteuersatz / 100;
+              if(quelle === "netto") {
+                var n = preisParse(netto.value);
+                brutto.value = n === null ? "" : preisFormat(n * f);
+              } else {
+                var b = preisParse(brutto.value);
+                netto.value = b === null ? "" : preisFormat(b / f);
+              }
+            }
+            function preisNachArtikelFill(steuersatz, bruttoModus) {
+              var s = parseFloat(steuersatz);
+              preisSteuersatz = isNaN(s) ? null : s;
+              if(bruttoModus == 1) {
+                document.getElementById("preisbrutto").value = document.getElementById("preis").value;
+                preisNettoBruttoSync("brutto");
+              } else {
+                preisNettoBruttoSync("netto");
+              }
+            }
       </script></form>';
-          
+
           $table->AddRow($addrow);
           $adresse = $this->app->DB->Select("SELECT adresse FROM $module WHERE id='$id' LIMIT 1");
           $this->app->YUI->AutoCompleteAuftrag("artikel", "verkaufartikelnummerprojekt", 1, "&projekt=$projekt&adresse=$adresse");

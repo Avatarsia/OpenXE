@@ -3748,8 +3748,22 @@ class Artikel extends GenArtikel {
         $_projekt = $this->app->DB->Select("SELECT projekt FROM $smodule WHERE id = '$sid' LIMIT 1");
         $_adresse = $this->app->DB->Select("SELECT adresse FROM $smodule WHERE id = '$sid' LIMIT 1");
         $funktion = ucfirst($smodule).'MitUmsatzeuer';
+        // Steuersatz der Position fuer Netto/Brutto-Eingabe
+        $steuerklasse = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id = '$id' LIMIT 1");
+        $steuersatzpos = 0;
+        if(!$this->app->erp->$funktion($sid)) {
+          $steuersatzpos = 0;
+        }
+        elseif($steuerklasse === 'ermaessigt') {
+          $steuersatzpos = (float)$this->app->DB->Select("SELECT steuersatz_ermaessigt FROM $smodule WHERE id = '$sid' LIMIT 1");
+        }
+        elseif($steuerklasse !== 'befreit') {
+          $steuersatzpos = (float)$this->app->DB->Select("SELECT steuersatz_normal FROM $smodule WHERE id = '$sid' LIMIT 1");
+        }
+        $bruttomodus = 0;
         if($this->app->erp->AnzeigePositionenBrutto($_anrede, $smodule, $_projekt, $_adresse) && $this->app->erp->$funktion($sid))
         {
+          $bruttomodus = 1;
           $umsatzsteuer = $this->app->DB->Select("SELECT umsatzsteuer FROM artikel WHERE id = '$id' LIMIT 1");
           if($umsatzsteuer === 'ermaessigt')
           {
@@ -3778,7 +3792,7 @@ class Artikel extends GenArtikel {
             $ab_menge = str_replace('.',',',$ab_menge);
           }
           $this->app->erp->RunHook('artikel_ajaxwerte',8, $id, $smodule, $name,$nummer, $preis, $ab_menge, $waehrung, $warnung);
-          echo "$name#*#$nummer#*#$projekt#*#$preis#*#$ab_menge#*#$waehrung#*#$warnung#";
+          echo "$name#*#$nummer#*#$projekt#*#$preis#*#$ab_menge#*#$waehrung#*#$warnung#*#$steuersatzpos#*#$bruttomodus#";
         break;
         default:
           echo "$name#*#$nummer#*#$projekt#*#$preis#*#$ab_menge";
