@@ -393,7 +393,8 @@ class EasyTable {
               $einkaufspreiseerlaubt = true;
               if($einkaufspreiseerlaubt)
               {
-                $editcols =array(4,5,6,7,8,9);
+                // 7 = Preis (brutto)
+                $editcols =array(4,5,6,7,8,9,10);
                 //$this->app->Tpl->Add($parsetarget,$htmltable->GetSpecialCSSClasses(array(4,5,6,7,8,9),$editlastrow,2));
               }else{
                 $editcols = array(4,5,6,7,8);
