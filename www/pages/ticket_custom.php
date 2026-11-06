@@ -114,38 +114,25 @@ class TicketCustom extends Ticket
             $this->app->Tpl->Set('REPAIR_ADRESSE_BLOCK', $this->repair_adresse_block($ticketId, $adresseId));
             $this->app->Tpl->Set('REPAIR_BELEG_BUTTONS', $this->repair_beleg_buttons($ticketId, $adresseId, (string)$details['service_type']));
 
-            // Load beleg links
-            $belegGateway = $this->app->Container->get('RepairBelegGateway');
-            $belege = $belegGateway->getByTicketId($ticketId);
-            $this->app->Tpl->Set('REPAIR_BELEGE_ROWS', '<tr><td colspan="3">Keine verknuepften Belege.</td></tr>');
-            if (!empty($belege)) {
-                $belegHtml = '';
-                foreach ($belege as $beleg) {
-                    // Belegnummer und Status live aus der Belegtabelle: der Link
-                    // entsteht beim Entwurf (belegnr leer), die Nummer erst bei
-                    // Freigabe. Typ ist ein ENUM aus repair_ticket_beleg.
-                    $belegNr = trim((string)($beleg['beleg_nr'] ?? ''));
-                    $belegStatus = '';
-                    if (in_array($beleg['beleg_typ'], ['angebot', 'auftrag', 'rechnung', 'lieferschein', 'gutschrift'], true)) {
-                        $live = $this->app->DB->SelectRow(
-                            "SELECT belegnr, status FROM `" . $beleg['beleg_typ'] . "` WHERE id = '" . (int)$beleg['beleg_id'] . "' LIMIT 1"
-                        );
-                        if (!empty($live)) {
-                            if (trim((string)$live['belegnr']) !== '') {
-                                $belegNr = trim((string)$live['belegnr']);
-                            }
-                            $belegStatus = (string)$live['status'];
-                        }
-                    }
-                    $belegHtml .= '<tr>';
-                    $belegHtml .= '<td>' . htmlspecialchars(ucfirst($beleg['beleg_typ'])) . '</td>';
-                    $belegHtml .= '<td><a href="index.php?module=' . htmlspecialchars($beleg['beleg_typ'], ENT_QUOTES, 'UTF-8') . '&action=edit&id=' . (int)$beleg['beleg_id'] . '">' . htmlspecialchars($belegNr !== '' ? $belegNr : 'Entwurf #' . (int)$beleg['beleg_id']) . '</a>'
-                        . ($belegStatus !== '' ? ' <small>(' . htmlspecialchars($belegStatus) . ')</small>' : '') . '</td>';
-                    $belegHtml .= '<td>' . htmlspecialchars($beleg['created_at'] ?? '') . '</td>';
-                    $belegHtml .= '</tr>';
-                }
-                $this->app->Tpl->Set('REPAIR_BELEGE_ROWS', $belegHtml);
-            }
+            // Belegkette: direkt verknuepfte Belege plus daraus abgeleitete
+            // (Versionen, Weiterfuehrungen) sowie Zuordnung aus dem Kundenkonto.
+            // Nummern und Status kommen live aus den Belegtabellen.
+            $renderer = new \Xentral\Modules\RepairIntegration\Service\RepairBelegLinkRenderer(
+                $this->app->Container->get('RepairBelegGateway'),
+                new \Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver($this->app->Container->get('Database'))
+            );
+            $canLink = $this->app->erp->RechteVorhanden('repairintegration', 'list')
+                && $this->app->erp->RechteVorhanden('ticket', 'edit');
+            [$chainNodes, $directLinks] = $renderer->resolveForTicket($ticketId);
+            $this->app->Tpl->Set('REPAIR_BELEGE_ROWS', $renderer->ticketChainRows($ticketId, $chainNodes, $directLinks, $canLink));
+            $this->app->Tpl->Set('REPAIR_BELEG_CANDIDATES', $renderer->ticketCandidates(
+                $ticketId,
+                $adresseId,
+                (string)$this->app->Secure->GetGET('repair_konto', 'nothtml', '', 1),
+                $chainNodes,
+                $directLinks,
+                $canLink
+            ));
 
             $this->app->Tpl->Parse('NEW_MESSAGE', 'repair_detail_tab.tpl');
         } catch (\Exception $e) {

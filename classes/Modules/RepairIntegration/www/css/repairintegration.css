@@ -145,3 +145,14 @@
     .repair-sync-page .repair-sync-table { min-width:760px; }
     .repair-sync-empty { padding:16px; }
 }
+
+/* Belegkette / Beleg zuordnen (Ticket-Detailseite) */
+.repair-chain td, .repair-link-candidates td { vertical-align: middle; }
+.repair-chain .repair-chain-branch { color: #999; }
+.repair-chain .repair-chain-direct td:first-child { font-weight: bold; }
+.repair-amount { text-align: right; white-space: nowrap; }
+.repair-chain td:nth-child(-n+4), .repair-link-candidates td:nth-child(-n+4) { white-space: nowrap; }
+.repair-link-btn { padding: 2px 8px; }
+.repair-link-konto { margin-bottom: 8px; }
+.repair-link-filter { margin-bottom: 6px; }
+.repair-link-scroll { max-height: 320px; overflow-y: auto; }

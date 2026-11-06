@@ -103,4 +103,29 @@ $(document).ready(function() {
         input.focus();
     });
 
+    // --- Ticket: Beleg zuordnen -----------------------------------------
+    // Das Panel liegt im Ticket-Formular: Enter im Kundennummer-Feld darf das
+    // Ticket nicht speichern, sondern laedt die Seite mit repair_konto neu.
+    function repairApplyKonto(input) {
+        var url = new URL(window.location.href);
+        var value = input.value.trim();
+        if (value === '') { url.searchParams.delete('repair_konto'); } else { url.searchParams.set('repair_konto', value); }
+        url.searchParams.delete('msg');
+        url.hash = 'repair-details-panel';
+        window.location.href = url.toString();
+    }
+    $(document).on('keydown', '#repair_konto', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); repairApplyKonto(this); }
+    });
+    $(document).on('click', '.repair-konto-apply[data-target]', function() {
+        var input = document.getElementById(this.getAttribute('data-target'));
+        if (input) { repairApplyKonto(input); }
+    });
+    $(document).on('change', '.repair-link-typfilter', function() {
+        var typ = this.value;
+        $(this).closest('fieldset').find('.repair-link-candidates tbody tr').each(function() {
+            this.hidden = typ !== '' && this.getAttribute('data-repair-typ') !== typ;
+        });
+    });
+
 });

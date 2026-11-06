@@ -33,6 +33,9 @@ class Repairintegration
         $this->app->ActionHandler('syncstatus', 'SyncStatus');
         $this->app->ActionHandler('createbeleg', 'RepairCreateBeleg');
         $this->app->ActionHandler('createadresse', 'RepairCreateAdresse');
+        $this->app->ActionHandler('linkbeleg', 'RepairLinkBeleg');
+        $this->app->ActionHandler('unlinkbeleg', 'RepairUnlinkBeleg');
+        $this->app->ActionHandler('belegtickets', 'RepairBelegTickets');
         $this->app->ActionHandler('install', 'Install');
         $this->app->ActionHandlerListen($app);
     }
@@ -665,6 +668,191 @@ class Repairintegration
         } catch (\Throwable $e) {
             error_log('RepairIntegration Belegverknuepfung fehlgeschlagen: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Ordnet einen Beleg nachtraeglich einem Reparaturticket zu.
+     * Aufruf von der Ticketseite (Button im Ticket-Formular, Token repair_beleg)
+     * oder aus der Minidetail des Belegs (Token repair_link, Ruecksprung zur Herkunftsseite).
+     * Mehrfachzuordnung eines Belegs zu verschiedenen Tickets ist erlaubt.
+     */
+    function RepairLinkBeleg()
+    {
+        $ticketId = (int)$this->app->Secure->GetGET('ticket');
+        if ($ticketId <= 0) {
+            $ticketId = (int)$this->app->Secure->GetPOST('repair_ticket');
+        }
+        [$typ, $belegId] = $this->repairParseBelegKey((string)$this->app->Secure->GetPOST('repair_link'));
+        $fromBeleg = $this->app->Secure->GetPOST('repair_return') === 'beleg';
+        $back = function (string $cssClass, string $text) use ($fromBeleg, $typ, $belegId, $ticketId): void {
+            $fromBeleg && $typ !== ''
+                ? $this->redirectBackToBeleg($typ, $belegId, $cssClass, $text)
+                : $this->redirectToTicket($ticketId, $cssClass, $text);
+        };
+
+        $error = $this->repairCheckLinkRequest($ticketId, $typ, $belegId);
+        if ($error !== '') {
+            $back('error', $error);
+            return;
+        }
+
+        try {
+            $db = $this->app->Container->get('Database');
+            $gateway = $this->app->Container->get('RepairBelegGateway');
+            $resolver = new \Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver($db);
+            $beleg = $resolver->loadBeleg($typ, $belegId);
+            $schluessel = (string)$db->fetchValue('SELECT schluessel FROM ticket WHERE id = :id', ['id' => $ticketId]);
+            $isRepairTicket = (int)$db->fetchValue('SELECT COUNT(*) FROM ticket_repair_details WHERE ticket_id = :id', ['id' => $ticketId]) > 0;
+            if ($beleg === null || $schluessel === '' || !$isRepairTicket) {
+                $back('error', 'Beleg oder Reparaturticket nicht gefunden.');
+                return;
+            }
+            $label = \Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver::label($typ) . ' '
+                . \Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver::number($beleg);
+            if ($gateway->isLinked($ticketId, $typ, $belegId)) {
+                $back('warning', $label . ' ist dem Ticket ' . $schluessel . ' bereits zugeordnet.');
+                return;
+            }
+            $belegNr = trim((string)$beleg['belegnr']);
+            $gateway->link($ticketId, $schluessel, $typ, $belegId, $belegNr !== '' ? $belegNr : null, false, (string)$this->app->User->GetName());
+            $this->repairBelegProtokoll($typ, $belegId, 'Reparaturticket ' . $schluessel . ' zugeordnet');
+            $this->app->erp->TicketProtokoll($ticketId, $label . ' zugeordnet');
+        } catch (\Throwable $e) {
+            $back('error', 'Zuordnung fehlgeschlagen: ' . $e->getMessage());
+            return;
+        }
+        $back('success', $label . ' wurde dem Ticket ' . $schluessel . ' zugeordnet.');
+    }
+
+    /** Entfernt eine direkte Ticket-Beleg-Zuordnung (repair_ticket_beleg.id). */
+    function RepairUnlinkBeleg()
+    {
+        $ticketId = (int)$this->app->Secure->GetGET('ticket');
+        $linkId = (int)$this->app->Secure->GetPOST('repair_unlink');
+        $fromBeleg = $this->app->Secure->GetPOST('repair_return') === 'beleg';
+
+        try {
+            $gateway = $this->app->Container->get('RepairBelegGateway');
+            $link = $linkId > 0 ? $gateway->getById($linkId) : null;
+        } catch (\Throwable $e) {
+            $link = null;
+        }
+        $typ = (string)($link['beleg_typ'] ?? '');
+        $belegId = (int)($link['beleg_id'] ?? 0);
+        $back = function (string $cssClass, string $text) use ($fromBeleg, $typ, $belegId, $ticketId): void {
+            $fromBeleg && $typ !== ''
+                ? $this->redirectBackToBeleg($typ, $belegId, $cssClass, $text)
+                : $this->redirectToTicket($ticketId, $cssClass, $text);
+        };
+        if ($link === null || (int)$link['ticket_id'] !== $ticketId) {
+            $back('error', 'Zuordnung nicht gefunden.');
+            return;
+        }
+        $error = $this->repairCheckLinkRequest($ticketId, $typ, $belegId, false);
+        if ($error !== '') {
+            $back('error', $error);
+            return;
+        }
+
+        $nr = trim((string)($link['beleg_nr'] ?? ''));
+        $label = \Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver::label($typ) . ' ' . ($nr !== '' ? $nr : 'Entwurf #' . $belegId);
+        $gateway->unlink($linkId);
+        $this->repairBelegProtokoll($typ, $belegId, 'Zuordnung zu Reparaturticket ' . $link['ticket_schluessel'] . ' entfernt');
+        $this->app->erp->TicketProtokoll($ticketId, 'Zuordnung ' . $label . ' entfernt');
+        $back('success', 'Zuordnung ' . $label . ' entfernt.');
+    }
+
+    /** @return array{0: string, 1: int} ['', 0] bei ungueltigem Schluessel */
+    private function repairParseBelegKey(string $key): array
+    {
+        if (preg_match('/^([a-z]+):(\d+)$/', $key, $m) !== 1) {
+            return ['', 0];
+        }
+        $typ = $m[1];
+        $isKnown = array_key_exists($typ, \Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver::LABELS);
+        return $isKnown ? [$typ, (int)$m[2]] : ['', 0];
+    }
+
+    /**
+     * Rechte + CSRF fuer Zuordnen/Entfernen. Rueckgabe: Fehlertext oder ''.
+     * $requireChainType: neue Zuordnungen nur fuer Kettentypen; Entfernen
+     * auch fuer Altbestand (z.B. verbindlichkeit).
+     */
+    private function repairCheckLinkRequest(int $ticketId, string $typ, int $belegId, bool $requireChainType = true): string
+    {
+        if ($ticketId <= 0 || $typ === '' || $belegId <= 0) {
+            return 'Ungueltige Anfrage.';
+        }
+        if ($requireChainType && !\Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver::isChainType($typ)) {
+            return 'Belegtyp kann nicht zugeordnet werden.';
+        }
+        if (!$this->app->erp->RechteVorhanden('repairintegration', 'list')
+            || !$this->app->erp->RechteVorhanden('ticket', 'edit')
+            || !$this->app->erp->RechteVorhanden($typ, 'edit')) {
+            return 'Keine Berechtigung.';
+        }
+        $session = $this->app->Container->get('Session');
+        $linkToken = $this->app->Secure->GetPOST('repair_link_csrf');
+        $valid = is_string($linkToken) && $linkToken !== ''
+            ? $session->isCsrfTokenValid(\Xentral\Modules\RepairIntegration\Service\RepairBelegLinkRenderer::CSRF_KEY_BELEG, $linkToken)
+            : (is_string($token = $this->app->Secure->GetPOST('repair_csrf')) && $session->isCsrfTokenValid('repair_beleg', $token));
+        return $valid ? '' : 'Formular abgelaufen. Seite neu laden.';
+    }
+
+    private function repairBelegProtokoll(string $typ, int $belegId, string $text): void
+    {
+        $method = ucfirst($typ) . 'Protokoll';
+        if (\Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver::isChainType($typ)
+            && method_exists($this->app->erp, $method)) {
+            $this->app->erp->$method($belegId, $text);
+        }
+    }
+
+    /**
+     * XHR: Block "Reparaturtickets" einer Beleg-Minidetail neu rendern
+     * (Kundennummer-Filter). Liefert nur das HTML-Fragment.
+     */
+    function RepairBelegTickets()
+    {
+        $typ = (string)$this->app->Secure->GetGET('typ');
+        $belegId = (int)$this->app->Secure->GetGET('id');
+        if (!\Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver::isChainType($typ)
+            || !$this->app->erp->RechteVorhanden($typ, 'list')) {
+            http_response_code(403);
+            $this->app->ExitXentral();
+        }
+        echo \Xentral\Modules\RepairIntegration\Service\RepairBelegMiniDetailPanel::render(
+            $this->app,
+            $typ,
+            $belegId,
+            (string)$this->app->Secure->GetGET('repair_konto', 'nothtml', '', 1)
+        );
+        $this->app->ExitXentral();
+    }
+
+    /**
+     * Zurueck zur Seite, von der aus zugeordnet wurde (Belegliste mit
+     * Minidetail oder Beleg-Uebersicht). Nur relative index.php-Ziele auf
+     * demselben Host; sonst die Bearbeiten-Seite des Belegs.
+     */
+    private function redirectBackToBeleg(string $typ, int $belegId, string $cssClass, string $text): void
+    {
+        $msg = $this->app->erp->base64_url_encode(
+            '<div class="' . $cssClass . '">' . htmlspecialchars($text) . '</div>'
+        );
+        $target = 'index.php?module=' . $typ . '&action=edit&id=' . $belegId;
+        $referer = (string)($_SERVER['HTTP_REFERER'] ?? '');
+        $parts = $referer !== '' ? parse_url($referer) : false;
+        if (is_array($parts)
+            && ($parts['host'] ?? '') . (isset($parts['port']) ? ':' . $parts['port'] : '') === (string)($_SERVER['HTTP_HOST'] ?? '')
+            && substr((string)($parts['path'] ?? ''), -9) === 'index.php') {
+            parse_str((string)($parts['query'] ?? ''), $query);
+            unset($query['msg'], $query['msgs'], $query['msgid']);
+            if (($query['module'] ?? '') !== '') {
+                $target = 'index.php?' . http_build_query($query);
+            }
+        }
+        $this->app->Location->execute($target . '&msg=' . $msg);
     }
 
     private function redirectToTicket(int $ticketId, string $cssClass, string $text): void

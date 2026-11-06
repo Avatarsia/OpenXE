@@ -43,8 +43,15 @@
             <p class="repairHint">Leistungsdaten werden bei der Belegerstellung gespeichert. Der normale OpenXE-Positionseditor &ouml;ffnet sich mit dem Serviceartikel. Dort k&ouml;nnen Sie Versand und weitere Artikel erg&auml;nzen.</p>
         </fieldset></div></div>
         <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
+            <legend>Beleg zuordnen</legend>
+            [REPAIR_BELEG_CANDIDATES]
+        </fieldset></div></div>
+    </div></div>
+    <div class="row"><div class="row-height">
+        <div class="col-xs-14 col-md-12 col-md-height"><div class="inside inside-full-height"><fieldset>
             <legend>Verkn&uuml;pfte Belege</legend>
-            <table class="mkTable" width="100%"><thead><tr><th>Typ</th><th>Nr.</th><th>Datum</th></tr></thead><tbody>[REPAIR_BELEGE_ROWS]</tbody></table>
+            <table class="mkTable repair-chain" width="100%"><thead><tr><th>Typ</th><th>Nr.</th><th>Status</th><th>Datum</th><th>Betrag</th><th>Herkunft</th><th></th></tr></thead><tbody>[REPAIR_BELEGE_ROWS]</tbody></table>
+            <p class="repairHint">&quot;direkt&quot; = dem Ticket zugeordnet. Versionen und weitergef&uuml;hrte Belege werden automatisch erg&auml;nzt.</p>
         </fieldset></div></div>
     </div></div>
 </div>
