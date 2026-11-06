@@ -1,0 +1,24 @@
+.cronjob-runtime { margin: 20px 0; }
+.runtime-toolbar, .runtime-legend, .runtime-navigation { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin: 12px 0; }
+.runtime-toolbar button, .runtime-navigation button { padding: 4px 10px; }
+.runtime-toolbar button[aria-pressed="true"] { outline: 1px solid var(--button-secondary-border-color, #A2C55A); }
+.runtime-range { margin-left: auto; }
+.runtime-legend { justify-content: center; }
+.runtime-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.runtime-legend i { display: inline-block; width: 4px; height: 12px; }
+.runtime-legend .runtime-status-completed { background: #A2C55A; }
+.runtime-legend .runtime-status-error { background: #E05A63; }
+.runtime-legend .runtime-status-partial { background: #F69E06; }
+.runtime-canvas { position: relative; height: 310px; }
+.runtime-summary, .runtime-details { padding: 12px 0; border-bottom: 1px solid var(--table-border-color, #94979E); line-height: 1.7; overflow-wrap: anywhere; }
+.runtime-help { margin: 8px 0; line-height: 1.6; }
+.runtime-log-panel { margin: 12px 0; overflow-x: auto; }
+.runtime-log-panel table { width: 100%; border-collapse: collapse; }
+.runtime-log-panel th, .runtime-log-panel td { padding: 6px 10px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--table-border-color, #94979E); }
+.runtime-log-panel td:first-child { white-space: nowrap; width: 180px; }
+.runtime-log-panel td:last-child { overflow-wrap: anywhere; }
+.cronjob-runtime button:focus-visible { outline: 2px solid var(--link-color, #5991FF); outline-offset: 2px; }
+@media (max-width: 600px) {
+    .runtime-range { margin-left: 0; width: 100%; }
+    .runtime-canvas { height: 260px; }
+}
