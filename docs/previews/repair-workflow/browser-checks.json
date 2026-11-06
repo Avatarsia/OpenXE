@@ -1,0 +1,219 @@
+{
+  "date": "2026-10-19",
+  "behavior": {
+    "failed": [],
+    "passed": 39,
+    "tests": [
+      {
+        "name": "native fieldset layout",
+        "pass": true
+      },
+      {
+        "name": "native label table layout",
+        "pass": true
+      },
+      {
+        "name": "article from supplied example",
+        "pass": true
+      },
+      {
+        "name": "device and fault from example",
+        "pass": true
+      },
+      {
+        "name": "diagnosis block matches example",
+        "pass": true
+      },
+      {
+        "name": "offer work is planned",
+        "pass": true
+      },
+      {
+        "name": "public diagnosis updates product text",
+        "pass": true
+      },
+      {
+        "name": "public final check updates product text",
+        "pass": true
+      },
+      {
+        "name": "internal notes excluded",
+        "pass": true
+      },
+      {
+        "name": "diagnosis shared between service and KVA-only",
+        "pass": true
+      },
+      {
+        "name": "fee price automatically proposed",
+        "pass": true
+      },
+      {
+        "name": "diagnosis shared back from KVA-only to service",
+        "pass": true
+      },
+      {
+        "name": "hidden work and final-check survive mode switching",
+        "pass": true
+      },
+      {
+        "name": "fee-only invoice same article",
+        "pass": true
+      },
+      {
+        "name": "fee-only has no work or final-check block",
+        "pass": true
+      },
+      {
+        "name": "conversion preserves edited text",
+        "pass": true
+      },
+      {
+        "name": "all service stages one article at full price",
+        "pass": true
+      },
+      {
+        "name": "invoice offers explicit final text insertion",
+        "pass": true
+      },
+      {
+        "name": "invoice has actual-work heading",
+        "pass": true
+      },
+      {
+        "name": "invoice has customer final check",
+        "pass": true
+      },
+      {
+        "name": "invoice insertion leaves offer untouched",
+        "pass": true
+      },
+      {
+        "name": "document print preview current",
+        "pass": true
+      },
+      {
+        "name": "invoice template selectable",
+        "pass": true
+      },
+      {
+        "name": "live preview has article number",
+        "pass": true
+      },
+      {
+        "name": "invalid placeholder blocks: {Unbekannt}",
+        "pass": true
+      },
+      {
+        "name": "invalid placeholder blocks: {unbekannt}",
+        "pass": true
+      },
+      {
+        "name": "invalid placeholder blocks: {}",
+        "pass": true
+      },
+      {
+        "name": "saved invoice frozen on settings update",
+        "pass": true
+      },
+      {
+        "name": "maintenance shows form notes",
+        "pass": true
+      },
+      {
+        "name": "maintenance shows original package price",
+        "pass": true
+      },
+      {
+        "name": "maintenance hides unrelated warranty/repair-limit",
+        "pass": true
+      },
+      {
+        "name": "four open cases",
+        "pass": true
+      },
+      {
+        "name": "completed toggle shows six",
+        "pass": true
+      },
+      {
+        "name": "service filter",
+        "pass": true
+      },
+      {
+        "name": "search empty state",
+        "pass": true
+      },
+      {
+        "name": "reset restores open including shipped",
+        "pass": true
+      },
+      {
+        "name": "missing fee remains empty",
+        "pass": true
+      },
+      {
+        "name": "missing public data blocks creation",
+        "pass": true
+      },
+      {
+        "name": "price normalizing",
+        "pass": true
+      }
+    ]
+  },
+  "responsive": {
+    "mobile": [
+      {
+        "fits": true,
+        "pageWidth": 390,
+        "view": "list",
+        "width": 390
+      },
+      {
+        "fits": true,
+        "pageWidth": 375,
+        "view": "detail",
+        "width": 390
+      },
+      {
+        "fits": true,
+        "pageWidth": 375,
+        "view": "settings",
+        "width": 390
+      },
+      {
+        "fits": true,
+        "pageWidth": 375,
+        "view": "document",
+        "width": 390
+      }
+    ],
+    "desktop": [
+      {
+        "fits": true,
+        "pageWidth": 1600,
+        "view": "list",
+        "width": 1600
+      },
+      {
+        "fits": true,
+        "pageWidth": 1585,
+        "view": "detail",
+        "width": 1600
+      },
+      {
+        "fits": true,
+        "pageWidth": 1600,
+        "view": "settings",
+        "width": 1600
+      },
+      {
+        "fits": true,
+        "pageWidth": 1585,
+        "view": "document",
+        "width": 1600
+      }
+    ]
+  }
+}

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="de" data-color-scheme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reparaturen · OpenXE Vorschau</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body data-module="repairintegration" data-action="list">
+  <svg class="svg-defs" aria-hidden="true"><defs>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 3 9 5v8l-9 5-9-5V8l9-5Z M3 8l9 5 9-5 M12 13v8 M7.5 5.5l9 5"/></symbol>
+    <symbol id="i-tools" viewBox="0 0 24 24"><path d="m14.5 6.5 3 3 M8 14l-5 5 2 2 5-5 M14 3a6 6 0 0 0-5 8L3 5l2-2 6 6a6 6 0 0 0 8 8l-4-4 3-3 4 4A6 6 0 0 0 14 3Z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8l-5-5Z M14 3v5h5 M8 12h8 M8 16h6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14 M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5 M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </defs></svg>
+  <aside id="sidebar" aria-label="OpenXE Navigation">
+    <div class="brand"><svg><use href="#i-box"/></svg><span>Open<span>XE</span></span></div>
+    <span class="side-link"><svg><use href="#i-file"/></svg>Tickets</span>
+    <span class="side-link"><svg><use href="#i-check"/></svg>Aufgaben</span>
+    <span class="side-link">Wiedervorlage</span><span class="side-link">Kalender</span>
+    <div class="side-separator"></div>
+    <span class="side-link"><svg><use href="#i-box"/></svg>Stammdaten</span>
+    <span class="side-link"><svg><use href="#i-file"/></svg>Verkauf</span>
+    <span class="side-link active"><svg><use href="#i-tools"/></svg>Reparaturen</span>
+  </aside>
+  <div id="main">
+    <header id="header"><div class="search-bar"><svg><use href="#i-search"/></svg><span>Suchen</span></div><span class="header-user">3D Partner <span class="avatar">3D</span></span></header>
+    <div id="page_container">
+      <h1 class="module-title">Reparaturen</h1>
+      <nav class="tabs secnav" aria-label="Reparaturansichten">
+        <button type="button" data-view="list" class="tab active" aria-current="page">Übersicht</button>
+        <button type="button" class="tab" disabled title="In dieser Vorschau nicht enthalten">Tickets mergen</button>
+        <button type="button" class="tab" disabled title="In dieser Vorschau nicht enthalten">Sync-Status</button>
+        <button type="button" data-view="settings" class="tab">Einstellungen</button>
+        <button type="button" data-view="detail" class="tab">Reparatur-Details</button>
+      </nav>
+      <div class="preview-notice">Layoutvorschau · Beispieldaten · keine Änderungen in OpenXE oder WordPress</div>
+
+      <section id="view-list" aria-label="Reparaturübersicht">
+        <div class="ui-tabs"><div class="ui-tabs-nav"><span>Reparaturen</span></div><div class="ui-tabs-panel">
+          <fieldset class="filter"><legend>Filter</legend><div class="filterbar">
+            <label>Service: <select id="filter-service"><option value="">Alle Services</option><option value="reparatur">Reparatur</option><option value="wartung">Wartung</option><option value="reverse_engineering">Reverse Engineering</option><option value="individualisierung">Individualisierung</option></select></label>
+            <label>Status: <select id="filter-status"><option value="">Alle Status</option></select></label>
+            <label><input id="show-completed" type="checkbox"> Erledigte anzeigen</label>
+          </div></fieldset>
+          <div class="dataTables-toolbar"><span>Einträge pro Seite: 25</span><label>Suche: <input id="search" type="search" aria-label="Vorgänge durchsuchen"></label></div>
+          <div class="table-container"><table class="jobs-table mkTable"><thead><tr><th>Vorgang / Kunde</th><th>Gerät</th><th>Service</th><th>Status</th><th>Eingang</th><th>Aktion</th></tr></thead><tbody id="jobs"></tbody></table></div>
+          <div id="list-empty" class="empty-state" hidden><p>Keine passenden Vorgänge.</p><button id="reset-filters" type="button" class="button button-secondary">Filter zurücksetzen</button></div>
+          <p id="list-count" class="table-foot" aria-live="polite"></p>
+        </div></div>
+      </section>
+
+      <section id="view-detail" aria-label="Reparatur-Details" hidden>
+        <div class="ui-tabs"><div class="ui-tabs-nav"><span>Ticket / Reparatur</span></div><div class="ui-tabs-panel">
+          <div class="ticket-heading"><button type="button" class="back-link" data-view="list" aria-label="Zur Übersicht"><svg><use href="#i-back"/></svg></button><strong id="detail-title"></strong><span id="detail-subtitle"></span><div id="detail-badges" class="badge-group"></div></div>
+          <div class="row"><div class="row-height">
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Reparatur-Details · Formularangaben</legend>
+              <table class="mkTableFormular facts-table"><tbody id="intake-facts"></tbody></table>
+              <div id="form-price" class="form-price"></div>
+              <div class="customer-description"><strong id="customer-description-label"></strong><p id="customer-description"></p></div>
+            </fieldset></div></div>
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Bearbeitung (intern)</legend>
+              <table class="mkTableFormular"><tbody>
+                <tr><td><label for="diagnosis">Diagnose-Notiz:</label></td><td><textarea id="diagnosis" rows="3"></textarea></td></tr>
+                <tr><td><label for="internal-notes">Interne Notizen:</label></td><td><textarea id="internal-notes" rows="3"></textarea></td></tr>
+                <tr><td>Kundenkonto:</td><td><strong id="customer-account" class="link-color"></strong></td></tr>
+              </tbody></table><p class="help">Interne Notizen werden nicht in den Produkttext übernommen.</p>
+            </fieldset></div></div>
+          </div></div>
+          <div class="row"><div class="row-height">
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Leistungsdaten für den Produkttext</legend>
+              <table class="mkTableFormular"><tbody>
+                <tr><td><label for="billing-mode">Abrechnung:</label></td><td><select id="billing-mode"><option value="service">Reparatur durchführen</option><option value="fee">Keine Reparatur · nur KVA abrechnen</option></select><p id="mode-hint" class="help"></p></td></tr>
+                <tr id="intake-diagnosis-row"><td><label for="public-diagnosis">Eingangsdiagnose:</label></td><td><textarea id="public-diagnosis" rows="6" placeholder="Diagnose für den Kundenbeleg"></textarea></td></tr>
+                <tr id="scope-label"><td><label for="service-scope">Reparatur- /<br>Wartungsarbeiten:</label></td><td><textarea id="service-scope" rows="4" placeholder="Leistungen für diesen Vorgang"></textarea></td></tr>
+                <tr id="final-check-row"><td><label for="public-final-check">Endkontrolle:</label></td><td><textarea id="public-final-check" rows="6" placeholder="Prüfungen für diesen Vorgang"></textarea></td></tr>
+                <tr><td><label for="position-price">Preis, brutto (€):</label></td><td><input class="amount" type="text" inputmode="decimal" id="position-price" autocomplete="off"> <button type="button" id="use-form-price" class="button button-secondary" hidden>Formularpreis übernehmen</button><p id="price-hint" class="help"></p><p id="price-error" class="validation" role="alert" hidden></p></td></tr>
+              </tbody></table>
+            </fieldset></div></div>
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Belegposition · Produkttext</legend>
+              <div class="position-actions"><button type="button" class="text-button" data-view="settings">Artikel / Textvorlagen</button><button type="button" id="regenerate-text" class="button button-secondary">Aus Vorlage einsetzen</button></div>
+              <div class="product-paper"><span class="paper-article-number article-number"></span><div><strong class="article-name"></strong><p id="position-paper-text"></p></div></div>
+              <details class="manual-editor"><summary>Produkttext manuell bearbeiten</summary><label class="visually-hidden" for="position-text">Positionsbeschreibung im Beleg</label><textarea id="position-text" rows="15"></textarea></details>
+              <p id="template-warning" class="validation" role="status" hidden></p>
+              <div class="prepare-footer"><p id="create-hint" class="help"></p><button type="button" id="create-document" class="button button-primary">Angebot vorbereiten</button></div>
+            </fieldset></div></div>
+          </div></div>
+          <div class="row"><div class="col-xs-14"><div class="inside"><fieldset><legend>Verknüpfte Belege</legend><div id="linked-documents"></div></fieldset></div></div></div>
+        </div></div>
+      </section>
+
+      <section id="view-settings" aria-label="Artikel und Textvorlagen" hidden>
+        <div class="ui-tabs"><div class="ui-tabs-nav"><span>Artikel &amp; Textvorlagen</span><span class="inactive">WordPress-Verbindung</span></div><div class="ui-tabs-panel">
+          <fieldset><legend>Artikelzuordnung</legend><table class="mkTableFormular settings-article-fields"><tbody>
+            <tr><td><label for="article-number">Artikelnummer:</label></td><td><input id="article-number" type="text" value="100003" maxlength="80"></td><td><label for="article-name">Bezeichnung:</label></td><td><input id="article-name" type="text" value="3D-Drucker Reparaturservice &amp; Wartung (nach Aufwand)" maxlength="160"></td></tr>
+          </tbody></table><p class="help">Vorbelegung aus deinem Beispiel. Die echte Artikelzuordnung wird später im ERP geprüft.</p></fieldset>
+          <div class="row"><div class="row-height">
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Textvorlage</legend><table class="mkTableFormular"><tbody>
+              <tr><td><label for="template-type">Verwendung:</label></td><td><select id="template-type"><option value="reparatur">Reparatur · Angebot / Auftrag</option><option value="reparatur_rechnung">Reparatur · Rechnung / Leistungsnachweis</option><option value="fee">Keine Reparatur · KVA-Abrechnung</option><option value="wartung">Wartung</option><option value="reverse_engineering">Reverse Engineering</option><option value="individualisierung">Individualisierung</option></select></td></tr>
+              <tr><td><label for="template-text">Produkttext:</label></td><td><textarea id="template-text" rows="16"></textarea></td></tr>
+            </tbody></table><p class="help">Platzhalter an der Cursorposition einsetzen:</p><div id="variable-buttons" class="variable-buttons"></div><p id="settings-validation" class="validation" role="status" hidden></p><div class="settings-actions"><button type="button" class="button button-primary" id="apply-settings">In der Vorschau anwenden</button><button type="button" class="button button-secondary" id="reset-template">Standardvorlage</button></div></fieldset></div></div>
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Druckvorschau der Belegposition</legend><table class="mkTableFormular"><tbody><tr><td><label for="preview-job">Vorgang:</label></td><td><select id="preview-job"></select></td></tr></tbody></table>
+              <div class="product-paper"><span class="paper-article-number" id="settings-paper-number">100003</span><div><strong class="article-name"></strong><p id="settings-preview"></p></div></div><p id="preview-missing" class="validation" role="status" hidden></p><p class="help">Gerät / Fehlerbild aus dem Formular; Diagnose, Arbeiten und Endkontrolle aus den Leistungsdaten.</p>
+            </fieldset></div></div>
+          </div></div>
+        </div></div>
+      </section>
+
+      <section id="view-document" aria-label="Belegvorschau" hidden>
+        <div class="ui-tabs"><div class="ui-tabs-nav"><span>Belegentwurf</span></div><div class="ui-tabs-panel">
+          <div class="ticket-heading"><button type="button" class="back-link" data-view="detail"><svg><use href="#i-back"/></svg>Zum Vorgang</button><strong id="document-title"></strong><span id="document-subtitle"></span></div>
+          <div class="row"><div class="row-height">
+            <div class="col-xs-14 col-md-8 col-md-height"><div class="inside"><fieldset><legend id="document-type-title">Beleg</legend>
+              <table class="mkTableFormular"><tbody><tr><td>Kunde:</td><td id="document-customer"></td><td>Vorgang:</td><td id="document-reference"></td></tr></tbody></table>
+              <div class="table-container document-position"><table class="mkTable"><thead><tr><th>Artikelnr.</th><th>Bezeichnung / Beschreibung</th><th>Menge</th><th>Preis, brutto</th></tr></thead><tbody><tr><td><span id="document-article-number"></span></td><td><label class="visually-hidden" for="document-position-name">Artikelbezeichnung</label><input id="document-position-name" type="text"><label class="visually-hidden" for="document-position-description">Produkttext im Beleg</label><textarea id="document-position-description" rows="18"></textarea></td><td>1</td><td><label class="visually-hidden" for="document-price">Bruttopreis in Euro</label><input id="document-price" type="text" inputmode="decimal" class="amount"></td></tr></tbody></table></div>
+              <p id="document-error" class="validation" role="alert" hidden></p>
+              <div class="document-paper-wrapper"><div class="product-paper"><span class="paper-article-number" id="document-paper-number"></span><div><strong id="document-paper-name"></strong><p id="document-paper-text"></p></div></div></div>
+              <dl class="totals"><div><dt>Netto</dt><dd id="document-net"></dd></div><div><dt>Umsatzsteuer 19 % (Beispiel)</dt><dd id="document-vat"></dd></div><div class="total-gross"><dt>Gesamt, brutto</dt><dd id="document-total"></dd></div></dl>
+            </fieldset></div></div>
+            <div class="col-xs-14 col-md-4 col-md-height"><div class="inside"><fieldset><legend id="document-next-title">Aktionen</legend><p id="document-flow-hint"></p><button type="button" class="button button-primary" id="continue-document"></button><button type="button" class="button button-secondary" id="use-invoice-template" hidden>Leistungsnachweis einsetzen</button><p class="help" id="invoice-template-hint" hidden>Setzt die Rechnungsvorlage mit den aktuellen Leistungsdaten ein. Durchgeführte Arbeiten und Endkontrolle vor Freigabe prüfen.</p><p id="document-fee-hint" class="help"></p><p class="help">Beispielentwurf · keine Freigabe oder Versendung</p></fieldset></div></div>
+          </div></div>
+        </div></div>
+      </section>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </div>
+</body>
+</html>
