@@ -215,7 +215,7 @@ final class Bootstrap
      *
      * @return HubspotDealPropertyService
      */
-    public function onInitHubspotDealPropertyService(ContainerInterface $container)
+    public static function onInitHubspotDealPropertyService(ContainerInterface $container)
     {
         return new HubspotDealPropertyService(
             $container->get('HubspotClientService'),

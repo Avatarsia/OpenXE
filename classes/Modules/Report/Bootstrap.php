@@ -156,7 +156,7 @@ final class Bootstrap
      *
      * @return ReportChartService
      */
-    public function onInitReportChartService(ContainerInterface $container)
+    public static function onInitReportChartService(ContainerInterface $container)
     {
         return new ReportChartService(
             $container->get('Database'),
