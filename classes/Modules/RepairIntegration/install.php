@@ -81,9 +81,9 @@ $db->perform(
 );
 
 // 4. Register permissions
-// Fuer alle vorhandenen Admin-User die vier Modul-Actions in userrights anlegen.
+// Fuer alle vorhandenen Admin-User die Modul-Actions in userrights anlegen.
 // Idempotent: bereits vorhandene Eintraege werden uebersprungen.
-$permissionActions = ['list', 'einstellungen', 'merge', 'syncstatus'];
+$permissionActions = ['list', 'einstellungen', 'merge', 'syncstatus', 'linkbeleg', 'unlinkbeleg', 'belegtickets'];
 $adminUsers = $db->fetchAll("SELECT id FROM `user` WHERE `type` = 'admin'");
 foreach ($adminUsers as $adminUser) {
     $userId = (int)$adminUser['id'];

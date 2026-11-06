@@ -104,8 +104,8 @@ final class RepairBelegChainResolverTest extends TestCase
             '  AN-1001-2 (Version von AN-1001)',
             'AB-2001 (aus Angebot AN-1001-2)',
             '  LS-3001 (aus Auftrag AB-2001)',
-            '  RE-4001 (aus Auftrag AB-2001)',
-            '    GS-5001 (aus Rechnung RE-4001)',
+            '    RE-4001 (aus Lieferschein LS-3001)',
+            '      GS-5001 (aus Rechnung RE-4001)',
         ], self::summary($nodes));
     }
 

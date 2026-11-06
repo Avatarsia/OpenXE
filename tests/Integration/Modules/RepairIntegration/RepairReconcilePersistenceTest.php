@@ -35,6 +35,7 @@ final class RepairReconcilePersistenceTest extends TestCase
           'CREATE TABLE datei (id int AUTO_INCREMENT PRIMARY KEY,titel varchar(255),beschreibung text,nummer varchar(255),geloescht int,firma int,geschuetzt int NOT NULL)',
           'CREATE TABLE datei_version (id int AUTO_INCREMENT PRIMARY KEY,datei int,ersteller varchar(255),datum date,version int,dateiname varchar(255),bemerkung varchar(255),size varchar(255))',
           'CREATE TABLE datei_stichwoerter (id int AUTO_INCREMENT PRIMARY KEY,datei int,subjekt varchar(255),objekt varchar(255),parameter varchar(255),sort int,parameter2 int,objekt2 varchar(255))',
+          'CREATE TABLE userrights (id int AUTO_INCREMENT PRIMARY KEY, `user` int NOT NULL, module varchar(64) NOT NULL, action varchar(64) NOT NULL, permission tinyint(1) NOT NULL)',
         ] as $sql) $this->db->perform($sql);
         (new RepairIntegrationMigration($this->db))->install();
         $config=new RepairConfigService($this->db);

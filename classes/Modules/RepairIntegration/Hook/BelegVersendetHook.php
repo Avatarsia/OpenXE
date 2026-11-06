@@ -8,6 +8,7 @@ use Xentral\Modules\RepairIntegration\Enum\ServiceType;
 use Xentral\Modules\RepairIntegration\Gateway\RepairBelegGateway;
 use Xentral\Modules\RepairIntegration\Gateway\RepairDetailsGateway;
 use Xentral\Modules\RepairIntegration\Gateway\RepairStatusConfigGateway;
+use Xentral\Modules\RepairIntegration\Service\RepairBelegChainResolver;
 use Xentral\Modules\RepairIntegration\Service\RepairSyncService;
 use Xentral\Modules\RepairIntegration\Service\RepairConfigService;
 use Xentral\Modules\RepairIntegration\Service\RepairStatusExchangeService;
@@ -16,7 +17,7 @@ use Xentral\Modules\RepairIntegration\Service\RepairStatusExchangeService;
  * Reagiert auf den Core-Hook DokumentMaskVersendet(typ, id): wurde ein aus
  * einem Repair-Ticket erzeugter Beleg versendet, wird das Ticket nachgezogen.
  *
- * - immer: Belegnummer im Link (repair_ticket_beleg) aktualisieren
+ * - direkter Link: Belegnummer im Link (repair_ticket_beleg) aktualisieren
  * - angebot:  quote_amount = Angebotssumme, Status -> quote_sent-Slug
  * - auftrag:  Status -> approved-Slug
  * - rechnung: actual_cost = Rechnungssumme, Status -> repaired-Slug
@@ -25,6 +26,13 @@ use Xentral\Modules\RepairIntegration\Service\RepairStatusExchangeService;
  * aufgeloest (kv_gesendet/re_angebot/ind_angebot usw.). Ein Statuswechsel
  * passiert nur vorwaerts, siehe shouldAdvance(). Jeder Statuswechsel und
  * jeder neue KVA-Betrag laeuft ueber den bestehenden WP-Push.
+ *
+ * Hat der versendete Beleg keinen eigenen Link (z.B. Angebotsversion per
+ * "neue Version" oder aus einem verknuepften Angebot weitergefuehrter
+ * Auftrag), wird die Belegkette ueber RepairBelegChainResolver aufgeloest
+ * und jedes Ticket mit einem Link auf einen Kettenbeleg genau einmal
+ * nachgezogen. Direkte Links haben Vorrang; abgeleitete Links gehoeren zu
+ * einem anderen Beleg, ihre Belegnummer bleibt daher unveraendert.
  */
 final class BelegVersendetHook
 {
@@ -70,6 +78,10 @@ final class BelegVersendetHook
         }
 
         $links = $this->belegGateway->getByBeleg($belegTyp, $belegId);
+        $isDirect = $links !== [];
+        if (!$isDirect) {
+            $links = $this->findChainLinks($belegTyp, $belegId);
+        }
         if ($links === []) {
             return [];
         }
@@ -92,7 +104,7 @@ final class BelegVersendetHook
         foreach ($links as $link) {
             $ticketId = (int)$link['ticket_id'];
 
-            if ($belegNr !== '' && $belegNr !== (string)($link['beleg_nr'] ?? '')) {
+            if ($isDirect && $belegNr !== '' && $belegNr !== (string)($link['beleg_nr'] ?? '')) {
                 $this->belegGateway->updateBelegNr((int)$link['id'], $belegNr);
             }
 
@@ -145,6 +157,30 @@ final class BelegVersendetHook
         }
 
         return $results;
+    }
+
+    /**
+     * Links aller Belege aus der Kette des versendeten Belegs, je Ticket
+     * hoechstens einer (neuester zuerst, siehe getByBelege).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function findChainLinks(string $belegTyp, int $belegId): array
+    {
+        $nodes = (new RepairBelegChainResolver($this->db))->resolve([['typ' => $belegTyp, 'id' => $belegId]]);
+        $belege = [];
+        foreach ($nodes as $node) {
+            $belege[] = ['typ' => (string)$node['typ'], 'id' => (int)$node['id']];
+        }
+
+        $links = [];
+        foreach ($this->belegGateway->getByBelege($belege) as $link) {
+            $ticketId = (int)$link['ticket_id'];
+            if ($ticketId > 0 && !isset($links[$ticketId])) {
+                $links[$ticketId] = $link;
+            }
+        }
+        return array_values($links);
     }
 
     /**

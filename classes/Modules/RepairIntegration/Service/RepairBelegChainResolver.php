@@ -179,7 +179,8 @@ final class RepairBelegChainResolver
 
     /**
      * Baut die Anzeigereihenfolge: Versionen unter dem Hauptangebot,
-     * Lieferschein/Rechnung unter dem Auftrag, Gutschrift unter der Rechnung.
+     * Lieferschein unter dem Auftrag, Rechnung unter Lieferschein bzw. Auftrag,
+     * Gutschrift unter der Rechnung.
      * Auftraege stehen auf oberster Ebene mit Herkunftsangabe "aus Angebot X".
      */
     private function order(array $nodes): array
@@ -251,12 +252,14 @@ final class RepairBelegChainResolver
                 $p = $ref('auftrag', $node['auftragid']);
                 return [$p, $p, 'aus Auftrag '];
             case 'rechnung':
-                $p = $ref('auftrag', $node['auftragid']);
-                if ($p !== null) {
-                    return [$p, $p, 'aus Auftrag '];
-                }
+                // Auftrag -> Lieferschein -> Rechnung setzt beide Felder: der
+                // Lieferschein ist die genauere Herkunft.
                 $p = $ref('lieferschein', $node['lieferschein']);
-                return [$p, $p, 'aus Lieferschein '];
+                if ($p !== null) {
+                    return [$p, $p, 'aus Lieferschein '];
+                }
+                $p = $ref('auftrag', $node['auftragid']);
+                return [$p, $p, 'aus Auftrag '];
             case 'gutschrift':
                 $p = $ref('rechnung', $node['rechnungid']);
                 return [$p, $p, 'aus Rechnung '];

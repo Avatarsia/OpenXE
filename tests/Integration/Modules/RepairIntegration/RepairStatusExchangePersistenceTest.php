@@ -43,6 +43,7 @@ final class RepairStatusExchangePersistenceTest extends TestCase
         self::$db->perform('CREATE TABLE ticket_protokoll (id int AUTO_INCREMENT PRIMARY KEY,ticket int,zeit datetime,bearbeiter varchar(100),grund text)');
         self::$db->perform('CREATE TABLE hook (id int AUTO_INCREMENT PRIMARY KEY, name varchar(255), alias varchar(255), aktiv int, parametercount int, description text)');
         self::$db->perform('CREATE TABLE hook_register (id int AUTO_INCREMENT PRIMARY KEY, hook_action int, `function` varchar(255), aktiv int, position int, hook int, module varchar(255), module_parameter int)');
+        self::$db->perform('CREATE TABLE userrights (id int AUTO_INCREMENT PRIMARY KEY, `user` int NOT NULL, module varchar(64) NOT NULL, action varchar(64) NOT NULL, permission tinyint(1) NOT NULL)');
         (new RepairIntegrationMigration(self::$db))->install();
         $config = new RepairConfigService(self::$db);
         $config->set('enabled', '1');

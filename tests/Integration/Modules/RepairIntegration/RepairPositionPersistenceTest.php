@@ -42,6 +42,7 @@ final class RepairPositionPersistenceTest extends TestCase
         foreach (self::$db->fetchCol('SHOW TABLES') as $table) self::$db->exec('DROP TABLE `' . str_replace('`', '``', $table) . '`');
         self::$db->exec('CREATE TABLE hook (id int AUTO_INCREMENT PRIMARY KEY, name varchar(255), alias varchar(255), aktiv int, parametercount int, description text)');
         self::$db->exec('CREATE TABLE hook_register (id int AUTO_INCREMENT PRIMARY KEY, hook_action int, `function` varchar(255), aktiv int, position int, hook int, module varchar(255), module_parameter int)');
+        self::$db->exec('CREATE TABLE userrights (id int AUTO_INCREMENT PRIMARY KEY, `user` int NOT NULL, module varchar(64) NOT NULL, action varchar(64) NOT NULL, permission tinyint(1) NOT NULL)');
         (new RepairIntegrationMigration(self::$db))->install();
         self::$db->exec("CREATE TABLE artikel (id int PRIMARY KEY, nummer varchar(50), name_de text, anabregs_text text, umsatzsteuer varchar(50), projekt int, mlmpunkte decimal(10,2), mlmbonuspunkte decimal(10,2), mlmdirektpraemie decimal(10,2), geloescht int DEFAULT 0)");
         self::$db->exec("INSERT INTO artikel VALUES (17, '100003', 'Reparatur', '', 'normal', 1, 0, 0, 0, 0), (18, 'VERSAND', 'Versand', '', 'normal', 1, 0, 0, 0, 0)");
@@ -101,10 +102,32 @@ final class RepairPositionPersistenceTest extends TestCase
         $migration = new RepairIntegrationMigration(self::$db);
         (new RepairConfigService(self::$db))->set('schema_version', '1.5.0');
         $migration->upgrade(); $migration->upgrade();
-        self::assertSame('1.8.0', $migration->getCurrentVersion());
+        self::assertSame('1.9.0', $migration->getCurrentVersion());
         foreach (['repair_status_exchange', 'repair_media_exchange', 'repair_exchange_jobs', 'repair_media_failures'] as $table) {
             self::assertSame(1, (int)self::$db->fetchValue('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table', ['table'=>$table]));
         }
+    }
+
+    public function testUpgradeGrantsBelegLinkActionsToExistingRepairUsersOnly(): void
+    {
+        self::$db->exec("INSERT INTO userrights (`user`, module, action, permission) VALUES
+            (5, 'repairintegration', 'list', 1), (5, 'repairintegration', 'createbeleg', 1),
+            (6, 'repairintegration', 'createbeleg', 1),
+            (7, 'repairintegration', 'list', 1), (7, 'repairintegration', 'linkbeleg', 0),
+            (8, 'repairintegration', 'list', 0), (9, 'ticket', 'list', 1)");
+        $migration = new RepairIntegrationMigration(self::$db);
+        (new RepairConfigService(self::$db))->set('schema_version', '1.8.0');
+        $migration->upgrade(); $migration->upgrade();
+        self::assertSame('1.9.0', $migration->getCurrentVersion());
+        $rows = self::$db->fetchAll("SELECT `user`, action, permission FROM userrights
+            WHERE module = 'repairintegration' AND action IN ('linkbeleg', 'unlinkbeleg', 'belegtickets')
+            ORDER BY `user`, action");
+        $actual = array_map(static fn(array $r): string => $r['user'] . ':' . $r['action'] . '=' . $r['permission'], $rows);
+        self::assertSame([
+            '5:belegtickets=1', '5:linkbeleg=1', '5:unlinkbeleg=1',
+            '6:belegtickets=1', '6:linkbeleg=1', '6:unlinkbeleg=1',
+            '7:belegtickets=1', '7:linkbeleg=0', '7:unlinkbeleg=1',
+        ], $actual);
     }
 
     public function testStaffFieldsPersistWithoutTouchingInternalNotes(): void

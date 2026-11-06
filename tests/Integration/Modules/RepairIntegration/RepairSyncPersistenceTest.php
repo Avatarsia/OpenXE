@@ -49,6 +49,7 @@ final class RepairSyncPersistenceTest extends TestCase
         self::$db->perform('CREATE TABLE hook (id int AUTO_INCREMENT PRIMARY KEY, name varchar(255), alias varchar(255), aktiv int, parametercount int, description text)');
         self::$db->perform('CREATE TABLE hook_register (id int AUTO_INCREMENT PRIMARY KEY, hook_action int, `function` varchar(255), aktiv int, position int, hook int, module varchar(255), module_parameter int)');
         self::$db->perform('CREATE TABLE hook_navigation (module varchar(255))');
+        self::$db->perform('CREATE TABLE userrights (id int AUTO_INCREMENT PRIMARY KEY, `user` int NOT NULL, module varchar(64) NOT NULL, action varchar(64) NOT NULL, permission tinyint(1) NOT NULL)');
         (new RepairIntegrationMigration(self::$db))->install();
         $this->config = new RepairConfigService(self::$db);
         $this->config->set('enabled', '1');

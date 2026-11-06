@@ -9,7 +9,7 @@ final class RepairIntegrationMigration
 {
     private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
     private const SCHEMA_VERSION_KEY = 'schema_version'; // @php83: add type string
-    private const SCHEMA_VERSION = '1.8.0'; // @php83: add type string
+    private const SCHEMA_VERSION = '1.9.0'; // @php83: add type string
 
     /**
      * Explizite Upgrade-Kette: gespeicherte Version => auszufuehrender Schritt.
@@ -31,6 +31,7 @@ final class RepairIntegrationMigration
         '1.5.0' => ['sql' => '008_beleg_positions.sql', 'to' => '1.6.0'],
         '1.6.0' => ['sql' => '009_status_exchange.sql', 'to' => '1.7.0'],
         '1.7.0' => ['sql' => '010_media_exchange.sql', 'to' => '1.8.0'],
+        '1.8.0' => ['sql' => '011_beleg_link_userrights.sql', 'to' => '1.9.0'],
     ];
 
     public function __construct(
@@ -48,6 +49,7 @@ final class RepairIntegrationMigration
         $this->executeSqlFile(__DIR__ . '/sql/008_beleg_positions.sql');
         $this->executeSqlFile(__DIR__ . '/sql/009_status_exchange.sql');
         $this->executeSqlFile(__DIR__ . '/sql/010_media_exchange.sql');
+        $this->executeSqlFile(__DIR__ . '/sql/011_beleg_link_userrights.sql');
         $this->setVersion(self::SCHEMA_VERSION);
     }
 
