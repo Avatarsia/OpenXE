@@ -542,8 +542,28 @@ class YUI {
       }
     } else 
     if ($module == "produktion") {
+    } else
+    if (in_array($module, ['auftrag','rechnung','gutschrift','angebot','proformarechnung']) && $column == 6) {
+      // Preis (brutto): in Netto umrechnen und als b.preis speichern
+      $value = $this->app->erp->FromFormatZahlToDB($value);
+      $parent = $this->app->DB->Select("SELECT $module FROM $table WHERE id='$id' LIMIT 1");
+      $steuersatz = 0;
+      $funktion = ucfirst($module).'MitUmsatzeuer';
+      if($this->app->erp->$funktion($parent)) {
+        $steuersatz = (float)$this->app->erp->GetSteuersatzBelegpos($module, $parent, $id);
+      }
+      $value = round((float)$value / (1 + $steuersatz / 100), 8);
+      $this->app->DB->Update("UPDATE $table SET preis='$value', keinrabatterlaubt='1' WHERE id='$id' LIMIT 1");
+      if(in_array($module, array('auftrag','rechnung','gutschrift'))) {
+        $this->app->DB->Update("UPDATE $module SET extsoll = 0 WHERE id = '$parent' LIMIT 1");
+      }
+      $result = $this->app->DB->Select("SELECT ".$this->FormatPreis("round(preis*(1+$steuersatz/100),4)")." FROM $table WHERE id='$id' LIMIT 1");
     } else {
-      
+      // Spalte Preis (brutto) verschiebt Waehrung/Rabatt/Einkaufspreis um eins
+      if (in_array($module, ['auftrag','rechnung','gutschrift','angebot','proformarechnung']) && $column > 6) {
+        $column--;
+      }
+
       switch ($column) {
         case 3: // Datum
 
@@ -668,10 +688,11 @@ class YUI {
           }
           $join = "";
           $preiscell = 'b.preis';
-          if($module == 'auftrag' || $module == 'rechnung' || $module == 'gutschrift' || $module == 'angebot' || $module == 'proformarechnung')
+          // Spalte Preis (netto) ist immer netto, Brutto hat eine eigene Spalte (case 6 oben)
+          if(false)
           {
             $parent = $this->app->DB->Select("SELECT $module FROM $table WHERE id='$id' LIMIT 1");
-            $anrede = $this->app->DB->Select("SELECT typ FROM $module WHERE id = '$parent' LIMIT 1");
+            $anrede =$this->app->DB->Select("SELECT typ FROM $module WHERE id = '$parent' LIMIT 1");
             $projekt = $this->app->DB->Select("SELECT projekt FROM $module WHERE id = '$parent' LIMIT 1");
             $adresse = $this->app->DB->Select("SELECT adresse FROM $module WHERE id = '$parent' LIMIT 1");
             $funktion = ucfirst($module).'MitUmsatzeuer';
@@ -1507,8 +1528,9 @@ class YUI {
         $funktion = ucfirst($module).'MitUmsatzeuer';
         $join = '';
         $anrede = 'firma';
-        if(!$this->app->erp->AnzeigeBelegNettoAdresse($anrede, $module, $projekt, $adresse, $id)
-          && $this->app->erp->$funktion($id)) {
+        // Spalte Preis (netto) bleibt b.preis, Brutto wird separat als Spalte 7 geliefert
+        $bruttoCol = 'b.preis';
+        if($this->app->erp->$funktion($id)) {
           //$steuersatz = $this->app->erp->GetSteuersatzBelegpos($module, $id, $sid);
           //$value /= $value / (1+(float)$steuersatz / 100);
           /*$umsatzsteuer_ermaessigt = (float)$this->app->DB->Select(
@@ -1519,7 +1541,7 @@ class YUI {
           );*/
           $umsatzsteuer_ermaessigt = (float)$moduleArr['steuersatz_ermaessigt'];
           $umsatzsteuer_normal = (float)$moduleArr['steuersatz_normal'];
-          $priceCol = "round(10000000* b.preis*(1+ if(isnull(b.steuersatz) OR b.steuersatz < 0,
+          $bruttoCol = "round(10000000* b.preis*(1+ if(isnull(b.steuersatz) OR b.steuersatz < 0,
           if(b.umsatzsteuer = 'befreit',0,
             if(b.umsatzsteuer = 'ermaessigt', $umsatzsteuer_ermaessigt,
               if(ifnull(b.umsatzsteuer,'') <> '', $umsatzsteuer_normal,
@@ -1573,11 +1595,12 @@ class YUI {
       if(!empty($positionsIds)) {
         $positions = $this->app->DB->SelectArr(
           sprintf(
-            "SELECT b.id, %s AS `preis`, trim(b.menge)+0 as menge
-            FROM `%s` AS `b` 
-            %s 
+            "SELECT b.id, %s AS `preis`, %s AS `preisbrutto`, trim(b.menge)+0 as menge
+            FROM `%s` AS `b`
+            %s
             WHERE b.`%s` = %d AND b.id IN (%s)",
             $priceCol,
+            isset($bruttoCol) ? $bruttoCol : 'NULL',
             $module.'_position',
             $join,
             $module, $id, implode(', ', array_unique($positionsIds))
@@ -1596,6 +1619,12 @@ class YUI {
                 $price .= str_repeat('0',2-strlen($priceSplit[(empty($priceSplit)?0:count($priceSplit))-1]));
               }
               $ret[] = ['elid' => $arr[$positionId]['price_id'], 'value' => $price];
+            }
+            if(isset($bruttoCol) && $position['preisbrutto'] !== null) {
+              $ret[] = [
+                'elid' => $positionId.'split7',
+                'value' => preg_replace('/(,\d\d)0{1,2}$/', '$1', number_format(round((float)$position['preisbrutto'], 4), 4, ',', '.'))
+              ];
             }
             if(isset($idToQuantity[$positionId])
               && $position['menge'] != $idToQuantity[$positionId]
@@ -1871,6 +1900,24 @@ class YUI {
             }
             elseif($umsatzsteuer !== 'befreit') {
               //$preis = round($preis / (1+ (float)$this->app->DB->Select("SELECT steuersatz_normal FROM $module WHERE id = '$id' LIMIT 1")/100),8);
+              $preis = round($preis / (1+ (float)$docArr['steuersatz_normal']/100),8);
+            }
+          }
+          // Netto/Brutto-Eingabe: zuletzt bearbeitetes Feld gewinnt
+          $preiseingabe = $this->app->Secure->GetPOST('preiseingabe');
+          $preisbrutto = $this->app->Secure->GetPOST('preisbrutto');
+          if($preiseingabe === 'netto') {
+            $preis = $this->app->erp->FromFormatZahlToDB($this->app->Secure->GetPOST('preis'));
+          }
+          elseif($preiseingabe === 'brutto' && $preisbrutto != '') {
+            $preis = (float)$this->app->erp->FromFormatZahlToDB($preisbrutto);
+            if(!$this->app->erp->$funktion($id)) {
+              // Beleg ohne USt: brutto = netto
+            }
+            elseif($articleArr['umsatzsteuer'] === 'ermaessigt') {
+              $preis = round($preis / (1+ (float)$docArr['steuersatz_ermaessigt']/100),8);
+            }
+            elseif($articleArr['umsatzsteuer'] !== 'befreit') {
               $preis = round($preis / (1+ (float)$docArr['steuersatz_normal']/100),8);
             }
           }
@@ -2584,11 +2631,13 @@ class YUI {
         $_adresse = !empty($docArr)?$docArr['adresse']:$this->app->DB->Select("SELECT adresse FROM $module WHERE id = '$id' LIMIT 1");
         $funktion = ucfirst($module).'MitUmsatzeuer';
         $_anrede = 'firma';
-        if($this->app->erp->AnzeigePositionenBrutto($_anrede, $module, $_projekt, $_adresse,$id) && $this->app->erp->$funktion($id))
+        // Eigene Spalten Preis (netto) und Preis (brutto): netto bleibt b.preis
+        $bruttocell = 'b.preis';
+        if($this->app->erp->$funktion($id))
         {
           $umsatzsteuer_ermaessigt = !empty($docArr)?(float)$docArr['steuersatz_ermaessigt']:(float)$this->app->DB->Select("SELECT steuersatz_ermaessigt FROM $module WHERE id = '$id' LIMIT 1");
           $umsatzsteuer_normal = !empty($docArr)?(float)$docArr['steuersatz_normal']:(float)$this->app->DB->Select("SELECT steuersatz_normal FROM $module WHERE id = '$id' LIMIT 1");
-          $preiscell = " round(10000000 * b.preis*(1+ if(isnull(b.steuersatz) OR b.steuersatz < 0,
+          $bruttocell = " round(10000000 * b.preis*(1+ if(isnull(b.steuersatz) OR b.steuersatz < 0,
           if(b.umsatzsteuer = 'befreit',0,
             if(b.umsatzsteuer = 'ermaessigt', $umsatzsteuer_ermaessigt,
               if(ifnull(b.umsatzsteuer,'') <> '', $umsatzsteuer_normal,
@@ -2631,6 +2680,7 @@ class YUI {
             DATE_FORMAT(lieferdatum,'%d.%m.%Y') as lieferdatum,
             trim(b.menge)+0 as menge,
             ".$this->FormatPreis($preiscell)." as preis,
+            ".$this->FormatPreis("round(".$bruttocell.",4)")." as preisbrutto,
             b.waehrung,
             ".$this->FormatPreis('b.rabatt')." as rabatt,";
 
@@ -2875,7 +2925,7 @@ class YUI {
         
         
         
-                              p.abkuerzung as projekt, a.nummer as nummer, b.nummer as nummer, DATE_FORMAT(lieferdatum,'%d.%m.%Y') as lieferdatum, trim(b.menge)+0 as menge,  ".$this->FormatPreis($preiscell)." as preis
+                              p.abkuerzung as projekt, a.nummer as nummer, b.nummer as nummer, DATE_FORMAT(lieferdatum,'%d.%m.%Y') as lieferdatum, trim(b.menge)+0 as menge,  ".$this->FormatPreis($preiscell)." as preis, ".$this->FormatPreis("round(".$bruttocell.",4)")." as preisbrutto
                               
                               
                               ,b.waehrung, b.rabatt as rabatt,";          
@@ -2901,6 +2951,7 @@ class YUI {
                         '%d.%m.%Y') as lieferdatum,
                         trim(b.menge)+0 as menge,
                         ".$this->FormatPreis($preiscell)." as preis,
+                        ".$this->FormatPreis("round(".$bruttocell.",4)")." as preisbrutto,
                         b.waehrung,
                         b.rabatt as rabatt,
                         '' AS Einkaufspreis,
@@ -14915,7 +14966,7 @@ source: "index.php?module=ajax&action=filter&filtername=' . $filter . $extendurl
       if ($module == "angebot" || $module == "auftrag" || $module == "rechnung" || $module == "gutschrift" || $module == "proformarechnung") {
         
         if ($schreibschutz != 1) {
-          $addrow = array('<form action="" method="post" id="myform"><input type="number" min="1" size="4" name="insertbefore">', '[ARTIKELSTART]<input type="text" size="30" name="artikel" id="artikel" onblur="window.setTimeout(\'selectafterblur()\',200);">[ARTIKELENDE]', '<input type="text" name="projekt" id="projekt" size="10" readonly onclick="checkhere()" >', '<input type="text" name="nummer" id="nummer" size="7">', '<input type="text" size="8" name="lieferdatum" id="lieferdatum">', '<input type="text" name="menge" id="menge" size="5" onblur="window.setTimeout(\'selectafterblurmenge()\',200); document.getElementById(\'preis\').style.background =\'none\';">', '<input type="text" name="preis" id="preis" size="10" onclick="checkhere();">', '<input type="text" name="waehrung" id="waehrung" size="10" onclick="checkhere();">' ,'<input type="text" name="rabatt" id="rabatt" size="7">','','');
+          $addrow = array('<form action="" method="post" id="myform"><input type="number" min="1" size="4" name="insertbefore">', '[ARTIKELSTART]<input type="text" size="30" name="artikel" id="artikel" onblur="window.setTimeout(\'selectafterblur()\',200);">[ARTIKELENDE]', '<input type="text" name="projekt" id="projekt" size="10" readonly onclick="checkhere()" >', '<input type="text" name="nummer" id="nummer" size="7">', '<input type="text" size="8" name="lieferdatum" id="lieferdatum">', '<input type="text" name="menge" id="menge" size="5" onblur="window.setTimeout(\'selectafterblurmenge()\',200); document.getElementById(\'preis\').style.background =\'none\';">', '<input type="text" name="preis" id="preis" size="10" onclick="checkhere();" placeholder="Preis (netto)" title="Preis (netto)" oninput="preisNettoBruttoSync(\'netto\');">', '<input type="text" name="preisbrutto" id="preisbrutto" size="10" placeholder="Preis (brutto)" title="Preis (brutto)" oninput="preisNettoBruttoSync(\'brutto\');"><input type="hidden" name="preiseingabe" id="preiseingabe" value="">', '<input type="text" name="waehrung" id="waehrung" size="10" onclick="checkhere();">' ,'<input type="text" name="rabatt" id="rabatt" size="7">','','');
           $addrow[] = '<input type="submit" value="einf&uuml;gen" name="ajaxbuchen">
             <script type="text/javascript">
             document.onkeydown = function(evt) {
@@ -14930,6 +14981,8 @@ source: "index.php?module=ajax&action=filter&filtername=' . $filter . $extendurl
             document.getElementById("preis").value="";
             document.getElementById("waehrung").value="";
             document.getElementById("rabatt").value="";
+            document.getElementById("preisbrutto").value="";
+            document.getElementById("preiseingabe").value="";
             }
             if (evt.keyCode == 160) { // pfeil rechts
               document.getElementById("menge").focus();
@@ -14942,8 +14995,44 @@ source: "index.php?module=ajax&action=filter&filtername=' . $filter . $extendurl
             }
             if(typeof aktuallisierePreise != \'undefined\')setTimeout(function(){aktuallisierePreise()},200);
             };
+            // Netto/Brutto-Umrechnung, Steuersatz kommt aus artikel ajaxwerte
+            var preisSteuersatz = null;
+            function preisParse(v) {
+              v = (""+v).trim();
+              if(v === "") return null;
+              if(v.indexOf(",") >= 0) v = v.replace(/\./g, "").replace(",", ".");
+              var n = parseFloat(v);
+              return isNaN(n) ? null : n;
+            }
+            function preisFormat(n) {
+              return n.toFixed(4).replace(".", ",");
+            }
+            function preisNettoBruttoSync(quelle) {
+              var netto = document.getElementById("preis");
+              var brutto = document.getElementById("preisbrutto");
+              document.getElementById("preiseingabe").value = quelle;
+              if(preisSteuersatz === null) return;
+              var f = 1 + preisSteuersatz / 100;
+              if(quelle === "netto") {
+                var n = preisParse(netto.value);
+                brutto.value = n === null ? "" : preisFormat(n * f);
+              } else {
+                var b = preisParse(brutto.value);
+                netto.value = b === null ? "" : preisFormat(b / f);
+              }
+            }
+            function preisNachArtikelFill(steuersatz, bruttoModus) {
+              var s = parseFloat(steuersatz);
+              preisSteuersatz = isNaN(s) ? null : s;
+              if(bruttoModus == 1) {
+                document.getElementById("preisbrutto").value = document.getElementById("preis").value;
+                preisNettoBruttoSync("brutto");
+              } else {
+                preisNettoBruttoSync("netto");
+              }
+            }
       </script></form>';
-          
+
           $table->AddRow($addrow);
           $adresse = $this->app->DB->Select("SELECT adresse FROM $module WHERE id='$id' LIMIT 1");
           $this->app->YUI->AutoCompleteAuftrag("artikel", "verkaufartikelnummerprojekt", 1, "&projekt=$projekt&adresse=$adresse");
@@ -15077,10 +15166,16 @@ source: "index.php?module=ajax&action=filter&filtername=' . $filter . $extendurl
         $table->headings[6] = 'Preis';
         $mengencol = 5;
         if ($module == "angebot" || $module == "auftrag" || $module == "rechnung" || $module == "gutschrift") {
-            $table->headings[7] = 'W&auml;hrung';
-            $table->headings[8] = 'Rabatt';
-            $rabattcol = 8; 
-        }       
+            $table->headings[6] = 'Preis (netto)';
+            $table->headings[7] = 'Preis (brutto)';
+            $table->headings[8] = 'W&auml;hrung';
+            $table->headings[9] = 'Rabatt';
+            $rabattcol = 9;
+        }
+        if ($module == "proformarechnung") {
+            $table->headings[6] = 'Preis (netto)';
+            $table->headings[7] = 'Preis (brutto)';
+        }
       }
       $__arr = array($summencol, $mengencol, $rabattcol, $ecol, $dcol,$zwischensumme);
       $this->app->erp->RunHook('yui_sortlistadd_draw', 2,$table,$__arr);
@@ -15171,7 +15266,7 @@ source: "index.php?module=ajax&action=filter&filtername=' . $filter . $extendurl
       }
       if ($module == "angebot" || $module == "auftrag" || $module == "rechnung" || $module == "gutschrift" || $module == "bestellung")
       {
-        for($i = $module != 'bestellung'?7:5; $i <= 7; $i++)
+        for($i = $module != 'bestellung'?7:5; $i <= ($module != 'bestellung'?8:7); $i++)
         {
           $this->app->Tpl->Add($parsetarget,'
           table.mkTable td:nth-child('.($i+1).')
