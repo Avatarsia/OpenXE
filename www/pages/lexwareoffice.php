@@ -1,0 +1,666 @@
+<?php
+/*
+**** COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
+* 
+* Xentral (c) Xentral ERP Sorftware GmbH, Fuggerstrasse 11, D-86150 Augsburg, * Germany 2019
+*
+* This file is licensed under the Embedded Projects General Public License *Version 3.1. 
+*
+* You should have received a copy of this license from your vendor and/or *along with this file; If not, please visit www.wawision.de/Lizenzhinweis 
+* to obtain the text of the corresponding license version.  
+*
+**** END OF COPYRIGHT & LICENSE NOTICE *** DO NOT REMOVE ****
+*/
+?>
+<?php
+
+use Xentral\Modules\LexwareOffice\Exception\LexwareOfficeException;
+use Xentral\Modules\LexwareOffice\Service\LexwareOfficeService;
+
+class Lexwareoffice
+{
+  /** @var Application */
+  public $app;
+
+  public function __construct($app, $intern = false)
+  {
+    $this->app = $app;
+    if($intern) {
+      return;
+    }
+
+    $this->ensureSuperSearchIndex();
+
+    $this->app->ActionHandlerInit($this);
+    $this->app->ActionHandler('edit','LexwareOfficeEdit');
+    $this->app->ActionHandler('upload','LexwareOfficeUpload');
+    $this->app->ActionHandler('upload_creditnote','LexwareOfficeUploadCreditNote');
+    $this->app->ActionHandler('upload_and_mark_paid','LexwareOfficeUploadAndMarkPaid');
+    $this->app->ActionHandler('upload_and_mark_paid_creditnote','LexwareOfficeUploadAndMarkPaidCreditNote');
+    $this->app->DefaultActionHandler('edit');
+
+    $this->app->Tpl->Set('UEBERSCHRIFT','Lexware Office');
+    $this->app->Tpl->Set('FARBE','[FARBE5]');
+
+    $this->app->ActionHandlerListen($app);
+  }
+
+  public function LexwareOfficeEdit()
+  {
+    $this->app->erp->MenuEintrag('index.php?module=einstellungen&action=list','Zur&uuml;ck');
+    $this->app->erp->MenuEintrag('index.php?module=lexwareoffice&action=edit','Lexware Office');
+
+    $service = $this->getService();
+    $message = '';
+    $hasApiKey = $service->hasApiKey();
+
+    if($this->app->Secure->GetPOST('delete') !== '') {
+      try {
+        $service->deleteApiKey();
+        $hasApiKey = false;
+        $message = '<div class="info">API-Schl&uuml;ssel wurde gel&ouml;scht.</div>';
+      } catch (LexwareOfficeException $exception) {
+        $message = '<div class="error">'.htmlspecialchars($exception->getMessage()).'</div>';
+      }
+    }
+
+    if($this->app->Secure->GetPOST('save') !== '') {
+      try {
+        $apiKey = (string)$this->app->Secure->GetPOST('api_key');
+        $service->saveApiKey($apiKey);
+        $hasApiKey = true;
+        $message = '<div class="success">API-Schl&uuml;ssel wurde gespeichert.</div>';
+      } catch (LexwareOfficeException $exception) {
+        $message = '<div class="error">'.htmlspecialchars($exception->getMessage()).'</div>';
+      }
+    }
+
+    // Default-Erloeskategorie (Voucher categoryId) separat speichern. Optional:
+    // leerer Wert setzt auf den neutralen Default zurueck.
+    if($this->app->Secure->GetPOST('save_category') !== '') {
+      try {
+        $categoryId = (string)$this->app->Secure->GetPOST('default_category_id');
+        $service->saveDefaultCategoryId($categoryId);
+        $message = '<div class="success">Standard-Erl&ouml;skategorie wurde gespeichert.</div>';
+      } catch (LexwareOfficeException $exception) {
+        $message = '<div class="error">'.htmlspecialchars($exception->getMessage()).'</div>';
+      }
+    }
+
+    if($message !== '') {
+      $this->app->Tpl->Set('MESSAGE',$message);
+    }
+
+    $apiKeyPlaceholder = $hasApiKey ? '******** (gespeichert)' : '';
+    $this->app->Tpl->Set('API_KEY_PLACEHOLDER', $apiKeyPlaceholder);
+    $this->app->Tpl->Set('API_KEY_HINT', 'Der API-Schl&uuml;ssel wird verschl&uuml;sselt in der Systemkonfiguration abgelegt.');
+    $this->app->Tpl->Set('DEFAULT_CATEGORY_ID', htmlspecialchars($service->getDefaultCategoryId()));
+    $this->app->Tpl->Set('DEFAULT_CATEGORY_HINT', 'Neutrale Default-Erl&ouml;skategorie (UUID) f&uuml;r die Voucher-&Uuml;bergabe. Leer lassen f&uuml;r den Standard. Die Belege werden in Lexware ohnehin manuell umgebucht.');
+    $deleteSection = '';
+    if($hasApiKey) {
+      $deleteSection = '
+        <form method="post" action="" onsubmit="return confirm(\'API-Schlüssel wirklich löschen?\');">
+          <fieldset>
+            <legend>API-Schl&uuml;ssel entfernen</legend>
+            <p>Entfernt den hinterlegten API-Schl&uuml;ssel aus der Systemkonfiguration.</p>
+            <p>
+              <input type="submit" class="btnGrey" name="delete" value="API-Schl&uuml;ssel l&ouml;schen">
+            </p>
+          </fieldset>
+        </form>
+      ';
+    }
+    $this->app->Tpl->Set('DELETE_SECTION', $deleteSection);
+
+    $this->app->Tpl->Parse('PAGE','lexwareoffice_settings.tpl');
+  }
+
+  private function getService(): LexwareOfficeService
+  {
+    return $this->app->Container->get('LexwareOfficeService');
+  }
+
+  /**
+   * Wird einmalig vom OpenXE-Installer aufgerufen.
+   * Registriert die Hook-Listener fuer das Rechnungs-Aktionsmenue.
+   */
+  public function Install()
+  {
+    $this->app->erp->RegisterHook(
+      'Rechnung_Aktion_option',
+      'lexwareoffice',
+      'LexwareOfficeAktionOption'
+    );
+    $this->app->erp->RegisterHook(
+      'Rechnung_Aktion_case',
+      'lexwareoffice',
+      'LexwareOfficeAktionCase'
+    );
+    $this->app->erp->RegisterHook(
+      'Gutschrift_Aktion_option',
+      'lexwareoffice',
+      'LexwareOfficeGutschriftAktionOption'
+    );
+    $this->app->erp->RegisterHook(
+      'Gutschrift_Aktion_case',
+      'lexwareoffice',
+      'LexwareOfficeGutschriftAktionCase'
+    );
+    $this->app->erp->RegisterHook(
+      'Rechnung_Stapel_option',
+      'lexwareoffice',
+      'LexwareOfficeStapelOption'
+    );
+    $this->app->erp->RegisterHook(
+      'Rechnung_Stapel_case',
+      'lexwareoffice',
+      'LexwareOfficeStapelCase'
+    );
+  }
+
+  /**
+   * Hook-Listener: haengt den Dropdown-Eintrag an die Rechnungs-Aktionsliste.
+   *
+   * @param int    $id
+   * @param string $projectStatus
+   * @param string $option
+   */
+  public function LexwareOfficeAktionOption($id, $projectStatus, &$option)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $option .= '<option value="lexwareofficeupload">An Lexware Office senden</option>';
+    if($this->app->erp->RechteVorhanden('rechnung','manuellbezahltmarkiert')) {
+      $option .= '<option value="lexwareofficeuploadpaid">An Lexware senden &amp; als bezahlt markieren</option>';
+    }
+  }
+
+  /**
+   * Hook-Listener: haengt den zugehoerigen JS-Case an das Rechnungs-Aktionsmenue.
+   *
+   * Hinweis zum Selector: das aktive Haupt-Dropdown in rechnung.php verwendet
+   * id="aktion$prefix" mit default $prefix='', folglich ist die effektive ID
+   * schlicht "aktion". Der Null-Check haelt den Handler robust, falls das
+   * DOM-Element spaeter umbenannt wird.
+   *
+   * @param int    $id
+   * @param string $projectStatus
+   * @param string $case
+   */
+  public function LexwareOfficeAktionCase($id, $projectStatus, &$case)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $case .= "case 'lexwareofficeupload':"
+      ." if(!confirm('Rechnung an Lexware Office senden?')) {"
+      ."   var el = document.getElementById('aktion'); if(el) el.selectedIndex = 0;"
+      ."   return;"
+      ." }"
+      ." window.location.href='index.php?module=lexwareoffice&action=upload&id=%value%';"
+      ." break;";
+    if($this->app->erp->RechteVorhanden('rechnung','manuellbezahltmarkiert')) {
+      $case .= "case 'lexwareofficeuploadpaid':"
+        ." if(!confirm('Rechnung an Lexware Office senden und anschließend als bezahlt markieren?')) {"
+        ."   var el = document.getElementById('aktion'); if(el) el.selectedIndex = 0;"
+        ."   return;"
+        ." }"
+        ." window.location.href='index.php?module=lexwareoffice&action=upload_and_mark_paid&id=%value%';"
+        ." break;";
+    }
+  }
+
+  /**
+   * Hook-Listener: Dropdown-Eintrag in der Gutschrifts-Aktionsliste.
+   *
+   * @param int    $id
+   * @param string $projectStatus
+   * @param string $option
+   */
+  public function LexwareOfficeGutschriftAktionOption($id, $projectStatus, &$option)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $option .= '<option value="lexwareofficeuploadcreditnote">An Lexware Office senden</option>';
+    if($this->app->erp->RechteVorhanden('rechnung','manuellbezahltmarkiert')) {
+      $option .= '<option value="lexwareofficeuploadcreditnotepaid">An Lexware senden &amp; als bezahlt markieren</option>';
+    }
+  }
+
+  /**
+   * Hook-Listener: JS-Case fuer Gutschrifts-Aktionsmenue.
+   *
+   * @param int    $id
+   * @param string $projectStatus
+   * @param string $case
+   */
+  public function LexwareOfficeGutschriftAktionCase($id, $projectStatus, &$case)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $case .= "case 'lexwareofficeuploadcreditnote':"
+      ." if(!confirm('Gutschrift an Lexware Office senden?')) {"
+      ."   var el = document.getElementById('aktion'); if(el) el.selectedIndex = 0;"
+      ."   return;"
+      ." }"
+      ." window.location.href='index.php?module=lexwareoffice&action=upload_creditnote&id=%value%';"
+      ." break;";
+    if($this->app->erp->RechteVorhanden('rechnung','manuellbezahltmarkiert')) {
+      $case .= "case 'lexwareofficeuploadcreditnotepaid':"
+        ." if(!confirm('Gutschrift an Lexware Office senden und anschließend als bezahlt markieren?')) {"
+        ."   var el = document.getElementById('aktion'); if(el) el.selectedIndex = 0;"
+        ."   return;"
+        ." }"
+        ." window.location.href='index.php?module=lexwareoffice&action=upload_and_mark_paid_creditnote&id=%value%';"
+        ." break;";
+    }
+  }
+
+  /**
+   * Prueft, ob ein Lexware-Office-API-Key hinterlegt ist.
+   * Nutzt den im Bootstrap registrierten Container-Service.
+   */
+  private function hasLexwareOfficeApiKey(): bool
+  {
+    try {
+      $config = $this->app->Container->get('LexwareOfficeConfigService');
+      return $config->hasApiKey();
+    } catch (\Throwable $e) {
+      return false;
+    }
+  }
+
+  /**
+   * Action-Handler: nimmt die Rechnungs-ID aus dem Dropdown entgegen und
+   * uebergibt sie dem LexwareOfficeService. Mirrors the old
+   * RechnungLexwareOfficeUpload-Controller aus rechnung.php.
+   */
+  public function LexwareOfficeUpload()
+  {
+    $id = (int)$this->app->Secure->GetGET('id');
+    if($id <= 0) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Rechnung wurde nicht gefunden.</div>');
+      $this->app->Location->execute('index.php?module=rechnung&action=list&msg='.$msg);
+      return;
+    }
+
+    if(!$this->app->erp->RechteVorhanden('rechnung','edit')) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Keine Berechtigung f&uuml;r diese Aktion.</div>');
+      $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id.'&msg='.$msg);
+      return;
+    }
+
+    try {
+      $result = $this->getService()->pushInvoice($id);
+      $lexwareId = !empty($result['invoiceId']) ? $result['invoiceId'] : '';
+      $contactId = !empty($result['contactId']) ? $result['contactId'] : '';
+      $pdfErr = isset($result['pdfUploadError']) ? (string)$result['pdfUploadError'] : '';
+      $text = 'Rechnung wurde an Lexware Office &uuml;bergeben.';
+      if($lexwareId !== '') {
+        $text .= ' Beleg-ID: '.htmlspecialchars($lexwareId);
+      }
+      if($contactId !== '') {
+        $text .= ' Kontakt-ID: '.htmlspecialchars($contactId);
+      }
+      if($pdfErr !== '') {
+        // Voucher steht, PDF fehlt: Warnung statt Erfolgsmeldung.
+        $message = '<div class="info">'.$text.'<br>Hinweis: '.htmlspecialchars($pdfErr).'</div>';
+        $this->app->erp->RechnungProtokoll($id, 'Lexware Office: '.$text.' | PDF-Hinweis: '.$pdfErr);
+      } else {
+        $message = '<div class="success">'.$text.'</div>';
+        $this->app->erp->RechnungProtokoll($id, 'Lexware Office: '.$text);
+      }
+    } catch (LexwareOfficeException $exception) {
+      $errorText = htmlspecialchars($exception->getMessage());
+      $message = '<div class="error">'.$errorText.'</div>';
+      $this->app->erp->RechnungProtokoll($id, 'Lexware Office Fehler: '.$errorText);
+    } catch (\Throwable $exception) {
+      // Generischer Fallback fuer alles was nicht domain-spezifisch ist:
+      // DB-Ausfall, TypeError im Mapper, JSON-Encode-Fehler etc.
+      $errorText = htmlspecialchars('Interner Fehler beim Lexware Office Upload: '.$exception->getMessage());
+      $message = '<div class="error">'.$errorText.'</div>';
+      $this->app->erp->RechnungProtokoll($id, 'Lexware Office Fehler (intern): '.$errorText);
+    }
+
+    $msg = $this->app->erp->base64_url_encode($message);
+    $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id.'&msg='.$msg);
+  }
+
+  /**
+   * Action-Handler fuer den Gutschrifts-Upload. Spiegelt
+   * LexwareOfficeUpload(), nutzt aber LexwareOfficeService::pushCreditNote()
+   * und kehrt zur Gutschrifts-Detailseite zurueck.
+   */
+  public function LexwareOfficeUploadCreditNote()
+  {
+    $id = (int)$this->app->Secure->GetGET('id');
+    if($id <= 0) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Gutschrift wurde nicht gefunden.</div>');
+      $this->app->Location->execute('index.php?module=gutschrift&action=list&msg='.$msg);
+      return;
+    }
+
+    if(!$this->app->erp->RechteVorhanden('gutschrift','edit')) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Keine Berechtigung f&uuml;r diese Aktion.</div>');
+      $this->app->Location->execute('index.php?module=gutschrift&action=edit&id='.$id.'&msg='.$msg);
+      return;
+    }
+
+    try {
+      $result = $this->getService()->pushCreditNote($id);
+      $lexwareId = !empty($result['creditNoteId']) ? $result['creditNoteId'] : '';
+      $contactId = !empty($result['contactId']) ? $result['contactId'] : '';
+      $pdfErr = isset($result['pdfUploadError']) ? (string)$result['pdfUploadError'] : '';
+      $text = 'Gutschrift wurde an Lexware Office &uuml;bergeben.';
+      if($lexwareId !== '') {
+        $text .= ' Beleg-ID: '.htmlspecialchars($lexwareId);
+      }
+      if($contactId !== '') {
+        $text .= ' Kontakt-ID: '.htmlspecialchars($contactId);
+      }
+      if($pdfErr !== '') {
+        $message = '<div class="info">'.$text.'<br>Hinweis: '.htmlspecialchars($pdfErr).'</div>';
+        $this->app->erp->GutschriftProtokoll($id, 'Lexware Office: '.$text.' | PDF-Hinweis: '.$pdfErr);
+      } else {
+        $message = '<div class="success">'.$text.'</div>';
+        $this->app->erp->GutschriftProtokoll($id, 'Lexware Office: '.$text);
+      }
+    } catch (LexwareOfficeException $exception) {
+      $errorText = htmlspecialchars($exception->getMessage());
+      $message = '<div class="error">'.$errorText.'</div>';
+      $this->app->erp->GutschriftProtokoll($id, 'Lexware Office Fehler: '.$errorText);
+    } catch (\Throwable $exception) {
+      $errorText = htmlspecialchars('Interner Fehler beim Lexware Office Upload (Gutschrift): '.$exception->getMessage());
+      $message = '<div class="error">'.$errorText.'</div>';
+      $this->app->erp->GutschriftProtokoll($id, 'Lexware Office Fehler (intern): '.$errorText);
+    }
+
+    $msg = $this->app->erp->base64_url_encode($message);
+    $this->app->Location->execute('index.php?module=gutschrift&action=edit&id='.$id.'&msg='.$msg);
+  }
+
+  /**
+   * Modul-weiter Rechte-Check: nur Admins duerfen Settings verwalten oder
+   * manuelle Uploads triggern. Adminrechte() existiert auf class.erpapi.php
+   * nicht, daher direkter User->GetType() Check wie in artikel.php/welcome.php.
+   */
+  public function CheckRights()
+  {
+    return $this->app->User->GetType() === 'admin';
+  }
+
+  private function ensureSuperSearchIndex(): void
+  {
+    if(!$this->app->Container->has('SuperSearchService') || !$this->app->Container->has('SuperSearchIndexer')) {
+      return;
+    }
+
+    /** @var \Xentral\Modules\SuperSearch\SuperSearchService $service */
+    $service = $this->app->Container->get('SuperSearchService');
+    /** @var \Xentral\Modules\SuperSearch\SuperSearchIndexer $indexer */
+    $indexer = $this->app->Container->get('SuperSearchIndexer');
+
+    $indexName = 'lexwareoffice';
+    if(!$service->existsIndex($indexName)) {
+      $service->createIndex($indexName, 'Lexware Office', 'lexwareoffice');
+    }
+
+    $count = (int)$this->app->DB->Select(
+      sprintf(
+        "SELECT COUNT(id) FROM supersearch_index_item WHERE index_name = '%s' AND outdated = 0",
+        $indexName
+      )
+    );
+    if($count === 0) {
+      $indexer->updateIndexFull($indexName);
+    }
+  }
+
+  /**
+   * Hook-Listener: ergaenzt das Stapelverarbeitungs-Dropdown auf der
+   * Rechnungs-Liste um den Eintrag "An Lexware Office senden". Wird nur
+   * angezeigt, wenn ein API-Key hinterlegt ist.
+   *
+   * @param string $option
+   */
+  public function LexwareOfficeStapelOption(&$option)
+  {
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    $option .= '<option value="lexwareofficeupload">An Lexware Office senden</option>';
+    if($this->app->erp->RechteVorhanden('rechnung','manuellbezahltmarkiert')) {
+      $option .= '<option value="lexwareofficeuploadpaid">An Lexware senden &amp; als bezahlt markieren</option>';
+    }
+  }
+
+  /**
+   * Hook-Listener: fuehrt den Bulk-Upload an Lexware Office aus. Iteriert
+   * ueber die ausgewaehlten Rechnungs-IDs, ruft pro Rechnung pushInvoice()
+   * auf und protokolliert Erfolg/Fehler pro Rechnung im Rechnungsprotokoll.
+   * Eine Sammelmeldung wird zusaetzlich oben auf der Liste angezeigt.
+   *
+   * @param string $aktion
+   * @param array  $auswahl Array von Rechnungs-IDs.
+   */
+  public function LexwareOfficeStapelCase($aktion, $auswahl)
+  {
+    if($aktion !== 'lexwareofficeupload' && $aktion !== 'lexwareofficeuploadpaid') {
+      return;
+    }
+    if(!$this->hasLexwareOfficeApiKey()) {
+      return;
+    }
+    if(!is_array($auswahl) || empty($auswahl)) {
+      return;
+    }
+    $markPaid = $aktion === 'lexwareofficeuploadpaid';
+    if($markPaid && !$this->app->erp->RechteVorhanden('rechnung','manuellbezahltmarkiert')) {
+      return;
+    }
+
+    $service = $this->app->Container->get('LexwareOfficeService');
+    $okCount = 0;
+    $failCount = 0;
+    $errors = [];
+    foreach($auswahl as $invoiceId) {
+      $invoiceId = (int)$invoiceId;
+      if($invoiceId <= 0) {
+        continue;
+      }
+      try {
+        $result = $service->pushInvoice($invoiceId);
+        $protMsg = 'Lexware Office (Bulk): Rechnung &uuml;bergeben.';
+        if(!empty($result['invoiceId'])) {
+          $protMsg .= ' Beleg-ID: '.$result['invoiceId'];
+        }
+        if(!empty($result['pdfUploadError'])) {
+          $protMsg .= ' | PDF-Hinweis: '.$result['pdfUploadError'];
+        }
+        if($markPaid) {
+          $this->markInvoicePaid($invoiceId);
+          $protMsg .= ' | Anschlie&szlig;end manuell als bezahlt markiert.';
+        }
+        $this->app->erp->RechnungProtokoll($invoiceId, $protMsg);
+        $okCount++;
+      } catch (LexwareOfficeException $e) {
+        $failCount++;
+        $errors[] = sprintf('Rechnung %d: %s', $invoiceId, $e->getMessage());
+        $this->app->erp->RechnungProtokoll($invoiceId, 'Lexware Office Fehler (Bulk): '.$e->getMessage());
+      } catch (\Throwable $e) {
+        $failCount++;
+        $errors[] = sprintf('Rechnung %d: %s', $invoiceId, $e->getMessage());
+        $this->app->erp->RechnungProtokoll($invoiceId, 'Lexware Office Fehler (Bulk, intern): '.$e->getMessage());
+      }
+    }
+
+    $label = $markPaid ? 'Lexware Office Bulk-Upload + bezahlt' : 'Lexware Office Bulk-Upload';
+    $summary = sprintf(
+      '%s: %d erfolgreich, %d fehlgeschlagen.',
+      $label,
+      $okCount,
+      $failCount
+    );
+    if($failCount > 0) {
+      // Erste 3 Fehler in die UI-Message; alle stehen ohnehin im
+      // jeweiligen Rechnungsprotokoll.
+      $summary .= ' Fehler: '.implode(' / ', array_slice($errors, 0, 3));
+      if(count($errors) > 3) {
+        $summary .= sprintf(' (+%d weitere im Protokoll)', count($errors) - 3);
+      }
+    }
+
+    $cssClass = $failCount === 0 ? 'success' : ($okCount === 0 ? 'error' : 'info');
+    $this->app->Tpl->Add(
+      'MESSAGE',
+      '<div class="'.$cssClass.'">'.htmlspecialchars($summary).'</div>'
+    );
+  }
+
+  /**
+   * Action-Handler: kombinierte Aktion fuer eine Einzelrechnung. Schickt
+   * die Rechnung an Lexware Office und markiert sie bei Erfolg manuell
+   * als bezahlt (inkl. Archivierung und Schreibschutz-Reset, analog zum
+   * Standard-Aktionsmenue-Eintrag "manuell als bezahlt markieren"). Bei
+   * Fehler im Upload wird KEINE Bezahlt-Markierung gesetzt.
+   */
+  public function LexwareOfficeUploadAndMarkPaid()
+  {
+    $id = (int)$this->app->Secure->GetGET('id');
+    if($id <= 0) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Rechnung wurde nicht gefunden.</div>');
+      $this->app->Location->execute('index.php?module=rechnung&action=list&msg='.$msg);
+      return;
+    }
+
+    if(!$this->app->erp->RechteVorhanden('rechnung','edit')
+      || !$this->app->erp->RechteVorhanden('rechnung','manuellbezahltmarkiert')) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Keine Berechtigung f&uuml;r diese Aktion.</div>');
+      $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id.'&msg='.$msg);
+      return;
+    }
+
+    try {
+      $result = $this->getService()->pushInvoice($id);
+      $lexwareId = !empty($result['invoiceId']) ? $result['invoiceId'] : '';
+      $pdfErr = isset($result['pdfUploadError']) ? (string)$result['pdfUploadError'] : '';
+      $this->markInvoicePaid($id);
+
+      $text = 'Rechnung wurde an Lexware Office &uuml;bergeben und als bezahlt markiert.';
+      if($lexwareId !== '') {
+        $text .= ' Beleg-ID: '.htmlspecialchars($lexwareId);
+      }
+      if($pdfErr !== '') {
+        $message = '<div class="info">'.$text.'<br>Hinweis: '.htmlspecialchars($pdfErr).'</div>';
+        $this->app->erp->RechnungProtokoll($id, 'Lexware Office + bezahlt: '.$text.' | PDF-Hinweis: '.$pdfErr);
+      } else {
+        $message = '<div class="success">'.$text.'</div>';
+        $this->app->erp->RechnungProtokoll($id, 'Lexware Office + bezahlt: '.$text);
+      }
+    } catch (LexwareOfficeException $exception) {
+      $errorText = htmlspecialchars($exception->getMessage());
+      $message = '<div class="error">Lexware Office Fehler: '.$errorText.' Bezahlt-Markierung wurde NICHT gesetzt.</div>';
+      $this->app->erp->RechnungProtokoll($id, 'Lexware Office Fehler (kombiniert): '.$errorText);
+    } catch (\Throwable $exception) {
+      $errorText = htmlspecialchars('Interner Fehler: '.$exception->getMessage());
+      $message = '<div class="error">'.$errorText.' Bezahlt-Markierung wurde NICHT gesetzt.</div>';
+      $this->app->erp->RechnungProtokoll($id, 'Lexware Office Fehler (kombiniert, intern): '.$errorText);
+    }
+
+    $msg = $this->app->erp->base64_url_encode($message);
+    $this->app->Location->execute('index.php?module=rechnung&action=edit&id='.$id.'&msg='.$msg);
+  }
+
+  /**
+   * Action-Handler: kombinierte Aktion fuer eine Einzelgutschrift. Schickt
+   * die Gutschrift an Lexware Office und markiert sie bei Erfolg als
+   * bezahlt. Bei Fehler im Upload wird KEINE Bezahlt-Markierung gesetzt.
+   */
+  public function LexwareOfficeUploadAndMarkPaidCreditNote()
+  {
+    $id = (int)$this->app->Secure->GetGET('id');
+    if($id <= 0) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Gutschrift wurde nicht gefunden.</div>');
+      $this->app->Location->execute('index.php?module=gutschrift&action=list&msg='.$msg);
+      return;
+    }
+
+    if(!$this->app->erp->RechteVorhanden('rechnung','edit')
+      || !$this->app->erp->RechteVorhanden('rechnung','manuellbezahltmarkiert')) {
+      $msg = $this->app->erp->base64_url_encode('<div class="error">Keine Berechtigung f&uuml;r diese Aktion.</div>');
+      $this->app->Location->execute('index.php?module=gutschrift&action=edit&id='.$id.'&msg='.$msg);
+      return;
+    }
+
+    try {
+      $result = $this->getService()->pushCreditNote($id);
+      $lexwareId = !empty($result['creditNoteId']) ? $result['creditNoteId'] : '';
+      $pdfErr = isset($result['pdfUploadError']) ? (string)$result['pdfUploadError'] : '';
+      $this->markCreditNotePaid($id);
+
+      $text = 'Gutschrift wurde an Lexware Office &uuml;bergeben und als bezahlt markiert.';
+      if($lexwareId !== '') {
+        $text .= ' Beleg-ID: '.htmlspecialchars($lexwareId);
+      }
+      if($pdfErr !== '') {
+        $message = '<div class="info">'.$text.'<br>Hinweis: '.htmlspecialchars($pdfErr).'</div>';
+      } else {
+        $message = '<div class="success">'.$text.'</div>';
+      }
+    } catch (LexwareOfficeException $exception) {
+      $errorText = htmlspecialchars($exception->getMessage());
+      $message = '<div class="error">Lexware Office Fehler: '.$errorText.' Bezahlt-Markierung wurde NICHT gesetzt.</div>';
+    } catch (\Throwable $exception) {
+      $errorText = htmlspecialchars('Interner Fehler: '.$exception->getMessage());
+      $message = '<div class="error">'.$errorText.' Bezahlt-Markierung wurde NICHT gesetzt.</div>';
+    }
+
+    $msg = $this->app->erp->base64_url_encode($message);
+    $this->app->Location->execute('index.php?module=gutschrift&action=edit&id='.$id.'&msg='.$msg);
+  }
+
+  /**
+   * Setzt eine Rechnung manuell auf bezahlt — gleiche Semantik wie der
+   * Standard-Aktionsmenue-Eintrag "manuell als bezahlt markieren" aus
+   * www/pages/rechnung.php (zahlungsstatus + bezahlt_am + Archivierung +
+   * Schreibschutz-Reset + Mahnwesen-Bemerkung).
+   */
+  private function markInvoicePaid($id)
+  {
+    $id = (int)$id;
+    if($id <= 0) {
+      return;
+    }
+    $this->app->DB->Update(
+      "UPDATE rechnung "
+      ."SET zahlungsstatus='bezahlt', bezahlt_am = now(), mahnwesenfestsetzen='1',"
+      ." mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Manuell als bezahlt markiert am ".date('d.m.Y')."') "
+      ."WHERE id=".$id." LIMIT 1"
+    );
+    $this->app->DB->Update(
+      sprintf(
+        'UPDATE rechnung SET zuarchivieren=1, schreibschutz = 0 WHERE id=%d LIMIT 1',
+        $id
+      )
+    );
+  }
+
+  /**
+   * Setzt eine Gutschrift auf bezahlt. Gutschrift kennt im Standard
+   * weder zuarchivieren noch Schreibschutz-Reset; daher nur der reine
+   * Zahlungsstatus.
+   */
+  private function markCreditNotePaid($id)
+  {
+    $id = (int)$id;
+    if($id <= 0) {
+      return;
+    }
+    $this->app->DB->Update(
+      "UPDATE gutschrift SET zahlungsstatus='bezahlt' WHERE id=".$id." LIMIT 1"
+    );
+  }
+}

@@ -59,6 +59,7 @@
 <option value="versendet">{|als versendet markieren|}</option>
 <option value="pdf">{|Sammel-PDF|}</option>
 <option value="drucken">{|drucken|}</option>
+[RECHNUNG_STAPEL_OPTIONS]
 </select>&nbsp;{|Drucker|}: <select name="seldrucker">[SELDRUCKER]</select>&nbsp;<input type="submit" class="btnBlue" name="ausfuehren" value="{|ausf&uuml;hren|}" />
 </fieldset>
 </form>
