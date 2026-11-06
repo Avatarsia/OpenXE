@@ -322,7 +322,7 @@ class Bestellung extends GenBestellung
         ORDER BY l.bezeichnung");
         $table->align[0] = 'right';
         $table->align[1] = 'left';
-        echo json_encode(array('inhalt'=>'<div class="inlinetooltiptable"><style> div.inlinetooltiptable > table.mkTable > tbody > tr:nth-child(2n+1) td {background-color:#e0e0e0;} </style>'.$table->DisplayNew('return','Lager','noAction').'</div>'));
+        echo json_encode(array('inhalt'=>'<div class="inlinetooltiptable"><style> div.inlinetooltiptable > table.mkTable > tbody > tr:nth-child(2n+1) td {background-color:var(--surface-muted);} </style>'.$table->DisplayNew('return','Lager','noAction').'</div>'));
       }else{
         echo json_encode(array('inhalt'=>'<div class="inlinetooltiptable">kein Lagerartikel</div>'));
       }
@@ -620,8 +620,8 @@ class Bestellung extends GenBestellung
         $table->datasets[$k]['Menge'] = '<b>'.$table->datasets[$k]['Menge'].'</b>';
         
       } else {
-        $table->datasets[$k]['geliefert'] = '<b style="color:red;">'.$table->datasets[$k]['geliefert'].'</b>';
-        $table->datasets[$k]['Menge'] = '<b style="color:red;">'.$table->datasets[$k]['Menge'].'</b>';
+        $table->datasets[$k]['geliefert'] = '<b class="text-error">'.$table->datasets[$k]['geliefert'].'</b>';
+        $table->datasets[$k]['Menge'] = '<b class="text-error">'.$table->datasets[$k]['Menge'].'</b>';
       }
       
       
@@ -789,7 +789,7 @@ class Bestellung extends GenBestellung
       $this->app->Tpl->Set('WARENEINGANGSBELEG', '-');
     }
   */
-  
+
     $sql = "SELECT
     CONCAT('<a href =\"index.php?module=wareneingang&action=distriinhalt&id=',pa.id,'\">',pa.id,'</a>') as wareneingang
 FROM
@@ -803,9 +803,9 @@ INNER JOIN bestellung b ON
 WHERE
     b.id = $id
 GROUP BY
-    pa.id";    			
-//	 echo($sql);        
-	 $wareneingangsbelege = $this->app->DB->SelectArr($sql);     
+    pa.id";
+//	 echo($sql);
+	 $wareneingangsbelege = $this->app->DB->SelectArr($sql);
     if(!empty($wareneingangsbelege)){
       $this->app->Tpl->Add('WARENEINGANGSBELEG', implode('<br />', array_column($wareneingangsbelege , 'wareneingang' )));
     }
@@ -1731,7 +1731,7 @@ GROUP BY
     $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">M&ouml;chten Sie eine Bestellung jetzt anlegen? &nbsp;
         <input type=\"button\" onclick=\"window.location.href='index.php?module=bestellung&action=create&anlegen=1'\" value=\"Ja - Bestellung jetzt anlegen\"></div><br>");
     $this->app->Tpl->Set('TAB1',"
-        <table width=\"100%\" style=\"background-color: #fff; border: solid 1px #000;\" align=\"center\">
+        <table width=\"100%\" class=\"bg-surface border-default\" align=\"center\">
         <tr>
         <td align=\"center\">
         <br><b style=\"font-size: 14pt\">Bestellungen in Bearbeitung</b>

@@ -4,7 +4,7 @@ table.onlineshopsfeatures {
 
 table.onlineshopsfeatures tr:nth-child(odd)
 {
-    background-color: lightgrey;
+    background-color: var(--surface-muted);
 }
 
 table.onlineshopsfeatures th:not(:first-child)  {

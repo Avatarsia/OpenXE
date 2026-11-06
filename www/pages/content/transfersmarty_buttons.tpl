@@ -47,7 +47,7 @@
         height: 40vh;
         min-width: 90vw;
         overflow: scroll;
-        border:grey 1px solid;
+        border:var(--border) 1px solid;
     }
     #textareasmartydeliverynote {
         max-height: 40vh;

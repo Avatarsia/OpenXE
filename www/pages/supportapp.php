@@ -86,7 +86,7 @@ class Supportapp Extends GenSupportapp {
         $abgelaufene = $app->YUI->TableSearchFilter($name, 1, 'abgelaufene',0,0,'checkbox');
 
         $sql = "SELECT SQL_CALC_FOUND_ROWS adr.id, adr.kundennummer, adr.name, if(isnull(re.adresse),'-','ja'), if(isnull(re2.datum),'',
-                if( re2.datum < DATE_SUB(CURDATE(),INTERVAL 1 YEAR),concat('<span style=\"color:red\">',date_format(re2.datum,'%d.%m.%Y'),'</span>'),date_format(re2.datum,'%d.%m.%Y') )) , adr.id 
+                if( re2.datum < DATE_SUB(CURDATE(),INTERVAL 1 YEAR),concat('<span class=\"text-error\">',date_format(re2.datum,'%d.%m.%Y'),'</span>'),date_format(re2.datum,'%d.%m.%Y') )) , adr.id
                 FROM adresse adr
                 INNER JOIN adresse_rolle ar ON adr.id = ar.adresse AND ar.subjekt LIKE 'Kunde' 
                 LEFT JOIN (

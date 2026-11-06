@@ -7,7 +7,7 @@
           <div class="info">{|Der Artikel ist ein Lagerartikel.|}</div>
           [MESSAGE]
           <br /><br />
-          <table width="60%" style="background-color: #fff; border: solid 1px #000;" align="center">
+          <table width="60%" class="bg-surface border-default" align="center">
             <tr>
               <td align="center">
                 <br />

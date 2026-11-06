@@ -2,23 +2,23 @@
 <style>
 
 .auftraginfo_cell {
-  color: #636363;border: 1px solid #ccc;padding: 5px; 
+  color: var(--text-body);border: 1px solid var(--border);padding: 5px;
 }
 
 .auftrag_cell {
-  color: #636363;border: 1px solid #fff;padding: 0px; margin:0px;
+  color: var(--text-body);border: 1px solid var(--surface);padding: 0px; margin:0px;
 }
 
 </style>
 
 
  <div style="overflow:scroll; height:600px"> 
-  <div style="background-color:white">
-    <div width="100%" style="background-color:#999;"><h2 class="greyh2">{|Details|}</h2></div>
+  <div class="bg-surface">
+    <div width="100%" class="bg-muted-strong"><h2 class="greyh2">{|Details|}</h2></div>
     <div style="padding:10px">
       <table  width="100%" cellpadding="5">
         <tr valign="top"><td>
-        <table style="font-size: 8pt; background: white; color: #333333; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
+        <table class="bg-surface text-strong" style="font-size: 8pt; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
           <tr><td class="auftraginfo_cell" style="width:150px">{|Verwendungszweck|}:</td><td class="auftraginfo_cell">[VORGANG]</td><td class="auftraginfo_cell" style="width:150px">{|Datum|}:</td><td class="auftraginfo_cell">[DATUM]</td></tr>
           <tr><td class="auftraginfo_cell">{|Buchungstext|}:</td><td class="auftraginfo_cell">[BUCHUNGSTEXT]</td><td class="auftraginfo_cell">{|Soll|}:</td><td class="auftraginfo_cell" align="right">[SOLL] [WAEHRUNG]</td></tr>
           <tr><td class="auftraginfo_cell">{|Belegfeld 1|}:</td><td class="auftraginfo_cell">[BELEGFELD1]</td><td class="auftraginfo_cell">{|Haben|}:</td><td class="auftraginfo_cell" align="right">[HABEN] [WAEHRUNG]</td></tr>
@@ -31,8 +31,8 @@
 
 
      <div style="overflow:scroll; height:600px"> 
-      <div style="background-color:white">
-        <div width="100%" style="background-color:#999;"><h2 class="greyh2">{|Verknüpfte Belege|}</h2></div>
+      <div class="bg-surface">
+        <div width="100%" class="bg-muted-strong"><h2 class="greyh2">{|Verknüpfte Belege|}</h2></div>
           <div style="padding:10px">
           [ZAHLUNGEN]
           </div>

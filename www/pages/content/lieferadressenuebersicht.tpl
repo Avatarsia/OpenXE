@@ -18,7 +18,7 @@
   <fieldset class="white">
     <legend>&nbsp;</legend>
     [TAB1]
-    <i style="float:right; font-size:10px;color:#6d6d6f;"><span style="color:red">*</span> Interne Bemerkung vorhanden </i>
+    <i class="text-body" style="float:right; font-size:10px;"><span class="text-error">*</span> Interne Bemerkung vorhanden </i>
   </fieldset>
 
 </div>

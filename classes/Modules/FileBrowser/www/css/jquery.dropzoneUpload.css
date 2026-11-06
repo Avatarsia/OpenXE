@@ -2,8 +2,8 @@
 .dropzone-upload .dropzone {
     padding: 40px;
     margin: 10px 0;
-    background: lightgrey;
-    border: 5px dashed grey;
+    background: var(--surface-muted);
+    border: 5px dashed var(--border-strong);
     -webkit-touch-callout: none;
     -webkit-user-select: none;
     -moz-user-select: none;

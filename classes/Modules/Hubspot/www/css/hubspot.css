@@ -7,6 +7,6 @@
     display: none;
 }
 #hs-add-more-field {
-    color: #367FA9;
+    color: var(--link-color);
     cursor: pointer;
 }

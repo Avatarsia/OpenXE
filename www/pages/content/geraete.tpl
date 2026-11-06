@@ -1,4 +1,4 @@
-<table width="100%" style="background-color: #fff; border: solid 1px #000;" align="center">
+<table width="100%" class="bg-surface border-default" align="center">
 <tr>
 <td align="center">
 <br><b style="font-size: 14pt">Ger&auml;teverwaltung</b>

@@ -31,7 +31,7 @@
     height: auto;
     max-height: calc(100vh - 80px);
 	background-color: var(--body-background);
-	box-shadow: 3px 3px 10px rgba(0, 0, 0, .33);
+	box-shadow: 3px 3px 10px var(--shadow);
 	-webkit-user-select: none;
 	-moz-user-select: none;
 	-ms-user-select: none;
@@ -211,11 +211,11 @@
 }
 #supersearch-overlay .result-item a:hover {
 	color: var(--grey);
-	background-color: rgba(0, 0, 0, .15);
+	background-color: var(--surface-muted);
 }
 #supersearch-overlay .result-item.active {
     color: var(--grey);
-   	background-color: rgba(0, 0, 0, .15);
+   	background-color: var(--surface-muted);
 }
 #supersearch-overlay .result-item .title,
 #supersearch-overlay .result-item .caption {

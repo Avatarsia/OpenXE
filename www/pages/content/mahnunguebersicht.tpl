@@ -16,7 +16,7 @@
 [SUB1MESSAGE]
 [MELDUNGMAHNWESEN]
 <form action="" onsubmit="return confirm('Mahnwesen wirklich starten?');" method="post">
-  <table width="100%" style="background-color: #CFCFD1;" align="center">
+  <table width="100%" class="bg-surface-strong" align="center">
     <tr>
       <td align="center">
         <br><b style="font-size: 14pt">{|Mahnlauf starten|}:</b>
@@ -93,7 +93,7 @@
   [BEFORETABZAHLUNGSERINNERUNGEN]
 <div id="tabs-2">
 [SUB2MESSAGE]
-  <table width="100%" style="background-color: #CFCFD1;" align="center">
+  <table width="100%" class="bg-surface-strong" align="center">
     <tr>
       <td align="center">
         <br><b style="font-size: 14pt">{|Zahlungserinnerungen|}</b>
@@ -109,7 +109,7 @@
   [BEFORETABMAHNUNGEN]
 <div id="tabs-3">
 [SUB3MESSAGE]
-  <table width="100%" style="background-color: #CFCFD1;" align="center">
+  <table width="100%" class="bg-surface-strong" align="center">
     <tr>
       <td align="center">
         <br><b style="font-size: 14pt">{|Mahnungen|}</b>
@@ -126,7 +126,7 @@
   [BEFORETABINKASSO]
 <div id="tabs-4">
 [SUB4MESSAGE]
-  <table width="100%" style="background-color: #CFCFD1;" align="center">
+  <table width="100%" class="bg-surface-strong" align="center">
     <tr>
       <td align="center">
         <br><b style="font-size: 14pt">{|Inkasso|}</b>
@@ -142,7 +142,7 @@
   [BEFORETABGESPERRT]
 <div id="tabs-5">
 [SUB5MESSAGE]
-  <table width="100%" style="background-color: #CFCFD1;" align="center">
+  <table width="100%" class="bg-surface-strong" align="center">
     <tr>
       <td align="center">
         <br><b style="font-size: 14pt">{|Gesperrt (nicht im Mahnungslauf)|}</b>
@@ -158,7 +158,7 @@
   [BEFORETABFORDERUNGSVERLUSTE]
 <div id="tabs-6">
 [SUB6MESSAGE]
-  <table width="100%" style="background-color: #CFCFD1;" align="center">
+  <table width="100%" class="bg-surface-strong" align="center">
     <tr>
       <td align="center">
         <br><b style="font-size: 14pt">{|Forderungsverluste|}</b>

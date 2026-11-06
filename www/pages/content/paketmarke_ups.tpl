@@ -1,4 +1,4 @@
-<br><br><table  style="min-width:60%;max-width:700px;background-color: #fff; border: solid 1px #000;"  align="center">
+<br><br><table  class="bg-surface border-default" style="min-width:60%;max-width:700px;"  align="center">
 <tr>
 <td align="center">
 <br>

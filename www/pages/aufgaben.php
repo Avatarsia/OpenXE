@@ -1447,7 +1447,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
           }
 
           if($tmp[$tmpi]['stunden'] > 0) {
-            $dauer = "<i style=\"color:grey\"><br>".$kunde."Geplant: ".$tmp[$tmpi]['stunden']." (h)</i>";
+            $dauer = "<i class=\"text-muted\"><br>".$kunde."Geplant: ".$tmp[$tmpi]['stunden']." (h)</i>";
           } else {
             $dauer="";
           }
@@ -1492,7 +1492,7 @@ CONCAT(if(a.prio=1 OR (a.abgabe_bis <= NOW() AND a.abgabe_bis!='0000-00-00'),CON
 
       $tmp_td .= "</ul>";
       if(date('Y-m-d')==$datum) {
-        $background="style=\"background-color:white; color:red; border: 1px solid #E0E0E0;\""; 
+        $background="class=\"bg-surface text-error\" style=\"border: 1px solid #E0E0E0;\"";
       } else {
         $background="";
       }

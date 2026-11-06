@@ -38,8 +38,8 @@ td.filtertd div.filter-item {
 }
 
 #goodspostingdocumenttable input[type="button"].disabled {
-    background-color: lightgrey;
-    border-color: lightgrey;
+    background-color: var(--surface-strong);
+    border-color: var(--border-strong);
 }
 
 #weitereinfoslagerdiv {
@@ -98,9 +98,9 @@ td.filtertd div.filter-item {
 }
 
 table.mkTable tr:nth-child(4n+2) td, table.mkTable tr:nth-child(4n+3) td {
-    background-color: #fff;
+    background-color: var(--surface);
 }
 
 table.mkTable tr:nth-child(4n+4) td, table.mkTable tr:nth-child(4n+5) td {
-    background-color: #e0e0e0;
+    background-color: var(--surface-muted);
 }
