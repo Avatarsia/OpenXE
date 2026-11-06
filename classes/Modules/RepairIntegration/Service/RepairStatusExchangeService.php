@@ -251,6 +251,7 @@ final class RepairStatusExchangeService
 
     public function receive(array $event): array
     {
+        $wertgarantie = is_array($event['service_details'] ?? null) ? $event['service_details'] : [];
         $event = self::validateEvent($event);
         if (!$this->isEnabled()) {
             throw new \RuntimeException('SYNC_V2_DISABLED');
@@ -299,6 +300,7 @@ final class RepairStatusExchangeService
                 $canonical = $this->persist($ticket, $event, false, $history['id']);
                 $result = ['success' => true, 'applied' => true, 'event' => $canonical, 'reason' => 'newer'];
             }
+            RepairWertgarantie::apply($this->db, $ticketId, $wertgarantie);
             $this->db->commit();
             return $result;
         } catch (\Throwable $e) {

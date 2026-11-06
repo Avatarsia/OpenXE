@@ -286,6 +286,7 @@ class TicketCustom extends Ticket
             if ($value === null || trim((string)$value) === '') continue;
             $rows .= '<tr><td width="145"><strong>' . htmlspecialchars($label) . ':</strong></td><td>' . nl2br(htmlspecialchars((string)$value)) . '</td></tr>';
         }
+        $tpl->Set('REPAIR_WERTGARANTIE', \Xentral\Modules\RepairIntegration\Service\RepairWertgarantie::render($details['wertgarantie'] ?? null));
         $tpl->Set('REPAIR_FORM_ROWS', $rows);
         $priceField = $type === 'wartung' ? 'wartung_paket_price_snapshot' : 'diagnosis_cost_snapshot';
         $price = $details[$priceField] ?? null;

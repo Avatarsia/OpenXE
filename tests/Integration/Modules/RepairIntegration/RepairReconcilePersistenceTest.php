@@ -144,4 +144,25 @@ final class RepairReconcilePersistenceTest extends TestCase
         self::assertSame(1,(int)$this->db->fetchValue("SELECT COUNT(*) FROM ticket WHERE schluessel='202610200002'"));
         self::assertSame(1,(int)$this->db->fetchValue("SELECT COUNT(*) FROM ticket_repair_details WHERE wp_request_number='202610200002'"));
     }
+
+    public function testWertgarantieManifestRespectsPreviewMissingInvalidAndNull(): void
+    {
+        $gateway = new RepairDetailsGateway($this->db);
+        $block = ['contract_number'=>'66326566','status'=>'verified_pending','status_label'=>'Verifiziert','checked_at'=>null,'live'=>true];
+        $this->remote['wertgarantie'] = $block;
+        $this->service->reconcileOne($this->remote, false);
+        self::assertNull($gateway->getByTicketId(1)['wertgarantie']);
+        $this->service->reconcileOne($this->remote, true);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['wertgarantie'], true));
+        unset($this->remote['wertgarantie']);
+        $this->service->reconcileOne($this->remote, true);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['wertgarantie'], true));
+        $this->remote['wertgarantie'] = 'invalid';
+        $this->service->reconcileOne($this->remote, true);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['wertgarantie'], true));
+        $this->remote['wertgarantie'] = null;
+        $this->service->reconcileOne($this->remote, true);
+        self::assertNull($gateway->getByTicketId(1)['wertgarantie']);
+    }
+
 }

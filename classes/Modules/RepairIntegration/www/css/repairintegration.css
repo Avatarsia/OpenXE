@@ -156,3 +156,6 @@
 .repair-link-konto { margin-bottom: 8px; }
 .repair-link-filter { margin-bottom: 6px; }
 .repair-link-scroll { max-height: 320px; overflow-y: auto; }
+
+.repair-wg-badge { display: inline-block; padding: 3px 8px; border-radius: 3px; background: #eee; color: #444; }
+.repair-wg-recognized { background: #d9eddf; color: #215d32; }

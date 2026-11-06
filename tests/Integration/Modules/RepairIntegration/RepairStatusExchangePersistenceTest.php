@@ -292,4 +292,55 @@ final class RepairStatusExchangePersistenceTest extends TestCase
             unlink($router);
         }
     }
+
+    public function testWertgarantiePersistsIndependentlyOfStatusEventAndClearsExplicitly(): void
+    {
+        $gateway = new RepairDetailsGateway(self::$db);
+        $block = ['contract_number'=>'66326566','status'=>'future_status','status_label'=>'Neuer Status','checked_at'=>null,'live'=>false];
+        $event = $this->event();
+        $event['service_details']['wertgarantie'] = $block;
+        self::assertTrue($this->exchange->receive($event)['success']);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['wertgarantie'], true));
+        self::assertTrue($this->exchange->receive($this->event())['success']);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['wertgarantie'], true));
+        $event['service_details']['wertgarantie'] = ['contract_number'=>'invalid'];
+        self::assertTrue($this->exchange->receive($event)['success']);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['wertgarantie'], true));
+        $event['service_details']['wertgarantie'] = null;
+        self::assertTrue($this->exchange->receive($event)['success']);
+        self::assertNull($gateway->getByTicketId(1)['wertgarantie']);
+    }
+
+    public function testWertgarantieMigrationUpgradeIsIdempotent(): void
+    {
+        self::$db->perform('ALTER TABLE ticket_repair_details DROP COLUMN wertgarantie');
+        self::$db->perform("UPDATE systemconfig SET value='1.9.0' WHERE namespace='repair_integration' AND `key`='schema_version'");
+        $migration = new RepairIntegrationMigration(self::$db);
+        $migration->upgrade();
+        self::assertSame('1.10.0', $migration->getCurrentVersion());
+        self::assertNull((new RepairDetailsGateway(self::$db))->getByTicketId(1)['wertgarantie']);
+        self::$db->perform("UPDATE systemconfig SET value='1.9.0' WHERE namespace='repair_integration' AND `key`='schema_version'");
+        $migration->upgrade();
+        self::assertFalse($migration->needsUpgrade());
+    }
+
+
+    public function testLegacyPushMappingPersistsAndToleratesInvalidMetadata(): void
+    {
+        $class = new \ReflectionClass(\Xentral\Modules\RepairIntegration\Api\RepairApiController::class);
+        $controller = $class->newInstanceWithoutConstructor();
+        $map = $class->getMethod('mapInboundData');
+        $gateway = new RepairDetailsGateway(self::$db);
+        $id = (int)$gateway->getByTicketId(1)['id'];
+        $block = ['contract_number'=>'66326566','status'=>'verified','status_label'=>'Verifiziert','checked_at'=>'2026-11-06T14:37:06+01:00','live'=>true];
+        foreach ([$block, 'invalid', null] as $value) {
+            $payload = ['request_number'=>'202610200001','service_type'=>'reparatur','service_details'=>['wertgarantie'=>$value]];
+            $class->getMethod('validatePushDetailsSchema')->invoke($controller, $payload);
+            $gateway->update($id, $map->invoke($controller, $payload));
+            self::assertSame($value === null ? null : $block, json_decode($gateway->getByTicketId(1)['wertgarantie'] ?? 'null', true));
+        }
+        $gateway->update($id, $map->invoke($controller, ['service_details'=>['wertgarantie'=>$block]]));
+        $gateway->update($id, $map->invoke($controller, ['service_details'=>[]]));
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['wertgarantie'], true));
+    }
 }

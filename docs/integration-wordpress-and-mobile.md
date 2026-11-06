@@ -395,3 +395,42 @@ Beispiel `GET /repairapi/index.php/mobile/repair`:
 - Bearer-Token niemals in `error_log` / `repair_sync_log` ausgeben — Controller loggt nur Payload + Error-Klasse
 - Remote-IP wird normalisiert via `$_SERVER['REMOTE_ADDR']` — bei OpenXE hinter Reverse-Proxy muss `trusted_proxies` korrekt konfiguriert sein, sonst greift Rate-Limit IP-uebergreifend
 - Mobile-Endpoints (Phase 2.5): pro-Token Rate-Limit ergaenzen (nicht nur pro-IP) — sonst kann ein gestohlener Token aus mehreren IPs missbraucht werden
+
+## Wertgarantie-Vertragspruefung (additiv, Schema 1.10.0)
+
+WordPress liefert im Legacy-/Initial-Push und v2-Status-Transport optional
+`service_details.wertgarantie`. Im v2-Manifest und requests-Listing steht derselbe
+Block als Top-Level-Key `wertgarantie`:
+
+```json
+{"contract_number":"66326566","status":"verified","status_label":"Verifiziert","checked_at":"2026-11-06T14:37:06+01:00","live":true}
+```
+
+Gespeichert wird der vollstaendige normalisierte Block als JSON-Text in der
+nullable Spalte `ticket_repair_details.wertgarantie`. Fehlender Key behaelt den
+Bestand (Kompatibilitaet mit alten Sendern), explizites `null` leert die Spalte.
+Ungueltige Bloecke werden ignoriert und ohne Vertragsdaten in `error_log`
+protokolliert; sie verursachen keine 4xx-Antwort. Andere Payload-Fehler und
+Authentifizierungsfehler behalten ihre bisherigen HTTP-Codes.
+
+Validierung: `contract_number` ist ein String mit 1 bis 64 Ziffern; `status`
+besteht aus 1 bis 32 Zeichen `[a-z_]`; `status_label` ist ein UTF-8-String mit
+maximal 255 Zeichen; `checked_at` ist ein parsebarer Datumsstring ohne
+Parser-Warnings oder `null`; `live` ist bool. Unbekannte wohlgeformte Statuswerte
+werden gespeichert und mit dem mitgelieferten, bei Ausgabe escapten Label angezeigt.
+Bekannt sind `verified`, `verified_pending`, `active_unmatched_name`,
+`active_external`, `inactive`, `not_found`, `check_failed`, `unavailable`,
+`invalid_format`. Ausschliesslich `verified` und `verified_pending` erhalten
+im Ticket-Detail den gruenen Badge "Wertgarantie-Reparatur"; alle anderen einen
+neutralen Badge. Status-Label und Vertragsnummer stehen daneben.
+
+Inbound-Pfade: `RepairApiController::mapInboundData()` (beide Legacy-Entry-Points
+und v2-Initial-Anlage), `RepairStatusExchangeService::receive()` (v2-Status,
+auch bei bereits bekanntem oder aelterem Status-Event) und
+`RepairReconcileService::reconcileOne()` (Manifest/requests, nur bei Apply).
+Ein Preview schreibt keine WG-Daten. Die Metadaten sind unabhaengig von der
+Status-Event-Identitaet; der Status-Event-Kontrakt bleibt unveraendert.
+Die gemeinsame Validierung liegt in `Service/RepairWertgarantie.php`.
+Installation und Upgrade 1.9.0 -> 1.10.0 pruefen `information_schema.COLUMNS`
+und fuehren fehlende DDL direkt aus PHP aus (idempotent, kein SQL PREPARE).
+Es gibt keinen WG-Rueckkanal nach WordPress.
