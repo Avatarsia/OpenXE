@@ -73,7 +73,7 @@ final class ResultGroup implements \JsonSerializable
     /**
      * @return array
      */
-    public function jsonSerialize()
+    public function jsonSerialize(): mixed
     {
         return [
             'key'   => $this->key,
