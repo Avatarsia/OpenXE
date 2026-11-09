@@ -54,7 +54,7 @@ final class RepairStatusExchangePersistenceTest extends TestCase
         (new RepairDetailsGateway(self::$db))->create(['ticket_id' => 1, 'ticket_schluessel' => '202610200001', 'wp_request_number' => '202610200001', 'service_type' => 'reparatur']);
     }
 
-    private function event(string $status = 'repaired', string $time = '2026-10-20T10:00:00.000001Z'): array
+    private function event(string $status = 'completed', string $time = '2026-10-20T10:00:00.000001Z'): array
     {
         return ['request_number' => '202610200001', 'status' => $status,
             'event_id' => '00112233-4455-4677-8899-aabbccddeeff', 'origin' => 'wp', 'changed_at_utc' => $time, 'revision' => 0];
@@ -95,13 +95,13 @@ final class RepairStatusExchangePersistenceTest extends TestCase
 
     public function testUnknownHistoryIsUnclearAndPreviewNeverWrites(): void
     {
-        $remote = ['status' => 'repaired', 'status_event' => null, 'history_ambiguous' => true, 'history_status_changed_at_utc' => null];
+        $remote = ['status' => 'completed', 'status_event' => null, 'history_ambiguous' => true, 'history_status_changed_at_utc' => null];
         self::assertSame('unclear', $this->exchange->reconcile(1, $remote)['state']);
         self::assertSame(0, (int)self::$db->fetchValue('SELECT COUNT(*) FROM repair_status_exchange'));
         self::assertSame('in_reparatur', self::$db->fetchValue('SELECT status FROM ticket WHERE id=1'));
         $resolved = $this->exchange->reconcile(1, $remote, true, 'remote');
         self::assertTrue($resolved['changed']);
-        self::assertSame('repaired', $resolved['event']['status']);
+        self::assertSame('completed', $resolved['event']['status']);
     }
 
     public function testHistoryRecoveryUsesOriginalTimeAndNeverReissuesEvent(): void
@@ -127,7 +127,7 @@ final class RepairStatusExchangePersistenceTest extends TestCase
     {
         $service = new RepairStatusService(self::$db, new RepairStatusConfigGateway(self::$db), new RepairDetailsGateway(self::$db));
         $service->changeStatus(1, 'repariert');
-        self::assertSame('repaired', $this->exchange->getSnapshot(1)['status_event']['status'] ?? null);
+        self::assertSame('completed', $this->exchange->getSnapshot(1)['status_event']['status'] ?? null);
         self::assertSame(1, (int)self::$db->fetchValue("SELECT COUNT(*) FROM repair_sync_queue WHERE action='status_exchange'"));
     }
 
@@ -145,20 +145,20 @@ final class RepairStatusExchangePersistenceTest extends TestCase
 
     public function testDelayedCoreWriteIsRecoveredBeforeRemoteReceiveAndKeepsHistoryTime(): void
     {
-        $this->exchange->receive($this->event('in_repair', '2026-10-18T10:00:00.000001Z'));
+        $this->exchange->receive($this->event('in_progress', '2026-10-18T10:00:00.000001Z'));
         self::$db->perform("UPDATE ticket SET status='repariert' WHERE id=1");
         self::$db->perform("INSERT INTO ticket_protokoll (ticket,zeit,bearbeiter,grund) VALUES (1,'2026-10-19 12:00:00','staff','Ge&auml;ndert: Status ''repariert''')");
         $late = $this->event('new', '2026-10-18T11:00:00.000001Z');
         $late['event_id'] = '10112233-4455-4677-8899-aabbccddeeff';
         $result = $this->exchange->receive($late);
         self::assertFalse($result['applied']);
-        self::assertSame('repaired', $result['event']['status']);
+        self::assertSame('completed', $result['event']['status']);
         self::assertSame('2026-10-19T10:00:00.000000Z', $result['event']['changed_at_utc']);
     }
 
     public function testExplicitResolutionCanResolveUnloggedCoreWriteAfterExistingEvent(): void
     {
-        $this->exchange->receive($this->event('in_repair', '2026-10-18T10:00:00.000001Z'));
+        $this->exchange->receive($this->event('in_progress', '2026-10-18T10:00:00.000001Z'));
         self::$db->perform("UPDATE ticket SET status='repariert' WHERE id=1");
         $resolved = $this->exchange->reconcile(1, ['status' => 'new', 'status_event' => null], true, 'remote');
         self::assertTrue($resolved['changed']);
@@ -168,7 +168,7 @@ final class RepairStatusExchangePersistenceTest extends TestCase
 
     public function testSameNativeStatusRoundTripAfterCrashIsRecoveredFromNewHistory(): void
     {
-        $this->exchange->receive($this->event('in_repair', '2026-10-18T10:00:00.000001Z'));
+        $this->exchange->receive($this->event('in_progress', '2026-10-18T10:00:00.000001Z'));
         self::$db->perform("INSERT INTO ticket_protokoll (ticket,zeit,bearbeiter,grund) VALUES
             (1,'2026-10-19 12:00:00','staff','Ge&auml;ndert: Status ''repariert'''),
             (1,'2026-10-19 13:00:00','staff','Ge&auml;ndert: Status ''in_reparatur''')");
@@ -180,12 +180,12 @@ final class RepairStatusExchangePersistenceTest extends TestCase
 
     public function testFineNativeStatusIsPreservedAndMaintenanceMappingIsUsed(): void
     {
-        self::$db->perform("INSERT INTO ticket_status_config (slug,label_de,category,sort_order,wp_status_mapping,is_active) VALUES ('special_repair','Special','repair',999,'in_repair',1)");
+        self::$db->perform("INSERT INTO ticket_status_config (slug,label_de,category,sort_order,wp_status_mapping,is_active) VALUES ('special_repair','Special','repair',999,'in_progress',1)");
         self::$db->perform("UPDATE ticket SET status='special_repair' WHERE id=1");
-        $this->exchange->receive($this->event('in_repair'));
+        $this->exchange->receive($this->event('in_progress'));
         self::assertSame('special_repair', self::$db->fetchValue('SELECT status FROM ticket WHERE id=1'));
         self::$db->perform("UPDATE ticket_repair_details SET service_type='wartung' WHERE ticket_id=1");
-        $event = $this->event('repaired', '2026-10-20T10:00:00.000002Z');
+        $event = $this->event('completed', '2026-10-20T10:00:00.000002Z');
         $event['event_id'] = '10112233-4455-4677-8899-aabbccddeeff';
         $this->exchange->receive($event);
         self::assertSame('wartung_fertig', self::$db->fetchValue('SELECT status FROM ticket WHERE id=1'));
@@ -204,7 +204,7 @@ final class RepairStatusExchangePersistenceTest extends TestCase
 
     public function testEqualUnknownHistoryGetsStableBaselineWithoutPretendingNewUserChange(): void
     {
-        $remote = ['status'=>'in_repair', 'status_event'=>null, 'history_ambiguous'=>true];
+        $remote = ['status'=>'in_progress', 'status_event'=>null, 'history_ambiguous'=>true];
         $first = $this->exchange->reconcile(1, $remote, true);
         self::assertSame('equal', $first['state']);
         self::assertSame('1970-01-01T00:00:00.000000Z', $first['event']['changed_at_utc']);
@@ -224,13 +224,13 @@ final class RepairStatusExchangePersistenceTest extends TestCase
     public function testHistoricalLocalAndCanonicalRemoteCanBeOrderedWithoutRemoteHistoryFlag(): void
     {
         self::$db->perform("INSERT INTO ticket_protokoll (ticket,zeit,bearbeiter,grund) VALUES (1,'2026-10-19 12:00:00','staff','Ge&auml;ndert: Status ''in_reparatur''')");
-        $result = $this->exchange->reconcile(1, ['status'=>'repaired','status_event'=>$this->event()]);
+        $result = $this->exchange->reconcile(1, ['status'=>'completed','status_event'=>$this->event()]);
         self::assertSame('remote_newer', $result['state']);
     }
 
     public function testStaleHistoryCannotRedateUnloggedCoreChangeBehindCanonicalEvent(): void
     {
-        $this->exchange->receive($this->event('in_repair', '2026-10-20T10:00:00.000001Z'));
+        $this->exchange->receive($this->event('in_progress', '2026-10-20T10:00:00.000001Z'));
         self::$db->perform("UPDATE ticket SET status='repariert' WHERE id=1");
         self::$db->perform("INSERT INTO ticket_protokoll (ticket,zeit,bearbeiter,grund) VALUES (1,'2026-10-19 12:00:00','staff','Ge&auml;ndert: Status ''repariert''')");
         self::assertNull($this->exchange->captureLocalChange(1));
@@ -261,7 +261,7 @@ final class RepairStatusExchangePersistenceTest extends TestCase
         $socket = stream_socket_server('tcp://127.0.0.1:0');
         $address = stream_socket_get_name($socket, false);
         fclose($socket);
-        $response = $this->event('repaired', (new \DateTimeImmutable('+1 minute', new \DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.u\Z'));
+        $response = $this->event('completed', (new \DateTimeImmutable('+1 minute', new \DateTimeZone('UTC')))->format('Y-m-d\TH:i:s.u\Z'));
         $router = tempnam(sys_get_temp_dir(), 'repair-status-http-');
         file_put_contents($router, '<?php header("Content-Type: application/json"); echo ' . var_export(json_encode(['success'=>true,'applied'=>false,'event'=>$response]), true) . ';');
         $process = proc_open([PHP_BINARY, '-S', $address, $router], [0=>['pipe','r'],1=>['file','/dev/null','w'],2=>['file','/dev/null','w']], $pipes);
@@ -317,7 +317,7 @@ final class RepairStatusExchangePersistenceTest extends TestCase
         self::$db->perform("UPDATE systemconfig SET value='1.9.0' WHERE namespace='repair_integration' AND `key`='schema_version'");
         $migration = new RepairIntegrationMigration(self::$db);
         $migration->upgrade();
-        self::assertSame('1.11.0', $migration->getCurrentVersion());
+        self::assertSame('1.12.0', $migration->getCurrentVersion());
         self::assertNull((new RepairDetailsGateway(self::$db))->getByTicketId(1)['wertgarantie']);
         self::$db->perform("UPDATE systemconfig SET value='1.9.0' WHERE namespace='repair_integration' AND `key`='schema_version'");
         $migration->upgrade();
@@ -367,7 +367,7 @@ final class RepairStatusExchangePersistenceTest extends TestCase
         self::$db->perform("UPDATE systemconfig SET value='1.10.0' WHERE namespace='repair_integration' AND `key`='schema_version'");
         $migration = new RepairIntegrationMigration(self::$db);
         $migration->upgrade();
-        self::assertSame('1.11.0', $migration->getCurrentVersion());
+        self::assertSame('1.12.0', $migration->getCurrentVersion());
         self::assertNull((new RepairDetailsGateway(self::$db))->getByTicketId(1)['shipping_feedback']);
         $gateway = new RepairDetailsGateway(self::$db);
         $saved = '{"choice":"later"}';
@@ -396,5 +396,83 @@ final class RepairStatusExchangePersistenceTest extends TestCase
         $gateway->update($id, $map->invoke($controller, ['service_details'=>['shipping_feedback'=>$block]]));
         $gateway->update($id, $map->invoke($controller, ['service_details'=>[]]));
         self::assertSame($block, json_decode($gateway->getByTicketId(1)['shipping_feedback'], true));
+    }
+
+    public function testStatusModelMigrationAndAllMappingsAreIdempotent(): void
+    {
+        $migration = new RepairIntegrationMigration(self::$db);
+        self::$db->perform('ALTER TABLE ticket_repair_details DROP COLUMN quote_decision');
+        (new RepairConfigService(self::$db))->set('schema_version', '1.11.0');
+        $migration->upgrade();
+        $migration->upgrade();
+        self::assertSame('1.12.0', $migration->getCurrentVersion());
+        $gateway = new RepairStatusConfigGateway(self::$db);
+        $groups = [
+            'new'=>['neu'], 'received'=>['eingegangen'], 'cancelled'=>['storniert'], 'closed'=>['abgeschlossen'],
+            'in_progress'=>['in_diagnose','freigegeben','in_reparatur','wartung_laeuft','re_analyse','re_freigabe','re_umsetzung','ind_planung','ind_freigabe','ind_fertigung'],
+            'completed'=>['kv_abgelehnt','repariert','versendet','wartung_fertig','re_abgelehnt','re_fertig','ind_abgelehnt','ind_fertig'],
+            'quote_sent'=>['kv_gesendet','re_angebot','ind_angebot'],
+        ];
+        foreach ($groups as $wp => $slugs) foreach ($slugs as $slug) {
+            self::assertSame($wp, $gateway->getWpMapping($slug));
+            $config = $gateway->getBySlug($slug);
+            self::assertSame($slug, $gateway->getByWpMapping($wp, $config['category'], $slug)['slug']);
+        }
+        self::assertSame('eingegangen', $gateway->getNextStatus('neu'));
+        self::assertNull($gateway->getNextStatus('eingegangen'));
+        self::assertNull($gateway->getNextStatus('storniert'));
+        self::assertTrue($gateway->isTerminal('storniert'));
+        foreach (['repair','maintenance','reverse_engineering','individualization'] as $category) {
+            foreach (['new'=>'neu','received'=>'eingegangen','cancelled'=>'storniert','closed'=>'abgeschlossen'] as $wp=>$slug) {
+                self::assertSame($slug, $gateway->getByWpMapping($wp,$category)['slug']);
+            }
+        }
+        foreach (['repair'=>['in_diagnose','repariert','kv_gesendet'],
+            'maintenance'=>['wartung_laeuft','wartung_fertig',null],
+            'reverse_engineering'=>['re_analyse','re_fertig','re_angebot'],
+            'individualization'=>['ind_planung','ind_fertig','ind_angebot']] as $category=>$defaults) {
+            foreach (['in_progress','completed','quote_sent'] as $index=>$wp) {
+                self::assertSame($defaults[$index], $gateway->getByWpMapping($wp,$category)['slug'] ?? null);
+            }
+            foreach (\Xentral\Modules\RepairIntegration\Service\RepairStatusModel::LEGACY as $old=>$wp) {
+                self::assertSame($gateway->getByWpMapping($wp,$category), $gateway->getByWpMapping($old,$category));
+            }
+        }
+    }
+
+    public function testQuoteDecisionPersistsAcrossV1V2AndNativePushes(): void
+    {
+        $gateway = new RepairDetailsGateway(self::$db);
+        $controller = (new \ReflectionClass(\Xentral\Modules\RepairIntegration\Api\RepairApiController::class))->newInstanceWithoutConstructor();
+        $map = new \ReflectionMethod($controller, 'mapInboundData');
+        $id = (int)$gateway->getByTicketId(1)['id'];
+        foreach (['approved', 'declined', null] as $value) {
+            $gateway->update($id, $map->invoke($controller, ['service_details'=>['quote_decision'=>$value]]));
+            self::assertSame($value, $gateway->getByTicketId(1)['quote_decision']);
+        }
+        $event = $this->event('approved');
+        $this->exchange->receive($event);
+        self::assertSame('in_reparatur', self::$db->fetchValue('SELECT status FROM ticket WHERE id=1'));
+        self::assertSame('approved', $gateway->getByTicketId(1)['quote_decision']);
+        $this->exchange->receive($event);
+        self::assertSame('approved', $gateway->getByTicketId(1)['quote_decision']);
+        $event['service_details']['quote_decision']='invalid';
+        $this->exchange->receive($event);
+        self::assertSame('approved', $gateway->getByTicketId(1)['quote_decision']);
+        $event['service_details']['quote_decision']=null;
+        $this->exchange->receive($event);
+        self::assertNull($gateway->getByTicketId(1)['quote_decision']);
+        foreach (['freigegeben'=>'approved','re_freigabe'=>'approved','ind_freigabe'=>'approved',
+            'kv_abgelehnt'=>'declined','re_abgelehnt'=>'declined','ind_abgelehnt'=>'declined'] as $slug=>$value) {
+            $sent = $this->exchange->changeLocalStatus(1, $slug);
+            self::assertSame($value, $sent['service_details']['quote_decision']);
+            self::assertSame($value, $gateway->getByTicketId(1)['quote_decision']);
+            self::assertSame($value, $this->exchange->getSnapshot(1)['quote_decision']);
+        }
+        $this->exchange->changeLocalStatus(1, 'versendet');
+        $received = $this->event('returned', '2099-10-20T10:00:00.000001Z');
+        $received['event_id']='11112233-4455-4677-8899-aabbccddeeff';
+        self::assertSame('completed', $this->exchange->receive($received)['event']['status']);
+        self::assertSame('versendet', self::$db->fetchValue('SELECT status FROM ticket WHERE id=1'));
     }
 }

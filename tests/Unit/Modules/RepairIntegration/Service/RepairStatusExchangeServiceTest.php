@@ -10,7 +10,7 @@ final class RepairStatusExchangeServiceTest extends TestCase
 {
     private function event(string $origin = 'wp', string $time = '2026-10-20T10:00:00.000001Z'): array
     {
-        return ['request_number' => '202610200001', 'status' => 'in_repair',
+        return ['request_number' => '202610200001', 'status' => 'in_progress',
             'event_id' => '00112233-4455-4677-8899-aabbccddeeff', 'origin' => $origin,
             'changed_at_utc' => $time, 'revision' => 0];
     }

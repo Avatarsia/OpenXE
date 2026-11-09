@@ -189,7 +189,7 @@ Ablauf bei Neuanlage (`RepairApiController::processPushDetails()`):
 
 1. `RepairApiController::normalizeWpStatus()` — reine Funktion: trim, lowercase, Pattern `^[a-z0-9_]+$`, max 30 Zeichen. Ergebnis `null` = nicht verwertbar.
 2. `ServiceType::tryFrom(service_type)?->statusCategory()` liefert die Kategorie (`repair` | `maintenance` | `reverse_engineering` | `individualization`).
-3. `RepairStatusConfigGateway::getByWpMapping($wpStatus, $category)` sucht in `ticket_status_config` die aktive Zeile mit passendem `wp_status_mapping`. Ein WP-Slug ist mehrdeutig (`in_repair` existiert in allen vier Kategorien), daher die Aufloesung ueber die Kategorie; kategorie-spezifische Zeilen gewinnen gegen `general`.
+3. `RepairStatusConfigGateway::getByWpMapping($wpStatus, $category)` sucht in `ticket_status_config` die aktive Zeile mit passendem `wp_status_mapping`. Ein WP-Slug ist mehrdeutig (`in_progress` existiert in allen vier Kategorien); explizite Kategorie-Defaults loesen ihn auf.
 4. Kein Treffer → Fallback `'neu'`.
 
 Validierung: `status` wird **nicht** hart geprueft und kann einen Request nie mit HTTP 400 abweisen — das Feld ist beratend, ein kaputter Wert darf die Ticket-Anlage nicht verhindern. Nicht verwertbare Werte (Nicht-String, leer, ueber 30 Zeichen, unerlaubte Zeichen) verhalten sich wie ein fehlendes Feld: `normalizeWpStatus()` liefert `null`, es greift der Fallback `'neu'`. Ein **wohlgeformter, aber unbekannter** Slug ist ebenfalls kein Fehler — der Request wird mit Fallback verarbeitet und der `repair_sync_log`-Eintrag der Neuanlage vermerkt es:
@@ -198,21 +198,28 @@ Validierung: `status` wird **nicht** hart geprueft und kann einen Request nie mi
 TICKET_CREATED (WP-Status "some_future_status" ohne Mapping, Fallback "neu")
 ```
 
-Aufloesungs-Matrix (Stand Seed 1.2.0, `-` = Fallback `neu`):
+Aufloesungs-Matrix (Schema 1.12.0, WP v3.41.0):
 
-| WP-Status        | reparatur      | wartung          | reverse_engineering | individualisierung |
-|------------------|----------------|------------------|---------------------|--------------------|
-| `new`            | `neu`          | `neu`            | `neu`               | `neu`              |
-| `in_diagnosis`   | `in_diagnose`  | -                | `re_analyse`        | `ind_planung`      |
-| `quote_sent`     | `kv_gesendet`  | -                | `re_angebot`        | `ind_angebot`      |
-| `quote_declined` | `kv_abgelehnt` | -                | `re_abgelehnt`      | `ind_abgelehnt`    |
-| `approved`       | `freigegeben`  | -                | `re_freigabe`       | `ind_freigabe`     |
-| `in_repair`      | `in_reparatur` | `wartung_laeuft` | `re_umsetzung`      | `ind_fertigung`    |
-| `repaired`       | `repariert`    | `wartung_fertig` | `re_fertig`         | `ind_fertig`       |
-| `returned`       | `versendet`    | -                | -                   | -                  |
-| `closed`         | `abgeschlossen`| `abgeschlossen`  | `abgeschlossen`     | `abgeschlossen`    |
+| WP-Status | repair | maintenance | reverse_engineering | individualization |
+|---|---|---|---|---|
+| `new` | `neu` | `neu` | `neu` | `neu` |
+| `received` | `eingegangen` | `eingegangen` | `eingegangen` | `eingegangen` |
+| `in_progress` | `in_diagnose` | `wartung_laeuft` | `re_analyse` | `ind_planung` |
+| `quote_sent` | `kv_gesendet` | kein Angebotsstatus | `re_angebot` | `ind_angebot` |
+| `completed` | `repariert` | `wartung_fertig` | `re_fertig` | `ind_fertig` |
+| `closed` | `abgeschlossen` | `abgeschlossen` | `abgeschlossen` | `abgeschlossen` |
+| `cancelled` | `storniert` | `storniert` | `storniert` | `storniert` |
 
-`versendet` liegt in Kategorie `repair`, wird aber von den `*_fertig`-Status aller Kategorien als `next_status_slug` genutzt. Ein `returned`-Push auf ein Wartungs-/RE-/IND-Ticket findet daher kein kategorie-eigenes Ziel und faellt auf `neu` zurueck — in der Praxis irrelevant, weil ein Rueckversand nach der Anlage passiert und Inbound-Status nur bei der Anlage greift.
+Bei v2/Manifest-Abgleich bleibt ein bereits vorhandener OpenXE-Status mit
+identischem WP-Mapping erhalten (z.B. `in_reparatur` bei `in_progress` oder
+`versendet` bei `completed`). Erst bei anderer Projektion gilt der Kategorie-Default.
+Der v1-Details-Push behaelt seine bisherige Anlage-/Workflow-Ownership-Semantik.
+
+Legacy-Keys werden eingehend toleriert: `in_diagnosis`, `approved`, `in_repair`
+werden `in_progress`; `quote_declined`, `repaired`, `returned` werden `completed`.
+`approved` setzt zusaetzlich `quote_decision=approved`, `quote_declined` setzt
+`declined`, sofern kein expliziter Entscheidungs-Key vorhanden ist.
+Ausgehend werden auch alte Queue-Payloads auf die neuen Keys normalisiert.
 
 ### Audit-Log
 
@@ -250,15 +257,15 @@ Header: `Content-Type: application/json`, `Authorization: Bearer <wp_api_key>`, 
 
 Body:
 ```json
-{ "request_number": "2026-0431", "status": "in_repair" }
+{ "request_number": "2026-0431", "status": "in_progress" }
 ```
 
 Response 200:
 ```json
-{ "success": true, "old_status": "in_diagnosis", "new_status": "in_repair", "audit_logged": true }
+{ "success": true, "old_status": "in_progress", "new_status": "in_progress", "audit_logged": true }
 ```
 
-`status` muss in der WP-Allowlist sein (siehe Plugin-`Helpers::get_status_labels()`): `new`, `in_diagnosis`, `quote_sent`, `quote_declined`, `approved`, `in_repair`, `repaired`, `returned`, `closed`.
+`status` muss in der WP-Allowlist sein (siehe Plugin-`Helpers::get_status_labels()`): `new`, `received`, `in_progress`, `quote_sent`, `completed`, `closed`, `cancelled`.
 
 ### Retry / Backoff
 
@@ -266,59 +273,62 @@ Response 200:
 
 ### Status-Mapping-Tabelle
 
-Gepflegt in `ticket_status_config`, ausgeliefert von `Migration/sql/002_seed_status_config.sql` (aktuelle Schema-Version 1.3.0). `wp_status_mapping = NULL` bedeutet: kein Outbound-Push. `notify_customer = 1` steuert `RepairEmailService::shouldSendNotification()` — der eigentliche Mailversand ist noch nicht verdrahtet (der Hook bereitet ihn nur vor, siehe Kommentar in `TicketStatusChangeHook`), das Flag ist heute also reine Konfiguration.
+Gepflegt in `ticket_status_config`, ausgeliefert von `Migration/sql/002_seed_status_config.sql` (aktuelle Schema-Version 1.12.0; aktualisiert durch `012_status_model.sql`). `wp_status_mapping = NULL` bedeutet: kein Outbound-Push. `notify_customer = 1` steuert `RepairEmailService::shouldSendNotification()` — der eigentliche Mailversand ist noch nicht verdrahtet (der Hook bereitet ihn nur vor, siehe Kommentar in `TicketStatusChangeHook`), das Flag ist heute also reine Konfiguration.
 
 | Slug              | Label                                  | Kategorie             | Sort | `wp_status_mapping` | `next_status_slug` | notify |
 |-------------------|----------------------------------------|-----------------------|------|---------------------|--------------------|--------|
-| `neu`             | Neu                                    | general               | 10   | `new`               | `offen`            | 0      |
+| `neu`             | Neu                                    | general               | 10   | `new`               | `eingegangen`            | 0      |
+| `eingegangen` | Gerät eingegangen | general | 15 | `received` | - | 1 |
 | `offen`           | Offen                                  | general               | 20   | -                   | -                  | 0      |
 | `warten_e`        | Warten auf Intern                      | general               | 30   | -                   | -                  | 0      |
 | `warten_kd`       | Warten auf Kunde                       | general               | 40   | -                   | -                  | 0      |
 | `klaeren`         | Klaeren                                | general               | 50   | -                   | -                  | 0      |
 | `beantwortet`     | Beantwortet                            | general               | 60   | -                   | -                  | 0      |
-| `in_diagnose`     | In Diagnose                            | repair                | 100  | `in_diagnosis`      | `kv_gesendet`      | 1      |
+| `in_diagnose`     | In Diagnose                            | repair                | 100  | `in_progress`      | `kv_gesendet`      | 1      |
 | `kv_gesendet`     | Kostenvoranschlag gesendet             | repair                | 110  | `quote_sent`        | `freigegeben`      | 1      |
-| `kv_abgelehnt`    | Kostenvoranschlag abgelehnt            | repair                | 115  | `quote_declined`    | `versendet`        | 1      |
-| `freigegeben`     | Freigegeben                            | repair                | 120  | `approved`          | `in_reparatur`     | 1      |
-| `in_reparatur`    | In Reparatur                           | repair                | 130  | `in_repair`         | `repariert`        | 0      |
-| `repariert`       | Repariert                              | repair                | 140  | `repaired`          | `versendet`        | 1      |
-| `versendet`       | Versendet                              | repair                | 150  | `returned`          | `abgeschlossen`    | 1      |
+| `kv_abgelehnt`    | Kostenvoranschlag abgelehnt            | repair                | 115  | `completed`    | `versendet`        | 1      |
+| `freigegeben`     | Freigegeben                            | repair                | 120  | `in_progress`          | `in_reparatur`     | 1      |
+| `in_reparatur`    | In Reparatur                           | repair                | 130  | `in_progress`         | `repariert`        | 0      |
+| `repariert`       | Repariert                              | repair                | 140  | `completed`          | `versendet`        | 1      |
+| `versendet`       | Versendet                              | repair                | 150  | `completed`          | `abgeschlossen`    | 1      |
 | `wartung_geplant` | Wartung geplant                        | maintenance           | 200  | -                   | `wartung_laeuft`   | 1      |
-| `wartung_laeuft`  | Wartung laeuft                         | maintenance           | 210  | `in_repair`         | `wartung_fertig`   | 0      |
-| `wartung_fertig`  | Wartung abgeschlossen                  | maintenance           | 220  | `repaired`          | `versendet`        | 1      |
-| `re_analyse`      | RE: Analyse                            | reverse_engineering   | 300  | `in_diagnosis`      | `re_angebot`       | 1      |
+| `wartung_laeuft`  | Wartung laeuft                         | maintenance           | 210  | `in_progress`         | `wartung_fertig`   | 0      |
+| `wartung_fertig`  | Wartung abgeschlossen                  | maintenance           | 220  | `completed`          | `versendet`        | 1      |
+| `re_analyse`      | RE: Analyse                            | reverse_engineering   | 300  | `in_progress`      | `re_angebot`       | 1      |
 | `re_angebot`      | RE: Angebot erstellt                   | reverse_engineering   | 310  | `quote_sent`        | `re_freigabe`      | 1      |
-| `re_abgelehnt`    | RE: Angebot abgelehnt                  | reverse_engineering   | 315  | `quote_declined`    | `versendet`        | 1      |
-| `re_freigabe`     | RE: Freigegeben                        | reverse_engineering   | 320  | `approved`          | `re_umsetzung`     | 1      |
-| `re_umsetzung`    | RE: In Umsetzung                       | reverse_engineering   | 330  | `in_repair`         | `re_fertig`        | 0      |
-| `re_fertig`       | RE: Fertig                             | reverse_engineering   | 340  | `repaired`          | `versendet`        | 1      |
-| `ind_planung`     | Individualisierung: Planung            | individualization     | 400  | `in_diagnosis`      | `ind_angebot`      | 1      |
+| `re_abgelehnt`    | RE: Angebot abgelehnt                  | reverse_engineering   | 315  | `completed`    | `versendet`        | 1      |
+| `re_freigabe`     | RE: Freigegeben                        | reverse_engineering   | 320  | `in_progress`          | `re_umsetzung`     | 1      |
+| `re_umsetzung`    | RE: In Umsetzung                       | reverse_engineering   | 330  | `in_progress`         | `re_fertig`        | 0      |
+| `re_fertig`       | RE: Fertig                             | reverse_engineering   | 340  | `completed`          | `versendet`        | 1      |
+| `ind_planung`     | Individualisierung: Planung            | individualization     | 400  | `in_progress`      | `ind_angebot`      | 1      |
 | `ind_angebot`     | Individualisierung: Angebot            | individualization     | 410  | `quote_sent`        | `ind_freigabe`     | 1      |
-| `ind_abgelehnt`   | Individualisierung: Angebot abgelehnt  | individualization     | 415  | `quote_declined`    | `versendet`        | 1      |
-| `ind_freigabe`    | Individualisierung: Freigegeben        | individualization     | 420  | `approved`          | `ind_fertigung`    | 1      |
-| `ind_fertigung`   | Individualisierung: In Fertigung       | individualization     | 430  | `in_repair`         | `ind_fertig`       | 0      |
-| `ind_fertig`      | Individualisierung: Fertig             | individualization     | 440  | `repaired`          | `versendet`        | 1      |
+| `ind_abgelehnt`   | Individualisierung: Angebot abgelehnt  | individualization     | 415  | `completed`    | `versendet`        | 1      |
+| `ind_freigabe`    | Individualisierung: Freigegeben        | individualization     | 420  | `in_progress`          | `ind_fertigung`    | 1      |
+| `ind_fertigung`   | Individualisierung: In Fertigung       | individualization     | 430  | `in_progress`         | `ind_fertig`       | 0      |
+| `ind_fertig`      | Individualisierung: Fertig             | individualization     | 440  | `completed`          | `versendet`        | 1      |
 | `abgeschlossen`   | Abgeschlossen                          | general               | 900  | `closed`            | -                  | 0      |
+| `storniert` | Storniert | general | 950 | `cancelled` | - | 1 |
 | `spam`            | Papierkorb                             | general               | 999  | -                   | -                  | 0      |
+
 
 Bewusst ohne Mapping: die `general`-Arbeitsstatus (`offen`, `warten_e`, `warten_kd`, `klaeren`, `beantwortet`, `spam`) und `wartung_geplant` — eine geplante Wartung ist keine Diagnose, ein WP-Echo waere irrefuehrend.
 
 ### Deploy-Reihenfolge — WP-Plugin zuerst
 
-> **Wichtig:** Die WP-Plugin-Version, die die Slugs `in_repair` und `quote_declined` kennt (**v3.29.0**), muss **vor oder zusammen mit** dieser OpenXE-Version deployed werden. Ein spaeter nachgezogenes Plugin verliert Status-Echos dauerhaft.
-
-Schema-Version 1.1.0 ergaenzt `wp_status_mapping`-Eintraege fuer `quote_declined` (`kv_abgelehnt`, `re_abgelehnt`, `ind_abgelehnt`) und `in_repair` (`wartung_laeuft`, `re_umsetzung`, `ind_fertigung`). Sobald ein Ticket in einen dieser Status wechselt, stellt `TicketStatusChangeHook` einen Outbound-Eintrag in `repair_sync_queue`.
+WP **v3.41.0** muss vor oder zusammen mit Schema **1.12.0** eingesetzt werden,
+damit die sieben neuen Status-Keys akzeptiert werden. Historische Migrationen
+bleiben unveraendert; `012_status_model.sql` stellt die Mappings idempotent um.
 
 Kennt das Ziel-Plugin einen dieser Slugs noch nicht, antwortet es mit einem non-2xx-Code. `RepairSyncService` wiederholt den Versuch entlang `RETRY_DELAYS` (2 min, 10 min, 30 min, 2 h) und setzt den Eintrag nach `max_retries` (Default 5, in Summe also nach ca. 2 Stunden 42 Minuten) endgueltig auf `permanently_failed`. Von dort wird **nicht** automatisch erneut zugestellt: die Sync-Status-Seite (`index.php?module=repairintegration&action=syncstatus`) zeigt `permanently_failed` nur als Zaehler, eine Wiedervorlage-Aktion gibt es nicht — betroffene Eintraege muessten in `repair_sync_queue` von Hand zurueckgesetzt werden.
 
 ### Migration bestehender Installationen
 
-Der Seed (`002_...`) laeuft nur bei Erstinstallation (`RepairIntegrationMigration::needsInstall()`). Bestehende Installationen bekommen Mapping-Aenderungen, neue Status und neue Spalten ueber die Upgrade-Kette `Migration/sql/003_*.sql` bis `005_*.sql` (1.3.0: `005_customer_quote_amount.sql` ergaenzt `ticket_repair_details.customer_quote_amount`, idempotent per information_schema-Check):
+Der Seed (`002_...`) laeuft nur bei Erstinstallation (`RepairIntegrationMigration::needsInstall()`). Bestehende Installationen bekommen Mapping-Aenderungen, neue Status und neue Spalten ueber die Upgrade-Kette `Migration/sql/003_*.sql` bis `012_status_model.sql` (1.3.0: `005_customer_quote_amount.sql` ergaenzt `ticket_repair_details.customer_quote_amount`, idempotent per information_schema-Check):
 
 - `RepairIntegrationMigration::needsUpgrade()` vergleicht die in `systemconfig` (`repair_integration.schema_version`) gespeicherte Version mit `SCHEMA_VERSION`
 - `upgrade()` fuehrt das Upgrade-SQL aus und schreibt die neue Version
 - Ausgeloest via `classes/Modules/RepairIntegration/install.php` (Action `index.php?module=repairintegration&action=install`) **und** automatisch beim ersten Seitenaufruf des Moduls (`repairintegration.php::ensureInstalled()`)
-- Idempotent: `INSERT IGNORE` fuer neue Zeilen, `UPDATE`s eng auf das jeweilige alte Seed-Wertepaar begrenzt (`WHERE slug = 'x' AND wp_status_mapping IS NULL`), damit vom Admin angepasste Zeilen nicht ueberschrieben werden
+- Idempotent: `INSERT IGNORE` fuer neue Status, feste Mapping-Updates fuer die vertraglichen Slugs und Normalisierung verbliebener Legacy-Mappings. Spaltenanlage per information_schema-Pruefung in PHP (kein SQL PREPARE).
 
 ### Reduce-Coupling-Note
 
@@ -374,7 +384,7 @@ Beispiel `GET /repairapi/index.php/mobile/repair`:
   ],
   "available_status_transitions": [
     { "key": "waiting_customer", "label": "Wartet auf Kundenfreigabe" },
-    { "key": "in_repair",        "label": "In Reparatur" }
+    { "key": "in_progress",      "label": "In Bearbeitung" }
   ]
 }
 ```
@@ -467,3 +477,27 @@ bleiben unveraendert. Im Ticket stehen Rueckmeldung und Datum, bei `shipped`
 zusaetzlich Versanddienstleister und Sendungsnummer; alle Werte HTML-escaped.
 `cancelled` wird von WordPress separat als normaler Statuswechsel nach `closed`
 uebertragen; es gibt keine zusaetzliche OpenXE-Statuslogik oder Rueckuebertragung.
+
+
+## KVA-Entscheidung (WP v3.41.0, OpenXE Schema 1.12.0)
+
+`ticket_repair_details.quote_decision` ist nullable `VARCHAR(16)`:
+`approved`, `declined` oder SQL NULL. Fehlender Key behaelt den Wert,
+explizites `null` loescht ihn; ungueltige Werte werden ignoriert und geloggt.
+Anzeige im Reparatur-Tab als Freigegeben/Abgelehnt (leerer Wert ohne Anzeige).
+
+- v1 Inbound: `service_details.quote_decision`; auch bei bestehenden Tickets.
+- v2 Status-Transport: `service_details.quote_decision` additiv, unabhaengig von Event-Identitaet.
+- Manifest: Top-Level `quote_decision`; Dry-Run schreibt nichts.
+- v1 Outbound `/requests/status`: Top-Level `quote_decision` bei Freigabe/Ablehnung.
+- `freigegeben`, `re_freigabe`, `ind_freigabe` senden `approved`;
+  `kv_abgelehnt`, `re_abgelehnt`, `ind_abgelehnt` senden `declined`.
+- v2 Outbound und Manifest liefern auch den gespeicherten Entscheidungswert
+  (einschliesslich `null`) bei anderen Status; Status-Keys bleiben die sieben neuen Keys.
+- Belegversand Auftrag verwendet weiterhin den nativen Kategorie-Freigabestatus,
+  nicht den Diagnose-Default von `in_progress`; Rechnung verwendet Kategorie-Fertigstatus.
+
+`012_status_model.sql` fuehrt keine Ticket-/History-Umschreibung und keinen Push aus.
+`neu.next_status_slug` wechselt nur vom bisherigen `offen` zu `eingegangen`,
+weil Geraeteeingang fuer alle Kategorien gemeinsam ist. `eingegangen` hat keinen
+kategorie-fremden automatischen Folgestatus; `storniert` ist terminal.

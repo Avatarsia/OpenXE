@@ -76,7 +76,7 @@ final class RepairSyncPersistenceTest extends TestCase
         $this->service->checkAndQueueStatusChange(1);
         $pending = $this->queue->getPendingEntries();
         self::assertCount(1, $pending);
-        self::assertSame('repaired', json_decode($pending[0]['payload'], true)['status']);
+        self::assertSame('completed', json_decode($pending[0]['payload'], true)['status']);
     }
 
     public function testInconsistentDetailKeyNeverUpdatesAnotherRequest(): void
@@ -110,7 +110,7 @@ final class RepairSyncPersistenceTest extends TestCase
         (new RepairIntegrationMigration(self::$db))->upgrade();
         self::assertSame('pending', $this->config->get('status_backfill_state'));
         $this->service->backfillAndQueueCurrentStatuses();
-        self::assertSame('in_repair', json_decode($this->queue->getPendingEntries()[0]['payload'], true)['status']);
+        self::assertSame('in_progress', json_decode($this->queue->getPendingEntries()[0]['payload'], true)['status']);
         self::assertSame('completed', $this->config->get('status_backfill_state'));
     }
 
@@ -243,7 +243,7 @@ final class RepairSyncPersistenceTest extends TestCase
         self::assertSame('repairsynctest://wordpress/wp-json/p3d/v1/requests/status', $request['url']);
         self::assertSame('POST', $request['options']['method']);
         self::assertStringContainsString('Authorization: Bearer test-only', $request['options']['header']);
-        self::assertSame(['request_number' => '202609080001', 'status' => 'repaired'], json_decode($request['options']['content'], true));
+        self::assertSame(['request_number' => '202609080001', 'status' => 'completed'], json_decode($request['options']['content'], true));
     }
 
     public function testSaveDeliversStatusSynchronouslyAndLeavesRetryToCron(): void
@@ -263,7 +263,7 @@ final class RepairSyncPersistenceTest extends TestCase
         $request = RepairHttpCapture::$requests[0];
         self::assertSame('repairsynctest://wordpress/wp-json/p3d/v1/requests/status', $request['url']);
         self::assertSame(8, $request['options']['timeout']);
-        self::assertSame(['request_number' => '202609080001', 'status' => 'in_repair'], json_decode($request['options']['content'], true));
+        self::assertSame(['request_number' => '202609080001', 'status' => 'in_progress'], json_decode($request['options']['content'], true));
         // Der Test-Wrapper liefert keine HTTP-Statuszeile -> Zustellung gilt als
         // fehlgeschlagen, der Eintrag bleibt fuer den Cron-Retry stehen.
         $row = self::$db->fetchRow('SELECT status, retry_count, next_retry_at FROM repair_sync_queue');
@@ -284,6 +284,21 @@ final class RepairSyncPersistenceTest extends TestCase
         self::assertFalse($this->service->queueAndPushStatusChange(1));
         self::assertCount(0, RepairHttpCapture::$requests);
         self::assertSame(0, (int)self::$db->fetchValue('SELECT COUNT(*) FROM repair_sync_queue'));
+    }
+    public function testV1DecisionStatusesQueueOnlyNewKeysAndExplicitDecision(): void
+    {
+        $this->ticket();
+        $this->service->backfillAndQueueCurrentStatuses();
+        foreach (['freigegeben'=>'approved','re_freigabe'=>'approved','ind_freigabe'=>'approved',
+            'kv_abgelehnt'=>'declined','re_abgelehnt'=>'declined','ind_abgelehnt'=>'declined'] as $slug=>$decision) {
+            self::$db->perform('UPDATE ticket SET status=:status WHERE id=1', ['status'=>$slug]);
+            $this->service->checkAndQueueStatusChange(1);
+            $pending = $this->queue->getPendingEntries();
+            self::assertCount(1, $pending);
+            $payload = json_decode($pending[0]['payload'], true);
+            self::assertSame($decision==='approved'?'in_progress':'completed', $payload['status']);
+            self::assertSame($decision, $payload['quote_decision']);
+        }
     }
 }
 
@@ -312,4 +327,6 @@ final class RepairHttpCapture
 
     public function stream_eof(): bool { return $this->read; }
     public function stream_stat(): array { return []; }
+
+
 }

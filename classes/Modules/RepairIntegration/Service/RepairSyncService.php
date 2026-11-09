@@ -132,6 +132,11 @@ final class RepairSyncService
             'request_number' => $details['wp_request_number'],
             'status' => $wpStatus,
         ];
+        $decision = RepairStatusModel::nativeDecision($ticket['status']);
+        if ($decision !== null) {
+            RepairStatusModel::apply($this->db, $ticketId, ['quote_decision' => $decision]);
+            $payloadData['quote_decision'] = $decision;
+        }
         // KVA-Betrag aus OpenXE mitsenden, sobald er gesetzt ist. Das Plugin
         // nimmt `quote_amount` im Status-Endpoint entgegen und speichert ihn
         // als customer_quote_amount der Anfrage.
@@ -434,7 +439,15 @@ final class RepairSyncService
             throw new SyncFailedException('WP API key not configured');
         }
 
-        $result = $this->request((string)$item['target_url'], (string)$item['payload'], $apiKey, $timeout);
+        $payload = json_decode((string)$item['payload'], true, 512, JSON_THROW_ON_ERROR);
+        if (is_string($payload['status'] ?? null)) {
+            $source = $item['action'] === 'status_exchange' ? ($payload['service_details'] ?? []) : $payload;
+            $decision = RepairStatusModel::map($source, $payload['status']);
+            $payload['status'] = RepairStatusModel::normalize($payload['status']);
+            if ($item['action'] === 'status_exchange') $payload['service_details'] = $source + $decision;
+            else $payload += $decision;
+        }
+        $result = $this->request((string)$item['target_url'], json_encode($payload, JSON_THROW_ON_ERROR), $apiKey, $timeout);
         $httpCode = (int)$result['http_code'];
 
         if ($result['error'] !== null || $httpCode < 200 || $httpCode >= 300) {

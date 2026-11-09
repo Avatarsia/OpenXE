@@ -19,8 +19,8 @@ use Xentral\Modules\RepairIntegration\Service\RepairStatusExchangeService;
  *
  * - direkter Link: Belegnummer im Link (repair_ticket_beleg) aktualisieren
  * - angebot:  quote_amount = Angebotssumme, Status -> quote_sent-Slug
- * - auftrag:  Status -> approved-Slug
- * - rechnung: actual_cost = Rechnungssumme, Status -> repaired-Slug
+ * - auftrag:  Status -> Freigabe-Slug
+ * - rechnung: actual_cost = Rechnungssumme, Status -> completed-Slug
  *
  * Der Ziel-Slug wird ueber das WP-Mapping in der Kategorie des Service-Typs
  * aufgeloest (kv_gesendet/re_angebot/ind_angebot usw.). Ein Statuswechsel
@@ -39,8 +39,8 @@ final class BelegVersendetHook
     /** Belegtyp -> WP-Status, dessen OpenXE-Slug das Ticket erhalten soll. */
     public const BELEG_WP_STATUS = [
         'angebot' => 'quote_sent',
-        'auftrag' => 'approved',
-        'rechnung' => 'repaired',
+        'auftrag' => 'in_progress',
+        'rechnung' => 'completed',
     ];
 
     /** Belegtyp -> Betragsfeld in ticket_repair_details. */
@@ -126,6 +126,10 @@ final class BelegVersendetHook
             $serviceType = ServiceType::tryFrom((string)($details['service_type'] ?? ''));
             $category = $serviceType !== null ? $serviceType->statusCategory() : 'repair';
             $target = $this->statusConfigGateway->getByWpMapping(self::BELEG_WP_STATUS[$belegTyp], $category);
+            if ($belegTyp === 'auftrag') {
+                $approval = ['repair'=>'freigegeben', 'reverse_engineering'=>'re_freigabe', 'individualization'=>'ind_freigabe'];
+                if (isset($approval[$category])) $target = $this->statusConfigGateway->getBySlug($approval[$category]);
+            }
             $current = $currentSlug !== '' ? $this->statusConfigGateway->getBySlug($currentSlug) : null;
 
             $newStatus = null;

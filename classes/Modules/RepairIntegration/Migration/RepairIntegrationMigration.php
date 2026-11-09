@@ -9,7 +9,7 @@ final class RepairIntegrationMigration
 {
     private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
     private const SCHEMA_VERSION_KEY = 'schema_version'; // @php83: add type string
-    private const SCHEMA_VERSION = '1.11.0'; // @php83: add type string
+    private const SCHEMA_VERSION = '1.12.0'; // @php83: add type string
 
     /**
      * Explizite Upgrade-Kette: gespeicherte Version => auszufuehrender Schritt.
@@ -34,6 +34,7 @@ final class RepairIntegrationMigration
         '1.8.0' => ['sql' => '011_beleg_link_userrights.sql', 'to' => '1.9.0'],
         '1.9.0' => ['sql' => 'wertgarantie', 'to' => '1.10.0'],
         '1.10.0' => ['sql' => 'shipping_feedback', 'to' => '1.11.0'],
+        '1.11.0' => ['sql' => '012_status_model.sql', 'to' => '1.12.0'],
     ];
 
     public function __construct(
@@ -54,6 +55,8 @@ final class RepairIntegrationMigration
         $this->executeSqlFile(__DIR__ . '/sql/011_beleg_link_userrights.sql');
         $this->ensureWertgarantieField();
         $this->ensureShippingFeedbackField();
+        $this->ensureQuoteDecisionField();
+        $this->executeSqlFile(__DIR__ . '/sql/012_status_model.sql');
         $this->setVersion(self::SCHEMA_VERSION);
     }
 
@@ -93,6 +96,9 @@ final class RepairIntegrationMigration
                     $this->db->perform('ALTER TABLE ticket_repair_details ADD COLUMN customer_quote_amount DECIMAL(10,2) DEFAULT NULL AFTER actual_cost');
                 }
             } else {
+                if ($step['sql'] === '012_status_model.sql') {
+                    $this->ensureQuoteDecisionField();
+                }
                 if ($step['sql'] === '008_beleg_positions.sql') {
                     $this->ensurePositionFields();
                 }
@@ -126,6 +132,17 @@ final class RepairIntegrationMigration
         );
         if ((int)$exists === 0) {
             $this->db->perform('ALTER TABLE ticket_repair_details ADD COLUMN shipping_feedback TEXT DEFAULT NULL');
+        }
+    }
+
+    private function ensureQuoteDecisionField(): void
+    {
+        $exists = $this->db->fetchValue(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+             AND TABLE_NAME = 'ticket_repair_details' AND COLUMN_NAME = 'quote_decision'"
+        );
+        if ((int)$exists === 0) {
+            $this->db->perform('ALTER TABLE ticket_repair_details ADD COLUMN quote_decision VARCHAR(16) NULL');
         }
     }
 

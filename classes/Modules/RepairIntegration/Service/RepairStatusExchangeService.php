@@ -33,7 +33,7 @@ final class RepairStatusExchangeService
             || !is_int($event['revision'] ?? null) || $event['revision'] < 0) {
             throw new \InvalidArgumentException('INVALID_STATUS_EVENT');
         }
-        return ['request_number' => $event['request_number'], 'status' => $event['status'], 'event_id' => $event['event_id'],
+        return ['request_number' => $event['request_number'], 'status' => RepairStatusModel::normalize($event['status']), 'event_id' => $event['event_id'],
             'origin' => $event['origin'], 'changed_at_utc' => $event['changed_at_utc'], 'revision' => $event['revision']];
     }
 
@@ -73,23 +73,24 @@ final class RepairStatusExchangeService
 
     private function eventFromRow(array $row): array
     {
-        return ['request_number' => $row['request_number'], 'status' => $row['status'], 'event_id' => $row['event_id'],
+        return ['request_number' => $row['request_number'], 'status' => RepairStatusModel::normalize($row['status']), 'event_id' => $row['event_id'],
             'origin' => $row['origin'], 'changed_at_utc' => str_replace(' ', 'T', $row['changed_at_utc']) . 'Z',
             'revision' => (int)$row['revision']];
     }
 
     public function getSnapshot(int $ticketId): array
     {
-        $result = ['status' => null, 'status_event' => null, 'history_status_changed_at_utc' => null, 'history_ambiguous' => true];
+        $result = ['status' => null, 'quote_decision' => null, 'status_event' => null, 'history_status_changed_at_utc' => null, 'history_ambiguous' => true];
         $ticket = $this->ticket($ticketId);
         if ($ticket === null || ($mapping = $this->statuses->getWpMapping($ticket['status'])) === null) {
             return $result;
         }
         $result['status'] = $mapping;
+        $result['quote_decision'] = $this->decision($ticket);
         $stored = $this->stored($ticketId);
         $history = $this->history($ticket);
         if ($stored !== null && $stored['native_status'] === $ticket['status'] && !$this->hasNewHistory($stored, $history)) {
-            $result['status_event'] = $this->eventFromRow($stored);
+            $result['status_event'] = $this->withDecision($this->eventFromRow($stored), $ticket);
             $result['history_ambiguous'] = false;
             $result['history_status_changed_at_utc'] = $result['status_event']['changed_at_utc'];
         } else {
@@ -163,6 +164,18 @@ final class RepairStatusExchangeService
             'event_id' => $this->uuid($seed), 'origin' => $origin, 'changed_at_utc' => $time, 'revision' => 0];
     }
 
+    private function decision(array $ticket): ?string
+    {
+        $details = (new \Xentral\Modules\RepairIntegration\Gateway\RepairDetailsGateway($this->db))->getByTicketId((int)$ticket['id']);
+        return RepairStatusModel::nativeDecision($ticket['status']) ?? ($details['quote_decision'] ?? null);
+    }
+
+    private function withDecision(array $event, array $ticket): array
+    {
+        $event['service_details']['quote_decision'] = $this->decision($ticket);
+        return $event;
+    }
+
     private function now(): string
     {
         return (string)$this->db->fetchValue("SELECT DATE_FORMAT(UTC_TIMESTAMP(6), '%Y-%m-%dT%H:%i:%s.%fZ')");
@@ -180,6 +193,7 @@ final class RepairStatusExchangeService
             VALUES (:tid,:native,:request,:status,:uuid,:origin,:time,:revision,:history)
             ON DUPLICATE KEY UPDATE native_status=VALUES(native_status),request_number=VALUES(request_number),status=VALUES(status),
                 event_id=VALUES(event_id),origin=VALUES(origin),changed_at_utc=VALUES(changed_at_utc),revision=VALUES(revision),history_id=VALUES(history_id)', $params);
+        $event = $this->withDecision($event, $ticket);
         $payload = json_encode($event, JSON_THROW_ON_ERROR);
         $this->db->perform('INSERT INTO repair_status_exchange_events (event_id,ticket_id,payload) VALUES (:uuid,:tid,:payload)',
             ['uuid' => $event['event_id'], 'tid' => $ticket['id'], 'payload' => $payload]);
@@ -222,6 +236,8 @@ final class RepairStatusExchangeService
         }
         $time = $oldStatus !== null ? $this->now() : $history['time'];
         $event = $this->newEvent($ticket, $time, $oldStatus === null ? 'history:' . $ticketId . ':' . $history['id'] : null);
+        $decision = RepairStatusModel::nativeDecision($ticket['status']);
+        if ($decision !== null) RepairStatusModel::apply($this->db, $ticketId, ['quote_decision' => $decision]);
         return $this->persist($ticket, $event, true, $history['id']);
     }
 
@@ -252,6 +268,7 @@ final class RepairStatusExchangeService
     public function receive(array $event): array
     {
         $wertgarantie = is_array($event['service_details'] ?? null) ? $event['service_details'] : [];
+        $legacyStatus = $event['status'] ?? null;
         $event = self::validateEvent($event);
         if (!$this->isEnabled()) {
             throw new \RuntimeException('SYNC_V2_DISABLED');
@@ -266,6 +283,7 @@ final class RepairStatusExchangeService
             if ($ticket === null || $this->statuses->getWpMapping($ticket['status']) === null) {
                 throw new \InvalidArgumentException('UNMAPPED_REQUEST');
             }
+            RepairStatusModel::apply($this->db, $ticketId, $wertgarantie, $legacyStatus);
             $stored = $this->stored($ticketId);
             // Recover a committed legacy Core write before comparing remote timestamps.
             if ($stored === null || $stored['native_status'] !== $ticket['status'] || $this->hasNewHistory($stored, $this->history($ticket))) {
@@ -274,12 +292,12 @@ final class RepairStatusExchangeService
                 }
                 $stored = $this->stored($ticketId);
             }
-            $current = $stored === null ? null : $this->eventFromRow($stored);
+            $current = $stored === null ? null : $this->withDecision($this->eventFromRow($stored), $ticket);
             $seen = $this->db->fetchRow('SELECT ticket_id,payload FROM repair_status_exchange_events WHERE event_id=:uuid', ['uuid' => $event['event_id']]);
             if ($seen) {
-                $original = json_decode($seen['payload'], true, 512, JSON_THROW_ON_ERROR);
+                $original = self::validateEvent(json_decode($seen['payload'], true, 512, JSON_THROW_ON_ERROR));
                 $original['revision'] = $event['revision'];
-                if ((int)$seen['ticket_id'] !== $ticketId || $original !== $event) {
+                if ((int)$seen['ticket_id'] !== $ticketId || $original !== self::validateEvent($event)) {
                     throw new \InvalidArgumentException('STATUS_EVENT_CONFLICT');
                 }
             }
@@ -287,7 +305,7 @@ final class RepairStatusExchangeService
                 $result = ['success' => true, 'applied' => false, 'event' => $current, 'reason' => $seen ? 'duplicate' : 'not_newer'];
             } else {
                 $category = ServiceType::tryFrom($ticket['service_type'])?->statusCategory();
-                $target = $category === null ? null : $this->statuses->getByWpMapping($event['status'], $category);
+                $target = $category === null ? null : $this->statuses->getByWpMapping($event['status'], $category, $ticket['status']);
                 if ($target === null) {
                     throw new \InvalidArgumentException('UNMAPPED_STATUS');
                 }
@@ -319,7 +337,7 @@ final class RepairStatusExchangeService
                 throw new \InvalidArgumentException('UNKNOWN_REQUEST');
             }
             $category = ServiceType::tryFrom($ticket['service_type'])?->statusCategory();
-            $target = $category === null ? null : $this->statuses->getByWpMapping($publicStatus, $category);
+            $target = $category === null ? null : $this->statuses->getByWpMapping($publicStatus, $category, $ticket['status']);
             if ($target === null) {
                 throw new \InvalidArgumentException('UNMAPPED_STATUS');
             }
@@ -327,6 +345,8 @@ final class RepairStatusExchangeService
                 $ticket['status'] = $target['slug'];
                 $this->db->perform('UPDATE ticket SET status=:status WHERE id=:id', ['status' => $ticket['status'], 'id' => $ticketId]);
             }
+            $decision = RepairStatusModel::nativeDecision($ticket['status']);
+            if ($decision !== null) RepairStatusModel::apply($this->db, $ticketId, ['quote_decision' => $decision]);
             $event = $this->newEvent($ticket, $this->now());
             $history = $this->history($ticket);
             $event = $this->persist($ticket, $event, true, $history['id']);
@@ -343,6 +363,8 @@ final class RepairStatusExchangeService
         if ($choice !== null && !in_array($choice, ['local', 'remote'], true)) {
             throw new \InvalidArgumentException('INVALID_CHOICE');
         }
+        if ($apply) RepairStatusModel::apply($this->db, $ticketId, $remote, $remote['status'] ?? null);
+        if (isset($remote['status'])) $remote['status'] = RepairStatusModel::normalize($remote['status']);
         $local = $this->getSnapshot($ticketId);
         $ticket = $this->ticket($ticketId);
         $result = ['state' => 'unclear', 'event' => $local['status_event'], 'changed' => false];
@@ -392,6 +414,7 @@ final class RepairStatusExchangeService
             $event = $this->newEvent($ticket, $time, 'baseline:' . $ticket['wp_request_number'] . ':' . ($takeRemote ? $remote['status'] : $local['status']) . ':' . $time, $takeRemote ? 'wp' : 'openxe');
             $event['status'] = $takeRemote ? $remote['status'] : $local['status'];
         }
+        if ($takeRemote) $event['service_details'] = RepairStatusModel::map($remote) + ($event['service_details'] ?? []);
         $received = $this->receive($event);
         $result['event'] = $received['event'];
         $result['changed'] = $received['applied'];

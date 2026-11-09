@@ -44,7 +44,7 @@ final class RepairReconcilePersistenceTest extends TestCase
         (new RepairDetailsGateway($this->db))->create(['ticket_id'=>1,'wp_request_number'=>'202610200001','ticket_schluessel'=>'202610200001','service_type'=>'reparatur']);
         $this->db->perform("INSERT INTO ticket_nachricht VALUES(1,'202610200001','api','neu','0',NULL)");
         $this->root=sys_get_temp_dir().'/repair-reconcile-test-'.bin2hex(random_bytes(8));mkdir($this->root,0700,true);
-        $this->remote=['id'=>1,'request_number'=>'202610200001','service_type'=>'reparatur','status'=>'repaired','status_event'=>['request_number'=>'202610200001','status'=>'repaired','event_id'=>'11111111-1111-4111-8111-111111111111','origin'=>'wp','changed_at_utc'=>'2026-10-20T10:00:00.000001Z','revision'=>0], 'history_ambiguous'=>false,'history_status_changed_at_utc'=>'2026-10-20T10:00:00.000001Z','images'=>[]];
+        $this->remote=['id'=>1,'request_number'=>'202610200001','service_type'=>'reparatur','status'=>'completed','status_event'=>['request_number'=>'202610200001','status'=>'completed','event_id'=>'11111111-1111-4111-8111-111111111111','origin'=>'wp','changed_at_utc'=>'2026-10-20T10:00:00.000001Z','revision'=>0], 'history_ambiguous'=>false,'history_status_changed_at_utc'=>'2026-10-20T10:00:00.000001Z','images'=>[]];
         $this->db->perform("INSERT INTO ticket_protokoll(ticket,zeit,bearbeiter,grund) VALUES(1,'2026-10-20 11:00:00','test','Ge&auml;ndert: Status \'In Reparatur\'')");
         $transport=new RepairExchangeTransport($config,function($method,$path,$body){
             $this->calls[]=[$method,$path];
@@ -185,4 +185,23 @@ final class RepairReconcilePersistenceTest extends TestCase
         self::assertNull($gateway->getByTicketId(1)['shipping_feedback']);
     }
 
+
+    public function testQuoteDecisionManifestMissingNullAndInvalid(): void
+    {
+        $gateway = new \Xentral\Modules\RepairIntegration\Gateway\RepairDetailsGateway($this->db);
+        $this->remote['quote_decision']='approved';
+        $this->service->reconcileOne($this->remote, false);
+        self::assertNull($gateway->getByTicketId(1)['quote_decision']);
+        $this->service->reconcileOne($this->remote, true);
+        self::assertSame('approved', $gateway->getByTicketId(1)['quote_decision']);
+        unset($this->remote['quote_decision']);
+        $this->service->reconcileOne($this->remote, true);
+        self::assertSame('approved', $gateway->getByTicketId(1)['quote_decision']);
+        $this->remote['quote_decision']='invalid';
+        $this->service->reconcileOne($this->remote, true);
+        self::assertSame('approved', $gateway->getByTicketId(1)['quote_decision']);
+        $this->remote['quote_decision']=null;
+        $this->service->reconcileOne($this->remote, true);
+        self::assertNull($gateway->getByTicketId(1)['quote_decision']);
+    }
 }
