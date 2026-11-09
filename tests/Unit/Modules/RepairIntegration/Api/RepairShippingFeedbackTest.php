@@ -24,6 +24,17 @@ final class RepairShippingFeedbackTest extends TestCase
             }
         }
     }
+    public function testShippedWithoutOptionalTrackingAndCarrierIsMapped(): void
+    {
+        $block=$this->block();$block['tracking_number']=null;$block['carrier']=null;$block['carrier_label']=null;
+        self::assertSame($block,json_decode($this->map(['shipping_feedback'=>$block])['shipping_feedback'],true));
+        $block=$this->block();$block['tracking_number']=null;
+        self::assertSame($block,json_decode($this->map(['shipping_feedback'=>$block])['shipping_feedback'],true));
+        $block=$this->block();$block['carrier']=null;$block['carrier_label']=null;
+        self::assertSame($block,json_decode($this->map(['shipping_feedback'=>$block])['shipping_feedback'],true));
+        $block=$this->block();$block['carrier']=null;
+        self::assertArrayNotHasKey('shipping_feedback',$this->map(['shipping_feedback'=>$block]));
+    }
     public function testOtherChoicesHaveNullShippingFieldsAndNullableDate(): void
     {
         foreach (['later','cancelled'] as $choice) {
@@ -48,8 +59,8 @@ final class RepairShippingFeedbackTest extends TestCase
     public function testInvalidBlocksAreIgnoredWithoutException(): void
     {
         foreach (['choice'=>['unknown',null,1], 'choice_label'=>[str_repeat('a',256),[],"\xff"],
-            'tracking_number'=>[str_repeat('A',65),'abc','AB_123',"ABC\n",123,null],
-            'carrier'=>['fedex',[],null], 'carrier_label'=>[str_repeat('a',256),[],"\xff",null],
+            'tracking_number'=>[str_repeat('A',65),'abc','AB_123',"ABC\n",123],
+            'carrier'=>['fedex',[]], 'carrier_label'=>[str_repeat('a',256),[],"\xff",null],
             'responded_at'=>['nonsense','tomorrow','2026-02-30T00:00:00Z','2026-11-09',123,'']] as $field=>$values) {
             foreach ($values as $value) {
                 $block=$this->block();$block[$field]=$value;

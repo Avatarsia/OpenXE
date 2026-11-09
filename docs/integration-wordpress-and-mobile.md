@@ -447,9 +447,10 @@ liefern denselben Block als Top-Level-Key `shipping_feedback`:
 
 `choice` erlaubt `shipped` (Bereits versendet), `later` (Versendet später) und
 `cancelled` (Versendet nicht mehr). `responded_at` ist RFC3339 oder `null`.
-Bei `shipped` ist `tracking_number` ein String mit maximal 64 Zeichen
-`[A-Z0-9 -]` (auch leer erlaubt), `carrier` ist `dhl`, `dpd`, `hermes`, `gls`,
-`ups`, `post` oder `other`, und `carrier_label` ein UTF-8-String.
+Bei `shipped` sind Sendungsnummer und Versanddienstleister fuer den Kunden optional:
+`tracking_number` ist `null` oder ein String mit maximal 64 Zeichen
+`[A-Z0-9 -]` (auch leer erlaubt), `carrier` ist `null` oder `dhl`, `dpd`, `hermes`, `gls`,
+`ups`, `post`, `other`; `carrier_label` ist bei gesetztem `carrier` ein UTF-8-String, sonst `null`.
 Bei den anderen Choices sind alle drei Versandfelder `null`.
 Labels sind UTF-8-Strings mit maximal 255 Zeichen. Unbekannte Zusatzfelder
 werden entfernt; fuehrende Nullen der Sendungsnummer bleiben erhalten.

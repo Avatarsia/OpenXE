@@ -25,9 +25,13 @@ final class RepairShippingFeedback
             return [];
         }
         if ($block['choice'] === 'shipped') {
-            if (!is_string($block['tracking_number']) || !preg_match('/^[A-Z0-9 -]{0,64}$/D', $block['tracking_number'])
-                || !in_array($block['carrier'], ['dhl', 'dpd', 'hermes', 'gls', 'ups', 'post', 'other'], true)
-                || !self::validLabel($block['carrier_label'])) {
+            // Tracking number and carrier are optional for the customer (WP sends null when empty).
+            if (($block['tracking_number'] !== null
+                    && (!is_string($block['tracking_number']) || !preg_match('/^[A-Z0-9 -]{0,64}$/D', $block['tracking_number'])))
+                || ($block['carrier'] === null && $block['carrier_label'] !== null)
+                || ($block['carrier'] !== null
+                    && (!in_array($block['carrier'], ['dhl', 'dpd', 'hermes', 'gls', 'ups', 'post', 'other'], true)
+                        || !self::validLabel($block['carrier_label'])))) {
                 error_log('RepairIntegration: invalid shipping_feedback shipping fields ignored');
                 return [];
             }
@@ -73,8 +77,12 @@ final class RepairShippingFeedback
         $html = '<p><strong>Versand-Rückmeldung: ' . $escape((string)($block['choice_label'] ?? ''))
             . '</strong> &middot; Datum: ' . $escape((string)($block['responded_at'] ?? ''));
         if (($block['choice'] ?? '') === 'shipped') {
-            $html .= ' &middot; Versanddienstleister: ' . $escape((string)($block['carrier_label'] ?? ''))
-                . ' &middot; Sendungsnummer: ' . $escape((string)($block['tracking_number'] ?? ''));
+            if ((string)($block['carrier_label'] ?? '') !== '') {
+                $html .= ' &middot; Versanddienstleister: ' . $escape((string)$block['carrier_label']);
+            }
+            if ((string)($block['tracking_number'] ?? '') !== '') {
+                $html .= ' &middot; Sendungsnummer: ' . $escape((string)$block['tracking_number']);
+            }
         }
         return $html . '</p>';
     }
