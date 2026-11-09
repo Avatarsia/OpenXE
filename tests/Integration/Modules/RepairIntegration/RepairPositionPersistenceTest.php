@@ -102,7 +102,7 @@ final class RepairPositionPersistenceTest extends TestCase
         $migration = new RepairIntegrationMigration(self::$db);
         (new RepairConfigService(self::$db))->set('schema_version', '1.5.0');
         $migration->upgrade(); $migration->upgrade();
-        self::assertSame('1.11.0', $migration->getCurrentVersion());
+        self::assertSame('1.12.0', $migration->getCurrentVersion());
         foreach (['repair_status_exchange', 'repair_media_exchange', 'repair_exchange_jobs', 'repair_media_failures'] as $table) {
             self::assertSame(1, (int)self::$db->fetchValue('SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=:table', ['table'=>$table]));
         }
@@ -118,7 +118,7 @@ final class RepairPositionPersistenceTest extends TestCase
         $migration = new RepairIntegrationMigration(self::$db);
         (new RepairConfigService(self::$db))->set('schema_version', '1.8.0');
         $migration->upgrade(); $migration->upgrade();
-        self::assertSame('1.11.0', $migration->getCurrentVersion());
+        self::assertSame('1.12.0', $migration->getCurrentVersion());
         $rows = self::$db->fetchAll("SELECT `user`, action, permission FROM userrights
             WHERE module = 'repairintegration' AND action IN ('linkbeleg', 'unlinkbeleg', 'belegtickets')
             ORDER BY `user`, action");

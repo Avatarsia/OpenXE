@@ -11,8 +11,7 @@ class RepairApiControllerTest extends TestCase
     public function testNormalizeWpStatusAcceptsKnownSlugs(): void
     {
         $slugs = [
-            'new', 'in_diagnosis', 'quote_sent', 'quote_declined', 'approved',
-            'in_repair', 'repaired', 'returned', 'closed',
+            'new', 'received', 'in_progress', 'quote_sent', 'completed', 'closed', 'cancelled',
         ];
         foreach ($slugs as $slug) {
             self::assertSame($slug, RepairApiController::normalizeWpStatus($slug));
@@ -21,7 +20,7 @@ class RepairApiControllerTest extends TestCase
 
     public function testNormalizeWpStatusTrimsAndLowercases(): void
     {
-        self::assertSame('in_repair', RepairApiController::normalizeWpStatus('  IN_REPAIR '));
+        self::assertSame('in_progress', RepairApiController::normalizeWpStatus('  IN_REPAIR '));
         self::assertSame('closed', RepairApiController::normalizeWpStatus("Closed\n"));
     }
 

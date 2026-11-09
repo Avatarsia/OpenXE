@@ -511,8 +511,8 @@ class Repairintegration
             [$tone, $label] = $stateLabels[$state] ?? ['neutral', $state];
             return '<span class="repair-sync-badge repair-sync-badge--' . $tone . '">' . $escape($label) . '</span>';
         };
-        $statusLabels = ['new'=>'Neu', 'in_repair'=>'In Reparatur', 'in_reparatur'=>'In Reparatur',
-            'repaired'=>'Repariert', 'returned'=>'Zurückgesendet', 'versendet'=>'Versendet'];
+        $statusLabels = ['new'=>'Neu', 'received'=>'Gerät eingegangen', 'in_progress'=>'In Bearbeitung', 'in_reparatur'=>'In Reparatur',
+            'completed'=>'Fertig / Rückversand', 'closed'=>'Abgeschlossen', 'cancelled'=>'Storniert', 'versendet'=>'Versendet'];
         $statusLabel = static fn($status) => $escape($statusLabels[$status] ?? ucfirst(str_replace('_', ' ', $status)));
         $html = '<section class="repair-sync-section" aria-labelledby="repair-sync-title"><header class="repair-sync-header"><div>'
             . '<h2 id="repair-sync-title">Status und Reparaturbilder</h2>'

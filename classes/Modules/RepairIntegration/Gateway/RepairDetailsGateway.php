@@ -51,7 +51,7 @@ final class RepairDetailsGateway
             'invoice_number', 'purchase_date', 'seller', 'cost_limit',
             'is_express', 'express_price', 'travel_distance_km', 'travel_fee',
             'customer_quote_amount', 'diagnosis_cost_snapshot', 'wartung_paket_price_snapshot',
-            'travel_fee_per_km_snapshot', 'wertgarantie', 'shipping_feedback',
+            'travel_fee_per_km_snapshot', 'wertgarantie', 'shipping_feedback', 'quote_decision',
         ];
 
         $filteredData = array_intersect_key($data, array_flip($columns));
@@ -86,7 +86,7 @@ final class RepairDetailsGateway
             'purchase_date', 'seller', 'cost_limit', 'is_express', 'express_price',
             'travel_distance_km', 'travel_fee', 'wp_request_number',
             'customer_quote_amount', 'diagnosis_cost_snapshot', 'wartung_paket_price_snapshot',
-            'travel_fee_per_km_snapshot', 'wertgarantie', 'shipping_feedback',
+            'travel_fee_per_km_snapshot', 'wertgarantie', 'shipping_feedback', 'quote_decision',
         ];
 
         $filteredData = array_intersect_key($data, array_flip($allowed));

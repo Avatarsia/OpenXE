@@ -54,7 +54,7 @@ if [ "${TICKET_EXISTS}" = "0" ]; then
     echo ""
     echo "Schnelltest: Manueller Queue-Eintrag"
     echo "  mysql: INSERT INTO repair_sync_queue (ticket_id, ticket_schluessel, action, payload, target_url, next_retry_at)"
-    echo "         VALUES (1, '202604050001', 'status_change', '{\"request_number\":\"202604050001\",\"status\":\"in_diagnosis\"}', '${WP_URL}/wp-json/p3d/v1/requests/status', NOW());"
+    echo "         VALUES (1, '202604050001', 'status_change', '{\"request_number\":\"202604050001\",\"status\":\"in_progress\"}', '${WP_URL}/wp-json/p3d/v1/requests/status', NOW());"
     exit 0
 fi
 

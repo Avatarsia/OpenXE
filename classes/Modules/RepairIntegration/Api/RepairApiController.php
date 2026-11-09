@@ -447,7 +447,7 @@ final class RepairApiController
             return null;
         }
 
-        return $value;
+        return \Xentral\Modules\RepairIntegration\Service\RepairStatusModel::normalize($value);
     }
 
     /**
@@ -1471,7 +1471,10 @@ final class RepairApiController
             + \Xentral\Modules\RepairIntegration\Service\RepairWertgarantie::map(
                 is_array($data['service_details'] ?? null) ? $data['service_details'] : [])
             + \Xentral\Modules\RepairIntegration\Service\RepairShippingFeedback::map(
-                is_array($data['service_details'] ?? null) ? $data['service_details'] : []);
+                is_array($data['service_details'] ?? null) ? $data['service_details'] : [])
+            + \Xentral\Modules\RepairIntegration\Service\RepairStatusModel::map(
+                is_array($data['service_details'] ?? null) ? $data['service_details'] : [],
+                is_string($data['status'] ?? null) ? strtolower(trim($data['status'])) : null);
     }
 
     private function logInbound(

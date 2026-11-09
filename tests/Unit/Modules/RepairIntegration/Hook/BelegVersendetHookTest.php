@@ -75,8 +75,8 @@ class BelegVersendetHookTest extends TestCase
     public function testBelegTypeMapping(): void
     {
         self::assertSame('quote_sent', BelegVersendetHook::BELEG_WP_STATUS['angebot']);
-        self::assertSame('approved', BelegVersendetHook::BELEG_WP_STATUS['auftrag']);
-        self::assertSame('repaired', BelegVersendetHook::BELEG_WP_STATUS['rechnung']);
+        self::assertSame('in_progress', BelegVersendetHook::BELEG_WP_STATUS['auftrag']);
+        self::assertSame('completed', BelegVersendetHook::BELEG_WP_STATUS['rechnung']);
         self::assertArrayNotHasKey('lieferschein', BelegVersendetHook::BELEG_WP_STATUS);
     }
 

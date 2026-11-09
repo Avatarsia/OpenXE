@@ -159,6 +159,7 @@ final class RepairReconcileService
         }
         if ($apply) RepairWertgarantie::apply($this->db, $id, $remote);
         if ($apply) RepairShippingFeedback::apply($this->db, $id, $remote);
+        if ($apply) RepairStatusModel::apply($this->db, $id, $remote, $remote['status'] ?? null);
         $result=['ticket_id'=>$id,'state'=>'equal','errors'=>[],'added_local'=>0,'added_remote'=>0,
             'local_status'=>$this->statuses->getSnapshot($id)['status'],'remote_status'=>$remote['status'] ?? null];
         try {

@@ -2,6 +2,7 @@
     [REPAIR_MESSAGE]
     [REPAIR_WERTGARANTIE]
     [REPAIR_SHIPPING_FEEDBACK]
+    [REPAIR_QUOTE_DECISION]
     <input type="hidden" name="repair_csrf" value="[REPAIR_CSRF]">
     <div class="row"><div class="row-height">
         <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset>
