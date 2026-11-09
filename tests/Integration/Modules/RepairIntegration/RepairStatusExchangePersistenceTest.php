@@ -317,7 +317,7 @@ final class RepairStatusExchangePersistenceTest extends TestCase
         self::$db->perform("UPDATE systemconfig SET value='1.9.0' WHERE namespace='repair_integration' AND `key`='schema_version'");
         $migration = new RepairIntegrationMigration(self::$db);
         $migration->upgrade();
-        self::assertSame('1.10.0', $migration->getCurrentVersion());
+        self::assertSame('1.11.0', $migration->getCurrentVersion());
         self::assertNull((new RepairDetailsGateway(self::$db))->getByTicketId(1)['wertgarantie']);
         self::$db->perform("UPDATE systemconfig SET value='1.9.0' WHERE namespace='repair_integration' AND `key`='schema_version'");
         $migration->upgrade();
@@ -342,5 +342,59 @@ final class RepairStatusExchangePersistenceTest extends TestCase
         $gateway->update($id, $map->invoke($controller, ['service_details'=>['wertgarantie'=>$block]]));
         $gateway->update($id, $map->invoke($controller, ['service_details'=>[]]));
         self::assertSame($block, json_decode($gateway->getByTicketId(1)['wertgarantie'], true));
+    }
+    public function testShippingFeedbackPersistsIndependentlyOfStatusEventAndClearsExplicitly(): void
+    {
+        $gateway = new RepairDetailsGateway(self::$db);
+        $block = ['choice'=>'shipped','choice_label'=>'Bereits versendet','responded_at'=>null,'tracking_number'=>'00340434123456789','carrier'=>'dhl','carrier_label'=>'DHL'];
+        $event = $this->event();
+        $event['service_details']['shipping_feedback'] = $block;
+        self::assertTrue($this->exchange->receive($event)['success']);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['shipping_feedback'], true));
+        self::assertTrue($this->exchange->receive($this->event())['success']);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['shipping_feedback'], true));
+        $event['service_details']['shipping_feedback'] = ['choice'=>'invalid'];
+        self::assertTrue($this->exchange->receive($event)['success']);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['shipping_feedback'], true));
+        $event['service_details']['shipping_feedback'] = null;
+        self::assertTrue($this->exchange->receive($event)['success']);
+        self::assertNull($gateway->getByTicketId(1)['shipping_feedback']);
+    }
+
+    public function testShippingFeedbackMigrationUpgradeIsIdempotent(): void
+    {
+        self::$db->perform('ALTER TABLE ticket_repair_details DROP COLUMN shipping_feedback');
+        self::$db->perform("UPDATE systemconfig SET value='1.10.0' WHERE namespace='repair_integration' AND `key`='schema_version'");
+        $migration = new RepairIntegrationMigration(self::$db);
+        $migration->upgrade();
+        self::assertSame('1.11.0', $migration->getCurrentVersion());
+        self::assertNull((new RepairDetailsGateway(self::$db))->getByTicketId(1)['shipping_feedback']);
+        $gateway = new RepairDetailsGateway(self::$db);
+        $saved = '{"choice":"later"}';
+        $gateway->update((int)$gateway->getByTicketId(1)['id'], ['shipping_feedback'=>$saved]);
+        self::$db->perform("UPDATE systemconfig SET value='1.10.0' WHERE namespace='repair_integration' AND `key`='schema_version'");
+        $migration->upgrade();
+        self::assertFalse($migration->needsUpgrade());
+        self::assertSame($saved, $gateway->getByTicketId(1)['shipping_feedback']);
+    }
+
+
+    public function testShippingFeedbackLegacyPushMappingPersistsAndToleratesInvalidMetadata(): void
+    {
+        $class = new \ReflectionClass(\Xentral\Modules\RepairIntegration\Api\RepairApiController::class);
+        $controller = $class->newInstanceWithoutConstructor();
+        $map = $class->getMethod('mapInboundData');
+        $gateway = new RepairDetailsGateway(self::$db);
+        $id = (int)$gateway->getByTicketId(1)['id'];
+        $block = ['choice'=>'shipped','choice_label'=>'Bereits versendet','responded_at'=>null,'tracking_number'=>'00340434123456789','carrier'=>'dhl','carrier_label'=>'DHL'];
+        foreach ([$block, 'invalid', null] as $value) {
+            $payload = ['request_number'=>'202610200001','service_type'=>'reparatur','service_details'=>['shipping_feedback'=>$value]];
+            $class->getMethod('validatePushDetailsSchema')->invoke($controller, $payload);
+            $gateway->update($id, $map->invoke($controller, $payload));
+            self::assertSame($value === null ? null : $block, json_decode($gateway->getByTicketId(1)['shipping_feedback'] ?? 'null', true));
+        }
+        $gateway->update($id, $map->invoke($controller, ['service_details'=>['shipping_feedback'=>$block]]));
+        $gateway->update($id, $map->invoke($controller, ['service_details'=>[]]));
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['shipping_feedback'], true));
     }
 }

@@ -301,6 +301,7 @@ final class RepairStatusExchangeService
                 $result = ['success' => true, 'applied' => true, 'event' => $canonical, 'reason' => 'newer'];
             }
             RepairWertgarantie::apply($this->db, $ticketId, $wertgarantie);
+            RepairShippingFeedback::apply($this->db, $ticketId, $wertgarantie);
             $this->db->commit();
             return $result;
         } catch (\Throwable $e) {

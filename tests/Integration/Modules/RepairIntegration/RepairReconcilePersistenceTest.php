@@ -165,4 +165,24 @@ final class RepairReconcilePersistenceTest extends TestCase
         self::assertNull($gateway->getByTicketId(1)['wertgarantie']);
     }
 
+    public function testShippingFeedbackManifestRespectsPreviewMissingInvalidAndNull(): void
+    {
+        $gateway = new RepairDetailsGateway($this->db);
+        $block = ['choice'=>'shipped','choice_label'=>'Bereits versendet','responded_at'=>null,'tracking_number'=>'00340434123456789','carrier'=>'dhl','carrier_label'=>'DHL'];
+        $this->remote['shipping_feedback'] = $block;
+        $this->service->reconcileOne($this->remote, false);
+        self::assertNull($gateway->getByTicketId(1)['shipping_feedback']);
+        $this->service->reconcileOne($this->remote, true);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['shipping_feedback'], true));
+        unset($this->remote['shipping_feedback']);
+        $this->service->reconcileOne($this->remote, true);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['shipping_feedback'], true));
+        $this->remote['shipping_feedback'] = 'invalid';
+        $this->service->reconcileOne($this->remote, true);
+        self::assertSame($block, json_decode($gateway->getByTicketId(1)['shipping_feedback'], true));
+        $this->remote['shipping_feedback'] = null;
+        $this->service->reconcileOne($this->remote, true);
+        self::assertNull($gateway->getByTicketId(1)['shipping_feedback']);
+    }
+
 }
