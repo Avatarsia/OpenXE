@@ -9,7 +9,7 @@ final class RepairIntegrationMigration
 {
     private const CONFIG_NAMESPACE = 'repair_integration'; // @php83: add type string
     private const SCHEMA_VERSION_KEY = 'schema_version'; // @php83: add type string
-    private const SCHEMA_VERSION = '1.10.0'; // @php83: add type string
+    private const SCHEMA_VERSION = '1.11.0'; // @php83: add type string
 
     /**
      * Explizite Upgrade-Kette: gespeicherte Version => auszufuehrender Schritt.
@@ -33,6 +33,7 @@ final class RepairIntegrationMigration
         '1.7.0' => ['sql' => '010_media_exchange.sql', 'to' => '1.8.0'],
         '1.8.0' => ['sql' => '011_beleg_link_userrights.sql', 'to' => '1.9.0'],
         '1.9.0' => ['sql' => 'wertgarantie', 'to' => '1.10.0'],
+        '1.10.0' => ['sql' => 'shipping_feedback', 'to' => '1.11.0'],
     ];
 
     public function __construct(
@@ -52,6 +53,7 @@ final class RepairIntegrationMigration
         $this->executeSqlFile(__DIR__ . '/sql/010_media_exchange.sql');
         $this->executeSqlFile(__DIR__ . '/sql/011_beleg_link_userrights.sql');
         $this->ensureWertgarantieField();
+        $this->ensureShippingFeedbackField();
         $this->setVersion(self::SCHEMA_VERSION);
     }
 
@@ -79,6 +81,8 @@ final class RepairIntegrationMigration
             $step = self::UPGRADE_STEPS[$current];
             if ($step['sql'] === 'wertgarantie') {
                 $this->ensureWertgarantieField();
+            } elseif ($step['sql'] === 'shipping_feedback') {
+                $this->ensureShippingFeedbackField();
             } elseif ($step['sql'] === '005_customer_quote_amount.sql') {
                 // SQL PREPARE cannot itself be sent through mysqli::prepare.
                 $exists = $this->db->fetchValue(
@@ -111,6 +115,17 @@ final class RepairIntegrationMigration
         );
         if ((int)$exists === 0) {
             $this->db->perform('ALTER TABLE ticket_repair_details ADD COLUMN wertgarantie TEXT DEFAULT NULL');
+        }
+    }
+
+    private function ensureShippingFeedbackField(): void
+    {
+        $exists = $this->db->fetchValue(
+            "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE()
+             AND TABLE_NAME = 'ticket_repair_details' AND COLUMN_NAME = 'shipping_feedback'"
+        );
+        if ((int)$exists === 0) {
+            $this->db->perform('ALTER TABLE ticket_repair_details ADD COLUMN shipping_feedback TEXT DEFAULT NULL');
         }
     }
 

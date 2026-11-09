@@ -1469,6 +1469,8 @@ final class RepairApiController
 
         return array_filter($mapped, static fn($v): bool => $v !== null)
             + \Xentral\Modules\RepairIntegration\Service\RepairWertgarantie::map(
+                is_array($data['service_details'] ?? null) ? $data['service_details'] : [])
+            + \Xentral\Modules\RepairIntegration\Service\RepairShippingFeedback::map(
                 is_array($data['service_details'] ?? null) ? $data['service_details'] : []);
     }
 

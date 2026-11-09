@@ -434,3 +434,35 @@ Die gemeinsame Validierung liegt in `Service/RepairWertgarantie.php`.
 Installation und Upgrade 1.9.0 -> 1.10.0 pruefen `information_schema.COLUMNS`
 und fuehren fehlende DDL direkt aus PHP aus (idempotent, kein SQL PREPARE).
 Es gibt keinen WG-Rueckkanal nach WordPress.
+
+## Versand-Rueckmeldung (additiv, Schema 1.11.0)
+
+WordPress v3.40.0 liefert optional `service_details.shipping_feedback` im
+Legacy-/Initial-Push und v2-Status-Transport. Manifest und requests-Listing
+liefern denselben Block als Top-Level-Key `shipping_feedback`:
+
+```json
+{"choice":"shipped","choice_label":"Bereits versendet","responded_at":"2026-11-09T12:58:56+01:00","tracking_number":"00340434123456789","carrier":"dhl","carrier_label":"DHL"}
+```
+
+`choice` erlaubt `shipped` (Bereits versendet), `later` (Versendet später) und
+`cancelled` (Versendet nicht mehr). `responded_at` ist RFC3339 oder `null`.
+Bei `shipped` ist `tracking_number` ein String mit maximal 64 Zeichen
+`[A-Z0-9 -]` (auch leer erlaubt), `carrier` ist `dhl`, `dpd`, `hermes`, `gls`,
+`ups`, `post` oder `other`, und `carrier_label` ein UTF-8-String.
+Bei den anderen Choices sind alle drei Versandfelder `null`.
+Labels sind UTF-8-Strings mit maximal 255 Zeichen. Unbekannte Zusatzfelder
+werden entfernt; fuehrende Nullen der Sendungsnummer bleiben erhalten.
+
+Die gemeinsame Validierung liegt in `Service/RepairShippingFeedback.php`.
+Alle drei Inbound-Pfade entsprechen Wertgarantie: `mapInboundData()`,
+`receive()` (auch doppelte/aeltere Events) und `reconcileOne()` (nur Apply).
+Fehlender Key behaelt den Bestand, `null` loescht ihn. Ungueltige Bloecke
+werden ohne Kundendaten geloggt und ignoriert, ohne dadurch 4xx auszulösen.
+Gespeichert wird JSON-Text in `ticket_repair_details.shipping_feedback`.
+Installation und Upgrade 1.10.0 -> 1.11.0 pruefen `information_schema.COLUMNS`
+und legen die nullable TEXT-Spalte nur an, wenn sie fehlt; Bestandsdaten
+bleiben unveraendert. Im Ticket stehen Rueckmeldung und Datum, bei `shipped`
+zusaetzlich Versanddienstleister und Sendungsnummer; alle Werte HTML-escaped.
+`cancelled` wird von WordPress separat als normaler Statuswechsel nach `closed`
+uebertragen; es gibt keine zusaetzliche OpenXE-Statuslogik oder Rueckuebertragung.

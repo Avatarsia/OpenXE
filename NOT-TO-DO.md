@@ -16,3 +16,4 @@
 | 2026-10-20 | php,test | Beleg-Link-Testfixture ohne ticket_schluessel scheitert vor Verhaltenspruefung am echten Pflichtfeld | Fixtures fuer repair_ticket_beleg ueber RepairBelegGateway::link erzeugen |
 | 2026-10-20 | php,sql,test | DMS-Fixture ohne Core-Pflichtfeld datei.geschuetzt verdeckte Importfehler unter Strict SQL | Aktuell upgegradetes Core-Schema im gekoppelten Test nutzen und Pflichtspalten explizit belegen |
 | 2026-10-20 | powershell,test | Verschachtelte Quotes in Inline-Python und generiertem PHP-SQL verursachten Parserfehler | Mehrzeilige Scripts via literal Here-String schreiben und SQL-Fixture vor Verhaltenstest linten |
+| 2026-11-09 | python,encoding | Path.read_text ohne encoding nutzte Windows-cp1252 und veraenderte UTF-8-Kommentare | Bei jedem read_text/write_text encoding="utf-8" explizit setzen; Diff vor Commit pruefen |

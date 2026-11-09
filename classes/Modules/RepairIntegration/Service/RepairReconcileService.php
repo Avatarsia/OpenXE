@@ -158,6 +158,7 @@ final class RepairReconcileService
             return ['state'=>$apply?'waiting_creation':'unlinked','ticket_id'=>null,'error'=>'ERP-Anlage oder Verknuepfung fehlt'];
         }
         if ($apply) RepairWertgarantie::apply($this->db, $id, $remote);
+        if ($apply) RepairShippingFeedback::apply($this->db, $id, $remote);
         $result=['ticket_id'=>$id,'state'=>'equal','errors'=>[],'added_local'=>0,'added_remote'=>0,
             'local_status'=>$this->statuses->getSnapshot($id)['status'],'remote_status'=>$remote['status'] ?? null];
         try {
