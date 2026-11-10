@@ -62,6 +62,8 @@ fix/location-redirect-proxy-port
 # SuperSearch: jsonSerialize() without return type -> PHP 8.1+ E_DEPRECATED
 #   prepended to the SuperSearch AJAX JSON when display_errors is on
 fix/supersearch-jsonserialize-returntype
+# Rechnungsliste: Filter "Zahlungsstatus offen" / "nicht bezahlt" ohne stornierte Rechnungen
+fix/rechnung-filter-storniert
 
 # WooCommerce hardening (open PRs on openxe-org, stacked)
 # #265 Pagination-Fix — foundation for #266 and #267
