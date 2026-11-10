@@ -378,8 +378,6 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $order['onlinebestellnummer'] = $wcOrder->number;
     $order['versandkostenbrutto'] = $wcOrder->shipping_total + $wcOrder->shipping_tax;
     $order['versandkostennetto'] = (float) $wcOrder->shipping_total;
-    $order['versandkostensteuersatz'] = (float) $wcOrder->shipping_total != 0.0
-      ? round(100 * (float) $wcOrder->shipping_tax / (float) $wcOrder->shipping_total, 6) : 0.0;
     $order['internebemerkung'] = $wcOrder->customer_note;
 
     if (!empty((string) $wcOrder->currency)) {
@@ -447,6 +445,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         ];
       }
     }
+    $order['versandkostensteuersatz'] = $this->resolveShippingTaxRate($wcOrder, $taxRates);
     $order['articlelist'] = [];
     foreach ($wcOrder->line_items as $wcOrderItem) {
       $order['articlelist'][] = $this->parseItem($wcOrderItem, $taxRates);
@@ -478,6 +477,73 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     return $order;
   }
 
+  /**
+   * Effective rate from WooCommerce tax rate IDs; null if any ID is unknown.
+   */
+  private function mapSourceTaxRate($lineTaxes, array $taxRates): ?float
+  {
+    $mappedRates = [];
+    foreach ($lineTaxes as $lineTax) {
+      if (!isset($lineTax->id, $taxRates[$lineTax->id])) {
+        return null;
+      }
+      $mappedRates[$lineTax->id] = $taxRates[$lineTax->id];
+    }
+    if (empty($mappedRates)) {
+      return null;
+    }
+    $taxRate = 0.0;
+    foreach ($mappedRates as $rate) {
+      if (!$rate['compound']) {
+        $taxRate += $rate['rate'];
+      }
+    }
+    foreach ($mappedRates as $rate) {
+      if ($rate['compound']) {
+        $taxRate = (100 + $taxRate) * (100 + $rate['rate']) / 100 - 100;
+      }
+    }
+    return round($taxRate, 6);
+  }
+
+  /**
+   * Shipping rate from source tax IDs; fallback snaps the rate computed from
+   * cent-rounded amounts to the nearest order tax rate (avoids e.g. 19.05 %).
+   */
+  private function resolveShippingTaxRate($wcOrder, array $taxRates): float
+  {
+    $net = (float) $wcOrder->shipping_total;
+    if ($net == 0.0) {
+      return 0.0;
+    }
+    $resolved = null;
+    foreach ($wcOrder->shipping_lines ?? [] as $shippingLine) {
+      if (empty($shippingLine->taxes)) {
+        continue;
+      }
+      $rate = $this->mapSourceTaxRate($shippingLine->taxes, $taxRates);
+      if ($rate === null || ($resolved !== null && $resolved !== $rate)) {
+        $resolved = null;
+        break;
+      }
+      $resolved = $rate;
+    }
+    if ($resolved !== null) {
+      return $resolved;
+    }
+    $computed = round(100 * (float) $wcOrder->shipping_tax / $net, 6);
+    $nearest = null;
+    foreach ($taxRates as $rate) {
+      if ($nearest === null || abs($rate['rate'] - $computed) < abs($nearest - $computed)) {
+        $nearest = $rate['rate'];
+      }
+    }
+    if ($nearest !== null && abs($nearest - $computed) <= 0.5) {
+      return round($nearest, 6);
+    }
+    return $computed;
+  }
+
   function parseItem($wcOrderItem, array $taxRates = [])
   {
     $quantity = (float) $wcOrderItem->quantity;
@@ -492,28 +558,9 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $subtotalTax = (float) $wcOrderItem->subtotal_tax;
     $taxRate = $subtotal != 0.0 ? round(100 * $subtotalTax / $subtotal, 2)
       : ($total != 0.0 ? round(100 * $tax / $total, 2) : 0.0);
-    $mappedRates = [];
-    $allRatesMapped = true;
-    foreach ($wcOrderItem->taxes ?? [] as $lineTax) {
-      if (isset($taxRates[$lineTax->id])) {
-        $mappedRates[$lineTax->id] = $taxRates[$lineTax->id];
-      } else {
-        $allRatesMapped = false;
-      }
-    }
-    if (!empty($mappedRates) && $allRatesMapped) {
-      $taxRate = 0.0;
-      foreach ($mappedRates as $rate) {
-        if (!$rate['compound']) {
-          $taxRate += $rate['rate'];
-        }
-      }
-      foreach ($mappedRates as $rate) {
-        if ($rate['compound']) {
-          $taxRate = (100 + $taxRate) * (100 + $rate['rate']) / 100 - 100;
-        }
-      }
-      $taxRate = round($taxRate, 6);
+    $mappedRate = $this->mapSourceTaxRate($wcOrderItem->taxes ?? [], $taxRates);
+    if ($mappedRate !== null) {
+      $taxRate = $mappedRate;
     }
 
     $orderItem = array();

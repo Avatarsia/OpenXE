@@ -158,6 +158,18 @@ runTests([
         same(7.0, $result['versandkostensteuersatz'] ?? null);
         same(10.7, $result['versandkostenbrutto']);
     },
+    'shipping tax IDs avoid rate errors from rounded shipping amounts' => static function () {
+        $result = connector()->parseOrder(order([
+            'shipping_total' => '4.20', 'shipping_tax' => '0.80',
+            'shipping_lines' => [(object) ['method_id' => 'flat_rate', 'taxes' => [(object) ['id' => 1, 'total' => '0.80']]]],
+        ]));
+        same(19.0, $result['versandkostensteuersatz'] ?? null);
+        same(4.2, $result['versandkostennetto'] ?? null);
+    },
+    'shipping without tax IDs snaps rounded rate to the nearest order tax rate' => static function () {
+        $result = connector()->parseOrder(order(['shipping_total' => '4.20', 'shipping_tax' => '0.80']));
+        same(19.0, $result['versandkostensteuersatz'] ?? null);
+    },
     'negative fees become ERP article positions with taxes' => static function () {
         $connector = connector();
         $connector->feeArticleNumber = 'FEE-EXISTING';
