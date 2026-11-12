@@ -2,6 +2,7 @@
 
 use Xentral\Modules\SuperSearch\Scheduler\SuperSearchDiffIndexTask;
 
+$supersearchDiffIndexTask = null;
 try {
   /** @var SuperSearchDiffIndexTask $supersearchDiffIndexTask */
   $supersearchDiffIndexTask = $app->Container->get('SuperSearchDiffIndexTask');
@@ -9,6 +10,12 @@ try {
   $supersearchDiffIndexTask->cleanup();
 
 } catch (\Exception $exception) {
-  $supersearchDiffIndexTask->cleanup();
+  if ($supersearchDiffIndexTask !== null) {
+    try {
+      $supersearchDiffIndexTask->cleanup();
+    } catch (\Throwable $cleanupError) {
+      error_log('SuperSearchDiffIndexTask cleanup failed: ' . $cleanupError->getMessage());
+    }
+  }
   throw $exception;
 }
