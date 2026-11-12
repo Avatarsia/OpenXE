@@ -520,7 +520,7 @@
 						</table>
 						<table width="100%">
 							<tr valign="top">
-								<td width="300"><input type="radio" name="hintergrund" value="logo" [HINTERGRUNDLOGO]>&nbsp;Logo</td><td><input type="file" name="logo">[LOGOVORHANDEN] [HINTERGRUNDLOGOTEXT] (<b style="color:red">Achtung aktuell wird nur JPG unterst&uuml;tzt!</b>)</td>
+								<td width="300"><input type="radio" name="hintergrund" value="logo" [HINTERGRUNDLOGO]>&nbsp;Logo</td><td><input type="file" name="logo">[LOGOVORHANDEN] [HINTERGRUNDLOGOTEXT] (<b class="text-error">Achtung aktuell wird nur JPG unterst&uuml;tzt!</b>)</td>
 							</tr>
 							<tr>
 								<td><br></td>

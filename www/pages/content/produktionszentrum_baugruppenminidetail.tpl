@@ -20,7 +20,7 @@
 
 <div style="overflow:scroll; height:550px; width:500px;">
 
-<div style="background-color:white">
+<div class="bg-surface">
 <h2 class="greyh2">Unterseriennummern</h2>
 
 <div style="padding:10px">[UNTERSERIENNUMMERN]</div>
@@ -28,7 +28,7 @@
 </div>
 <br><br>
 <h2 class="greyh2">Chargen</h2>
-<div style="background-color:white">
+<div class="bg-surface">
 <div style="padding:10px">[CHARGEN]</div>
 </div>
 </div>

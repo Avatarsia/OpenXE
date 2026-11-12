@@ -1,10 +1,10 @@
 .settings-h3{
     font-size: 18px;
     line-height: 28px;
-    color: rgba(55, 64, 81, 0.8);
+    color: var(--text-strong);
     padding-left: 0;
     display: block;
-    border-bottom: 1px solid rgba(55, 64, 81, 0.1);
+    border-bottom: 1px solid var(--border);
 }
 
 .settings-module {
@@ -44,9 +44,9 @@
 }
 
 .settings-module .module:hover{
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), 0 0 1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 2px var(--shadow), 0 0 1px var(--shadow);
     border-radius: 3px;
-    background-color: white;
+    background-color: var(--surface);
 }
 
 .settings-module .module button {
@@ -56,13 +56,13 @@
     background-color: #2DCA73;
     border: none;
     border-radius: 2px;
-    color: white;
+    color: var(--text-inverse);
     word-break: normal;
 }
 
 .settings-module .module button.install{
     background-color: #2DCA73;
-    color: white;
+    color: var(--text-inverse);
 }
 
 .settings-module .module button.install:hover{
@@ -155,7 +155,7 @@ BETA PROGRAM
 
 .beta-program h3 {
     font-size: 14px;
-    color: black;
+    color: var(--text-strong);
     font-weight: normal;
 }
 
@@ -171,7 +171,7 @@ BETA PROGRAM
 }
 
 .beta-program .beta-program-highlight {
-    background-color: white;
+    background-color: var(--surface);
     padding: 10px 20px;
     border-radius: 4px;
 }
@@ -201,11 +201,11 @@ div[aria-describedby="beta-program-thanks-popup"].ui-dialog{
 }
 
 div[aria-describedby="beta-program-thanks-popup"].ui-dialog div.ui-dialog-titlebar {
-    border-bottom: 1px solid #E6EAEE;
+    border-bottom: 1px solid var(--border);
     font-size: 18px;
 }
 
 div[aria-describedby="beta-program-thanks-popup"].ui-dialog,
 div[aria-describedby="beta-program-thanks-popup"].ui-dialog div.ui-dialog-titlebar {
-    background-color: white;
+    background-color: var(--surface);
 }

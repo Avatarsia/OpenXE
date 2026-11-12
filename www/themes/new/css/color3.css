@@ -1,4 +1,6 @@
 :root {
+    color-scheme: light;
+
     --sidebar-background: #354052;
     --sidebar-icon-background: transparent;
     --sidebar-icon-color: #D2D8E2;
@@ -54,7 +56,9 @@
     --fieldset-legend-color: #4D4D4D;
 
     --textfield-color: #929292; /* NEU */
-    --textfield-border: #d9d9d9;
+    --textfield-border-light: #d9d9d9;
+    --textfield-border-dark: #3A4152;
+    --textfield-border: var(--textfield-border-light);
     --textfield-background: #FFFFFF; /* NEU */
 
     --info: #BBBBBB;
@@ -66,4 +70,125 @@
     --important: #68D4D0;
 /*    --success: #92EFB4;*/
     --success: #2DCA73;
+
+    /* Basis-Tokens fuer neutrale Flaechen, Rahmen und Text */
+    --surface: #FFFFFF;
+    --surface-alt: #F5F6FA;
+    --surface-muted: #ECECEC;
+    --surface-strong: #CFCFD1;
+
+    --border: #D4D4D4;
+    --border-strong: #999999;
+
+    --text-strong: #333333;
+    --text-body: #48494B;
+    --text-muted: #888888;
+    --text-inverse: #FFFFFF;
+    --text-on-accent: #FFFFFF;
+
+    --accent: #53BED0;
+    --accent-soft: #D5ECF2;
+
+    --warning-accent: #F2B005;
+    --warning-soft: #FCE7C1;
+    --success-soft: #E5F5D2;
+    --error-soft: #FDE2E2;
+
+    --shadow: rgba(0, 0, 0, 0.15);
+    --overlay: rgba(0, 0, 0, 0.5);
+    --overlay-muted: rgba(236, 236, 236, 0.5);
+    --surface-veil: rgba(255, 255, 255, 0.7);
+    --link-color: #5991FF;
 }
+
+/* Dark theme: active when <html> carries the class "openXeDarkMode". The class is set by
+   themes/new/js/colorscheme.js from data-color-scheme (auto|light|dark; auto follows the OS).
+   Token names are shared with theme-utilities.css and dark-overrides.css. */
+html.openXeDarkMode {
+    color-scheme: dark;
+
+    --sidebar-background: #1A1F2B;
+    --sidebar-icon-background: transparent;
+    --sidebar-icon-color: #B8C0CE;
+    --sidebar-icon-background-active: transparent;
+    --sidebar-icon-color-active: #26E3E4;
+    --sidebar-logo-background: transparent;
+    --sidebar-logo-color: transparent;
+
+    --header-background: #1E2230;
+    --header-color: #E6E8EE;
+    --header-icon-color: #9AA3B5;
+    --header-icon-color-active: #9AA3B5;
+    --header-icon-background: transparent;
+    --header-icon-background-active: transparent;
+
+    --mainmenu-background: #262B3A;
+    --mainmenu-color: #9AA3B5;
+    --mainmenu-active-background: #262B3A;
+    --mainmenu-active-color: #E6E8EE;
+    --mainmenu-active-top: #262B3A;
+    --mainmenu-active-bottom: #E6E8EE;
+
+    --mainmenu-merged-background: #2E3444;
+    --mainmenu-merged-color: #E6E8EE;
+    --mainmenu-merged-background-active: #3A4152;
+    --mainmenu-merged-color-active: #FFFFFF;
+
+    --submenu-background: #1E2230;
+    --submenu-color: #9AA3B5;
+
+    --tabs-background: #262B3A;
+    --tabs-color: #9AA3B5;
+
+    --green-light: #1F3A26;
+    --grey: #D5D9E2;
+    --current-grey: #2E3444;
+
+    --text-color: #A9B1C2;
+    --body-background: #171A23;
+
+    --filter: #1E2230;
+    --fieldset: #1E2230;
+    --fieldset-dark: #262B3A;
+    --fieldset-legend-color: #D5D9E2;
+
+    --textfield-color: #D5D9E2;
+    --textfield-border: var(--textfield-border-dark);
+    --textfield-background: #262B3A;
+
+    --info: #4B5468;
+    --warning: #D9A93F;
+    --warning-color: #1A1F2B;
+    --error: #E0605F;
+    --important: #4FB8B4;
+    --success: #2DCA73;
+
+    --surface: #1E2230;
+    --surface-alt: #262B3A;
+    --surface-muted: #2E3444;
+    --surface-strong: #3A4152;
+
+    --border: #3A4152;
+    --border-strong: #4B5468;
+
+    --text-strong: #E6E8EE;
+    --text-body: #D5D9E2;
+    --text-muted: #9AA3B5;
+    --text-inverse: #FFFFFF;
+    --text-on-accent: #0F1620;
+
+    --accent: #63C3D3;
+    --accent-soft: #1F3A44;
+
+    --warning-accent: #E0A800;
+    --warning-soft: #4A3A1A;
+    --success-soft: #1F3A26;
+    --error-soft: #4A1F22;
+
+    --shadow: rgba(0, 0, 0, 0.6);
+    --overlay: rgba(0, 0, 0, 0.7);
+    --overlay-muted: rgba(46, 52, 68, 0.5);
+    --surface-veil: rgba(30, 34, 48, 0.7);
+    --link-color: #7AA7FF;
+}
+

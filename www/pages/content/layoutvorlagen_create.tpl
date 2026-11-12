@@ -9,7 +9,7 @@
     <tbody>
       <tr valign="top">
         <td >
-<table width="100%" align="center" style="background-color:#cfcfd1;">
+<table width="100%" align="center" class="bg-surface-strong">
 <tr>
 <td width="33%"></td>
 <td align="center" nowrap><b style="font-size: 14pt">Layoutvorlage</b> </td>

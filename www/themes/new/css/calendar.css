@@ -76,14 +76,14 @@
     text-overflow: ellipsis;
     margin-left: 5px;
     background: var(--fieldset-dark);
-    color: #3b3b3b;
+    color: var(--text-strong);
     padding: 0 4px;
 }
 
 #calendar .fc-event-inner .fc-event-title {
     font-size: 11px;
     line-height: 16px;
-    color: #3b3b3b;
+    color: var(--text-strong);
     font-family: Verdana, Arial, sans-serif;
     margin-left: 3px;
 }
@@ -142,7 +142,7 @@ legend.auswahl, legend.gruppenkalender {
     font-size: 12px;
     text-transform: capitalize;
     font-family: Verdana, Arial, Helvetica, sans-serif;
-    color: #3b3b3b;
+    color: var(--text-strong);
 }
 
 fieldset#auswahl label {
@@ -183,14 +183,14 @@ input.auswahl,
 /** Termin Form **/
 
 #TerminForm > * {
-    color: #6d6d6f;
+    color: var(--text-body);
 }
 
 #TerminForm input,
 #TerminForm textarea#beschreibung,
 #TerminForm input#titel {
     max-width: 275px;
-    border: 1px solid #6d6d6f;
+    border: 1px solid var(--textfield-border);
 }
 
 #TerminForm #adresse,
@@ -228,18 +228,18 @@ input#allday, td.erinnerung {
 
 select#personen {
     height: 190px;
-    border: 1px solid #6d6d6f;
+    border: 1px solid var(--textfield-border);
 }
 
 select#gruppenkalender {
     height: 190px;
-    border: 1px solid #6d6d6f;
+    border: 1px solid var(--textfield-border);
 }
 
 
 span.fc-button.ui-state-hover {
-    color: #000;
-    background: #fff;
+    color: var(--text-strong);
+    background: var(--surface);
 }
 
 /** Bottom pannel of form **/
