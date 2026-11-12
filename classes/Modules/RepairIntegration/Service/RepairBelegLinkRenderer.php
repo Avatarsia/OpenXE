@@ -286,7 +286,7 @@ final class RepairBelegLinkRenderer
                 . '</tr>';
         }
 
-        $html = '<div class="repair-beleg-tickets" style="background-color:white">'
+        $html = '<div class="repair-beleg-tickets" style="background-color:var(--fieldset, white)">'
             . '<h2 class="greyh2">Reparaturtickets</h2><div style="padding:10px;">'
             . '<table class="mkTable" width="100%"><thead><tr><th>Ticket</th><th>Betreff</th><th>Status</th><th>Zuordnung</th><th></th></tr></thead><tbody>'
             . ($assignedRows !== '' ? $assignedRows : '<tr><td colspan="5">Diesem Beleg ist kein Reparaturticket zugeordnet.</td></tr>')
