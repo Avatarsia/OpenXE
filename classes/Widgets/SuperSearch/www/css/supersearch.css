@@ -25,7 +25,7 @@
 	z-index: 994;
 	top: 55px;
 	left: 18px;
-    width: calc(100vw - 60px);
+    width: var(--supersearch-width, calc(100vw - 60px));
     max-width: none;
     min-width: 0;
     height: auto;
@@ -90,7 +90,8 @@
      * Praeferenz, max. 720px bis hin zur 4K-Aufloesung. Kein
      * Breakpoint-Sprung mehr zwischen 1200px und darueber.
      */
-    flex: 0 1 clamp(var(--ssr-detail-min), var(--ssr-detail-pref), var(--ssr-detail-max));
+    flex: 1 1 0;
+    min-width: 0;
     height: 100%;
     overflow-y: auto;
     background-color: var(--fieldset);
@@ -104,7 +105,8 @@
  * produziert. Wert: Viewport minus Detail-Maximalbreite minus Overlay-Padding.
  */
 #supersearch-overlay.has-detail .result-wrapper {
-    max-width: calc(100vw - var(--ssr-detail-max) - 60px);
+    flex: 0 0 var(--supersearch-results-width, 50%);
+    max-width: none;
 }
 
 #supersearch-overlay .search {
@@ -315,4 +317,43 @@
         display: none !important;
         visibility: hidden;
     }
+}
+
+#supersearch-overlay .supersearch-resize {
+    display: none;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 12px;
+    z-index: 995;
+    cursor: col-resize;
+    touch-action: none;
+}
+#supersearch-overlay .supersearch-outer,
+#supersearch-overlay.has-detail .supersearch-split {
+    display: block;
+}
+#supersearch-overlay .supersearch-split {
+    left: calc(var(--supersearch-results-width, 50%) - 6px);
+}
+#supersearch-overlay .supersearch-outer {
+    right: -6px;
+}
+#supersearch-overlay .supersearch-resize::after {
+    content: '';
+    position: absolute;
+    top: calc(50% - 18px);
+    left: 5px;
+    width: 2px;
+    height: 36px;
+    background: var(--text-color);
+    opacity: .35;
+}
+#supersearch-overlay .supersearch-resize:hover::after,
+#supersearch-overlay .supersearch-resize:focus-visible::after {
+    opacity: 1;
+}
+#supersearch-overlay .supersearch-resize:focus-visible {
+    outline: 2px solid var(--text-color);
+    outline-offset: -2px;
 }

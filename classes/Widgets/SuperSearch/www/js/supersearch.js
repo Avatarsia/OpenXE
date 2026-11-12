@@ -25,6 +25,10 @@ var SuperSearch = (function ($) {
             $results: null,
             $lastUpdate: null,
             debounceBuffer: null,
+            searchVersion: 0,
+            layout: {},
+            visibleLayout: null,
+            suppressFocus: false,
             hasResults: false,
             isOpen: false,
             // K3: aktuell laufender Such-XHR, damit veraltete Antworten
@@ -38,7 +42,17 @@ var SuperSearch = (function ($) {
                 return;
             }
 
+            try {
+                me.storage.layout = JSON.parse(window.localStorage.getItem('supersearch-layout')) || {};
+            } catch (e) {
+                me.storage.layout = {};
+            }
             me.registerEvents();
+            $(window).on('resize.SuperSearch', function () {
+                if (me.storage.isOpen) {
+                    me.applyLayout();
+                }
+            });
         },
 
         registerEvents: function () {
@@ -49,13 +63,6 @@ var SuperSearch = (function ($) {
 
             // Overlay mit ESC schließen — Document-Level, mit Namespace fuer sauberen Cleanup.
             $(document).off('keydown.SuperSearch').on('keydown.SuperSearch', function (e) {
-                if (me.storage.$overlay === null) {
-                    return;
-                }
-                if (me.storage.isOpen !== true) {
-                    return;
-                }
-
                 // ESC
                 if (e.keyCode === 27) {
                     me.hideOverlay();
@@ -64,9 +71,6 @@ var SuperSearch = (function ($) {
 
             // Overlay bei Klick ausserhalb schliessen (Overlay und Suchfeld ausgenommen)
             $(document).off('mousedown.SuperSearch').on('mousedown.SuperSearch', function (e) {
-                if (me.storage.$overlay === null || me.storage.isOpen !== true) {
-                    return;
-                }
                 var $target = $(e.target);
                 if ($target.closest(me.storage.$overlay).length || $target.closest(me.storage.$input).length) {
                     return;
@@ -89,6 +93,74 @@ var SuperSearch = (function ($) {
             return me.storage.$overlay;
         },
 
+        applyLayout: function () {
+            var $overlay = me.storage.$overlay;
+            if ($overlay === null) {
+                return;
+            }
+            var viewport = document.documentElement.clientWidth;
+            var maxWidth = Math.max(0, viewport - $overlay[0].getBoundingClientRect().left - 16);
+            var layout = me.storage.layout;
+            var width = typeof layout.width === 'number' && isFinite(layout.width) ? layout.width : (viewport - me.config.viewportSidebarOffset);
+            var results = typeof layout.results === 'number' && isFinite(layout.results) ? layout.results : (width - Math.min(960, Math.max(420, viewport * 0.42)));
+            width = Math.min(maxWidth, Math.max(700, width));
+            results = Math.max(0, Math.min(Math.max(280, results), width - 420));
+            me.storage.visibleLayout = { width: width, results: results };
+            $overlay[0].style.setProperty('--supersearch-width', width + 'px');
+            $overlay[0].style.setProperty('--supersearch-results-width', results + 'px');
+            $overlay.find('.supersearch-split').attr({ 'aria-valuemin': 280, 'aria-valuemax': Math.max(280, width - 420), 'aria-valuenow': results });
+            $overlay.find('.supersearch-outer').attr({ 'aria-valuemin': 700, 'aria-valuemax': maxWidth, 'aria-valuenow': width });
+        },
+
+        resizeLayout: function (kind, delta, persist) {
+            var layout = me.storage.visibleLayout;
+            me.storage.layout = {
+                width: layout.width + (kind === 'outer' ? delta : 0),
+                results: layout.results + (kind === 'split' ? delta : 0)
+            };
+            me.applyLayout();
+            me.storage.layout = me.storage.visibleLayout;
+            if (persist === false) {
+                return;
+            }
+            try {
+                window.localStorage.setItem('supersearch-layout', JSON.stringify(me.storage.layout));
+            } catch (e) {
+                // Resizing remains available when browser storage is disabled.
+            }
+        },
+
+        registerResizeEvents: function ($overlay) {
+            var drag = null;
+            $overlay.on('pointerdown.SuperSearch', '.supersearch-resize', function (event) {
+                if (event.button !== 0) {
+                    return;
+                }
+                event.preventDefault();
+                drag = { kind: $(this).attr('data-resize'), x: event.originalEvent.clientX };
+                this.setPointerCapture(event.originalEvent.pointerId);
+            });
+            $overlay.on('pointermove.SuperSearch', '.supersearch-resize', function (event) {
+                if (drag !== null) {
+                    var x = event.originalEvent.clientX;
+                    me.resizeLayout(drag.kind, x - drag.x, false);
+                    drag.x = x;
+                }
+            });
+            $overlay.on('pointerup.SuperSearch pointercancel.SuperSearch lostpointercapture.SuperSearch', '.supersearch-resize', function () {
+                if (drag !== null) {
+                    me.resizeLayout(drag.kind, 0);
+                    drag = null;
+                }
+            });
+            $overlay.on('keydown.SuperSearch', '.supersearch-resize', function (event) {
+                if (event.keyCode === 37 || event.keyCode === 39) {
+                    event.preventDefault();
+                    me.resizeLayout($(this).attr('data-resize'), event.keyCode === 37 ? -20 : 20);
+                }
+            });
+        },
+
         showOverlay: function () {
             var $overlay = me.getOverlay();
             $overlay.show();
@@ -97,13 +169,17 @@ var SuperSearch = (function ($) {
         },
 
         hideOverlay: function () {
-            me.getOverlay().hide();
+            window.clearTimeout(me.storage.debounceBuffer);
+            me.storage.searchVersion++;
+            if (me.storage.$overlay !== null) {
+                me.storage.$overlay.hide();
+            }
             me.storage.isOpen = false;
-            // Accessibility: Focus zurueck zum Such-Eingabefeld, das das Overlay
-            // geoeffnet hat. Damit landet der Keyboard-Nutzer nach ESC wieder
-            // an einem sinnvollen Punkt.
-            if (me.storage.$input !== null && me.storage.$input.length > 0) {
+            if (me.storage.$overlay !== null && document.activeElement &&
+                me.storage.$overlay[0].contains(document.activeElement)) {
+                me.storage.suppressFocus = true;
                 me.storage.$input.trigger('focus');
+                me.storage.suppressFocus = false;
             }
         },
 
@@ -117,6 +193,8 @@ var SuperSearch = (function ($) {
             }
 
             var overlayTemplate =
+                '<span class="supersearch-resize supersearch-split" data-resize="split" role="separator" tabindex="0" aria-label="Breite der Trefferliste" aria-orientation="vertical"></span>' +
+                '<span class="supersearch-resize supersearch-outer" data-resize="outer" role="separator" tabindex="0" aria-label="Breite der Suche" aria-orientation="vertical"></span>' +
                 // Close-Icon: role=button + tabindex=0 + aria-label fuer Keyboard-Bedienung.
                 '<span id="supersearch-icon-close" class="icon icon-close" role="button" tabindex="0" aria-label="Suche schliessen"></span>' +
                 '<div class="result-wrapper">' +
@@ -200,6 +278,7 @@ var SuperSearch = (function ($) {
 
             $overlay.hide();
             $overlay.appendTo('#header');
+            me.registerResizeEvents($overlay);
             me.storage.isOpen = false;
 
             return $overlay;
@@ -228,9 +307,14 @@ var SuperSearch = (function ($) {
             }
 
             var that = this;
+            var searchVersion = ++me.storage.searchVersion;
             me.debounce(function () {
                 var searchQuery = $(that).val();
-                me.fetchSearchResults(searchQuery).then(me.renderSearchResults);
+                me.fetchSearchResults(searchQuery).then(function (result) {
+                    if (searchVersion === me.storage.searchVersion) {
+                        me.renderSearchResults(result);
+                    }
+                });
             }, me.config.inputBuffer);
         },
 
@@ -241,6 +325,9 @@ var SuperSearch = (function ($) {
          */
         onFocusSearchInput: function (event) {
             event.preventDefault();
+            if (me.storage.suppressFocus) {
+                return;
+            }
             if (me.storage.$overlay === null) {
                 return;
             }
@@ -268,6 +355,7 @@ var SuperSearch = (function ($) {
                 me.storage.currentSearchXhr.abort();
             }
 
+            var searchVersion = me.storage.searchVersion;
             var xhr = $.ajax({
                 url: 'index.php?module=supersearch&action=ajax&cmd=search',
                 method: 'post',
@@ -276,6 +364,9 @@ var SuperSearch = (function ($) {
                     search_query: searchQuery
                 },
                 error: function (jqXHR, textStatus, errorThrown) {
+                    if (searchVersion !== me.storage.searchVersion) {
+                        return;
+                    }
                     // Vom Folge-Request abgebrochen — kein Fehler-Alert zeigen.
                     if (textStatus === 'abort') {
                         return;
@@ -877,6 +968,7 @@ var SuperSearch = (function ($) {
          */
         showDetails: function () {
             me.getOverlay().addClass('has-detail');
+            me.applyLayout();
             me.getOverlay().find('.detail-wrapper').scrollTop(0);
         },
 
@@ -885,6 +977,7 @@ var SuperSearch = (function ($) {
          */
         hideDetails: function () {
             me.getOverlay().removeClass('has-detail');
+            me.applyLayout();
         },
 
         /**
