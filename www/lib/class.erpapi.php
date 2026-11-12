@@ -7116,6 +7116,10 @@ title: 'Abschicken',
     $navarray['menu']['admin'][$menu]['sec'][]  = array('Ticketregeln','ticketregeln','list');
     $navarray['menu']['admin'][$menu]['sec'][]  = array('Zeitkonten','zeiterfassung','list');
 
+    // ------ Reparatur
+    $navarray['menu']['admin'][++$menu]['first']  = array('Reparatur','repairintegration','list');
+    $navarray['menu']['admin'][$menu]['sec'][]  = array('Reparaturen','repairintegration','list');
+
     // ------ System
     $navarray['menu']['admin'][++$menu]['first']  = array('System','rechnung','list');
     $navarray['menu']['admin'][$menu]['sec'][]  = array('Einstellungen','einstellungen','list');
@@ -11125,6 +11129,15 @@ function SendPaypalFromAuftrag($auftrag, $test = false)
 
         if(!class_exists($classname) && !class_exists($classname.'_custom'))
         {
+          if(file_exists(dirname(__DIR__).'/pages/'.$hook['module'].'_custom.php') ||
+            file_exists(dirname(__DIR__).'/pages/'.$modulelower.'_custom.php'))
+          {
+            if(file_exists(dirname(__DIR__).'/pages/'.$hook['module'].'.php')) {
+              include_once dirname(__DIR__).'/pages/'.$hook['module'].'.php';
+            }elseif(file_exists(dirname(__DIR__).'/pages/'.$modulelower.'.php')) {
+              include_once dirname(__DIR__).'/pages/'.$modulelower.'.php';
+            }
+          }
           if(file_exists(dirname(__DIR__).'/pages/'.$hook['module'].'_custom.php'))
           {
             include dirname(__DIR__).'/pages/'.$hook['module'].'_custom.php';

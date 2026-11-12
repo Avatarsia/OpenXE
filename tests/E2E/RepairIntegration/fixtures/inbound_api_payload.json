@@ -1,0 +1,34 @@
+{
+  "request_number": "202604050001",
+  "status": "new",
+  "service_type": "reparatur",
+  "service_delivery_type": "einsendung",
+  "customer": {
+    "name": "Max Mustermann",
+    "email": "max@example.com",
+    "phone": "+49 471 12345678",
+    "company": null,
+    "vat_id": null,
+    "address": {
+      "street": "Rudloffstr.",
+      "house_number": "111",
+      "postal_code": "27568",
+      "city": "Bremerhaven",
+      "country": "DE"
+    }
+  },
+  "device": {
+    "manufacturer": "Bambu Lab",
+    "model": "X1 Carbon",
+    "serial_number": "BL-2024-123456",
+    "mods_present": false,
+    "mods_text": null
+  },
+  "service_details": {
+    "issue_category": "print_quality",
+    "issue_description": "Druckqualitaet verschlechtert nach 500h",
+    "warranty_status": "no",
+    "cost_limit": "200",
+    "is_express": false
+  }
+}
