@@ -2,3 +2,6 @@
 # so that upstream formatting choices (trailing whitespace, tabs, mixed EOL)
 # do not block `git diff --check` or review tooling.
 vendor/** -whitespace
+
+# Keep independent feature-branch error-log entries during integration.
+NOT-TO-DO.md merge=union
