@@ -13,10 +13,7 @@
 */
 ?>
 <?php
-use Xentral\Widgets\Chart\Chart;
-use Xentral\Widgets\Chart\Dataset;
-use Xentral\Widgets\Chart\HtmlRenderer;
-use Xentral\Widgets\Chart\PeriodMatcher;
+use Xentral\Widgets\Chart\CronjobRuntimeData;
 include '_gen/prozessstarter.php';
 
 class Prozessstarter extends GenProzessstarter {
@@ -30,6 +27,7 @@ class Prozessstarter extends GenProzessstarter {
   protected $currentCronjobName;
   /** @var int */
   protected $parentId;
+  protected $runtimeMini = false;
 
   private \Psr\Log\LoggerInterface $logger;
 
@@ -461,6 +459,15 @@ class Prozessstarter extends GenProzessstarter {
    * @return array
    */
   public function getDatesFromForm($formelementDate, $formelementTime, $from = false) {
+    foreach(['last24h' => 1, 'last7d' => 7, 'last30d' => 30] as $preset => $days) {
+      if($this->app->Secure->GetPOST($preset)) {
+        $date = new DateTimeImmutable();
+        if($from) {
+          $date = $date->sub(new DateInterval('P'.$days.'D'));
+        }
+        return [$date->format('Y-m-d H:i:s'), $date->format('d.m.Y'), $date->format('H:i')];
+      }
+    }
     $last12h = $this->app->Secure->GetPOST('last12h');
     $last6h = $this->app->Secure->GetPOST('last6h');
     if(!empty($last12h) || !empty($last6h)) {
@@ -514,8 +521,6 @@ class Prozessstarter extends GenProzessstarter {
       $timeFormated = substr($time,0,5);
     }
 
-    $date = $this->roundDate($date);
-
     return [$date, $dateFormated, $timeFormated];
   }
 
@@ -528,128 +533,76 @@ class Prozessstarter extends GenProzessstarter {
    *
    * @return string
    */
-  protected function getChart($dateFrom, $dateTo, $cronjobId = 0, $limit = 0) {
-    $extra = '';
-    if($cronjobId > 0) {
-      $extra = sprintf(' AND p.id = %d ',$cronjobId);
+  protected function getChart($dateFrom, $dateTo, $cronjobId = 0, $limit = 0, $mini = false) {
+    if($this->runtimeMini) {
+      $now = new DateTimeImmutable();
+      $dateFrom = $now->sub(new DateInterval('P30D'))->format('Y-m-d H:i:s');
+      $dateTo = $now->format('Y-m-d H:i:s');
+      $mini = true;
     }
-
-    /*$sql = sprintf(
-      '
-        SELECT DATE_FORMAT(cl2.change_time, \'%%d.%%m.%%Y %%H:%%i\') as `date`, 
-        IF(cl2.status <> \'abgeschlossen\' AND SUBSTRING(cl2.status,1,5) != \'mutex\' ,1,0) as `running` ,cl2.status,cl2.cronjob_id,p.bezeichnung
-        FROM (
-          SELECT change_time, id ,cronjob_id
-          FROM cronjob_log 
-          WHERE status = \'start\'
-        ) AS cl1
-        INNER JOIN (
-          SELECT change_time, id, status, parent_id ,cronjob_id
-          FROM cronjob_log
-        ) AS cl2 ON (cl1.id = cl2.parent_id OR cl1.id = cl2.id) AND cl1.cronjob_id = cl2.cronjob_id
-        INNER JOIN prozessstarter AS p ON cl1.cronjob_id = p.id AND p.aktiv = 1 
-        WHERE (cl2.change_time >= \'%s\' OR cl1.change_time >= \'%s\')
-        AND (cl2.change_time <= \'%s\' OR cl1.change_time <= \'%s\') 
-        %s
-        ORDER BY cl2.cronjob_id,cl2.change_time, cl2.id
-        ', $dateFrom, $dateFrom,$dateTo,$dateTo, $extra
-    );*/
-    $sql = sprintf(
-      '
-        SELECT DATE_FORMAT(cl.change_time, \'%%d.%%m.%%Y %%H:%%i\') as `date`, 
-        IF(cl.status <> \'abgeschlossen\' AND SUBSTRING(cl.status,1,5) != \'mutex\' ,1,0) as `running` ,
-        cl.status,cl.cronjob_id,p.bezeichnung
-        FROM cronjob_log as cl
-        INNER JOIN prozessstarter AS p ON cl.cronjob_id = p.id AND p.aktiv = 1  
-        WHERE cl.change_time >= \'%s\'
-        AND cl.change_time <= \'%s\'  
-        %s
-        ORDER BY cl.cronjob_id,cl.change_time, cl.id
-        ', (new DateTime($dateFrom))->sub(new DateInterval( 'P1D'))->format('Y-m-d H:i:s') ,
-      $dateTo, $extra
-    );
-    $cronjobArr = $this->app->DB->SelectArr($sql);
-    $begin = new DateTime($dateFrom);
-    if($dateFrom === $dateTo) {
-      $dateTo = new DateTime($dateFrom);
-      $dateTo = $dateTo->add(new DateInterval( 'P1D'))->format('Y-m-d H:i:s');
+    $from = new DateTimeImmutable($dateFrom);
+    $to = new DateTimeImmutable($dateTo);
+    if($to <= $from) {
+      $to = $from->add(new DateInterval('P1D'));
     }
-
-    $end = new DateTime($dateTo);
-
-    list($months, $days, $hours) = explode(' ',$end->diff($begin)->format('%m %d %h'));
-    $days += $months * 30;
-    if($days === 0) {
-      $interval = new DateInterval('PT1M');
-    }
-    elseif($days <= 1) {
-      $interval = new DateInterval('PT5M');
-    }
-    else {
-      $interval = new DateInterval('PT15M');
-    }
-    foreach($cronjobArr as $row) {
-      $cronjobIdToName['K'.$row['cronjob_id']] = $row['bezeichnung'];
-    }
-
-    $seperated = $this->seperateData($cronjobArr, 'cronjob_id');
-    $seperated = $this->roundDataDates($seperated, 'running','date', $interval);
-
-    foreach($seperated as $cronjobIdKey => $rows) {
-      foreach($rows as $rowKey => $row) {
-        $seperated[$cronjobIdKey][$rowKey]['bezeichnung'] = $cronjobIdToName[$cronjobIdKey];
+    $extra = $cronjobId > 0 ? sprintf(' AND p.id = %d', $cronjobId) : '';
+    $sql = "SELECT cl.id, cl.parent_id, cl.cronjob_id, cl.status, cl.change_time, p.bezeichnung
+       FROM cronjob_log AS cl
+       INNER JOIN prozessstarter AS p ON cl.cronjob_id = p.id AND p.aktiv = 1";
+    $starts = $this->app->DB->SelectArr(sprintf(
+      $sql." WHERE cl.status IN ('start', 'gestartet')
+       AND cl.change_time >= '%s' AND cl.change_time <= '%s' %s
+       ORDER BY cl.change_time, cl.id",
+      $from->format('Y-m-d H:i:s'), $to->format('Y-m-d H:i:s'), $extra
+    ));
+    $logs = is_array($starts) ? $starts : [];
+    if(!empty($logs)) {
+      $ids = implode(',', array_map('intval', array_column($logs, 'id')));
+      // Filter by START time only. A known completion can lie beyond the window.
+      $events = $this->app->DB->SelectArr(sprintf(
+        $sql." WHERE cl.parent_id IN (%s) AND cl.change_time >= '%s' %s
+         ORDER BY cl.change_time, cl.id", $ids, $from->format('Y-m-d H:i:s'), $extra
+      ));
+      if(is_array($events)) {
+        $logs = array_merge($logs, $events);
       }
     }
-
-    $seperated = $this->formatData($seperated,'running');
-
-    $sorted = [];
-    foreach($seperated as $cronjobIdKey => $rows) {
-      $maxValue = 0;
-      foreach($rows as $element) {
-        if($element['running'] > $maxValue) {
-          $maxValue = $element['running'];
-        }
+    $runs = CronjobRuntimeData::fromLogs(is_array($logs) ? $logs : []);
+    if($limit > 0) {
+      $totals = [];
+      foreach($runs as $run) {
+        $totals[$run['jobId']] = ($totals[$run['jobId']] ?? 0) + ($run['duration'] ?? 0);
       }
-      $sorted[$cronjobIdKey] = $maxValue;
+      arsort($totals);
+      $jobIds = array_keys(array_slice($totals, 0, $limit, true));
+      $runs = array_values(array_filter($runs, static function($run) use ($jobIds) {
+        return in_array($run['jobId'], $jobIds, true);
+      }));
     }
-    array_multisort($sorted,SORT_DESC,$seperated);
-    $matchedDatas = [];
-    $period = new PeriodMatcher($begin, $end, $interval, 'd.m.Y H:i:s');
-    $maxCronjobs = $limit === 0?999999:$limit;
-    foreach($seperated as $cronjobIdKey => $cronjobRow) {
-      $maxCronjobs--;
-      if($maxCronjobs < 0) {
-        unset($seperated[$cronjobIdKey]);
-        continue;
-      }
-      $matchedDatas[$cronjobIdKey] = $period->matchData(
-        $cronjobRow,
-        'date'
-        ,$cronjobIdToName[$cronjobIdKey]
-      );
-    }
+    $json = json_encode([
+      'runs' => $runs, 'from' => $from->getTimestamp() * 1000,
+      'to' => $to->getTimestamp() * 1000, 'timezone' => date_default_timezone_get(), 'mini' => $mini,
+    ], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_INVALID_UTF8_SUBSTITUTE);
+    $buttons = $mini ? '<button type="button" data-runtime-days="1">24 Stunden</button>'
+      .'<button type="button" data-runtime-days="7">7 Tage</button>'
+      .'<button type="button" data-runtime-days="30">30 Tage</button>' : '';
 
-    $labels = $period->getDates();
-    $options = [];
-    $chart = new Chart('line',[],[],$options);
-    $chart->addLabels($labels);
-    $first = true;
-    foreach($seperated as $cronjobIdKey => $matchedData) {
-      if($first) {
-        $first = false;
-        $chart->addDatasetAsYAxis(
-          new Dataset($cronjobIdToName[$cronjobIdKey],
-            $matchedDatas[$cronjobIdKey]), 'left' );//,'logarithmic'
-      }
-      else {
-        $chart->addDataset(new Dataset($cronjobIdToName[$cronjobIdKey], $matchedDatas[$cronjobIdKey]));
-      }
-    }
-
-    $chartRenderer = new HtmlRenderer($chart, 'Laufzeiten', 400, 150);
-
-    return $chartRenderer->render();
+    return '<link rel="stylesheet" href="./css/prozessstarter-runtime.css?v=2">'
+      .'<div class="cronjob-runtime"><div class="chart-title">Laufzeiten</div>'
+      .'<div class="runtime-toolbar">'.$buttons.'<span class="runtime-range"></span></div>'
+      .'<div class="runtime-legend"><span><i class="runtime-status-completed"></i>Abgeschlossen</span>'
+      .'<span><i class="runtime-status-error"></i>Fehler</span><span><i class="runtime-status-partial"></i>Teilfehler</span></div>'
+      .'<div class="runtime-canvas"><canvas role="img" aria-label="Laufzeit je Ausfuehrung. Details mit den Schaltflaechen darunter auswaehlen."></canvas></div>'
+      .'<div class="runtime-help">Jede S&auml;ule steht f&uuml;r einen Lauf. H&ouml;he: Laufzeit. Farbe: protokollierter Cronjob-Status.</div>'
+      .'<div class="runtime-summary" aria-live="polite"></div>'
+      .'<div class="runtime-details" aria-live="polite"></div>'
+      .'<div class="runtime-navigation"><button type="button" class="runtime-previous">Vorheriger Lauf</button>'
+      .'<button type="button" class="runtime-next">N&auml;chster Lauf</button>'
+      .'<button type="button" class="runtime-logs-button" aria-expanded="false">Logs zu diesem Lauf</button></div>'
+      .'<div class="runtime-log-panel" hidden></div>'
+      .'<div class="runtime-help">Ohne Abschlussmeldung bleibt die Dauer unbekannt. Abgeschlossen bedeutet nicht, dass alle Bestellungen erfolgreich importiert wurden.</div>'
+      .'<script type="application/json">'.$json.'</script></div>'
+      .'<script src="./js/prozessstarter-runtime.js?v=2"></script>';
   }
 
   public function ProzessstarterChart() {
@@ -691,6 +644,7 @@ class Prozessstarter extends GenProzessstarter {
   }
 
   public function ProzessstarterMinidetail() {
+    $this->runtimeMini = true;
     $cronjobId = (int)$this->app->Secure->GetGET('id');
     $dateFrom = $this->getDatesFromForm('','',true);
     $dateFrom = reset($dateFrom);
