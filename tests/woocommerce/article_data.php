@@ -14,6 +14,9 @@ final class ArticleDataDatabase
     public array $config = [];
     public array $prices = [];
     public int $group = 0;
+    public bool $groupActive = true;
+    public int $groupPriceCalls = 0;
+    public int $writes = 0;
     public bool $failLog = false;
     private ?array $snapshot = null;
 
@@ -52,7 +55,8 @@ final class ArticleDataDatabase
     {
         if (str_contains($sql, 'FROM shopexport')) {
             same(['shop' => 5], $parameters);
-            return $this->group;
+            return str_contains($sql, 'INNER JOIN gruppen') && str_contains($sql, 'g.aktiv = 1') && !$this->groupActive
+                ? false : $this->group;
         }
         if (str_contains($sql, 'FROM artikelnummer_fremdnummern')) {
             same(['article' => 9, 'shop' => 5], $parameters);
@@ -66,6 +70,7 @@ final class ArticleDataDatabase
 
     public function perform(string $sql, array $parameters): void
     {
+        $this->writes++;
         if (preg_match('/^UPDATE (artikel|artikel_onlineshops) SET `([a-z_]+)` = :value/', $sql, $match)) {
             if ($match[1] === 'artikel') {
                 same(9, $parameters['article']);
@@ -106,10 +111,12 @@ function articleRepository(ArticleDataDatabase $db): ArticleDataRepository
                 return $this->database;
             }
         },
-        'erp' => new class {
+        'erp' => new class ($db) {
+            public function __construct(private ArticleDataDatabase $db) {}
             public function GetVerkaufspreisGruppe(int $article, int $quantity, int $group): string
             {
                 same([9, 1, 7], [$article, $quantity, $group]);
+                $this->db->groupPriceCalls++;
                 return '24.00';
             }
         },
@@ -157,6 +164,7 @@ runTests([
     'load_uses_group_price_when_shop_has_group' => static function () {
         $db = new ArticleDataDatabase();
         $db->group = 7;
+        $db->prices[1] = ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false];
         $repo = articleRepository($db);
         same(['value' => '24.00', 'source' => 'group_price'], $repo->load(9)['price_net']);
         try {
@@ -167,6 +175,22 @@ runTests([
         }
         check(!isset($db->article['shop_name_de']));
         same([], $db->config);
+    },
+    'inactive_group_uses_the_editable_standard_price' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->group = 7;
+        $db->groupActive = false;
+        $db->prices[1] = ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false];
+        $repo = articleRepository($db);
+        same(['value' => '30.00', 'source' => 'price'], $repo->load(9)['price_net']);
+        same(['price_net' => ['old' => '30.00', 'new' => '20']], $repo->apply(9, ['price_net' => '20'], 'pull'));
+        same(0, $db->groupPriceCalls);
+    },
+    'active_group_without_standard_row_has_no_export_price' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->group = 7;
+        same('', articleRepository($db)->load(9)['price_net']['value']);
+        same(0, $db->groupPriceCalls);
     },
     'apply_writes_article_and_shop_override_identically' => static function () {
         $db = new ArticleDataDatabase();
@@ -188,10 +212,12 @@ runTests([
         articleRepository($db)->apply(9, ['pseudo_price' => '15'], 'pull');
         $log = json_decode($db->config['woocommerce_pull_log_5'], true);
         same(500, count($log));
-        $entry = $log[499];
-        check((bool) preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', $entry['time']));
-        unset($entry['time']);
-        same(['user' => 42, 'article' => 9, 'field' => 'pseudo_price', 'old' => '12.00', 'new' => '15', 'origin' => 'pull'], $entry);
+        foreach (['artikel' => '10.00', 'shop' => '12.00'] as $target => $old) {
+            $entry = $log[$target === 'artikel' ? 498 : 499];
+            check((bool) preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/', $entry['time'] ?? ''));
+            same(['user' => 42, 'article' => 9, 'field' => 'pseudo_price', 'target' => $target,
+                'old' => $old, 'new' => '15', 'origin' => 'pull'], array_diff_key($entry, ['time' => true]));
+        }
     },
     'apply_ignores_sku_and_reports_only_changes' => static function () {
         $db = new ArticleDataDatabase();
@@ -238,8 +264,69 @@ runTests([
         same(true, $db->prices[1]['expired']);
         same('CHF', $db->prices[2]['waehrung']);
         same(['value' => '20.5', 'source' => 'price'], $repo->load(9)['price_net']);
-        $repo->apply(9, ['price_net' => ''], 'pull');
-        same(['value' => '', 'source' => 'price'], $repo->load(9)['price_net']);
+    },
+    'empty_shop_price_is_visible_but_not_pullable' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->prices[1] = ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false];
+        $values = wooReader(['regular_price' => ''])->findBySku('ABC')['values'];
+        $rows = array_column(FieldDiff::compare(articleRepository($db)->load(9), $values), null, 'key');
+        same(true, $rows['price_net']['differs']);
+        same(false, $rows['price_net']['pullable'] ?? true);
+        same('leerer Shop-Preis wird nicht uebernommen', $rows['price_net']['reason'] ?? null);
+        same(true, $rows['pseudo_price']['pullable'] ?? false);
+        same(true, $rows['pseudo_price']['differs']);
+    },
+    'empty_standard_price_is_rejected_before_any_write' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->prices[1] = ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false];
+        $repo = articleRepository($db);
+        foreach (['', '  ', null] as $empty) {
+            try {
+                $repo->apply(9, ['shop_name' => 'Changed', 'price_net' => $empty], 'pull');
+                throw new LogicException('Empty standard price was accepted.');
+            } catch (InvalidArgumentException $error) {
+                check(str_contains($error->getMessage(), 'price_net'));
+            }
+        }
+        same(0, $db->writes);
+        same(['value' => '30.00', 'source' => 'price'], $repo->load(9)['price_net']);
+        $repo->apply(9, ['pseudo_price' => ''], 'pull');
+        same('0', $db->article['pseudopreis']);
+        same('0', $db->override['pseudopreis']);
+    },
+    'rejects_overlong_text_before_any_write' => static function () {
+        $db = new ArticleDataDatabase();
+        $repo = articleRepository($db);
+        foreach ([
+            'shop_name' => [str_repeat('x', 256), 255],
+            'customs_tariff' => [str_repeat('x', 65), 64],
+            'delivery_time' => [str_repeat('x', 256), 255],
+            'weight' => [str_repeat('9', 256), 255],
+            'description' => [str_repeat("\u{20ac}", 21846), 65535],
+        ] as $key => [$value, $limit]) {
+            try {
+                $repo->apply(9, ['seo_title' => 'Changed', $key => $value], 'pull');
+                throw new LogicException('Overlong value was accepted: ' . $key);
+            } catch (InvalidArgumentException $error) {
+                check(str_contains($error->getMessage(), $key));
+                check(str_contains($error->getMessage(), (string) $limit));
+            }
+        }
+        same(0, $db->writes);
+        $valid = str_repeat("\u{20ac}", 64);
+        $repo->apply(9, ['customs_tariff' => $valid], 'pull');
+        same($valid, $db->article['zolltarifnummer']);
+    },
+    'price_diff_uses_export_precision_without_rounding_other_values_or_erp_edits' => static function () {
+        foreach (['price_net', 'pseudo_price'] as $key) {
+            same(false, articleDiff([$key => ['value' => '8.395']], [$key => '8.40'], $key)['differs']);
+            same(true, articleDiff([$key => ['value' => '8.395']], [$key => '8.39'], $key)['differs']);
+        }
+        same(true, articleDiff(['weight' => ['value' => '8.395']], ['weight' => '8.40'], 'weight')['differs']);
+        $db = new ArticleDataDatabase();
+        $db->prices[1] = ['id' => 1, 'preis' => '8.395', 'waehrung' => 'EUR', 'expired' => false];
+        same(['price_net' => ['old' => '8.395', 'new' => '8.4']],
+            articleRepository($db)->apply(9, ['price_net' => '8.40'], 'tab'));
     },
     'failed_log_rolls_back_article_and_override' => static function () {
         $db = new ArticleDataDatabase();
@@ -302,6 +389,47 @@ runTests([
         same(['keine SKU', 'SKU mehrfach', 'SKU mehrfach'], array_column($page['unmatched'], 'reason'));
         same(false, $page['more']);
     },
+    'inherited_variation_sku_leaves_parent_matched' => static function () {
+        $client = new class {
+            public function get(string $endpoint, array $query): array
+            {
+                $parent = (object) ['id' => 100, 'sku' => 'PARENT', 'type' => 'variable'];
+                $inherited = (object) ['id' => 101, 'sku' => 'PARENT', 'parent_id' => 100, 'name' => 'Inherited'];
+                if (isset($query['sku'])) {
+                    return [$inherited, $parent];
+                }
+                return $endpoint === 'products' ? [$parent] : [$inherited, (object) ['id' => 102, 'sku' => '']];
+            }
+        };
+        $reader = new WooProductReader($client, new DeliveryTimeMap(static fn () => [], ''));
+        $page = $reader->page(1);
+        same(['PARENT'], array_keys($page['items']));
+        same([101, 102], array_column($page['unmatched'], 'id'));
+        same(['keine eigene SKU', 'keine eigene SKU'], array_column($page['unmatched'], 'reason'));
+        same(100, $reader->findBySku('PARENT')['id']);
+    },
+    'inherited_variation_logistics_are_not_compared' => static function () {
+        $client = new class {
+            public function get(string $endpoint, array $query): array
+            {
+                $logistics = ['weight' => '5', 'dimensions' => (object) ['length' => '4', 'width' => '3', 'height' => '2']];
+                $variant = (object) (['id' => 101, 'parent_id' => 100, 'sku' => 'VAR'] + $logistics);
+                if (isset($query['sku']) || $endpoint === 'products/100/variations') {
+                    return [$variant];
+                }
+                return [(object) (['id' => 100, 'sku' => 'PARENT', 'type' => 'variable'] + $logistics)];
+            }
+        };
+        $reader = new WooProductReader($client, new DeliveryTimeMap(static fn () => [], ''));
+        foreach ([$reader->page(1)['items']['VAR'], $reader->findBySku('VAR')] as $variation) {
+            $rows = array_column(FieldDiff::compare([], $variation['values']), null, 'key');
+            foreach (['weight', 'length', 'width', 'height'] as $key) {
+                check(array_key_exists($key, $variation['values']));
+                same(null, $variation['values'][$key]);
+                check(!array_key_exists($key, $rows));
+            }
+        }
+    },
     'sale_price_maps_to_pseudo_price' => static function () {
         $values = wooReader(['regular_price' => '16', 'sale_price' => '0'])->findBySku('ABC')['values'];
         same('0', $values['price_net']);
@@ -315,6 +443,22 @@ runTests([
         same('2-3 Werktage', wooReader(['meta_data' => $metadata])->findBySku('ABC')['values']['delivery_time']);
         $metadata[0]->value = -1;
         same('', wooReader(['meta_data' => $metadata])->findBySku('ABC')['values']['delivery_time']);
+    },
+    'unknown_delivery_time_does_not_propose_clearing_the_existing_value' => static function () {
+        $metadata = [(object) ['key' => '_lieferzeit', 'value' => 999]];
+        $product = wooReader(['meta_data' => $metadata])->findBySku('ABC');
+        $openxe = ['delivery_time' => ['value' => '2-3 Werktage']];
+        same(null, $product['values']['delivery_time']);
+        same('Lieferzeit-ID 999 unbekannt', $product['reasons']['delivery_time'] ?? null);
+        $rows = array_column(FieldDiff::compare($openxe, $product['values']), null, 'key');
+        check(!array_key_exists('delivery_time', $rows));
+
+        $metadata[0]->value = -1;
+        $default = wooReader(['meta_data' => $metadata])->findBySku('ABC');
+        $row = articleDiff($openxe, $default['values'], 'delivery_time');
+        same('', $row['woocommerce']);
+        same(true, $row['differs']);
+        same(true, $row['pullable'] ?? false);
     },
     'ean_uses_global_then_german_market_then_rank_math' => static function () {
         $metadata = [

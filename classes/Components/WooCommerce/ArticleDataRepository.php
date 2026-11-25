@@ -12,6 +12,22 @@ final class ArticleDataRepository
     private const CONFIG_LIMIT = 65000;
     private const LOG_LIMIT = 500;
 
+    // database/struktur.sql; shop_name_de is defined in the 1.13 upgrade schema.
+    // The mirrored text columns have the same limits in artikel and artikel_onlineshops.
+    private const VARCHAR_LIMITS = [
+        'shop_name' => 255,
+        'inactive' => 255,
+        'pseudo_stock' => 255,
+        'delivery_time' => 255,
+        'weight' => 255,
+        'ean' => 1024,
+        'customs_tariff' => 64,
+        'origin_country' => 64,
+        'manufacturer' => 255,
+    ];
+    private const TEXT_FIELDS = ['description', 'short_description', 'seo_title', 'seo_description', 'seo_keyword'];
+    private const TEXT_BYTE_LIMIT = 65535;
+
     private $database;
 
     public function __construct(private $app, private int $shopId)
@@ -26,6 +42,18 @@ final class ArticleDataRepository
 
     public function apply(int $articleId, array $values, string $origin): array
     {
+        $updates = [];
+        foreach (ArticleFieldCatalog::fields() as $field) {
+            $key = $field['key'];
+            if (!$field['edit'] || !array_key_exists($key, $values)) {
+                continue;
+            }
+            $new = $this->valueForStorage($key, $values[$key]);
+            $this->validateTextLength($key, $new);
+            [$storage, $column] = array_pad(explode(':', $field['storage'], 2), 2, '');
+            $updates[$key] = [$new, $storage, $column];
+        }
+
         $ownTransaction = !$this->database->inTransaction();
         if ($ownTransaction) {
             $this->database->beginTransaction();
@@ -33,49 +61,51 @@ final class ArticleDataRepository
         try {
             $state = $this->loadState($articleId, true);
             $changes = [];
-            foreach (ArticleFieldCatalog::fields() as $field) {
-                $key = $field['key'];
-                if (!$field['edit'] || !array_key_exists($key, $values)) {
-                    continue;
-                }
-                $new = $this->valueForStorage($key, $values[$key]);
+            $audit = [];
+            foreach ($updates as $key => [$new, $storage, $column]) {
                 $effective = $state['fields'][$key]['value'];
-                [$storage, $column] = array_pad(explode(':', $field['storage'], 2), 2, '');
-                $old = $effective;
-                if (FieldDiff::equivalent($key, $effective, $new)) {
-                    $old = $storage === 'shop' ? (string) ($state['article'][$column] ?? '') : $effective;
-                    if (FieldDiff::equivalent($key, $old, $new)) {
-                        continue;
-                    }
+                $effectiveChanged = !FieldDiff::equivalent($key, $effective, $new);
+                $articleOld = (string) ($state['article'][$column] ?? '');
+                $articleChanged = $storage === 'shop'
+                    ? !FieldDiff::equivalent($key, $articleOld, $new)
+                    : $effectiveChanged;
+                if (!$effectiveChanged && !$articleChanged) {
+                    continue;
                 }
 
                 if ($storage === 'price') {
-                    if ($state['fields'][$key]['source'] === 'group_price') {
+                    if ($state['usesGroupPrice']) {
                         throw new RuntimeException('Der Gruppenpreis des Shops kann hier nicht geaendert werden.');
                     }
                     $this->writeStandardPrice($articleId, $state['price'], $new);
+                    $audit[] = ['field' => $key, 'target' => 'price', 'old' => $effective, 'new' => $new];
                 } elseif ($storage === 'onrequest') {
                     $name = $this->articleConfigKey($articleId);
                     $config = $this->lockConfig($name);
                     $config['onRequest'] = $new === '1';
                     $this->writeConfig($name, $this->encodeConfig($config));
+                    $audit[] = ['field' => $key, 'target' => 'onrequest', 'old' => $effective, 'new' => $new];
                 } else {
-                    $this->database->perform(
-                        "UPDATE artikel SET `$column` = :value WHERE id = :article",
-                        ['value' => $new, 'article' => $articleId]
-                    );
-                    if ($storage === 'shop' && $state['override']) {
+                    if ($articleChanged) {
+                        $this->database->perform(
+                            "UPDATE artikel SET `$column` = :value WHERE id = :article",
+                            ['value' => $new, 'article' => $articleId]
+                        );
+                        $audit[] = ['field' => $key, 'target' => 'artikel', 'old' => $articleOld, 'new' => $new];
+                    }
+                    if ($storage === 'shop' && $state['override'] && $effectiveChanged) {
                         $this->database->perform(
                             "UPDATE artikel_onlineshops SET `$column` = :value WHERE id = :id",
                             ['value' => $new, 'id' => (int) $state['override']['id']]
                         );
+                        $audit[] = ['field' => $key, 'target' => 'shop', 'old' => $effective, 'new' => $new];
                     }
                 }
-                $changes[$key] = ['old' => $old, 'new' => $new];
+                $changes[$key] = ['old' => $effectiveChanged ? $effective : $articleOld, 'new' => $new];
             }
 
-            if ($changes !== []) {
-                $this->appendLog($articleId, $changes, $origin);
+            if ($audit !== []) {
+                $this->appendLog($articleId, $audit, $origin);
             }
             if ($ownTransaction) {
                 $this->database->commit();
@@ -110,18 +140,21 @@ final class ArticleDataRepository
         );
         $sku = trim($foreign === false || $foreign === null ? (string) $article['nummer'] : (string) $foreign);
         $group = (int) $this->database->fetchValue(
-            'SELECT preisgruppe FROM shopexport WHERE id = :shop' . $lockSql,
+            'SELECT s.preisgruppe FROM shopexport s INNER JOIN gruppen g ON s.preisgruppe = g.id AND g.aktiv = 1'
+            . ' WHERE s.id = :shop LIMIT 1' . $lockSql,
             ['shop' => $this->shopId]
         );
-        $price = $group > 0 ? [] : $this->standardPrice($articleId, $lock);
-        $priceValue = $group > 0 ? $this->app->erp->GetVerkaufspreisGruppe($articleId, 1, $group) : ($price['preis'] ?? '');
+        $usesGroupPrice = $group > 0 && method_exists($this->app->erp, 'GetVerkaufspreisGruppe');
+        $price = $this->standardPrice($articleId, $lock);
+        $hasGroupPrice = $price !== [] && $usesGroupPrice;
+        $priceValue = $hasGroupPrice ? $this->app->erp->GetVerkaufspreisGruppe($articleId, 1, $group) : ($price['preis'] ?? '');
         $config = $this->readConfig($this->articleConfigKey($articleId));
 
         $fields = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
             [$storage, $column] = array_pad(explode(':', $field['storage'], 2), 2, '');
             [$value, $source] = match ($storage) {
-                'price' => [$priceValue, $group > 0 ? 'group_price' : 'price'],
+                'price' => [$priceValue, $hasGroupPrice ? 'group_price' : 'price'],
                 'foreign_number' => [$sku, 'foreign_number'],
                 'onrequest' => [($config['onRequest'] ?? false) === true ? '1' : '0', 'onrequest'],
                 'shop' => $override ? [$override[$column] ?? '', 'shop'] : [$article[$column] ?? '', 'artikel'],
@@ -130,7 +163,8 @@ final class ArticleDataRepository
             $fields[$field['key']] = ['value' => (string) $value, 'source' => $source];
         }
 
-        return ['fields' => $fields, 'article' => $article, 'override' => $override, 'price' => $price];
+        return ['fields' => $fields, 'article' => $article, 'override' => $override,
+            'price' => $price, 'usesGroupPrice' => $usesGroupPrice];
     }
 
     private function valueForStorage(string $key, $input): string
@@ -155,7 +189,7 @@ final class ArticleDataRepository
                 return '';
             }
             if ($value === '' && $key === 'price_net') {
-                return '';
+                throw new InvalidArgumentException('Ein leerer Wert fuer price_net ist nicht zulaessig.');
             }
             [$maxInteger, $maxDecimal] = $numericLimits[$key];
             [$integer, $decimal] = array_pad(explode('.', $value, 2), 2, '');
@@ -166,6 +200,17 @@ final class ArticleDataRepository
         }
 
         return $value;
+    }
+
+    private function validateTextLength(string $key, string $value): void
+    {
+        $maxCharacters = self::VARCHAR_LIMITS[$key] ?? null;
+        if ($maxCharacters !== null && mb_strlen($value, 'UTF-8') > $maxCharacters) {
+            throw new InvalidArgumentException('Wert fuer ' . $key . ' ist zu lang (max. ' . $maxCharacters . ' Zeichen).');
+        }
+        if (in_array($key, self::TEXT_FIELDS, true) && strlen($value) > self::TEXT_BYTE_LIMIT) {
+            throw new InvalidArgumentException('Wert fuer ' . $key . ' ist zu lang (max. ' . self::TEXT_BYTE_LIMIT . ' Bytes).');
+        }
     }
 
     private function standardPrice(int $articleId, bool $lock): array
@@ -189,15 +234,13 @@ final class ArticleDataRepository
                 ['id' => (int) $old['id']]
             );
         }
-        if ($value !== '') {
-            $this->database->perform(
-                'INSERT INTO verkaufspreise (artikel, objekt, projekt, adresse, preis, waehrung, ab_menge, angelegt_am,'
-                . ' gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht, art, apichange)'
-                . " VALUES (:article, 'Standard', '', '0', :value, :currency, 1, CURDATE(),"
-                . " '0000-00-00', '', '', NOW(), 1, 0, 'Kunde', 1)",
-                ['article' => $articleId, 'value' => $value, 'currency' => ($old['waehrung'] ?? '') ?: 'EUR']
-            );
-        }
+        $this->database->perform(
+            'INSERT INTO verkaufspreise (artikel, objekt, projekt, adresse, preis, waehrung, ab_menge, angelegt_am,'
+            . ' gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht, art, apichange)'
+            . " VALUES (:article, 'Standard', '', '0', :value, :currency, 1, CURDATE(),"
+            . " '0000-00-00', '', '', NOW(), 1, 0, 'Kunde', 1)",
+            ['article' => $articleId, 'value' => $value, 'currency' => ($old['waehrung'] ?? '') ?: 'EUR']
+        );
         $effectivePrice = $this->standardPrice($articleId, true);
         if (FieldDiff::normalize('price_net', (string) ($effectivePrice['preis'] ?? '')) !== $value) {
             throw new RuntimeException('Ein weiterer aktiver Standardpreis verhindert die Preisaenderung fuer Artikel ' . $articleId . '.');
@@ -247,8 +290,8 @@ final class ArticleDataRepository
         $time = gmdate('Y-m-d\TH:i:s\Z');
         $user = (int) (($this->app->User ?? null)?->GetID() ?? 0);
         $entries = [];
-        foreach ($changes as $field => $change) {
-            $entries[] = ['time' => $time, 'user' => $user, 'article' => $articleId, 'field' => $field]
+        foreach ($changes as $change) {
+            $entries[] = ['time' => $time, 'user' => $user, 'article' => $articleId]
                 + $change + ['origin' => $origin];
         }
         $new = $this->encodeConfig($entries);

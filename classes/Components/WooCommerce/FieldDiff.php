@@ -10,18 +10,31 @@ final class FieldDiff
         $rows = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
             $key = $field['key'];
-            if (!$field['pull'] || !array_key_exists($key, $woo)) {
+            if (!$field['pull'] || !isset($woo[$key])) {
                 continue;
             }
             $old = (string) ($openxe[$key]['value'] ?? '');
             $new = (string) $woo[$key];
-            $rows[] = [
+            $comparisonValue = $old;
+            if (in_array($key, ['price_net', 'pseudo_price'], true)) {
+                $normalized = self::normalize($key, $old);
+                if (is_numeric($normalized)) {
+                    $comparisonValue = number_format((float) $normalized, 2, '.', '');
+                }
+            }
+            $pullable = $key !== 'price_net' || trim($new) !== '';
+            $row = [
                 'key' => $key,
                 'label' => $field['label'],
                 'openxe' => $old,
                 'woocommerce' => $new,
-                'differs' => !self::equivalent($key, $old, $new),
+                'differs' => !self::equivalent($key, $comparisonValue, $new),
+                'pullable' => $pullable,
             ];
+            if (!$pullable) {
+                $row['reason'] = 'leerer Shop-Preis wird nicht uebernommen';
+            }
+            $rows[] = $row;
         }
         return $rows;
     }

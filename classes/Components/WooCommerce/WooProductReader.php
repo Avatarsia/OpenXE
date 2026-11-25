@@ -20,7 +20,8 @@ final class WooProductReader
         if ($sku === '') {
             return null;
         }
-        $match = null;
+        $matches = [];
+        $parentIds = [];
         $page = 1;
         do {
             [$products, $more] = $this->fetchPage('products', $page++, ['sku' => $sku]);
@@ -29,14 +30,26 @@ final class WooProductReader
                 if (trim((string) ($product['sku'] ?? '')) !== $sku) {
                     continue;
                 }
-                if ($match !== null) {
-                    throw new RuntimeException('SKU mehrfach in WooCommerce: ' . $sku);
+                $matches[] = $product;
+                if (empty($product['parent_id'])) {
+                    $parentIds[(int) $product['id']] = true;
                 }
-                $match = $product;
             }
         } while ($more);
 
-        return $match === null ? null : $this->mapProduct($match, (int) ($match['parent_id'] ?? 0));
+        $match = null;
+        foreach ($matches as $product) {
+            $parentId = (int) ($product['parent_id'] ?? 0);
+            if (isset($parentIds[$parentId])) {
+                continue;
+            }
+            if ($match !== null) {
+                throw new RuntimeException('SKU mehrfach in WooCommerce: ' . $sku);
+            }
+            $match = $this->mapProduct($product, $parentId);
+        }
+
+        return $match;
     }
 
     public function page(int $page): array
@@ -53,11 +66,12 @@ final class WooProductReader
                 continue;
             }
             $parentId = (int) $product['id'];
+            $parentSku = trim((string) ($product['sku'] ?? ''));
             $variationPage = 1;
             do {
                 [$variations, $moreVariations] = $this->fetchPage("products/$parentId/variations", $variationPage++);
                 foreach ($variations as $variation) {
-                    $this->collect((array) $variation, $parentId, $items, $unmatched, $firstSeen);
+                    $this->collect((array) $variation, $parentId, $items, $unmatched, $firstSeen, $parentSku);
                 }
             } while ($moreVariations);
         }
@@ -86,12 +100,12 @@ final class WooProductReader
         return [$rows, $more];
     }
 
-    private function collect(array $product, int $parentId, array &$items, array &$unmatched, array &$firstSeen): void
+    private function collect(array $product, int $parentId, array &$items, array &$unmatched, array &$firstSeen, ?string $parentSku = null): void
     {
         $sku = trim((string) ($product['sku'] ?? ''));
         $entry = ['id' => (int) $product['id'], 'name' => (string) ($product['name'] ?? $sku)];
-        if ($sku === '') {
-            $unmatched[] = $entry + ['reason' => 'keine SKU'];
+        if ($sku === '' || $sku === $parentSku) {
+            $unmatched[] = $entry + ['reason' => $parentId > 0 ? 'keine eigene SKU' : 'keine SKU'];
             return;
         }
         if (isset($firstSeen[$sku])) {
@@ -127,10 +141,23 @@ final class WooProductReader
             }
         }
         $dimensions = (array) ($product['dimensions'] ?? []);
+        $deliveryId = $meta['_lieferzeit'] ?? '-1';
+        $termId = filter_var($deliveryId, FILTER_VALIDATE_INT);
+        $deliveryTime = $termId === false ? '' : $this->map->textFor($termId);
+        $reasons = [];
+        if ($termId !== -1 && $deliveryTime === '') {
+            $deliveryTime = null;
+            $reasons['delivery_time'] = 'Lieferzeit-ID ' . $deliveryId . ' unbekannt';
+        }
         $values = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
             $key = $field['key'];
             if (!$field['pull'] || ($parentId > 0 && in_array($key, ['shop_name', 'short_description'], true))) {
+                continue;
+            }
+            if ($parentId > 0 && in_array($key, ['weight', 'length', 'width', 'height'], true)) {
+                // The REST API returns parent values when the variation does not set its own.
+                $values[$key] = null;
                 continue;
             }
             // A variable parent has no independently editable price in WooCommerce.
@@ -143,7 +170,7 @@ final class WooProductReader
                 'price_net' => $sale !== '' ? $sale : $regular,
                 'pseudo_price' => $sale !== '' ? $regular : '',
                 'inactive' => ($product['status'] ?? 'publish') === 'publish' ? '0' : '1',
-                'delivery_time' => $this->map->textFor((int) ($meta['_lieferzeit'] ?? -1)),
+                'delivery_time' => $deliveryTime,
                 'ean' => $ean,
                 default => match (true) {
                     str_starts_with($target, 'meta:') => $meta[substr($target, 5)] ?? '',
@@ -153,6 +180,10 @@ final class WooProductReader
             };
         }
 
-        return ['id' => (int) $product['id'], 'parent_id' => $parentId, 'values' => $values];
+        $mapped = ['id' => (int) $product['id'], 'parent_id' => $parentId, 'values' => $values];
+        if ($reasons !== []) {
+            $mapped['reasons'] = $reasons;
+        }
+        return $mapped;
     }
 }
