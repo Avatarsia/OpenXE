@@ -14,6 +14,8 @@
 .wc-download-table th:nth-child(1) { width: 30%; }
 .wc-download-table th:nth-child(2) { width: 55%; }
 .wc-refund-table { min-width: 850px; }
+.wc-pull-table { min-width: 34rem; }
+.wc-pull-table td { max-width: 24rem; overflow-wrap: anywhere; white-space: pre-wrap; }
 .wc-refund-table td:last-child { max-width: 28rem; overflow-wrap: anywhere; }
 .wc-admin-actions { display: flex; flex-wrap: wrap; gap: .75rem; }
 .wc-admin-pages { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }

@@ -1,0 +1,96 @@
+<?php
+// SPDX-License-Identifier: AGPL-3.0-only
+
+final class BulkPullDatabase
+{
+    public array $articles = [
+        9 => ['id' => 9, 'nummer' => 'LOCAL-9', 'name_de' => 'Artikel 9', 'shop_name_de' => 'Alter Name', 'projekt' => 0],
+        10 => ['id' => 10, 'nummer' => 'LOCAL-10', 'name_de' => 'Artikel 10', 'projekt' => 0],
+    ];
+    public array $assignments = [9 => true, 10 => true];
+    public array $foreignNumbers = [9 => 'SHOP-9'];
+    public array $audit = [];
+    public array $writes = [];
+    private ?array $snapshot = null;
+
+    public function fetchRow(string $sql, array $params)
+    {
+        if (str_contains($sql, 'FROM shopexport')) {
+            return ['id' => 7, 'modulename' => 'shopimporter_woocommerce', 'projekt' => 0, 'einstellungen_json' => '{}'];
+        }
+        if (str_contains($sql, 'FROM artikel WHERE')) {
+            return $this->articles[$params['article']] ?? false;
+        }
+        if (str_contains($sql, 'FROM artikel_onlineshops')) {
+            return false;
+        }
+        throw new LogicException($sql);
+    }
+
+    public function fetchAll(string $sql, array $params): array
+    {
+        if (str_contains($sql, 'FROM verkaufspreise')) {
+            return [['preis' => '19.99']];
+        }
+        if (str_contains($sql, 'FROM artikel AS a')) {
+            $rows = [];
+            foreach ($this->articles as $id => $article) {
+                if (($this->assignments[$id] ?? false) && ($this->foreignNumbers[$id] ?? $article['nummer']) === $params['sku']) {
+                    $rows[] = $article;
+                }
+            }
+            return $rows;
+        }
+        throw new LogicException($sql);
+    }
+
+    public function fetchValue(string $sql, array $params)
+    {
+        if (str_contains($sql, 'FROM artikelnummer_fremdnummern')) {
+            return $this->foreignNumbers[$params['article']] ?? false;
+        }
+        if (str_contains($sql, 'FROM konfiguration')) {
+            return $this->audit[$params['name']] ?? false;
+        }
+        if (str_contains($sql, 'FROM shopexport')) {
+            return 0;
+        }
+        throw new LogicException($sql);
+    }
+
+    public function perform(string $sql, array $params): void
+    {
+        $this->writes[] = [$sql, $params];
+        if (preg_match('/^UPDATE artikel SET `([a-z_]+)`/', $sql, $matches)) {
+            $this->articles[$params['article']][$matches[1]] = $params['value'];
+        } elseif (str_starts_with($sql, 'INSERT INTO konfiguration')) {
+            $this->audit[$params['name']] = $params['wert'] ?? ($this->audit[$params['name']] ?? '[]');
+        } else {
+            throw new LogicException($sql);
+        }
+    }
+
+    public function inTransaction(): bool { return $this->snapshot !== null; }
+    public function beginTransaction(): void { $this->snapshot = [$this->articles, $this->audit]; }
+    public function commit(): void { $this->snapshot = null; }
+    public function rollBack(): void
+    {
+        [$this->articles, $this->audit] = $this->snapshot;
+        $this->snapshot = null;
+    }
+}
+
+final class BulkPullClient
+{
+    public array $pages = [1 => [
+        ['id' => 101, 'name' => 'Vorschau', 'sku' => 'SHOP-9',
+            'meta_data' => [['key' => 'rank_math_title', 'value' => 'SEO Vorschau']]],
+    ]];
+    public array $requests = [];
+
+    public function get(string $endpoint, array $query): array
+    {
+        $this->requests[] = [$endpoint, $query['page'], $query['per_page']];
+        return $this->pages[$query['page']] ?? [];
+    }
+}

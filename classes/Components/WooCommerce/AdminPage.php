@@ -4,6 +4,9 @@ namespace Xentral\Components\WooCommerce;
 
 use RuntimeException;
 use InvalidArgumentException;
+use Shopimporter_Woocommerce;
+use Throwable;
+use Xentral\Components\Http\Session\Session;
 use Xentral\Components\Http\Session\SessionHandler;
 
 /** Reuses onlineshops/edit authorization; every write also checks the session token. */
@@ -39,8 +42,15 @@ final class AdminPage
             throw new RuntimeException('WooCommerce-Shop nicht vorhanden oder nicht freigegeben.');
         }
         $session = $this->app->Container->get('Session');
-        $view = $this->app->Secure->GetGET('view') === 'refunds' ? 'refunds' : 'downloads';
+        $view = match ($this->app->Secure->GetGET('view')) {
+            'refunds' => 'refunds',
+            'pull' => 'pull',
+            default => 'downloads',
+        };
         $action = $this->app->Secure->GetPOST('wc_action');
+        if ($view === 'pull') {
+            return $this->navigation($view) . $this->renderPull($session, $action) . '</div>';
+        }
         $notice = '';
         $noticeClass = 'info';
         $draft = null;
@@ -52,10 +62,7 @@ final class AdminPage
             throw new RuntimeException('Artikel ist diesem Shop nicht zugeordnet oder nicht freigegeben.');
         }
         if ($action) {
-            $token = $this->app->Secure->GetPOST('csrf_token', '', '', 1);
-            if (!is_string($token) || !$session->isCsrfTokenValid('woocommerce_admin', $token)) {
-                throw new RuntimeException('Formular abgelaufen. Seite neu laden und erneut speichern.');
-            }
+            $this->requireToken($session);
             try {
                 if ($view === 'downloads' && $article && $action === 'save_downloads') {
                     $names = $this->app->Secure->GetPOST('download_name', '', '', 1);
@@ -97,10 +104,7 @@ final class AdminPage
         }
         $token = $session->createCsrfToken('woocommerce_admin');
         SessionHandler::commitSession($session);
-        $html = '<div class="wc-admin"><nav class="wc-admin-nav" aria-label="WooCommerce-Verwaltung">'
-            . '<a' . ($view === 'downloads' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'downloads')) . '">Downloads</a> '
-            . '<a href="index.php?module=shopimport&amp;action=einzelimport&amp;id=' . $this->shopId . '">Auftrag nachholen</a> '
-            . '<a' . ($view === 'refunds' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'refunds')) . '">Refund-Status</a></nav>';
+        $html = $this->navigation($view);
         if ($notice !== '') {
             $html .= '<div class="' . $noticeClass . '" role="' . ($noticeClass === 'error' ? 'alert' : 'status') . '">' . $notice . '</div>';
         }
@@ -114,6 +118,142 @@ final class AdminPage
                 $search !== '' ? $this->search($search) : [], $search, !empty($config['felder']['exportDownloads']));
         }
         return $html . '</div>';
+    }
+
+    private function navigation(string $view): string
+    {
+        return '<div class="wc-admin"><nav class="wc-admin-nav" aria-label="WooCommerce-Verwaltung">'
+            . '<a' . ($view === 'downloads' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'downloads')) . '">Downloads</a> '
+            . '<a href="index.php?module=shopimport&amp;action=einzelimport&amp;id=' . $this->shopId . '">Auftrag nachholen</a> '
+            . '<a' . ($view === 'refunds' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'refunds')) . '">Refund-Status</a> '
+            . '<a' . ($view === 'pull' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'pull')) . '">Artikeldaten abgleichen</a></nav>';
+    }
+
+    private function requireToken(Session $session): void
+    {
+        $token = $this->app->Secure->GetPOST('csrf_token', '', '', 1);
+        if (!is_string($token) || !$session->isCsrfTokenValid('woocommerce_admin', $token)) {
+            throw new RuntimeException('Formular abgelaufen. Seite neu laden und erneut speichern.');
+        }
+    }
+
+    private function renderPull(Session $session, $action): string
+    {
+        $secure = $this->app->Secure;
+        $page = max(1, filter_var($secure->GetGET('page'), FILTER_VALIDATE_INT) ?: 1);
+        $groupsByKey = [];
+        foreach (ArticleFieldCatalog::fields() as $field) {
+            if ($field['pull']) {
+                $groupsByKey[$field['key']] = $field['group'];
+            }
+        }
+        $groups = array_values(array_unique($groupsByKey));
+        $submitted = $secure->GetGET('groups', '', '', 1);
+        $selectedGroups = $secure->GetGET('filter') === '1'
+            ? array_values(array_filter($groups, static fn (string $group): bool =>
+                is_array($submitted) && in_array($group, $submitted, true)))
+            : $groups;
+        $sessionKey = 'pull_' . $this->shopId;
+
+        if ($action) {
+            $this->requireToken($session);
+            if ($action !== 'apply_pull' || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+                throw new RuntimeException('Aktion nicht verfuegbar.');
+            }
+            $preview = $session->getValue('woocommerce_admin', $sessionKey);
+            $nonce = $secure->GetPOST('pull_preview', '', '', 1);
+            if (!is_string($nonce) || !$preview || $preview['page'] !== $page || !hash_equals($preview['nonce'], $nonce)) {
+                throw new RuntimeException('Vorschau erneut laden und Felder auswaehlen.');
+            }
+            $selection = $secure->GetPOST('selection', '', '', 1);
+            if (!is_array($selection) || $selection === []) {
+                throw new RuntimeException('Bitte mindestens ein Feld auswaehlen.');
+            }
+            $accepted = $results = [];
+            foreach ($selection as $id => $keys) {
+                if (!isset($preview['fields'][$id]) || !is_array($keys) || $keys === []
+                    || array_filter($keys, static fn ($key): bool =>
+                        !is_string($key) || !isset($preview['fields'][$id][$key])) !== []) {
+                    $results[$id] = ['error' => 'Feld war in der Vorschau nicht auswaehlbar.'];
+                    continue;
+                }
+                $accepted[$id] = $keys;
+            }
+            if ($accepted !== []) {
+                $session->removeValue('woocommerce_admin', $sessionKey);
+                SessionHandler::commitSession($session);
+                try {
+                    $results += $this->bulkPull()->apply($accepted, 'bulk_pull', $page);
+                } catch (Throwable $error) {
+                    $this->logPullError($error);
+                    foreach ($accepted as $id => $keys) {
+                        $results[$id] = ['error' => 'Aktuelle WooCommerce-Artikeldaten konnten nicht geladen werden.'];
+                    }
+                }
+            }
+            return AdminView::pullResults($this->shopId, $page, $selectedGroups, $results);
+        }
+
+        try {
+            $data = $this->bulkPull()->compare($page);
+        } catch (Throwable $error) {
+            $this->logPullError($error);
+            throw new RuntimeException('WooCommerce-Artikeldaten konnten nicht verglichen werden.');
+        }
+        $fields = [];
+        foreach ($data['articles'] as $id => &$article) {
+            $article['rows'] = array_filter($article['rows'], static fn (array $row): bool =>
+                in_array($groupsByKey[$row['key']], $selectedGroups, true));
+            foreach ($article['rows'] as $row) {
+                if ($row['pullable']) {
+                    $fields[$id][$row['key']] = true;
+                }
+            }
+        }
+        unset($article);
+        $nonce = bin2hex(random_bytes(16));
+        $session->setValue('woocommerce_admin', $sessionKey, ['nonce' => $nonce, 'page' => $page, 'fields' => $fields]);
+        $token = $session->createCsrfToken('woocommerce_admin');
+        SessionHandler::commitSession($session);
+
+        return AdminView::pull($this->shopId, $token, $nonce, $page, $data, $groups, $selectedGroups);
+    }
+
+    private function bulkPull(): BulkPull
+    {
+        if (!class_exists(Shopimporter_Woocommerce::class, false)) {
+            require_once dirname(__DIR__, 3) . '/www/pages/shopimporter_woocommerce.php';
+        }
+        $connector = Shopimporter_Woocommerce::clientForShop($this->app, $this->shopId);
+        return new BulkPull(
+            new ArticleDataRepository($this->app, $this->shopId),
+            new WooProductReader($connector->client, $connector->deliveryTimeMap()),
+            $this->articleForSku(...)
+        );
+    }
+
+    private function articleForSku(string $sku): ?array
+    {
+        $rows = $this->db->fetchAll(
+            'SELECT a.id, a.nummer, a.name_de, a.projekt FROM artikel AS a WHERE a.geloescht = 0 '
+            . 'AND EXISTS (SELECT 1 FROM artikel_onlineshops AS ao WHERE ao.artikel = a.id '
+            . 'AND ao.shop = :assigned_shop AND ao.aktiv = 1) '
+            . 'AND CAST(TRIM(COALESCE((SELECT fn.nummer FROM artikelnummer_fremdnummern AS fn '
+            . 'WHERE fn.artikel = a.id AND fn.shopid = :shop AND fn.aktiv = 1 AND fn.nummer <> \'\' '
+            . "ORDER BY fn.bezeichnung = 'SHOPID' DESC LIMIT 1), a.nummer)) AS BINARY) = CAST(:sku AS BINARY) LIMIT 2",
+            ['assigned_shop' => $this->shopId, 'shop' => $this->shopId, 'sku' => $sku]
+        );
+        if (count($rows) !== 1 || !$this->app->erp->UserProjektRecht((int) $rows[0]['projekt'])) {
+            return null;
+        }
+        return $rows[0];
+    }
+
+    private function logPullError(Throwable $error): void
+    {
+        $this->app->Container->get('Logger')->error(
+            'WooCommerce-Artikeldatenabgleich fehlgeschlagen: ' . RefundStatusService::sanitizeError($error->getMessage())
+        );
     }
 
     private function article($id)

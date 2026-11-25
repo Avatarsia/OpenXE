@@ -86,6 +86,102 @@ final class AdminView
         return $html . '</nav>';
     }
 
+    public static function pull(int $shopId, string $token, string $preview, int $page, array $data, array $groups, array $selectedGroups): string
+    {
+        $extra = ['page' => $page, 'filter' => '1', 'groups' => $selectedGroups];
+        $html = '<h2>Artikeldaten abgleichen</h2><p>W&auml;hlen Sie die Felder aus, die OpenXE aus WooCommerce &uuml;bernehmen soll. Beim Speichern werden die aktuellen Shop-Werte geladen.</p>'
+            . '<form method="get" action="index.php"><fieldset><legend>Feldgruppen</legend>';
+        foreach (['module' => 'onlineshops', 'action' => 'edit', 'id' => $shopId, 'cmd' => 'woocommerce',
+            'view' => 'pull', 'page' => $page, 'filter' => '1'] as $name => $value) {
+            $html .= self::hidden($name, $value);
+        }
+        $html .= '<div class="wc-admin-actions">';
+        foreach ($groups as $group) {
+            $html .= '<label><input type="checkbox" name="groups[]" value="' . self::e($group) . '"'
+                . (in_array($group, $selectedGroups, true) ? ' checked' : '') . '> ' . self::e($group) . '</label>';
+        }
+        $html .= '</div><p><button type="submit">Filtern</button></p></fieldset></form>';
+
+        $html .= '<form method="post" action="' . self::e(self::url($shopId, 'pull', $extra)) . '">'
+            . self::hidden('csrf_token', $token) . self::hidden('pull_preview', $preview);
+        $hasRows = $hasSelection = false;
+        foreach ($data['articles'] as $id => $article) {
+            if ($article['rows'] === []) {
+                continue;
+            }
+            $hasRows = true;
+            $label = $article['nummer'] . ' - ' . $article['name'];
+            $html .= '<fieldset><legend>' . self::e($label) . '</legend>'
+                . '<div class="wc-admin-scroll" tabindex="0" role="region" aria-label="' . self::e('Feldvergleich ' . $label) . '">'
+                . '<table class="wc-pull-table"><thead><tr><th scope="col">Feld</th><th scope="col">OpenXE</th>'
+                . '<th scope="col">WooCommerce</th><th scope="col">&Uuml;bernehmen</th></tr></thead><tbody>';
+            foreach ($article['rows'] as $row) {
+                $html .= '<tr><th scope="row">' . self::e($row['label']) . '</th><td>' . self::pullValue($row['openxe'])
+                    . '</td><td>' . self::pullValue($row['woocommerce']) . '</td><td>';
+                if ($row['pullable']) {
+                    $hasSelection = true;
+                    $html .= '<input type="checkbox" name="selection[' . (int) $id . '][]" value="' . self::e($row['key'])
+                        . '" aria-label="' . self::e($row['label'] . ' uebernehmen: ' . $label) . '">';
+                } else {
+                    $html .= self::e($row['reason']);
+                }
+                $html .= '</td></tr>';
+            }
+            $html .= '</tbody></table></div></fieldset>';
+        }
+        if ($hasSelection) {
+            $html .= '<p class="wc-admin-actions"><button type="submit" class="btnBlueNew" name="wc_action" value="apply_pull">Ausgew&auml;hlte Werte &uuml;bernehmen</button></p>';
+        }
+        $html .= '</form>';
+        if (!$hasRows) {
+            $html .= '<p>Auf dieser Seite gibt es f&uuml;r die ausgew&auml;hlten Feldgruppen keine Unterschiede.</p>';
+        }
+
+        if ($data['unmatched'] !== []) {
+            $html .= '<h3>Nicht zugeordnete WooCommerce-Produkte</h3><ul class="wc-admin-results">';
+            foreach ($data['unmatched'] as $product) {
+                $html .= '<li>' . self::e('#' . $product['id'] . ' ' . $product['name'] . ' - ' . $product['reason']) . '</li>';
+            }
+            $html .= '</ul>';
+        }
+
+        $html .= '<nav class="wc-admin-pages" aria-label="Artikelseiten">';
+        if ($page > 1) {
+            $html .= '<a href="' . self::e(self::url($shopId, 'pull', ['page' => $page - 1] + $extra)) . '">Zur&uuml;ck</a> ';
+        }
+        $html .= 'Seite ' . $page;
+        if ($data['more']) {
+            $html .= ' <a href="' . self::e(self::url($shopId, 'pull', ['page' => $page + 1] + $extra)) . '">Weiter</a>';
+        }
+        return $html . '</nav>';
+    }
+
+    public static function pullResults(int $shopId, int $page, array $selectedGroups, array $results): string
+    {
+        $html = '<h2>Artikeldaten abgleichen</h2><ul class="wc-admin-results">';
+        foreach ($results as $id => $result) {
+            $html .= '<li>OpenXE-Artikel #' . self::e($id) . ' ';
+            if (isset($result['error'])) {
+                $html .= '<span class="error" role="alert">Fehler beim Speichern. ' . self::e($result['error']) . '</span>';
+            } else {
+                $message = match (count($result)) {
+                    0 => 'Keine &Auml;nderung erforderlich.',
+                    1 => '1 Feld &uuml;bernommen.',
+                    default => count($result) . ' Felder &uuml;bernommen.',
+                };
+                $html .= '<span role="status">' . $message . '</span>';
+            }
+            $html .= '</li>';
+        }
+        return $html . '</ul><p><a href="' . self::e(self::url($shopId, 'pull',
+            ['page' => $page, 'filter' => '1', 'groups' => $selectedGroups])) . '">Vorschau neu laden</a></p>';
+    }
+
+    private static function pullValue(string $value): string
+    {
+        return $value === '' ? '<em>leer</em>' : self::e($value);
+    }
+
     private static function downloadRow(array $download)
     {
         return '<tr><td><input name="download_name[]" aria-label="Downloadname" maxlength="255" value="' . self::e($download['name']) . '"></td><td><input name="download_file[]" type="url" aria-label="Datei-URL" maxlength="2048" value="' . self::e($download['file']) . '"></td><td><button type="button" class="wc-download-remove">Entfernen</button></td></tr>';

@@ -1,9 +1,29 @@
 <?php
 // SPDX-License-Identifier: AGPL-3.0-only
 require __DIR__ . '/bootstrap.php';
+require __DIR__ . '/fixtures/bulk-pull.php';
 
 use Xentral\Components\Http\Session\Session;
 use Xentral\Components\WooCommerce\AdminPage;
+use Xentral\Components\WooCommerce\DeliveryTimeMap;
+
+final class Shopimporter_Woocommerce
+{
+    public static BulkPullClient $fixtureClient;
+    public $client;
+
+    public static function clientForShop($app, int $shopId): self
+    {
+        $connector = new self();
+        $connector->client = self::$fixtureClient;
+        return $connector;
+    }
+
+    public function deliveryTimeMap(): DeliveryTimeMap
+    {
+        return new DeliveryTimeMap(static fn () => [], '');
+    }
+}
 
 final class AdminDatabaseFake
 {
@@ -36,12 +56,15 @@ final class AdminDatabaseFake
     public function rollBack() { $this->transaction = false; }
 }
 
-function adminFixture(array $post = [], array $get = [])
+function adminFixture(array $post = [], array $get = [], $db = null, ?Session $session = null)
 {
-    $_SESSION = [];
-    $db = new AdminDatabaseFake();
-    $session = new Session();
-    $token = $session->createCsrfToken('woocommerce_admin');
+    $_SERVER['REQUEST_METHOD'] = $post === [] ? 'GET' : 'POST';
+    if ($session === null) {
+        $_SESSION = [];
+        $session = new Session();
+    }
+    $db = $db ?? new AdminDatabaseFake();
+    $token = $post['csrf_token'] ?? $session->createCsrfToken('woocommerce_admin');
     $secure = new class($get + ['article' => 9], $post + ['csrf_token' => $token]) {
         private $get; private $post;
         public function __construct($get, $post) { $this->get = $get; $this->post = $post; }
@@ -63,6 +86,50 @@ function adminFixture(array $post = [], array $get = [])
 }
 
 runTests([
+    'apply_requires_token' => static function () {
+        [$page, $db] = adminFixture(['wc_action' => 'apply_pull', 'selection' => [9 => ['shop_name']],
+            'csrf_token' => 'invalid'], ['view' => 'pull']);
+        $html = $page->render();
+        check(str_contains($html, 'Formular abgelaufen'));
+        same([], $db->writes);
+    },
+    'apply_requires_a_matching_preview' => static function () {
+        [$page, $db] = adminFixture(['wc_action' => 'apply_pull', 'selection' => [9 => ['shop_name']]],
+            ['view' => 'pull'], new BulkPullDatabase());
+        check(str_contains($page->render(), 'Vorschau erneut laden'));
+        same([], $db->writes);
+    },
+    'bulk preview filters fields and POST applies only displayed selections using fresh data' => static function () {
+        $db = new BulkPullDatabase();
+        $client = Shopimporter_Woocommerce::$fixtureClient = new BulkPullClient();
+        $client->pages[2] = $client->pages[1];
+        $client->pages[2][] = ['id' => 102, 'name' => 'Kein Zugriff', 'sku' => 'LOCAL-10'];
+        $client->pages[2][] = ['id' => 103, 'name' => 'Interne Artikelnummer', 'sku' => 'LOCAL-9'];
+        $db->articles[10]['projekt'] = 55;
+        $get = ['view' => 'pull', 'page' => '2', 'filter' => '1', 'groups' => ['SEO']];
+        [$page] = adminFixture([], $get, $db);
+        $html = $page->render();
+        check(str_contains($html, 'name="selection[9][]" value="seo_title"'));
+        check(!str_contains($html, 'value="shop_name"'));
+        check(!str_contains($html, 'name="selection[10][]"'));
+        same(2, substr_count($html, 'kein OpenXE-Artikel'));
+        same([], $db->writes);
+        preg_match('/name="pull_preview" value="([^"]+)"/', $html, $preview);
+        preg_match('/name="csrf_token" value="([^"]+)"/', $html, $token);
+        $post = ['wc_action' => 'apply_pull', 'csrf_token' => $token[1], 'pull_preview' => $preview[1]];
+        $client->pages[2][0]['meta_data'][0]['value'] = 'SEO aktuell';
+
+        [$page] = adminFixture($post + ['selection' => [9 => ['shop_name']]], $get, $db, new Session($_SESSION));
+        check(str_contains($page->render(), 'Feld war in der Vorschau nicht ausw'));
+        same([], $db->writes);
+
+        [$page] = adminFixture($post + ['selection' => [9 => ['seo_title']], 'seo_title' => 'Gefaelschter Wert'],
+            $get, $db, new Session($_SESSION));
+        check(str_contains($page->render(), '1 Feld'));
+        same('SEO aktuell', $db->articles[9]['metatitle_de']);
+        same('Alter Name', $db->articles[9]['shop_name_de']);
+        same([['products', 2, 100], ['products', 2, 100]], $client->requests);
+    },
     'CSRF rejected before any writes' => static function () {
         [$page, $db] = adminFixture(['wc_action' => 'clear_downloads', 'article' => 9, 'csrf_token' => 'invalid']);
         check(strpos($page->render(), 'Formular abgelaufen') !== false); same([], $db->writes);
