@@ -1213,6 +1213,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     return 'success';
   }
 
+  public static function clientForShop($app, int $shopId): Shopimporter_Woocommerce
+  {
+    $connector = new self($app);
+    $connector->getKonfig($shopId, []);
+    return $connector;
+  }
+
   /**
    * This is called by class.remote.php, initializes some class variables from the DB
    * @param  [type] $shopid [description]
