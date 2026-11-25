@@ -173,6 +173,25 @@
     }
 
     $(function () {
+        $(document).on('woocommerce:article-overrides-saved', function (event, values) {
+            const form = document.forms.namedItem('eprooform');
+            if (!form || !values) {
+                return;
+            }
+            for (const name of ['pseudopreis', 'pseudolager', 'restmenge', 'lieferzeitmanuell', 'autolagerlampe']) {
+                const original = form.elements.namedItem(name);
+                if (!original || !Object.prototype.hasOwnProperty.call(values, name)) {
+                    continue;
+                }
+                if (original.type === 'checkbox') {
+                    original.checked = String(values[name]) === '1';
+                } else {
+                    original.value = values[name];
+                }
+                $(original).trigger('change');
+            }
+        });
+
         $('.wc-article-tab').each(function () {
             const form = this.closest('form');
             if (!form) {
@@ -186,6 +205,14 @@
                 fields.set(field.dataset.wooKey, field);
             }
             const tab = $(this);
+            tab.find('[data-woo-shop]').on('change', function () {
+                const url = new URL(tab.attr('data-compare-url'), document.baseURI);
+                url.searchParams.delete('cmd');
+                url.searchParams.delete('shop');
+                url.searchParams.set('woo_shop', this.value);
+                url.hash = 'tabs-6';
+                window.location.assign(url.href);
+            });
             const status = tab.find('[data-woo-status]');
             const results = tab.find('[data-woo-results]');
             tab.find('[data-woo-compare]').on('click', function () {

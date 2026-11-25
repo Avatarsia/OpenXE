@@ -7384,7 +7384,7 @@ class Artikel extends GenArtikel {
       }
       if($cmd === 'saveonlineshops')
       {
-        $sid = $this->app->Secure->GetPOST('sid');
+        $sid = (int)$this->app->Secure->GetPOST('sid');
         $felder = array(
         'lagerkorrekturwert',
         'pseudolager',
@@ -7414,19 +7414,20 @@ class Artikel extends GenArtikel {
         }
         if(!$sid)
         {
-          $this->app->DB->Insert("INSERT INTO artikel_onlineshops (artikel,autolagerlampe,ausartikel) VALUES ('$id',0,1)");
+          $this->app->DB->Insert("INSERT INTO artikel_onlineshops (artikel,autolagerlampe,ausartikel,pseudolager,lieferzeitmanuell,last_article_hash) VALUES ('$id',0,1,'','','')");
           $sid = $this->app->DB->GetInsertID();
         }
         if($sid)
         {
-          
-          $this->app->DB->Update("UPDATE artikel_onlineshops SET shop = '$shop' WHERE id = '$sid' LIMIT 1");
-          $inhalt = null;
-          foreach($felder as $feld)
-          {
-            $inhalt[] = " $feld = '".$this->app->Secure->GetPOST($feld)."'";
+          try {
+            $articleFields = $this->saveOnlineShopFields((int)$id, (int)$sid, $shop, $felder);
+          } catch (Throwable $error) {
+            $this->app->Container->get('Logger')->error('Artikel-Shop-Zuordnung nicht gespeichert: '
+              . RefundStatusService::sanitizeError($error->getMessage()));
+            echo json_encode(['status' => 0, 'Error' => 'Die Shop-Zuordnung konnte nicht gespeichert werden.']);
+            $this->app->ExitXentral();
+            return;
           }
-          $this->app->DB->Update('UPDATE artikel_onlineshops SET '.implode(', ', $inhalt)." WHERE id = '$sid' LIMIT 1");
           if(!$this->app->DB->error())
           {
             $shop = $this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
@@ -7440,7 +7441,7 @@ class Artikel extends GenArtikel {
               $this->app->DB->Update("UPDATE artikel SET shop3 = 0 WHERE id = '$id' AND shop3 = '$shop' LIMIT 1");
             }
           }
-          echo json_encode(array('status'=>1));
+          echo json_encode(['status' => 1, 'articleFields' => $articleFields], JSON_INVALID_UTF8_SUBSTITUTE);
           $this->app->ExitXentral();
         }
         echo json_encode(array('status'=>0,'Error'=>'Der Eintrag konnte nicht angelegt werden'));
@@ -7711,7 +7712,7 @@ class Artikel extends GenArtikel {
     $this->app->Tpl->Set('KURZTEXT_DE_ANZEIGE','<textarea readonly rows="2" cols="70" readonly style="background-color:#eee; border-color:#ddd;">'.$kurztext_de_anzeige.'</textarea>');
     $this->app->Tpl->Set('ARTIKELBESCHREIBUNG_DE_ANZEIGE','<textarea style="background-color:#eee; border-color:#ddd;" readonly rows="5" cols="70" style="color:grey" name="artikelbeschreibung_de_anzeige" id="artikelbeschreibung_de_anzeige">'.$artikelbeschreibung_de_anzeige.'</textarea>');
 
-    $this->prepareWooCommerceArticleTab((int)$id);
+    $wooSubmitted = $this->prepareWooCommerceArticleTab((int)$id);
     parent::ArtikelEdit();
 
     /* anzeige formular */ 
@@ -7751,7 +7752,9 @@ class Artikel extends GenArtikel {
       return;
     }
 
-    $this->app->erp->MessageHandlerStandardForm();
+    if (!$wooSubmitted) {
+      $this->app->erp->MessageHandlerStandardForm();
+    }
 
     /* sperrmeldung */
     $intern_gesperrt = $this->app->DB->Select("SELECT intern_gesperrt FROM artikel WHERE id='$id' LIMIT 1");
@@ -7771,53 +7774,104 @@ class Artikel extends GenArtikel {
 
   }
 
-  private function prepareWooCommerceArticleTab(int $articleId): void
+  private function saveOnlineShopFields(int $articleId, int $assignmentId, int $shopId, array $fields): array
+  {
+    $db = $this->app->DB;
+    $isWooCommerce = $db->Select("SELECT id FROM shopexport WHERE id = '$shopId' AND modulename = 'shopimporter_woocommerce' LIMIT 1");
+    $sharedFields = $isWooCommerce ? ['pseudopreis', 'pseudolager', 'restmenge', 'lieferzeitmanuell', 'autolagerlampe'] : [];
+    $assignments = ["ao.shop = '$shopId'"];
+    foreach ($fields as $field) {
+      $value = $this->app->Secure->GetPOST($field);
+      $shared = in_array($field, $sharedFields, true);
+      if ($shared && $field === 'pseudopreis') {
+        $value = $value === '' ? '0' : $this->app->erp->ReplaceBetrag(1, $value, 1);
+      }
+      $assignments[] = "ao.$field = '$value'";
+      if ($shared) {
+        $assignments[] = "a.$field = '$value'";
+      }
+    }
+    // Both copies of a WooCommerce override are written in a single statement.
+    $join = $isWooCommerce ? ' JOIN artikel a ON a.id = ao.artikel' : '';
+    if (!$db->Update('UPDATE artikel_onlineshops ao' . $join . ' SET ' . implode(', ', $assignments)
+      . " WHERE ao.id = '$assignmentId' AND ao.artikel = '$articleId'")) {
+      throw new RuntimeException($db->error() ?: 'UPDATE artikel_onlineshops fehlgeschlagen.');
+    }
+    return $sharedFields ? ($db->SelectRow('SELECT ' . implode(', ', $sharedFields)
+      . " FROM artikel WHERE id = '$articleId' LIMIT 1") ?: []) : [];
+  }
+
+  private function prepareWooCommerceArticleTab(int $articleId): bool
   {
     $this->app->Tpl->Set('WOOCOMMERCETABOPEN', '<!--');
     $this->app->Tpl->Set('WOOCOMMERCETABCLOSE', '-->');
+    $secure = $this->app->Secure;
+    $postedShop = $secure->GetPOST('woo_shop', '', '', 1);
+    $postedToken = $secure->GetPOST('woo_csrf_token', '', '', 1);
+    $draft = $secure->GetPOST('woo', '', '', 1);
+    $submitted = $secure->GetPOST(FormActionHandler::eventName('artikel')) === 'go'
+      && ($postedShop !== '' || $postedToken !== '' || $draft !== '');
     try {
       $tab = new ArticleTab($this->app);
       $shops = $tab->shopsFor($articleId);
-      if (!$shops) {
-        return;
-      }
+      $shopIds = array_map('intval', array_column($shops, 'id'));
+      $requestedShop = (int)filter_var($secure->GetGET('woo_shop'), FILTER_VALIDATE_INT);
+      $shopId = in_array($requestedShop, $shopIds, true) ? $requestedShop : ($shopIds[0] ?? 0);
 
-      $shopId = (int)$shops[0]['id'];
-      $session = $this->app->Container->get('Session');
-      $postedToken = $this->app->Secure->GetPOST('woo_csrf_token', '', '', 1);
-      $postedShop = $this->app->Secure->GetPOST('woo_shop', '', '', 1);
-      if ($this->app->Secure->GetPOST('speichern') !== '' && $postedShop !== '') {
-        $post = ['woo_csrf_token' => $postedToken, 'woo' => $this->app->Secure->GetPOST('woo', '', '', 1)];
-        // The form handler redirects immediately after a successful article update.
-        $this->app->FormHandler->afterEditSave('artikel', function (int $savedId) use ($tab, $post, $postedShop): ?string {
-          try {
-            $tab->saveExtras($savedId, is_string($postedShop) ? (int)$postedShop : 0, $post);
-            return null;
-          } catch (Throwable $error) {
-            $message = RefundStatusService::sanitizeError($error->getMessage());
-            $this->app->Container->get('Logger')->error('WooCommerce-Artikeldaten nicht gespeichert: ' . $message);
-            if (!$error instanceof InvalidArgumentException && !$error instanceof RuntimeException) {
-              $message = 'Bitte wenden Sie sich an die Administration.';
+      if ($submitted) {
+        $post = ['woo_csrf_token' => $postedToken, 'woo' => $draft];
+        $postedShopId = (int)filter_var($postedShop, FILTER_VALIDATE_INT);
+        if (in_array($postedShopId, $shopIds, true)) {
+          $shopId = $postedShopId;
+        }
+        try {
+          $before = $tab->validateExtras($articleId, $postedShopId, $post);
+          // The form handler redirects immediately after a successful article update.
+          $this->app->FormHandler->afterEditSave('artikel', function (int $savedId) use ($tab, $post, $shopId, $before): ?string {
+            try {
+              $tab->saveExtras($savedId, $shopId, $post, $before);
+              return null;
+            } catch (Throwable $error) {
+              $this->app->Container->get('Logger')->error('WooCommerce-Artikeldaten nicht gespeichert: '
+                . RefundStatusService::sanitizeError($error->getMessage()));
+              return '<div class="error">Artikel gespeichert. WooCommerce-Zusatzdaten konnten nicht gespeichert werden.</div>';
             }
-            return '<div class="error">Artikel gespeichert. WooCommerce-Zusatzdaten konnten nicht gespeichert werden. '
-              . AdminView::e($message) . '</div>';
-          }
-        });
+          }, ['woo_shop' => $shopId]);
+        } catch (Throwable $error) {
+          $message = RefundStatusService::sanitizeError($error->getMessage());
+          $this->app->Container->get('Logger')->error('WooCommerce-Artikelformular abgelehnt: ' . $message);
+          // WidgetArtikel can allocate an article number before FormActionHandler::Edit().
+          $secure->POST['speichern'] = '';
+          $this->app->FormHandler->rejectEditSave('artikel', '<div class="error">Artikel nicht gespeichert. '
+            . AdminView::e($error instanceof InvalidArgumentException || $error instanceof DomainException
+              ? $message : 'WooCommerce-Artikeldaten konnten nicht validiert werden.') . '</div>');
+        }
       }
 
-      $token = $postedToken;
-      if (!is_string($token) || !$session->isCsrfTokenValid('woocommerce_admin', $token)) {
-        $token = $session->createCsrfToken('woocommerce_admin');
-        SessionHandler::commitSession($session);
+      if ($shopId > 0) {
+        $session = $this->app->Container->get('Session');
+        $token = $postedToken;
+        if (!is_string($token) || !$session->isCsrfTokenValid('woocommerce_admin', $token)) {
+          $token = $session->createCsrfToken('woocommerce_admin');
+          SessionHandler::commitSession($session);
+        }
+        $this->app->Tpl->Set('WOOCOMMERCETAB', $tab->render($articleId, $shopId, $token,
+          $submitted && is_array($draft) ? $draft : []));
+        $this->app->Tpl->Set('WOOCOMMERCETABOPEN', '');
+        $this->app->Tpl->Set('WOOCOMMERCETABCLOSE', '');
       }
-      $this->app->Tpl->Set('WOOCOMMERCETAB', $tab->render($articleId, $shopId, $token));
-      $this->app->Tpl->Set('WOOCOMMERCETABOPEN', '');
-      $this->app->Tpl->Set('WOOCOMMERCETABCLOSE', '');
     } catch (Throwable $error) {
       $this->app->Container->get('Logger')->error('WooCommerce-Artikelreiter fehlgeschlagen: '
         . RefundStatusService::sanitizeError($error->getMessage()));
-      $this->app->Tpl->Add('MESSAGE', '<div class="error">WooCommerce-Artikeldaten konnten nicht geladen werden.</div>');
+      $notice = '<div class="error">WooCommerce-Artikeldaten konnten nicht geladen werden.</div>';
+      if ($submitted) {
+        $secure->POST['speichern'] = '';
+        $this->app->FormHandler->rejectEditSave('artikel', $notice);
+      } else {
+        $this->app->Tpl->Add('MESSAGE', $notice);
+      }
     }
+    return $submitted;
   }
 
   public function ArtikelEtiketten()

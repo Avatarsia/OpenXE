@@ -43,9 +43,20 @@ final class ArticleDataDatabase
                 && $this->override['aktiv'] === 1 && $this->override['ausartikel'] === 0 ? $this->override : false;
         }
         if (str_contains($sql, 'FROM verkaufspreise')) {
-            check(str_contains($sql, 'ab_menge = 1') && str_contains($sql, 'ORDER BY v.preis DESC'));
-            $active = array_filter($this->prices, static fn (array $price): bool => !$price['expired']);
-            usort($active, static fn (array $left, array $right): int => $right['preis'] <=> $left['preis']);
+            $group = $parameters['group'] ?? null;
+            if ($group !== null) {
+                check(str_contains($sql, "v.art = 'Gruppe'") && str_contains($sql, 'v.ab_menge <= 1'));
+                check(str_contains($sql, 'v.gueltig_ab <= CURDATE()') && str_contains($sql, 'v.gueltig_bis >= CURDATE()'));
+                check(str_contains($sql, 'ORDER BY v.ab_menge DESC, v.preis ASC'));
+            } else {
+                check(str_contains($sql, 'ab_menge = 1') && str_contains($sql, 'ORDER BY v.preis DESC'));
+            }
+            $active = array_filter($this->prices, static fn (array $price): bool =>
+                !$price['expired'] && ($price['group'] ?? null) === $group
+            );
+            usort($active, static fn (array $left, array $right): int =>
+                $group !== null ? $left['preis'] <=> $right['preis'] : $right['preis'] <=> $left['preis']
+            );
             return $active[0] ?? false;
         }
         throw new RuntimeException('Unexpected row query: ' . $sql);
@@ -84,7 +95,9 @@ final class ArticleDataDatabase
             $this->prices[$parameters['id']]['expired'] = true;
         } elseif (str_starts_with($sql, 'INSERT INTO verkaufspreise')) {
             $id = count($this->prices) + 1;
-            $this->prices[$id] = ['id' => $id, 'preis' => $parameters['value'], 'waehrung' => $parameters['currency'], 'expired' => false];
+            $this->prices[$id] = ['id' => $id, 'preis' => $parameters['value'], 'waehrung' => $parameters['currency'],
+                'expired' => false, 'group' => $parameters['group']];
+            same($parameters['group'] === null ? 'Kunde' : 'Gruppe', $parameters['type']);
         } elseif (str_starts_with($sql, 'INSERT INTO konfiguration')) {
             if (!str_contains($sql, 'wert = VALUES(wert)')) {
                 $this->config[$parameters['name']] ??= '[]';
@@ -161,20 +174,18 @@ runTests([
         $db->override['ausartikel'] = 1;
         same(['value' => '10.00', 'source' => 'artikel'], $repo->load(9)['pseudo_price']);
     },
-    'load_uses_group_price_when_shop_has_group' => static function () {
+    'group_price_replaces_export_row_without_touching_standard_price' => static function () {
         $db = new ArticleDataDatabase();
         $db->group = 7;
         $db->prices[1] = ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false];
+        $db->prices[2] = ['id' => 2, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => 7];
         $repo = articleRepository($db);
         same(['value' => '24.00', 'source' => 'group_price'], $repo->load(9)['price_net']);
-        try {
-            $repo->apply(9, ['shop_name' => 'Changed', 'price_net' => '20'], 'pull');
-            throw new LogicException('Group price change was accepted.');
-        } catch (RuntimeException $error) {
-            check(str_contains($error->getMessage(), 'Gruppenpreis'));
-        }
-        check(!isset($db->article['shop_name_de']));
-        same([], $db->config);
+        same(['price_net' => ['old' => '24.00', 'new' => '20']], $repo->apply(9, ['price_net' => '20'], 'pull'));
+        same(false, $db->prices[1]['expired']);
+        same(true, $db->prices[2]['expired']);
+        same(7, $db->prices[3]['group']);
+        same(['value' => '20', 'source' => 'group_price'], $repo->load(9)['price_net']);
     },
     'inactive_group_uses_the_editable_standard_price' => static function () {
         $db = new ArticleDataDatabase();
@@ -189,7 +200,20 @@ runTests([
     'active_group_without_standard_row_has_no_export_price' => static function () {
         $db = new ArticleDataDatabase();
         $db->group = 7;
-        same('', articleRepository($db)->load(9)['price_net']['value']);
+        $db->prices[1] = ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => 7];
+        $repo = articleRepository($db);
+        $stored = $repo->load(9);
+        same(['value' => '', 'source' => 'price_without_standard'], $stored['price_net']);
+        $diff = array_column(FieldDiff::compare($stored, ['price_net' => '19']), null, 'key');
+        same(false, $diff['price_net']['pullable']);
+        same('Export sendet ohne Standardpreis keinen Preis', $diff['price_net']['reason']);
+        try {
+            $repo->apply(9, ['price_net' => '19'], 'pull');
+            throw new LogicException('Price change without a standard row was accepted.');
+        } catch (InvalidArgumentException $error) {
+            same('Export sendet ohne Standardpreis keinen Preis', $error->getMessage());
+        }
+        same(0, $db->writes);
         same(0, $db->groupPriceCalls);
     },
     'apply_writes_article_and_shop_override_identically' => static function () {

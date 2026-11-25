@@ -47,6 +47,9 @@ final class ArticleTabDatabase
     public array $price = ['id' => 4, 'preis' => '10.00', 'waehrung' => 'EUR'];
     private bool $transaction = false;
     public int $writes = 0;
+    public int $group = 0;
+    public bool $failWrites = false;
+    public array $errors = [];
 
     public function fetchAll(string $sql, array $params): array
     {
@@ -67,12 +70,15 @@ final class ArticleTabDatabase
 
     public function fetchValue(string $sql, array $params)
     {
-        return $this->config[$params['name'] ?? ''] ?? false;
+        return str_contains($sql, 'FROM shopexport') ? $this->group : ($this->config[$params['name'] ?? ''] ?? false);
     }
 
     public function perform(string $sql, array $params): void
     {
         $this->writes++;
+        if ($this->failWrites) {
+            throw new RuntimeException('Synthetic extras write failure');
+        }
         if (str_starts_with($sql, 'UPDATE artikel_onlineshops SET ')) {
             same(6, $params['id']);
             preg_match('/SET \x60([a-z_]+)\x60/', $sql, $match);
@@ -109,16 +115,31 @@ function articleTabFixture(): array
                 return match ($service) {
                     'Database' => $this->db,
                     'Session' => $this->session,
-                    'Logger' => new class {
-                        public function error(string $message): void {}
+                    'Logger' => new class ($this->db) {
+                        public function __construct(private ArticleTabDatabase $db) {}
+                        public function error(string $message): void { $this->db->errors[] = $message; }
                     },
                 };
             }
         },
+        'DB' => new class {
+            public function Select(string $sql): bool { return false; }
+        },
         'erp' => new class {
+            public function ReplaceBetrag(int $db, string $value, int $fromForm): string
+            {
+                same([1, 1], [$db, $fromForm]);
+                return str_replace(',', '.', $value);
+            }
             public function UserProjektRecht(int $project): bool { return $project === 0; }
+            public function GetVerkaufspreisGruppe(int $article, int $quantity, int $group): string { return '10'; }
         },
         'Secure' => new class {
+            public array $get = ['module' => 'artikel', 'id' => 9];
+            public array $POST = [];
+            public function GetGET(string $name) { return $this->get[$name] ?? ''; }
+            public function GetPOST(string $name, ...$args) { return $this->POST[$name] ?? ''; }
+            public function RuleCheck(string $value, string $rule): bool { return $rule === 'notempty' && $value !== ''; }
             public function CleanString(string $html, string $rule, int $sqlcheckoff): string
             {
                 same(['nojs', 1], [$rule, $sqlcheckoff]);
@@ -128,12 +149,157 @@ function articleTabFixture(): array
         'Tpl' => new class {
             public array $values = [];
             public function Set(string $name, string $value): void { $this->values[$name] = $value; }
+            public function Add(string $name, string $value): void { $this->values[$name] = ($this->values[$name] ?? '') . $value; }
+            public function Parse(string $target, string $template): void { $this->values[$target] = $template; }
         },
     ];
+    $app->FormHandler = new FormHandler($app);
     return [new ArticleTab($app), $db, $token, $app];
 }
 
+function articleTabPage(object $app): Artikel
+{
+    $page = (new ReflectionClass(Artikel::class))->newInstanceWithoutConstructor();
+    $page->app = $app;
+    return $page;
+}
+
+function prepareArticleTab(object $app)
+{
+    $page = articleTabPage($app);
+    return (new ReflectionMethod($page, 'prepareWooCommerceArticleTab'))->invoke($page, 9);
+}
+
+function submitArticleTab(object $app, $shop, string $token, array $draft): void
+{
+    $app->Secure->POST = ['phpwf_formhandlerevent_YXJ0aWtlbA==' => 'go', 'speichern' => 'Speichern',
+        'woo_shop' => $shop, 'woo_csrf_token' => $token, 'woo' => $draft];
+}
+
 runTests([
+    'selected_shop_drives_render_compare_and_post' => static function () {
+        [, $db, , $app] = articleTabFixture();
+        $db->shops[] = ['id' => 8, 'bezeichnung' => 'Shop B', 'projekt' => 0, 'article_project' => 0];
+        $db->shops[] = ['id' => 11, 'bezeichnung' => 'Forbidden', 'projekt' => 42, 'article_project' => 0];
+        $app->Secure->get['woo_shop'] = '8';
+        prepareArticleTab($app);
+        $html = $app->Tpl->values['WOOCOMMERCETAB'];
+        check(str_contains($html, '<select') && str_contains($html, 'value="8" selected'));
+        check(str_contains($html, 'name="woo_shop" value="8"'));
+        check(str_contains($html, '&amp;shop=8'));
+        check(!str_contains($html, 'Forbidden'));
+        $app->Secure->get['woo_shop'] = '11';
+        prepareArticleTab($app);
+        check(str_contains($app->Tpl->values['WOOCOMMERCETAB'], 'name="woo_shop" value="5"'));
+    },
+    'popup_saves_woocommerce_values_in_both_tables_and_returns_stored_fields' => static function () {
+        [, , , $app] = articleTabFixture();
+        $columns = ['pseudopreis' => '20.50', 'pseudolager' => '4', 'restmenge' => '1',
+            'lieferzeitmanuell' => '2 Tage', 'autolagerlampe' => '1'];
+        $app->Secure->POST = $columns + ['aktiv' => '1'];
+        $app->DB = new class ($columns) {
+            public array $updates = [];
+            public bool $woo = true;
+            public function __construct(private array $columns) {}
+            public function Select(string $sql) { check(str_contains($sql, 'shopimporter_woocommerce')); return $this->woo ? '5' : ''; }
+            public function Update(string $sql): bool { $this->updates[] = $sql; return true; }
+            public function SelectRow(string $sql): array { return $this->columns; }
+        };
+        $page = articleTabPage($app);
+        $save = new ReflectionMethod($page, 'saveOnlineShopFields');
+        same($columns, $save->invoke($page, 9, 6, 5, [...array_keys($columns), 'aktiv']));
+        foreach ($columns as $column => $value) {
+            check(str_contains($app->DB->updates[0], "ao.$column = '$value'"));
+            check(str_contains($app->DB->updates[0], "a.$column = '$value'"));
+        }
+        check(!str_contains($app->DB->updates[0], 'a.aktiv ='));
+        $app->DB->woo = false;
+        same([], $save->invoke($page, 9, 6, 5, [...array_keys($columns), 'aktiv']));
+        check(!str_contains($app->DB->updates[1], 'JOIN artikel'));
+    },
+    'save_extras_leaves_override_on_unrelated_article_save' => static function () {
+        [$tab, $db, $token] = articleTabFixture();
+        $post = ['woo_csrf_token' => $token, 'woo' => ['on_request' => '1']];
+        $snapshot = $db->article;
+        $db->article['name_de'] = 'Unrelated change';
+        $result = $tab->saveExtras(9, 5, $post, $snapshot);
+        same('12.00', $db->override['pseudopreis']);
+        same(['on_request'], array_keys($result));
+    },
+    'invalid_extra_rejects_legacy_edit_before_any_update' => static function () {
+        $template = file_get_contents(dirname(__DIR__, 2) . '/www/widgets/templates/_gen/artikel.tpl');
+        $messagePosition = strpos($template, '[MESSAGE]');
+        check($messagePosition !== false && $messagePosition < strpos($template, '<div id="tabs">'),
+            'Save errors must be visible on every tab');
+        foreach ([
+            ['5', true, ['price_net' => 'invalid'], 'price_net'],
+            ['5', true, ['on_request' => 'maybe'], 'on_request'],
+            ['5', true, ['price_net' => '10'], 'delivery_time', ['lieferzeitmanuell' => str_repeat('a', 256)]],
+            ['5', true, ['price_net' => '10'], 'delivery_time', ['lieferzeitmanuell' => '2 Tage' . str_repeat(' ', 256)]],
+            ['9', true, ['price_net' => '10'], 'nicht zugeordnet'],
+            ['5', false, ['price_net' => '10'], 'Formular abgelaufen'],
+        ] as $scenario) {
+            [$shop, $validToken, $draft, $error] = $scenario;
+            [, $db, $token, $app] = articleTabFixture();
+            submitArticleTab($app, $shop, $validToken ? $token : 'invalid', $draft);
+            $app->Secure->POST += $scenario[4] ?? [];
+            check(prepareArticleTab($app), 'WooCommerce edit must keep the rendered form on this request');
+            same('', $app->Secure->GetPOST('speichern'), 'Reject submit before WidgetArtikel allocates a number');
+            $form = $app->FormHandler->CreateNew('artikel');
+            $form->UseTable('artikel');
+            $form->UseTemplate('artikel.tpl', 'PAGE');
+            $form->Edit();
+            same(0, $db->writes);
+            check(str_contains($app->Tpl->values['MESSAGE'] ?? '', $error));
+            same('artikel.tpl', $app->Tpl->values['PAGE']);
+        }
+    },
+    'failed_extras_write_is_logged_and_returns_an_error_notice' => static function () {
+        [, $db, $token, $app] = articleTabFixture();
+        submitArticleTab($app, '5', $token, ['price_net' => '19,99']);
+        check(prepareArticleTab($app));
+        same(0, $db->writes);
+        $form = $app->FormHandler->CreateNew('artikel');
+        $callback = (new ReflectionProperty($form, 'afterEditSave'))->getValue($form);
+        $db->failWrites = true;
+        $notice = $callback(9);
+        check(str_contains($notice, 'WooCommerce-Zusatzdaten konnten nicht gespeichert werden'));
+        same(['WooCommerce-Artikeldaten nicht gespeichert: Synthetic extras write failure'], $db->errors);
+        same('10.00', $db->price['preis']);
+    },
+    'rejected_submissions_render_the_post_draft' => static function () {
+        foreach (['19,99', '<invalid>'] as $draftPrice) {
+            [, $db, $token, $app] = articleTabFixture();
+            submitArticleTab($app, '5', $token, ['price_net' => $draftPrice, 'on_request' => '1', 'sku' => 'bad']);
+            check(prepareArticleTab($app), 'WooCommerce draft must survive a mandatory field failure');
+            $form = $app->FormHandler->CreateNew('artikel');
+            $form->UseTemplate('artikel.tpl', 'PAGE');
+            $form->NewField(new class {
+                public string $name = 'name_de';
+                public string $value = '';
+                public function Get(): string { return $this->value; }
+                public function GetClose(): string { return ''; }
+            });
+            $form->AddMandatory('name_de', 'notempty', 'Pflichtfeld!', 'MSGNAME_DE');
+            $form->Edit();
+            same('artikel.tpl', $app->Tpl->values['PAGE']);
+            same(0, $db->writes);
+            check(str_contains($app->Tpl->values['MSGNAME_DE'], 'Pflichtfeld!'));
+            $html = $app->Tpl->values['WOOCOMMERCETAB'];
+            check(preg_match('/name="woo\[price_net\]"[^>]+value="' . preg_quote(htmlspecialchars($draftPrice), '/') . '"/', $html) === 1);
+            check(preg_match('/data-woo-key="on_request"[^>]+ checked/', $html) === 1);
+            check(str_contains($html, 'value="LOCAL-9"') && !str_contains($html, 'value="bad"'));
+        }
+    },
+    'price_control_is_editable_with_group_and_readonly_without_standard' => static function () {
+        [$tab, $db, $token] = articleTabFixture();
+        $db->group = 7;
+        check(preg_match('/data-woo-key="price_net"[^>]+readonly/', $tab->render(9, 5, $token)) === 0);
+        $db->price = [];
+        $html = $tab->render(9, 5, $token);
+        check(preg_match('/data-woo-key="price_net"[^>]+readonly/', $html) === 1);
+        check(str_contains($html, 'Export sendet ohne Standardpreis keinen Preis'));
+    },
     'tab_hidden_without_woocommerce_shop' => static function () {
         [$tab, $db, , $app] = articleTabFixture();
         same(5, (int) $tab->shopsFor(9)[0]['id']);
@@ -192,14 +358,17 @@ runTests([
         try {
             $tab->saveExtras(9, 5, ['woo_csrf_token' => 'invalid', 'woo' => ['price_net' => '19.99']]);
             check(false, 'Invalid token accepted');
-        } catch (RuntimeException $error) {
+        } catch (DomainException $error) {
             check(str_contains($error->getMessage(), 'Formular abgelaufen'));
         }
         same(0, $db->writes);
     },
     'save_extras_syncs_shop_override_to_article_value' => static function () {
         [$tab, $db, $token] = articleTabFixture();
-        $result = $tab->saveExtras(9, 5, ['woo_csrf_token' => $token, 'woo' => ['pseudo_price' => '99']]);
+        $db->article['pseudopreis'] = '10.00';
+        $snapshot = $db->article;
+        $db->article['pseudopreis'] = '15.00';
+        $result = $tab->saveExtras(9, 5, ['woo_csrf_token' => $token, 'woo' => ['pseudo_price' => '99']], $snapshot);
         same('15', $db->override['pseudopreis']);
         same(['old' => '12.00', 'new' => '15'], $result['pseudo_price']);
     },

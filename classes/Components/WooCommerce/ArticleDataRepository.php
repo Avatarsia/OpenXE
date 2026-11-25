@@ -9,6 +9,8 @@ use Throwable;
 
 final class ArticleDataRepository
 {
+    public const PRICE_WITHOUT_STANDARD = 'Export sendet ohne Standardpreis keinen Preis';
+
     private const CONFIG_LIMIT = 65000;
     private const LOG_LIMIT = 500;
 
@@ -40,7 +42,12 @@ final class ArticleDataRepository
         return $this->loadState($articleId, false)['fields'];
     }
 
-    public function apply(int $articleId, array $values, string $origin): array
+    public function validate(array $values): void
+    {
+        $this->prepareUpdates($values, true);
+    }
+
+    private function prepareUpdates(array $values, bool $checkOriginalLength = false): array
     {
         $updates = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
@@ -49,11 +56,18 @@ final class ArticleDataRepository
                 continue;
             }
             $new = $this->valueForStorage($key, $values[$key]);
-            $this->validateTextLength($key, $new);
+            // The legacy widget writes its own input before the repository normalizes it.
+            $valueForLength = $checkOriginalLength && is_string($values[$key]) ? $values[$key] : $new;
+            $this->validateTextLength($key, $valueForLength);
             [$storage, $column] = array_pad(explode(':', $field['storage'], 2), 2, '');
             $updates[$key] = [$new, $storage, $column];
         }
+        return $updates;
+    }
 
+    public function apply(int $articleId, array $values, string $origin): array
+    {
+        $updates = $this->prepareUpdates($values);
         $ownTransaction = !$this->database->inTransaction();
         if ($ownTransaction) {
             $this->database->beginTransaction();
@@ -74,10 +88,10 @@ final class ArticleDataRepository
                 }
 
                 if ($storage === 'price') {
-                    if ($state['usesGroupPrice']) {
-                        throw new RuntimeException('Der Gruppenpreis des Shops kann hier nicht geaendert werden.');
+                    if ($state['fields'][$key]['source'] === 'price_without_standard') {
+                        throw new InvalidArgumentException(self::PRICE_WITHOUT_STANDARD);
                     }
-                    $this->writeStandardPrice($articleId, $state['price'], $new);
+                    $this->writePrice($articleId, $state['price'], $new, $state['priceGroup']);
                     $audit[] = ['field' => $key, 'target' => 'price', 'old' => $effective, 'new' => $new];
                 } elseif ($storage === 'onrequest') {
                     $name = $this->articleConfigKey($articleId);
@@ -144,17 +158,26 @@ final class ArticleDataRepository
             . ' WHERE s.id = :shop LIMIT 1' . $lockSql,
             ['shop' => $this->shopId]
         );
-        $usesGroupPrice = $group > 0 && method_exists($this->app->erp, 'GetVerkaufspreisGruppe');
+        $group = method_exists($this->app->erp, 'GetVerkaufspreisGruppe') ? $group : 0;
         $price = $this->standardPrice($articleId, $lock);
-        $hasGroupPrice = $price !== [] && $usesGroupPrice;
-        $priceValue = $hasGroupPrice ? $this->app->erp->GetVerkaufspreisGruppe($articleId, 1, $group) : ($price['preis'] ?? '');
+        $priceSource = 'price';
+        $priceValue = $price['preis'] ?? '';
+        if ($group > 0) {
+            if ($price === []) {
+                $priceSource = 'price_without_standard';
+            } else {
+                $priceSource = 'group_price';
+                $price = $this->groupPrice($articleId, $group, $lock);
+                $priceValue = $price['preis'] ?? $this->app->erp->GetVerkaufspreisGruppe($articleId, 1, $group);
+            }
+        }
         $config = $this->readConfig($this->articleConfigKey($articleId));
 
         $fields = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
             [$storage, $column] = array_pad(explode(':', $field['storage'], 2), 2, '');
             [$value, $source] = match ($storage) {
-                'price' => [$priceValue, $hasGroupPrice ? 'group_price' : 'price'],
+                'price' => [$priceValue, $priceSource],
                 'foreign_number' => [$sku, 'foreign_number'],
                 'onrequest' => [($config['onRequest'] ?? false) === true ? '1' : '0', 'onrequest'],
                 'shop' => $override ? [$override[$column] ?? '', 'shop'] : [$article[$column] ?? '', 'artikel'],
@@ -164,7 +187,7 @@ final class ArticleDataRepository
         }
 
         return ['fields' => $fields, 'article' => $article, 'override' => $override,
-            'price' => $price, 'usesGroupPrice' => $usesGroupPrice];
+            'price' => $price, 'priceGroup' => $group];
     }
 
     private function valueForStorage(string $key, $input): string
@@ -225,9 +248,22 @@ final class ArticleDataRepository
         ) ?: [];
     }
 
-    private function writeStandardPrice(int $articleId, array $old, string $value): void
+    private function groupPrice(int $articleId, int $group, bool $lock): array
     {
-        // The legacy price helper uses another connection and selects customer rows by different criteria.
+        // Match GetVerkaufspreisGruppe at quantity 1, including legacy lower quantity tiers.
+        return $this->database->fetchRow(
+            'SELECT v.id, v.preis, v.waehrung FROM verkaufspreise AS v'
+            . " WHERE v.artikel = :article AND v.gruppe = :group AND v.art = 'Gruppe'"
+            . ' AND v.ab_menge <= 1 AND v.ab_menge > -1'
+            . " AND (v.gueltig_bis >= CURDATE() OR IFNULL(v.gueltig_bis, '0000-00-00') = '0000-00-00')"
+            . " AND (v.gueltig_ab <= CURDATE() OR IFNULL(v.gueltig_ab, '0000-00-00') = '0000-00-00')"
+            . ' ORDER BY v.ab_menge DESC, v.preis ASC LIMIT 1' . ($lock ? ' FOR UPDATE' : ''),
+            ['article' => $articleId, 'group' => $group]
+        ) ?: [];
+    }
+
+    private function writePrice(int $articleId, array $old, string $value, int $group): void
+    {
         if ($old) {
             $this->database->perform(
                 'UPDATE verkaufspreise SET gueltig_bis = DATE_SUB(CURDATE(), INTERVAL 1 DAY), apichange = 1 WHERE id = :id',
@@ -236,14 +272,21 @@ final class ArticleDataRepository
         }
         $this->database->perform(
             'INSERT INTO verkaufspreise (artikel, objekt, projekt, adresse, preis, waehrung, ab_menge, angelegt_am,'
-            . ' gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht, art, apichange)'
-            . " VALUES (:article, 'Standard', '', '0', :value, :currency, 1, CURDATE(),"
-            . " '0000-00-00', '', '', NOW(), 1, 0, 'Kunde', 1)",
-            ['article' => $articleId, 'value' => $value, 'currency' => ($old['waehrung'] ?? '') ?: 'EUR']
+            . ' gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht, art, gruppe, apichange)'
+            . " VALUES (:article, :object, '', '0', :value, :currency, 1, CURDATE(),"
+            . " '0000-00-00', '', '', NOW(), 1, 0, :type, :group, 1)",
+            [
+                'article' => $articleId,
+                'object' => $group > 0 ? 'Gruppe' : 'Standard',
+                'value' => $value,
+                'currency' => ($old['waehrung'] ?? '') ?: 'EUR',
+                'type' => $group > 0 ? 'Gruppe' : 'Kunde',
+                'group' => $group > 0 ? $group : null,
+            ]
         );
-        $effectivePrice = $this->standardPrice($articleId, true);
+        $effectivePrice = $group > 0 ? $this->groupPrice($articleId, $group, true) : $this->standardPrice($articleId, true);
         if (FieldDiff::normalize('price_net', (string) ($effectivePrice['preis'] ?? '')) !== $value) {
-            throw new RuntimeException('Ein weiterer aktiver Standardpreis verhindert die Preisaenderung fuer Artikel ' . $articleId . '.');
+            throw new RuntimeException('Eine weitere aktive Preiszeile verhindert die Preisaenderung fuer Artikel ' . $articleId . '.');
         }
     }
 

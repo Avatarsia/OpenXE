@@ -3,8 +3,8 @@
 
 namespace Xentral\Components\WooCommerce;
 
+use DomainException;
 use InvalidArgumentException;
-use RuntimeException;
 use Shopimporter_Woocommerce;
 use Throwable;
 
@@ -42,9 +42,21 @@ final class ArticleTab
         ));
     }
 
-    public function render(int $articleId, int $shopId, string $token): string
+    public function render(int $articleId, int $shopId, string $token, array $draft = []): string
     {
-        $shop = $this->assignedShop($articleId, $shopId);
+        $shops = $this->shopsFor($articleId);
+        $shop = $this->assignedShop($shops, $shopId);
+        $shopPicker = '<p>WooCommerce-Shop: <strong>' . AdminView::e($shop['bezeichnung']) . '</strong></p>';
+        if (count($shops) > 1) {
+            $shopPicker = '<p><label for="wc-article-shop">WooCommerce-Shop</label> '
+                . '<select id="wc-article-shop" data-woo-shop>';
+            foreach ($shops as $option) {
+                $id = (int) $option['id'];
+                $shopPicker .= '<option value="' . $id . '"' . ($id === $shopId ? ' selected' : '') . '>'
+                    . AdminView::e($option['bezeichnung']) . '</option>';
+            }
+            $shopPicker .= '</select></p>';
+        }
         $values = (new ArticleDataRepository($this->app, $shopId))->load($articleId);
         // Where a shop override exists, the form still edits the original article field.
         $article = in_array('shop', array_column($values, 'source'), true) ? $this->articleValues($articleId) : [];
@@ -52,7 +64,7 @@ final class ArticleTab
         $html = '<div class="wc-admin wc-article-tab" data-compare-url="' . AdminView::e($compareUrl) . '">'
             . '<input type="hidden" name="woo_shop" value="' . $shopId . '">'
             . '<input type="hidden" name="woo_csrf_token" value="' . AdminView::e($token) . '">'
-            . '<p>WooCommerce-Shop: <strong>' . AdminView::e($shop['bezeichnung']) . '</strong></p>'
+            . $shopPicker
             . '<div class="wc-admin-actions"><button type="submit" name="speichern" value="Speichern">Speichern</button>'
             . '<button type="button" data-woo-compare>Mit WooCommerce vergleichen</button></div>'
             . '<p>&Uuml;bernommene Werte werden erst mit Speichern gesichert.</p>'
@@ -62,7 +74,7 @@ final class ArticleTab
         $groups = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
             $key = $field['key'];
-            $groups[$field['group']][] = $this->renderField($field, $values[$key], $article);
+            $groups[$field['group']][] = $this->renderField($field, $values[$key], $article, $draft[$key] ?? null);
         }
         foreach ($groups as $group => $fields) {
             $html .= '<fieldset><legend>' . AdminView::e($group) . '</legend>' . implode('', $fields) . '</fieldset>';
@@ -73,7 +85,7 @@ final class ArticleTab
     public function compare(int $articleId, int $shopId): array
     {
         try {
-            $this->assignedShop($articleId, $shopId);
+            $this->assignedShop($this->shopsFor($articleId), $shopId);
             $openxe = (new ArticleDataRepository($this->app, $shopId))->load($articleId);
             if (!class_exists(Shopimporter_Woocommerce::class, false)) {
                 require_once dirname(__DIR__, 3) . '/www/pages/shopimporter_woocommerce.php';
@@ -102,13 +114,55 @@ final class ArticleTab
         }
     }
 
-    public function saveExtras(int $articleId, int $shopId, array $post): array
+    public function validateExtras(int $articleId, int $shopId, array $post): array
+    {
+        [$repository, $stored, $values] = $this->validatedExtras($articleId, $shopId, $post);
+        $snapshot = $this->articleValues($articleId);
+        foreach (ArticleFieldCatalog::fields() as $field) {
+            $key = $field['key'];
+            if ($stored[$key]['source'] !== 'shop') {
+                continue;
+            }
+            $column = substr($field['storage'], strlen('shop:'));
+            $submitted = $this->app->Secure->GetPOST($column, null, '', 1);
+            if ($key === 'pseudo_price' && is_string($submitted)) {
+                $submitted = $this->app->erp->ReplaceBetrag(1, $submitted, 1);
+            }
+            if (!is_string($submitted) || $submitted !== (string) ($snapshot[$column] ?? '')) {
+                $values[$key] = $submitted;
+            }
+        }
+        $repository->validate($values);
+        return $snapshot;
+    }
+
+    public function saveExtras(int $articleId, int $shopId, array $post, array $before = []): array
+    {
+        [$repository, $stored, $values] = $this->validatedExtras($articleId, $shopId, $post);
+        if ($before !== [] && in_array('shop', array_column($stored, 'source'), true)) {
+            $article = $this->articleValues($articleId);
+            foreach (ArticleFieldCatalog::fields() as $field) {
+                $key = $field['key'];
+                if ($stored[$key]['source'] !== 'shop') {
+                    continue;
+                }
+                $column = substr($field['storage'], strlen('shop:'));
+                $saved = (string) ($article[$column] ?? '');
+                if ($saved !== (string) ($before[$column] ?? '')) {
+                    $values[$key] = $saved;
+                }
+            }
+        }
+        return $values === [] ? [] : $repository->apply($articleId, $values, 'article_tab');
+    }
+
+    private function validatedExtras(int $articleId, int $shopId, array $post): array
     {
         $token = $post['woo_csrf_token'] ?? null;
         if (!is_string($token) || !$this->app->Container->get('Session')->isCsrfTokenValid('woocommerce_admin', $token)) {
-            throw new RuntimeException('Formular abgelaufen. Seite neu laden und erneut speichern.');
+            throw new DomainException('Formular abgelaufen. Seite neu laden und erneut speichern.');
         }
-        $this->assignedShop($articleId, $shopId);
+        $this->assignedShop($this->shopsFor($articleId), $shopId);
         $woo = $post['woo'] ?? [];
         if (!is_array($woo)) {
             throw new InvalidArgumentException('Ungueltige WooCommerce-Artikeldaten.');
@@ -119,21 +173,18 @@ final class ArticleTab
         if (($values['price_net'] ?? null) === '' && $stored['price_net']['value'] === '') {
             unset($values['price_net']);
         }
-        if (in_array('shop', array_column($stored, 'source'), true)) {
-            $article = $this->articleValues($articleId);
-            foreach (ArticleFieldCatalog::fields() as $field) {
-                if ($stored[$field['key']]['source'] === 'shop') {
-                    $column = substr($field['storage'], strlen('shop:'));
-                    $values[$field['key']] = (string) $article[$column];
-                }
-            }
+        if (array_key_exists('on_request', $values) && !in_array($values['on_request'], ['0', '1'], true)) {
+            throw new InvalidArgumentException('Ungueltiger Wert fuer WooCommerce-Artikelfeld on_request.');
         }
-        return $values === [] ? [] : $repository->apply($articleId, $values, 'article_tab');
+        if (array_key_exists('price_net', $values) && $stored['price_net']['source'] === 'price_without_standard') {
+            throw new InvalidArgumentException(ArticleDataRepository::PRICE_WITHOUT_STANDARD);
+        }
+        return [$repository, $stored, $values];
     }
 
-    private function assignedShop(int $articleId, int $shopId): array
+    private function assignedShop(array $shops, int $shopId): array
     {
-        foreach ($this->shopsFor($articleId) as $shop) {
+        foreach ($shops as $shop) {
             if ((int) $shop['id'] === $shopId) {
                 return $shop;
             }
@@ -146,14 +197,18 @@ final class ArticleTab
         return $this->database->fetchRow('SELECT * FROM artikel WHERE id = :article', ['article' => $articleId]);
     }
 
-    private function renderField(array $field, array $data, array $article): string
+    private function renderField(array $field, array $data, array $article, $draft): string
     {
         $key = $field['key'];
         [, $mirror] = array_pad(explode(':', $field['storage'], 2), 2, '');
         $override = $data['source'] === 'shop';
-        $value = $override ? (string) $article[$mirror] : $data['value'];
+        $value = $override ? (string) ($article[$mirror] ?? '') : $data['value'];
         $id = 'wc-article-' . $key;
-        $readonly = !$field['edit'] || $data['source'] === 'group_price';
+        $priceBlocked = $data['source'] === 'price_without_standard';
+        $readonly = !$field['edit'] || $priceBlocked;
+        if (!$readonly && is_string($draft)) {
+            $value = $draft;
+        }
         $attributes = ' id="' . $id . '" name="woo[' . $key . ']" data-woo-key="' . $key . '"'
             . ($mirror !== '' ? ' data-mirror="' . $mirror . '"' : '')
             . ($readonly ? ' readonly' : '');
@@ -170,6 +225,7 @@ final class ArticleTab
         return '<div class="wc-article-field"><label for="' . $id . '">' . AdminView::e($field['label'])
             . '</label><code>' . AdminView::e($field['wc']) . '</code>' . $input
             . ($override ? '<small>wird auch in der Shop-Zuordnung gesetzt</small>' : '')
-            . ($data['source'] === 'group_price' ? '<small>Gruppenpreis des Shops</small>' : '') . '</div>';
+            . ($data['source'] === 'group_price' ? '<small>Gruppenpreis des Shops</small>' : '')
+            . ($priceBlocked ? '<small>' . ArticleDataRepository::PRICE_WITHOUT_STANDARD . '</small>' : '') . '</div>';
     }
 }

@@ -103,6 +103,7 @@
 [FORMHANDLEREVENT]
 
 [LEERFELD][MSGLEERFELD]
+[MESSAGE]
 
 <!-- gehort zu tabview -->
 <div id="tabs">
@@ -118,7 +119,6 @@
 <!-- ende gehort zu tabview -->
 
 <div id="tabs-1">
-[MESSAGE]
 
 
 
@@ -736,7 +736,6 @@
 [DISABLEOPENSHOP]
 <div id="tabs-4">
 
-   [MESSAGE]
 <div class="row">
 <div class="row-height">
 <div class="col-xs-12 col-md-6 col-md-height">
@@ -993,6 +992,7 @@ $(document).ready(function() {
                 success: function(data) {
                   if(typeof data.status != 'undefined' && data.status == 1)
                   {
+                    $(document).trigger('woocommerce:article-overrides-saved', [data.articleFields]);
                     $('#onlineshopeditpopup').dialog('close');
                     var oTable = $('#artikel_onlineshops').DataTable( );
                     oTable.ajax.reload();
