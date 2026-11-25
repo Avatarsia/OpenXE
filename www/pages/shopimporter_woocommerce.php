@@ -1558,6 +1558,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
             'typ' => 'textarea',
             'cols' => 60,
             'rows' => 5,
+            'placeholder' => '',
             'bezeichnung' => '{|Lieferzeit-Zuordnung (Text=ID, nur falls WordPress-API nicht erreichbar)|}',
         ],
         'productsmarty' => [
