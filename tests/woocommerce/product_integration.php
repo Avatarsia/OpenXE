@@ -58,6 +58,14 @@ class IntegrationProductApi
 class IntegrationProductConnector extends Shopimporter_Woocommerce
 {
     public $uploadRequests = [];
+    public $deliveryRequests = [];
+
+    public function wordpress_request(string $endpoint, $postdata = null, $method = null, $getdata = null, string $content_disposition = null, string $content_type = null, $debug = false, $debugurl = null, bool $ssl_ignore = false, int $timeout_seconds = 30)
+    {
+        $this->deliveryRequests[] = $endpoint;
+        return ['status' => true, 'response' => [['id' => 65, 'name' => 'ca. 3-4 Werktage']]];
+    }
+
     public function uploadFiles($files)
     {
         $this->uploadRequests[] = $files;
@@ -90,7 +98,13 @@ function productConnector(array $articles, array $settings = []): IntegrationPro
     $connector->data = $articles;
     $connector->client = new IntegrationProductApi();
     $connector->shopid = 5;
-    $connector->logger = new class { public function debug(...$args) {} public function info(...$args) {} public function error(...$args) {} };
+    $connector->logger = new class {
+        public array $warnings = [];
+        public function debug(...$args) {}
+        public function info(...$args) {}
+        public function error(...$args) {}
+        public function warning(string $message): void { $this->warnings[] = $message; }
+    };
     foreach (array_replace(['backorders' => 0, 'metadatasmarty' => '', 'productsmarty' => '', 'filenamesmarty' => '', 'fileunique' => '-', 'kategorienuebertragen' => false, 'dateienuebertragen' => []], $settings) as $key => $value) {
         if ((new ReflectionClass(Shopimporter_Woocommerce::class))->hasProperty($key)) {
             (new ReflectionProperty(Shopimporter_Woocommerce::class, $key))->setValue($connector, $value);
@@ -141,7 +155,9 @@ function productWrite(IntegrationProductApi $api, string $endpoint): array
 
 runTests([
     'real ImportSendList preserves mapped metadata prices stock dimensions EAN and result identity' => static function () {
-        $connector = productConnector([remoteProduct()]);
+        $connector = productConnector([remoteProduct(['lieferzeitmanuell' => 'ca. 3-4 Werktage'])], [
+            'ImportWordpressUserName' => 'user', 'ImportWordpressApplicationPassword' => 'fixture',
+        ]);
         $result = $connector->ImportSendList();
         same(true, $result[0]->success);
         same(7, $result[0]->articleId);
@@ -153,8 +169,8 @@ runTests([
         same('outofstock', $payload['stock_status']);
         same('0', $payload['dimensions']['length']);
         same('0123456789012', $payload['global_unique_id']);
-        // Upstream 1.13: no hardcoded Yoast/prefixed metadata; product metadata comes only from metadatasmarty.
         same([], array_column($payload['meta_data'], 'value', 'key'));
+        same([], $connector->deliveryRequests);
     },
     'real product Smarty transformation remains ahead of product mapping' => static function () {
         require_once dirname(__DIR__, 2) . '/vendor/smarty/smarty/libs/Smarty.class.php';
@@ -227,6 +243,57 @@ runTests([
         $meta = array_column($payload['meta_data'], 'value', 'key');
         same([['name' => 'manual.pdf', 'wp_media_id' => 701, 'typ' => 'datenblatt']], $meta['openxe_product_attachments']);
         check(!isset($payload['downloads']));
+    },
+    'metadata_is_merged_not_replaced' => static function () {
+        require_once dirname(__DIR__, 2) . '/vendor/smarty/smarty/libs/Smarty.class.php';
+        $directory = sys_get_temp_dir() . '/openxe-smarty-' . bin2hex(random_bytes(5));
+        mkdir($directory . '/smarty/templates', 0777, true);
+        try {
+            $article = remoteMatrixProduct([
+                'metakeywords_de' => 'repair', 'lieferzeitmanuell' => 'ca. 3-4 Werktage',
+                'Dateien' => [['dateipfad' => 'manual.pdf', 'filename' => 'manual.pdf', 'stichwort' => 'Datenblatt']],
+            ]);
+            $article['artikel_varianten'][0] += ['metatitle_de' => 'Variant title', 'lieferzeitmanuell' => 'Unknown'];
+            $connector = productConnector([$article], [
+                'extendedFieldMapping' => true, 'yoastMeta' => true, 'dateienuebertragen' => ['datenblatt'],
+                'metadatasmarty' => '{ "template": "Smarty", "rank_math_title": "Smarty title", "openxe_product_attachments": "old" }',
+                'ImportWordpressUserName' => 'user', 'ImportWordpressApplicationPassword' => 'fixture',
+            ]);
+            $app = (object) ['erp' => new class($directory) {
+                private $directory;
+                public function __construct($directory) { $this->directory = $directory; }
+                public function GetTMP() { return $this->directory; }
+            }];
+            (new ReflectionProperty(Shopimporter_Woocommerce::class, 'app'))->setValue($connector, $app);
+            $connector->client->collections['products'] = [['id' => 80, 'sku' => 'PARENT', 'parent_id' => 0]];
+            same(true, $connector->ImportSendList()[0]->success);
+            same(['PUT', 'products/80'], array_slice($connector->client->writes[0], 0, 2));
+            $rows = $connector->client->writes[0][2]['meta_data'];
+            $meta = array_column($rows, 'value', 'key');
+            same(count($meta), count($rows), 'Metadata keys must be unique');
+            same('Smarty', $meta['template']);
+            same('Smarty title', $meta['rank_math_title']);
+            same('SEO title', $meta['_yoast_wpseo_title']);
+            same('repair', $meta['rank_math_focus_keyword'] ?? null);
+            same(65, $meta['_lieferzeit']);
+            same('kept', $meta['custom']);
+            same([['name' => 'manual.pdf', 'wp_media_id' => 700, 'typ' => 'datenblatt']], $meta['openxe_product_attachments']);
+            $child = array_column(productWrite($connector->client, 'products/80/variations')['meta_data'], 'value', 'key');
+            same('Variant title', $child['rank_math_title']);
+            same('Variant title', $child['_yoast_wpseo_title']);
+            same('1234567890123', $child['_gm_gtin']);
+            check(!array_key_exists('_lieferzeit', $child));
+            same(['product_delivery_times?per_page=100'], $connector->deliveryRequests);
+            same(1, count($connector->logger->warnings));
+            check(str_contains($connector->logger->warnings[0], 'Unknown'));
+        } finally {
+            foreach (glob($directory . '/smarty/templates/*') as $path) {
+                unlink($path);
+            }
+            rmdir($directory . '/smarty/templates');
+            rmdir($directory . '/smarty');
+            rmdir($directory);
+        }
     },
     'replace mode clears the last explicit category despite a legacy article type name' => static function () {
         $connector = productConnector([remoteProduct(['kategorien' => [], 'kategoriename' => 'Legacy type'])], ['kategorienuebertragen' => true, 'categorySyncMode' => 'replace']);

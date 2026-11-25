@@ -59,6 +59,10 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   private $refundSync = false;
   private $categorySyncMode = 'additive';
   private $exportDownloads = false;
+  private bool $extendedFieldMapping = false;
+  private bool $yoastMeta = false;
+  private bool $visibilitySync = false;
+  private bool $shopCategoryTree = false;
   private $importModifiedFrom = '';
   private $importCompletedOrders = false;
 
@@ -1095,8 +1099,20 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         }
 
       $productSync = new ProductSynchronizer($this->client);
-      $productOptions = ['backorders' => $this->backorders];
+      $productOptions = [
+        'backorders' => $this->backorders,
+        'extendedMapping' => $this->extendedFieldMapping,
+        'yoastMeta' => $this->yoastMeta,
+        'onRequest' => false,
+      ];
+      if ($this->extendedFieldMapping) {
+        $productOptions['deliveryTimeIds'] = [$this->deliveryTimeMap(), 'idFor'];
+      }
       $productData = $tmp[$i];
+      if (!$this->extendedFieldMapping) {
+        // The legacy top-level export only sends Smarty and attachment metadata.
+        unset($productData['meta_data']);
+      }
       if ($this->exportDownloads && $this->downloadSettings !== null) {
         $productData = $this->downloadSettings->apply($productData);
       }
@@ -1110,7 +1126,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         }
       }
       $commonProductAtts = $productSync->map($productData, $productOptions);
-      $commonProductAtts['meta_data'] = $commonMetaData;
+      $commonMetaData = array_merge($commonProductAtts['meta_data'] ?? [], $commonMetaData);
 
       if (isset($tmp[$i]['Dateien'])) {
         if (!empty($uploaded_files['files'])) {
@@ -1142,11 +1158,14 @@ class Shopimporter_Woocommerce extends ShopimporterBase
             );
 
             if (!empty($attachments)) {
-                $commonProductAtts['meta_data'][] = array('key' => 'openxe_product_attachments', 'value' => $attachments);
+                $commonMetaData[] = array('key' => 'openxe_product_attachments', 'value' => $attachments);
             }
         }
       }
 
+      $commonProductAtts['meta_data'] = array_values(array_column($commonMetaData, null, 'key'));
+      // sync() maps the article again and also maps variations. Log unknown terms only there.
+      $productOptions['logger'] = $this->logger;
       $productOptions['variationPayloads'] = (new VariationMedia())->upload(
         $productData,
         array_values(array_filter($this->dateienuebertragen)),
@@ -1244,6 +1263,10 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $this->feeArticleNumber = trim((string) ($felder['feeArticleNumber'] ?? ''));
     $this->refundSync = !empty($felder['refundSync']);
     $this->categorySyncMode = ($felder['categorySyncMode'] ?? '') === 'replace' ? 'replace' : 'additive';
+    $this->extendedFieldMapping = !empty($felder['extendedFieldMapping']);
+    $this->yoastMeta = !empty($felder['yoastMeta']);
+    $this->visibilitySync = !empty($felder['visibilitySync']);
+    $this->shopCategoryTree = !empty($felder['shopCategoryTree']);
     $this->exportDownloads = !empty($felder['exportDownloads']);
     $this->downloadSettings = $this->exportDownloads
       ? new DownloadSettings($this->app->Container->get('Database'), (int) $this->shopid)
@@ -1561,6 +1584,10 @@ class Shopimporter_Woocommerce extends ShopimporterBase
             'placeholder' => '',
             'bezeichnung' => '{|Lieferzeit-Zuordnung (Text=ID, nur falls WordPress-API nicht erreichbar)|}',
         ],
+        'extendedFieldMapping' => ['typ' => 'checkbox', 'bezeichnung' => '{|Erweiterte Feldzuordnung exportieren (SEO, Lieferzeit, Hersteller, Zoll, GTIN)|}', 'info' => 'Erst nach der Rueckholung aus WooCommerce einschalten.'],
+        'yoastMeta' => ['typ' => 'checkbox', 'bezeichnung' => '{|Yoast-Metadaten zusaetzlich senden|}'],
+        'shopCategoryTree' => ['typ' => 'checkbox', 'bezeichnung' => '{|Shop-Kategorienbaum statt Artikelbaum verwenden|}', 'info' => 'Erst nach der Rueckholung aus WooCommerce einschalten.'],
+        'visibilitySync' => ['typ' => 'checkbox', 'bezeichnung' => '{|Produkte bei entfernter Shop-Zuordnung ausblenden|}', 'info' => 'Erst nach der Rueckholung aus WooCommerce einschalten.'],
         'productsmarty' => [
             'typ' => 'textarea',
             'cols' => 80,

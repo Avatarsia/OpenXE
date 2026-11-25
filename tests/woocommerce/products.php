@@ -221,7 +221,7 @@ runTests([
             'anzahl_lager' => '0', 'pseudolager' => '0', 'gewicht' => '1.2', 'laenge' => 0, 'breite' => '', 'hoehe' => '4.5',
             'ean' => '0123456789012', 'metadescription_de' => 'SEO', 'meta_data' => ['custom' => 'value'],
             'eigenschaften' => [['name' => 'Material', 'values' => 'Cotton']],
-        ], ['backorders' => 1, 'metadataprefix' => 'ox_']);
+        ], ['backorders' => 1, 'metadataprefix' => 'ox_', 'yoastMeta' => true]);
         same('A & B', $mapped['name']);
         same('20.00', $mapped['regular_price']);
         same('12.50', $mapped['sale_price']);
@@ -232,6 +232,133 @@ runTests([
         same('0123456789012', $mapped['global_unique_id']);
         same([['key' => '_yoast_wpseo_metadesc', 'value' => 'SEO'], ['key' => 'ox_custom', 'value' => 'value']], $mapped['meta_data']);
         same([['name' => 'Material', 'visible' => true, 'variation' => false, 'options' => ['Cotton']]], $mapped['attributes']);
+    },
+    'extended_mapping_off_keeps_legacy_payload' => static function () {
+        $api = new ProductApi();
+        $api->collections = ['products' => [], 'products/1001/variations' => []];
+        $source = [
+            'metatitle_de' => 'T', 'metadescription_de' => 'D', 'metakeywords_de' => 'K',
+            'ean' => '4260', 'lieferzeitmanuell' => 'ca. 3-4 Werktage',
+        ];
+        $article = $source + ['nummer' => 'P', 'artikel_varianten' => [$source + [
+            'artikel' => 8, 'nummer' => 'V', 'meta_data' => ['_yoast_wpseo_title' => 'source title'],
+        ]]];
+        (new ProductSynchronizer($api))->sync($article, ['meta_data' => [['key' => '_yoast_wpseo_title', 'value' => 'prepared title']]], [
+            'onRequest' => true,
+            'deliveryTimeIds' => static function (): ?int { throw new RuntimeException('Lookup while disabled'); },
+            'variationPayloads' => [8 => ['meta_data' => [['key' => '_yoast_wpseo_metadesc', 'value' => 'prepared description']]]],
+        ]);
+        foreach ($api->writes as [, , $payload]) {
+            same('4260', $payload['global_unique_id']);
+            same('no', $payload['backorders']);
+            same([], $payload['meta_data'] ?? []);
+        }
+    },
+    'yoast_meta_only_when_enabled' => static function () {
+        $api = new ProductApi();
+        $api->collections = ['products' => [], 'products/1001/variations' => []];
+        (new ProductSynchronizer($api))->sync([
+            'nummer' => 'P', 'metatitle_de' => 'Parent title', 'metadescription_de' => 'Parent description',
+            'artikel_varianten' => [
+                ['artikel' => 8, 'nummer' => 'V', 'metatitle_de' => 'Variant title', 'metadescription_de' => 'Variant description'],
+            ],
+        ], [], ['yoastMeta' => true]);
+        same([
+            '_yoast_wpseo_metadesc' => 'Parent description', '_yoast_wpseo_title' => 'Parent title',
+        ], array_column($api->writes[0][2]['meta_data'] ?? [], 'value', 'key'));
+        same([
+            '_yoast_wpseo_metadesc' => 'Variant description', '_yoast_wpseo_title' => 'Variant title',
+        ], array_column($api->writes[1][2]['meta_data'] ?? [], 'value', 'key'));
+    },
+    'extended_mapping_sends_rank_math_and_logistics' => static function () {
+        $mapped = (new ProductSynchronizer(null))->map([
+            'nummer' => 'N', 'metatitle_de' => 'T', 'metadescription_de' => 'D', 'metakeywords_de' => 'K',
+            'zolltarifnummer' => '85149000', 'herkunftsland' => 'DE', 'hersteller' => 'Artillery',
+            'ean' => '4260', 'lieferzeitmanuell' => 'ca. 3-4 Werktage',
+        ], ['extendedMapping' => true, 'deliveryTimeIds' => static fn(string $text): ?int => $text === 'ca. 3-4 Werktage' ? 65 : null]);
+        same('4260', $mapped['global_unique_id']);
+        same([
+            'rank_math_title' => 'T', 'rank_math_description' => 'D', 'rank_math_focus_keyword' => 'K',
+            '_dhl_hs_code' => '85149000', '_dhl_manufacture_country' => 'DE', '_german_market_gpsr_manufacturer' => 'Artillery',
+            '_gm_gtin' => '4260', '_rank_math_gtin_code' => '4260', '_lieferzeit' => 65, 'openxe_on_request' => '0',
+        ], array_column($mapped['meta_data'] ?? [], 'value', 'key'));
+    },
+    'empty_values_clear_wordpress' => static function () {
+        $mapped = (new ProductSynchronizer(null))->map([
+            'nummer' => 'N', 'metatitle_de' => '', 'metadescription_de' => '', 'metakeywords_de' => '',
+            'zolltarifnummer' => '', 'herkunftsland' => '', 'hersteller' => '',
+            'ean' => '', 'lieferzeitmanuell' => '',
+        ], ['extendedMapping' => true, 'deliveryTimeIds' => static fn(string $text): ?int => $text === '' ? -1 : null]);
+        same('', $mapped['global_unique_id']);
+        same([
+            'rank_math_title' => '', 'rank_math_description' => '', 'rank_math_focus_keyword' => '',
+            '_dhl_hs_code' => '', '_dhl_manufacture_country' => '', '_german_market_gpsr_manufacturer' => '',
+            '_gm_gtin' => '', '_rank_math_gtin_code' => '', '_lieferzeit' => -1, 'openxe_on_request' => '0',
+        ], array_column($mapped['meta_data'] ?? [], 'value', 'key'));
+    },
+    'unknown_delivery_time_not_sent' => static function () {
+        $logger = new class {
+            public array $warnings = [];
+            public function warning(string $message): void { $this->warnings[] = $message; }
+        };
+        $mapped = (new ProductSynchronizer(null))->map(['nummer' => 'N', 'lieferzeitmanuell' => 'Unknown'], [
+            'extendedMapping' => true, 'deliveryTimeIds' => static fn(string $text): ?int => null, 'logger' => $logger,
+        ]);
+        check(!array_key_exists('_lieferzeit', array_column($mapped['meta_data'] ?? [], 'value', 'key')));
+        same(1, count($logger->warnings));
+        check(str_contains($logger->warnings[0], 'Unknown'));
+    },
+    'on_request_sets_backorder_state' => static function () {
+        $sync = new ProductSynchronizer(null);
+        $article = ['nummer' => 'N', 'anzahl_lager' => 0];
+        $options = ['extendedMapping' => true];
+        $requested = $sync->map($article, ['onRequest' => true] + $options);
+        same('notify', $requested['backorders']);
+        same('onbackorder', $requested['stock_status']);
+        same('1', array_column($requested['meta_data'] ?? [], 'value', 'key')['openxe_on_request'] ?? null);
+        $normal = $sync->map($article, $options);
+        same('no', $normal['backorders']);
+        same('outofstock', $normal['stock_status']);
+        same('0', array_column($normal['meta_data'] ?? [], 'value', 'key')['openxe_on_request'] ?? null);
+    },
+    'sold_out_wins_over_on_request' => static function () {
+        $article = ['nummer' => 'N', 'anzahl_lager' => 8, 'ausverkauft' => '1', 'lieferzeitmanuell' => 'ca. 3-4 Werktage'];
+        $options = ['extendedMapping' => true, 'onRequest' => true];
+        $sync = new ProductSynchronizer(null);
+        $mapped = $sync->map($article, $options + [
+            'deliveryTimeIds' => static fn(string $text): ?int => $text === 'derzeit nicht lieferbar' ? 99 : null,
+        ]);
+        same('outofstock', $mapped['stock_status']);
+        same('no', $mapped['backorders']);
+        $meta = array_column($mapped['meta_data'] ?? [], 'value', 'key');
+        same('0', $meta['openxe_on_request'] ?? null);
+        same(99, $meta['_lieferzeit'] ?? null);
+        $withoutTerm = $sync->map($article, $options + ['deliveryTimeIds' => static fn(string $text): ?int => null]);
+        check(!array_key_exists('_lieferzeit', array_column($withoutTerm['meta_data'] ?? [], 'value', 'key')));
+    },
+    'variation_inherits_parent_sold_out_without_its_own_value' => static function () {
+        $api = new ProductApi();
+        $api->collections = ['products' => [], 'products/1001/variations' => []];
+        (new ProductSynchronizer($api))->sync([
+            'nummer' => 'P', 'ausverkauft' => '1', 'artikel_varianten' => [
+                ['artikel' => 8, 'nummer' => 'V1', 'lag' => 4],
+                ['artikel' => 9, 'nummer' => 'V2', 'lag' => 0, 'ausverkauft' => '0'],
+            ],
+        ], [], [
+            'extendedMapping' => true, 'onRequest' => true,
+            'deliveryTimeIds' => static fn(string $text): ?int => $text === 'derzeit nicht lieferbar' ? 99 : null,
+        ]);
+        $inherited = $api->writes[1][2];
+        same('outofstock', $inherited['stock_status']);
+        same('no', $inherited['backorders']);
+        same(99, array_column($inherited['meta_data'], 'value', 'key')['_lieferzeit']);
+        $own = $api->writes[2][2];
+        same('onbackorder', $own['stock_status']);
+        same('notify', $own['backorders']);
+        $meta = array_column($own['meta_data'], 'value', 'key');
+        same('1', $meta['openxe_on_request']);
+        check(!array_key_exists('_lieferzeit', $meta), 'Do not clear omitted fields in sparse variant data');
+        check(!array_key_exists('rank_math_title', $meta), 'Do not clear omitted fields in sparse variant data');
     },
     'gross pricing and empty stock preserve price basis and unmanaged inventory' => static function () {
         $mapped = (new ProductSynchronizer(new ProductApi()))->map(['nummer' => 'N', 'preis' => 10, 'bruttopreis' => 11.9, 'pseudopreis' => 20, 'anzahl_lager' => ''], ['priceType' => 'gross']);

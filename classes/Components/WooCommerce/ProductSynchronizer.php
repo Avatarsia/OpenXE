@@ -18,11 +18,16 @@ class ProductSynchronizer
     /**
      * $payload contains already prepared fields (e.g. uploaded images/attachment metadata).
      * Options: backorders (no/notify/yes or 0/1/2), metadataprefix, priceType (net/gross),
-     * variationPayloads keyed by source article ID. Source properties use local WC attributes.
+     * yoastMeta and extendedMapping default to false. Extended mapping uses onRequest,
+     * a deliveryTimeIds callable and an optional logger. variationPayloads are keyed by source article ID.
+     * Source properties use local WC attributes.
      * @return array{id:int,variations:array}
      */
     public function sync(array $article, array $payload = [], array $options = []): array
     {
+        if (isset($payload['meta_data'])) {
+            $payload['meta_data'] = $this->filterYoastMeta($payload['meta_data'], $options);
+        }
         $mapped = array_replace($this->map($article, $options), $payload);
         $sku = $this->sku($article);
         if ($sku === '') {
@@ -105,11 +110,16 @@ class ProductSynchronizer
             }
         }
         foreach ($variants as $sourceId => $variant) {
-            $variationSku = $this->sku($variant['source']);
-            $variation = $this->map($variant['source'], $options);
+            $source = $variant['source'];
+            if (!empty($options['extendedMapping']) && isset($article['ausverkauft'])) {
+                $source['ausverkauft'] = $source['ausverkauft'] ?? $article['ausverkauft'];
+            }
+            $variationSku = $this->sku($source);
+            $variation = $this->map($source, $options);
             $override = $options['variationPayloads'][$sourceId] ?? [];
             if (isset($override['meta_data'])) {
-                $override['meta_data'] = array_values(array_column(array_merge($variation['meta_data'] ?? [], $override['meta_data']), null, 'key'));
+                $overrideMeta = $this->filterYoastMeta($override['meta_data'], $options);
+                $override['meta_data'] = array_values(array_column(array_merge($variation['meta_data'] ?? [], $overrideMeta), null, 'key'));
             }
             $variation = array_replace($variation, $override);
             $variation['attributes'] = $variant['selection'];
@@ -171,16 +181,21 @@ class ProductSynchronizer
         if (!in_array($backorders, ['no', 'notify', 'yes'], true)) {
             throw new InvalidArgumentException('Invalid backorders setting.');
         }
-        if ($this->flag($article['restmenge'] ?? false) || $this->flag($article['ausverkauft'] ?? false)) {
+        $soldOut = $this->flag($article['ausverkauft'] ?? false);
+        $extendedMapping = $options['extendedMapping'] ?? false;
+        $onRequest = $extendedMapping && !$soldOut && ($options['onRequest'] ?? false);
+        if ($onRequest) {
+            $backorders = 'notify';
+        } elseif ($soldOut || $this->flag($article['restmenge'] ?? false)) {
             $backorders = 'no';
         }
         $payload['backorders'] = $backorders;
-        if (array_key_exists('anzahl_lager', $article) || array_key_exists('lag', $article) || $this->flag($article['ausverkauft'] ?? false)) {
+        if (array_key_exists('anzahl_lager', $article) || array_key_exists('lag', $article) || $soldOut) {
             $stock = $article['anzahl_lager'] ?? $article['lag'] ?? 0;
             if (isset($article['pseudolager']) && is_numeric($article['pseudolager']) && (float) $article['pseudolager'] > 0) {
                 $stock = $article['pseudolager'];
             }
-            if ($this->flag($article['ausverkauft'] ?? false)) {
+            if ($soldOut) {
                 $stock = 0;
             }
             $payload['manage_stock'] = $stock !== '' && $stock !== null;
@@ -191,11 +206,54 @@ class ProductSynchronizer
                 $payload['stock_status'] = 'instock';
             }
         }
+        if ($onRequest) {
+            $payload['stock_status'] = 'onbackorder';
+        }
+
         $meta = [];
-        foreach (['metadescription_de' => '_yoast_wpseo_metadesc', 'metatitle_de' => '_yoast_wpseo_title'] as $source => $key) {
-            if (array_key_exists($source, $article)) {
-                $meta[] = ['key' => $key, 'value' => $article[$source]];
+        if (!empty($options['yoastMeta'])) {
+            foreach (['metadescription_de' => '_yoast_wpseo_metadesc', 'metatitle_de' => '_yoast_wpseo_title'] as $source => $key) {
+                if (array_key_exists($source, $article)) {
+                    $meta[] = ['key' => $key, 'value' => $article[$source]];
+                }
             }
+        }
+        if ($extendedMapping) {
+            $fields = [
+                'rank_math_title' => 'metatitle_de',
+                'rank_math_description' => 'metadescription_de',
+                'rank_math_focus_keyword' => 'metakeywords_de',
+                '_dhl_hs_code' => 'zolltarifnummer',
+                '_dhl_manufacture_country' => 'herkunftsland',
+                '_german_market_gpsr_manufacturer' => 'hersteller',
+            ];
+            foreach ($fields as $key => $source) {
+                if (array_key_exists($source, $article)) {
+                    $meta[] = ['key' => $key, 'value' => (string) $article[$source]];
+                }
+            }
+
+            $ean = $payload['global_unique_id'] ?? '';
+            $payload['global_unique_id'] = $ean;
+            $meta[] = ['key' => '_gm_gtin', 'value' => $ean];
+            $meta[] = ['key' => '_rank_math_gtin_code', 'value' => $ean];
+
+            if ($soldOut || array_key_exists('lieferzeitmanuell', $article)) {
+                $deliveryTime = $soldOut ? 'derzeit nicht lieferbar' : trim((string) $article['lieferzeitmanuell']);
+                $deliveryTimeId = -1;
+                if ($deliveryTime !== '') {
+                    $resolveDeliveryTime = $options['deliveryTimeIds'] ?? null;
+                    $deliveryTimeId = $resolveDeliveryTime === null ? null : $resolveDeliveryTime($deliveryTime);
+                }
+                if ($deliveryTimeId !== null) {
+                    $meta[] = ['key' => '_lieferzeit', 'value' => $deliveryTimeId];
+                } elseif (isset($options['logger'])) {
+                    $options['logger']->warning(
+                        'WooCommerce Artikel ' . $payload['sku'] . ': Unbekannte Lieferzeit: ' . $deliveryTime
+                    );
+                }
+            }
+            $meta[] = ['key' => 'openxe_on_request', 'value' => $onRequest ? '1' : '0'];
         }
         foreach ($article['meta_data'] ?? [] as $key => $value) {
             if (is_array($value) && isset($value['key'])) {
@@ -204,6 +262,7 @@ class ProductSynchronizer
                 $meta[] = ['key' => (string) ($options['metadataprefix'] ?? '') . $key, 'value' => $value];
             }
         }
+        $meta = $this->filterYoastMeta($meta, $options);
         if ($meta !== []) {
             $payload['meta_data'] = $meta;
         }
@@ -235,6 +294,16 @@ class ProductSynchronizer
             $payload['downloads'] = array_values($article['downloads']);
         }
         return $payload;
+    }
+
+    private function filterYoastMeta(array $meta, array $options): array
+    {
+        if (!empty($options['yoastMeta'])) {
+            return $meta;
+        }
+        return array_values(array_filter($meta, static function (array $entry): bool {
+            return !str_starts_with((string) ($entry['key'] ?? ''), '_yoast_');
+        }));
     }
 
     private function variants(array $article): array
