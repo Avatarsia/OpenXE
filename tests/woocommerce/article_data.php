@@ -49,7 +49,12 @@ final class ArticleDataDatabase
     {
         if (str_contains($sql, 'FROM verkaufspreise')) {
             $group = $parameters['group'] ?? null;
-            if ($group !== null) {
+            $fallback = $group === null && str_contains($sql, 'v.ab_menge <= 1');
+            if ($fallback) {
+                check(str_contains($sql, "v.art = 'Kunde'") || str_contains($sql, 'FROM adresse_rolle'));
+                check(str_contains($sql, 'v.gueltig_ab <= CURDATE()') && str_contains($sql, 'v.gueltig_bis >= CURDATE()'));
+                check(str_contains($sql, "v.waehrung = 'EUR'"));
+            } elseif ($group !== null) {
                 check(str_contains($sql, "v.art = 'Gruppe'") && str_contains($sql, 'v.ab_menge <= 1'));
                 check(str_contains($sql, 'v.gueltig_ab <= CURDATE()') && str_contains($sql, 'v.gueltig_bis >= CURDATE()'));
                 check(str_contains($sql, 'ORDER BY v.ab_menge DESC, v.preis ASC'));
@@ -58,10 +63,11 @@ final class ArticleDataDatabase
             }
             $active = array_filter($this->prices, static fn (array $price): bool =>
                 !$price['expired'] && ($price['group'] ?? null) === $group
-                && ($group === null ? ($price['ab_menge'] ?? '1') == 1
+                && (!$fallback || in_array($price['waehrung'], ['EUR', ''], true))
+                && ($group === null && !$fallback ? ($price['ab_menge'] ?? '1') == 1
                     : ($price['ab_menge'] ?? '1') <= 1 && ($price['ab_menge'] ?? '1') > -1)
             );
-            usort($active, static fn (array $left, array $right): int => $group !== null
+            usort($active, static fn (array $left, array $right): int => $group !== null || $fallback
                 ? (($right['ab_menge'] ?? '1') <=> ($left['ab_menge'] ?? '1')) ?: ($left['preis'] <=> $right['preis'])
                 : $right['preis'] <=> $left['preis']
             );
@@ -141,6 +147,13 @@ function articleRepository(ArticleDataDatabase $db): ArticleDataRepository
         },
         'erp' => new class ($db) {
             public function __construct(private ArticleDataDatabase $db) {}
+            public function Firmendaten(string $key): string
+            {
+                return match ($key) {
+                    'waehrung' => 'EUR',
+                    'guenstigste_vk' => '0',
+                };
+            }
             public function GetVerkaufspreisGruppe(int $article, int $quantity, int $group): string
             {
                 same([9, 1, 7], [$article, $quantity, $group]);
@@ -227,6 +240,42 @@ runTests([
         $diff = array_column(FieldDiff::compare($stored, ['price_net' => '28']), null, 'key');
         same(false, $diff['price_net']['pullable']);
         same('Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen', $diff['price_net']['reason']);
+    },
+    'ambiguous_standard_fallback_is_readonly_and_rejects_price_changes' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->group = 7;
+        $db->prices = [
+            1 => ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false],
+            2 => ['id' => 2, 'preis' => '26.00', 'waehrung' => 'EUR', 'expired' => false],
+        ];
+        $repo = articleRepository($db);
+        $stored = $repo->load(9);
+        $diff = articleDiff($stored, ['price_net' => '28'], 'price_net');
+        $reason = 'Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen';
+        same('24.00', $stored['price_net']['value']);
+        same($reason, ArticleDataRepository::priceBlockReason($stored['price_net']['source']));
+        same(false, $diff['pullable']);
+        same($reason, $diff['reason']);
+        try {
+            $repo->apply(9, ['price_net' => '28'], 'pull');
+            throw new LogicException('Price change with multiple standard fallback candidates was accepted.');
+        } catch (InvalidArgumentException $error) {
+            same($reason, $error->getMessage());
+        }
+        same(0, $db->writes);
+    },
+    'single_standard_fallback_is_replaced_without_creating_a_group_price' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->group = 7;
+        $db->prices[1] = ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false];
+        $repo = articleRepository($db);
+        same(['price_net' => ['old' => '24.00', 'new' => '28']], $repo->apply(9, ['price_net' => '28'], 'pull'));
+        same(true, $db->prices[1]['expired']);
+        same(
+            ['id' => 2, 'preis' => '28', 'waehrung' => 'EUR', 'expired' => false],
+            $db->prices[2]
+        );
+        same(['value' => '28', 'source' => 'price'], $repo->load(9)['price_net']);
     },
     'multiple_candidates_reject_changes_before_any_write_in_both_price_paths' => static function () {
         foreach ([null, 7] as $group) {

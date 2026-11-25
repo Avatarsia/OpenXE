@@ -174,16 +174,24 @@ final class ArticleDataRepository
         $group = method_exists($this->app->erp, 'GetVerkaufspreisGruppe') ? $group : 0;
         $candidates = $this->standardPriceCandidates($articleId, $lock);
         $priceSource = 'price';
-        $priceValue = $candidates[0]['preis'] ?? '';
+        // Zero selects the direct standard query; null selects the ERP standard fallback.
+        $priceGroup = 0;
         if ($group > 0) {
             if ($candidates === []) {
                 $priceSource = 'price_without_standard';
             } else {
-                $priceSource = 'group_price';
-                $candidates = $this->groupPriceCandidates($articleId, $group, $lock);
-                $priceValue = $candidates[0]['preis'] ?? $this->app->erp->GetVerkaufspreisGruppe($articleId, 1, $group);
+                $groupCandidates = $this->groupPriceCandidates($articleId, $group, $lock);
+                if ($groupCandidates !== []) {
+                    $priceSource = 'group_price';
+                    $priceGroup = $group;
+                    $candidates = $groupCandidates;
+                } else {
+                    $priceGroup = null;
+                    $candidates = $this->fallbackPriceCandidates($articleId, $lock);
+                }
             }
         }
+        $priceValue = $candidates[0]['preis'] ?? ($priceGroup === null ? '0' : '');
         if (count($candidates) > 1) {
             $priceSource = 'price_ambiguous';
         }
@@ -203,7 +211,7 @@ final class ArticleDataRepository
         }
 
         return ['fields' => $fields, 'article' => $article, 'override' => $override,
-            'price' => $candidates[0] ?? [], 'priceGroup' => $group];
+            'price' => $candidates[0] ?? [], 'priceGroup' => $priceGroup];
     }
 
     private function valueForStorage(string $key, $input): string
@@ -279,7 +287,43 @@ final class ArticleDataRepository
         );
     }
 
-    private function writePrice(int $articleId, array $old, string $value, int $group): void
+    private function fallbackPriceCandidates(int $articleId, bool $lock): array
+    {
+        // GetVerkaufspreisGruppe falls back to GetVerkaufspreis for one unit, address 0 and EUR.
+        $currency = $this->app->erp->Firmendaten('waehrung') ?: 'EUR';
+        $currencySql = $currency === 'EUR' ? " AND (v.waehrung = 'EUR' OR v.waehrung = '')" : " AND v.waehrung = 'EUR'";
+        $baseSql = 'SELECT v.id, v.preis FROM verkaufspreise AS v'
+            . ' WHERE v.artikel = :article AND v.ab_menge <= 1 AND v.ab_menge > -1'
+            . " AND (v.gueltig_bis >= CURDATE() OR v.gueltig_bis = '0000-00-00')"
+            . " AND (v.gueltig_ab <= CURDATE() OR v.gueltig_ab = '0000-00-00')"
+            . $currencySql;
+        $addressPrice = "(v.adresse = '0' AND v.art = 'Kunde')";
+        $addressGroupPrice = "(v.art <> 'Kunde' AND v.gruppe IN (SELECT parameter FROM adresse_rolle"
+            . " WHERE adresse = '0' AND (bis > NOW() OR IFNULL(bis, '0000-00-00') = '0000-00-00')"
+            . " AND parameter > 0 AND objekt = 'Gruppe'))";
+        $limitSql = ' LIMIT 2' . ($lock ? ' FOR UPDATE' : '');
+        $params = ['article' => $articleId];
+
+        if (!$this->app->erp->Firmendaten('guenstigste_vk')) {
+            $orderSql = ' ORDER BY v.ab_menge DESC, v.preis ASC';
+            $candidates = $this->database->fetchAll($baseSql . ' AND ' . $addressPrice . $orderSql . $limitSql, $params);
+            if ($candidates !== []) {
+                return $candidates;
+            }
+            $candidates = $this->database->fetchAll($baseSql . ' AND ' . $addressGroupPrice . $orderSql . $limitSql, $params);
+            if ($candidates !== []) {
+                return $candidates;
+            }
+        }
+
+        return $this->database->fetchAll(
+            $baseSql . " AND ($addressGroupPrice OR (v.adresse IN ('', '0') AND v.art = 'Kunde'))"
+            . ' ORDER BY v.preis ASC, v.ab_menge DESC' . $limitSql,
+            $params
+        );
+    }
+
+    private function writePrice(int $articleId, array $old, string $value, ?int $group): void
     {
         if ($old) {
             $this->database->perform(
@@ -310,8 +354,11 @@ final class ArticleDataRepository
                 ]
             );
         }
-        $candidates = $group > 0 ? $this->groupPriceCandidates($articleId, $group, true)
-            : $this->standardPriceCandidates($articleId, true);
+        $candidates = match ($group) {
+            null => $this->fallbackPriceCandidates($articleId, true),
+            0 => $this->standardPriceCandidates($articleId, true),
+            default => $this->groupPriceCandidates($articleId, $group, true),
+        };
         if (count($candidates) !== 1 || FieldDiff::normalize('price_net', (string) $candidates[0]['preis']) !== $value) {
             throw new RuntimeException('Eine weitere aktive Preiszeile verhindert die Preisaenderung fuer Artikel ' . $articleId . '.');
         }
