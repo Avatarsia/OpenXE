@@ -42,6 +42,11 @@ final class ArticleDataDatabase
             return $parameters === ['article' => 9, 'shop' => 5]
                 && $this->override['aktiv'] === 1 && $this->override['ausartikel'] === 0 ? $this->override : false;
         }
+        throw new RuntimeException('Unexpected row query: ' . $sql);
+    }
+
+    public function fetchAll(string $sql, array $parameters): array
+    {
         if (str_contains($sql, 'FROM verkaufspreise')) {
             $group = $parameters['group'] ?? null;
             if ($group !== null) {
@@ -53,13 +58,17 @@ final class ArticleDataDatabase
             }
             $active = array_filter($this->prices, static fn (array $price): bool =>
                 !$price['expired'] && ($price['group'] ?? null) === $group
+                && ($group === null ? ($price['ab_menge'] ?? '1') == 1
+                    : ($price['ab_menge'] ?? '1') <= 1 && ($price['ab_menge'] ?? '1') > -1)
             );
-            usort($active, static fn (array $left, array $right): int =>
-                $group !== null ? $left['preis'] <=> $right['preis'] : $right['preis'] <=> $left['preis']
+            usort($active, static fn (array $left, array $right): int => $group !== null
+                ? (($right['ab_menge'] ?? '1') <=> ($left['ab_menge'] ?? '1')) ?: ($left['preis'] <=> $right['preis'])
+                : $right['preis'] <=> $left['preis']
             );
-            return $active[0] ?? false;
+            check(str_contains($sql, 'LIMIT 2'));
+            return array_slice($active, 0, 2);
         }
-        throw new RuntimeException('Unexpected row query: ' . $sql);
+        throw new RuntimeException('Unexpected rows query: ' . $sql);
     }
 
     public function fetchValue(string $sql, array $parameters)
@@ -95,9 +104,15 @@ final class ArticleDataDatabase
             $this->prices[$parameters['id']]['expired'] = true;
         } elseif (str_starts_with($sql, 'INSERT INTO verkaufspreise')) {
             $id = count($this->prices) + 1;
-            $this->prices[$id] = ['id' => $id, 'preis' => $parameters['value'], 'waehrung' => $parameters['currency'],
-                'expired' => false, 'group' => $parameters['group']];
-            same($parameters['group'] === null ? 'Kunde' : 'Gruppe', $parameters['type']);
+            if (str_contains($sql, 'FROM verkaufspreise WHERE id = :id')) {
+                check(str_contains($sql, ':value, waehrung, ab_menge, vpe, vpe_menge'));
+                $this->prices[$id] = array_replace($this->prices[$parameters['id']],
+                    ['id' => $id, 'preis' => $parameters['value'], 'expired' => false]);
+            } else {
+                $this->prices[$id] = ['id' => $id, 'preis' => $parameters['value'], 'waehrung' => 'EUR',
+                    'expired' => false, 'group' => $parameters['group'], 'ab_menge' => '1'];
+                same($parameters['group'] === null ? 'Kunde' : 'Gruppe', $parameters['type']);
+            }
         } elseif (str_starts_with($sql, 'INSERT INTO konfiguration')) {
             if (!str_contains($sql, 'wert = VALUES(wert)')) {
                 $this->config[$parameters['name']] ??= '[]';
@@ -186,6 +201,79 @@ runTests([
         same(true, $db->prices[2]['expired']);
         same(7, $db->prices[3]['group']);
         same(['value' => '20', 'source' => 'group_price'], $repo->load(9)['price_net']);
+    },
+    'multiple_group_candidates_are_not_pullable' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->group = 7;
+        $db->prices = [
+            1 => ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false],
+            2 => ['id' => 2, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => 7],
+            3 => ['id' => 3, 'preis' => '26.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => 7],
+        ];
+        $stored = articleRepository($db)->load(9);
+        same('24.00', $stored['price_net']['value']);
+        $diff = array_column(FieldDiff::compare($stored, ['price_net' => '28']), null, 'key');
+        same(false, $diff['price_net']['pullable']);
+        same('Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen', $diff['price_net']['reason']);
+    },
+    'multiple_standard_candidates_are_not_pullable' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->prices = [
+            1 => ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false],
+            2 => ['id' => 2, 'preis' => '26.00', 'waehrung' => 'EUR', 'expired' => false],
+        ];
+        $stored = articleRepository($db)->load(9);
+        same('26.00', $stored['price_net']['value']);
+        $diff = array_column(FieldDiff::compare($stored, ['price_net' => '28']), null, 'key');
+        same(false, $diff['price_net']['pullable']);
+        same('Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen', $diff['price_net']['reason']);
+    },
+    'multiple_candidates_reject_changes_before_any_write_in_both_price_paths' => static function () {
+        foreach ([null, 7] as $group) {
+            $db = new ArticleDataDatabase();
+            $db->group = $group ?? 0;
+            $db->prices = [
+                1 => ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => $group],
+                2 => ['id' => 2, 'preis' => '26.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => $group],
+            ];
+            if ($group !== null) {
+                $db->prices[3] = ['id' => 3, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false];
+            }
+            $db->beginTransaction();
+            try {
+                articleRepository($db)->apply(9, ['pseudo_price' => '20', 'price_net' => '28'], 'pull');
+                throw new LogicException('Price change with multiple candidates was accepted.');
+            } catch (InvalidArgumentException $error) {
+                same('Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen', $error->getMessage());
+            }
+            same(0, $db->writes);
+            $db->rollBack();
+        }
+    },
+    'fractional_group_price_replacement_keeps_quantity_and_currency' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->group = 7;
+        $db->prices = [
+            1 => ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false],
+            2 => ['id' => 2, 'preis' => '24.00', 'waehrung' => 'CHF', 'expired' => false, 'group' => 7, 'ab_menge' => '0.5'],
+        ];
+        $repo = articleRepository($db);
+        same(['price_net' => ['old' => '24.00', 'new' => '28']], $repo->apply(9, ['price_net' => '28'], 'pull'));
+        same(true, $db->prices[2]['expired']);
+        same('0.5', $db->prices[3]['ab_menge']);
+        same('CHF', $db->prices[3]['waehrung']);
+        same('28', $repo->load(9)['price_net']['value']);
+    },
+    'fractional_standard_price_is_not_a_candidate_for_quantity_one' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->prices[1] = ['id' => 1, 'preis' => '24.00', 'waehrung' => 'CHF', 'expired' => false, 'ab_menge' => '0.5'];
+        $repo = articleRepository($db);
+        same('', $repo->load(9)['price_net']['value']);
+        same(['price_net' => ['old' => '', 'new' => '28']], $repo->apply(9, ['price_net' => '28'], 'pull'));
+        same(false, $db->prices[1]['expired']);
+        same('0.5', $db->prices[1]['ab_menge']);
+        same('1', $db->prices[2]['ab_menge']);
+        same('28', $repo->load(9)['price_net']['value']);
     },
     'inactive_group_uses_the_editable_standard_price' => static function () {
         $db = new ArticleDataDatabase();

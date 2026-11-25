@@ -22,8 +22,8 @@ final class FieldDiff
                 $comparisonOld = self::exportPrice($key, $old);
                 $comparisonNew = self::exportPrice($key, $new);
             }
-            $priceBlocked = ($openxe[$key]['source'] ?? null) === 'price_without_standard';
-            $pullable = !$priceBlocked && ($key !== 'price_net' || trim($new) !== '');
+            $priceBlockReason = ArticleDataRepository::priceBlockReason($openxe[$key]['source'] ?? null);
+            $pullable = $priceBlockReason === null && ($key !== 'price_net' || trim($new) !== '');
             $row = [
                 'key' => $key,
                 'label' => $field['label'],
@@ -33,8 +33,7 @@ final class FieldDiff
                 'pullable' => $pullable,
             ];
             if (!$pullable) {
-                $row['reason'] = $priceBlocked ? ArticleDataRepository::PRICE_WITHOUT_STANDARD
-                    : 'leerer Shop-Preis wird nicht uebernommen';
+                $row['reason'] = $priceBlockReason ?? 'leerer Shop-Preis wird nicht uebernommen';
             }
             $rows[] = $row;
         }

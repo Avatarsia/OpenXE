@@ -176,8 +176,13 @@ final class ArticleTab
         if (array_key_exists('on_request', $values) && !in_array($values['on_request'], ['0', '1'], true)) {
             throw new InvalidArgumentException('Ungueltiger Wert fuer WooCommerce-Artikelfeld on_request.');
         }
-        if (array_key_exists('price_net', $values) && $stored['price_net']['source'] === 'price_without_standard') {
-            throw new InvalidArgumentException(ArticleDataRepository::PRICE_WITHOUT_STANDARD);
+        $priceBlockReason = ArticleDataRepository::priceBlockReason($stored['price_net']['source']);
+        if ($priceBlockReason !== null && array_key_exists('price_net', $values)) {
+            if (!is_scalar($values['price_net'])
+                || !FieldDiff::equivalent('price_net', $stored['price_net']['value'], (string) $values['price_net'])) {
+                throw new InvalidArgumentException($priceBlockReason);
+            }
+            unset($values['price_net']);
         }
         return [$repository, $stored, $values];
     }
@@ -204,8 +209,8 @@ final class ArticleTab
         $override = $data['source'] === 'shop';
         $value = $override ? (string) ($article[$mirror] ?? '') : $data['value'];
         $id = 'wc-article-' . $key;
-        $priceBlocked = $data['source'] === 'price_without_standard';
-        $readonly = !$field['edit'] || $priceBlocked;
+        $priceBlockReason = ArticleDataRepository::priceBlockReason($data['source']);
+        $readonly = !$field['edit'] || $priceBlockReason !== null;
         if (!$readonly && is_string($draft)) {
             $value = $draft;
         }
@@ -226,6 +231,6 @@ final class ArticleTab
             . '</label><code>' . AdminView::e($field['wc']) . '</code>' . $input
             . ($override ? '<small>wird auch in der Shop-Zuordnung gesetzt</small>' : '')
             . ($data['source'] === 'group_price' ? '<small>Gruppenpreis des Shops</small>' : '')
-            . ($priceBlocked ? '<small>' . ArticleDataRepository::PRICE_WITHOUT_STANDARD . '</small>' : '') . '</div>';
+            . ($priceBlockReason !== null ? '<small>' . AdminView::e($priceBlockReason) . '</small>' : '') . '</div>';
     }
 }

@@ -10,6 +10,7 @@ use Throwable;
 final class ArticleDataRepository
 {
     public const PRICE_WITHOUT_STANDARD = 'Export sendet ohne Standardpreis keinen Preis';
+    private const PRICE_AMBIGUOUS = 'Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen';
 
     private const CONFIG_LIMIT = 65000;
     private const LOG_LIMIT = 500;
@@ -40,6 +41,15 @@ final class ArticleDataRepository
     public function load(int $articleId): array
     {
         return $this->loadState($articleId, false)['fields'];
+    }
+
+    public static function priceBlockReason(?string $source): ?string
+    {
+        return match ($source) {
+            'price_without_standard' => self::PRICE_WITHOUT_STANDARD,
+            'price_ambiguous' => self::PRICE_AMBIGUOUS,
+            default => null,
+        };
     }
 
     public function validate(array $values): void
@@ -74,6 +84,12 @@ final class ArticleDataRepository
         }
         try {
             $state = $this->loadState($articleId, true);
+            $price = $state['fields']['price_net'];
+            $reason = self::priceBlockReason($price['source']);
+            if ($reason !== null && isset($updates['price_net'])
+                && !FieldDiff::equivalent('price_net', $price['value'], $updates['price_net'][0])) {
+                throw new InvalidArgumentException($reason);
+            }
             $changes = [];
             $audit = [];
             foreach ($updates as $key => [$new, $storage, $column]) {
@@ -88,9 +104,6 @@ final class ArticleDataRepository
                 }
 
                 if ($storage === 'price') {
-                    if ($state['fields'][$key]['source'] === 'price_without_standard') {
-                        throw new InvalidArgumentException(self::PRICE_WITHOUT_STANDARD);
-                    }
                     $this->writePrice($articleId, $state['price'], $new, $state['priceGroup']);
                     $audit[] = ['field' => $key, 'target' => 'price', 'old' => $effective, 'new' => $new];
                 } elseif ($storage === 'onrequest') {
@@ -159,17 +172,20 @@ final class ArticleDataRepository
             ['shop' => $this->shopId]
         );
         $group = method_exists($this->app->erp, 'GetVerkaufspreisGruppe') ? $group : 0;
-        $price = $this->standardPrice($articleId, $lock);
+        $candidates = $this->standardPriceCandidates($articleId, $lock);
         $priceSource = 'price';
-        $priceValue = $price['preis'] ?? '';
+        $priceValue = $candidates[0]['preis'] ?? '';
         if ($group > 0) {
-            if ($price === []) {
+            if ($candidates === []) {
                 $priceSource = 'price_without_standard';
             } else {
                 $priceSource = 'group_price';
-                $price = $this->groupPrice($articleId, $group, $lock);
-                $priceValue = $price['preis'] ?? $this->app->erp->GetVerkaufspreisGruppe($articleId, 1, $group);
+                $candidates = $this->groupPriceCandidates($articleId, $group, $lock);
+                $priceValue = $candidates[0]['preis'] ?? $this->app->erp->GetVerkaufspreisGruppe($articleId, 1, $group);
             }
+        }
+        if (count($candidates) > 1) {
+            $priceSource = 'price_ambiguous';
         }
         $config = $this->readConfig($this->articleConfigKey($articleId));
 
@@ -187,7 +203,7 @@ final class ArticleDataRepository
         }
 
         return ['fields' => $fields, 'article' => $article, 'override' => $override,
-            'price' => $price, 'priceGroup' => $group];
+            'price' => $candidates[0] ?? [], 'priceGroup' => $group];
     }
 
     private function valueForStorage(string $key, $input): string
@@ -236,30 +252,31 @@ final class ArticleDataRepository
         }
     }
 
-    private function standardPrice(int $articleId, bool $lock): array
+    private function standardPriceCandidates(int $articleId, bool $lock): array
     {
-        return $this->database->fetchRow(
-            'SELECT v.id, v.preis, v.waehrung FROM verkaufspreise AS v'
+        // The standard export query only considers rows for exactly one unit.
+        return $this->database->fetchAll(
+            'SELECT v.id, v.preis FROM verkaufspreise AS v'
             . " WHERE v.artikel = :article AND v.ab_menge = 1 AND v.geloescht = 0 AND v.art != 'Gruppe'"
             . " AND (v.objekt = 'Standard' OR v.objekt = '') AND (v.adresse = '0' OR v.adresse = '')"
             . " AND (v.gueltig_bis >= NOW() OR v.gueltig_bis = '0000-00-00')"
-            . ' ORDER BY v.preis DESC LIMIT 1' . ($lock ? ' FOR UPDATE' : ''),
+            . ' ORDER BY v.preis DESC LIMIT 2' . ($lock ? ' FOR UPDATE' : ''),
             ['article' => $articleId]
-        ) ?: [];
+        );
     }
 
-    private function groupPrice(int $articleId, int $group, bool $lock): array
+    private function groupPriceCandidates(int $articleId, int $group, bool $lock): array
     {
         // Match GetVerkaufspreisGruppe at quantity 1, including legacy lower quantity tiers.
-        return $this->database->fetchRow(
-            'SELECT v.id, v.preis, v.waehrung FROM verkaufspreise AS v'
+        return $this->database->fetchAll(
+            'SELECT v.id, v.preis FROM verkaufspreise AS v'
             . " WHERE v.artikel = :article AND v.gruppe = :group AND v.art = 'Gruppe'"
             . ' AND v.ab_menge <= 1 AND v.ab_menge > -1'
             . " AND (v.gueltig_bis >= CURDATE() OR IFNULL(v.gueltig_bis, '0000-00-00') = '0000-00-00')"
             . " AND (v.gueltig_ab <= CURDATE() OR IFNULL(v.gueltig_ab, '0000-00-00') = '0000-00-00')"
-            . ' ORDER BY v.ab_menge DESC, v.preis ASC LIMIT 1' . ($lock ? ' FOR UPDATE' : ''),
+            . ' ORDER BY v.ab_menge DESC, v.preis ASC LIMIT 2' . ($lock ? ' FOR UPDATE' : ''),
             ['article' => $articleId, 'group' => $group]
-        ) ?: [];
+        );
     }
 
     private function writePrice(int $articleId, array $old, string $value, int $group): void
@@ -269,23 +286,33 @@ final class ArticleDataRepository
                 'UPDATE verkaufspreise SET gueltig_bis = DATE_SUB(CURDATE(), INTERVAL 1 DAY), apichange = 1 WHERE id = :id',
                 ['id' => (int) $old['id']]
             );
+            $this->database->perform(
+                'INSERT INTO verkaufspreise (artikel, objekt, projekt, adresse, preis, waehrung, ab_menge,'
+                . ' vpe, vpe_menge, angelegt_am, gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht,'
+                . ' kundenartikelnummer, art, gruppe, apichange, nichtberechnet, inbelegausblenden, gueltig_ab, kurs, kursdatum)'
+                . " SELECT artikel, objekt, projekt, adresse, :value, waehrung, ab_menge, vpe, vpe_menge, CURDATE(),"
+                . " '0000-00-00', bemerkung, bearbeiter, NOW(), firma, geloescht, kundenartikelnummer, art, gruppe, 1,"
+                . ' nichtberechnet, inbelegausblenden, gueltig_ab, kurs, kursdatum FROM verkaufspreise WHERE id = :id',
+                ['id' => (int) $old['id'], 'value' => $value]
+            );
+        } else {
+            $this->database->perform(
+                'INSERT INTO verkaufspreise (artikel, objekt, projekt, adresse, preis, waehrung, ab_menge, angelegt_am,'
+                . ' gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht, art, gruppe, apichange)'
+                . " VALUES (:article, :object, '', '0', :value, 'EUR', 1, CURDATE(),"
+                . " '0000-00-00', '', '', NOW(), 1, 0, :type, :group, 1)",
+                [
+                    'article' => $articleId,
+                    'object' => $group > 0 ? 'Gruppe' : 'Standard',
+                    'value' => $value,
+                    'type' => $group > 0 ? 'Gruppe' : 'Kunde',
+                    'group' => $group > 0 ? $group : null,
+                ]
+            );
         }
-        $this->database->perform(
-            'INSERT INTO verkaufspreise (artikel, objekt, projekt, adresse, preis, waehrung, ab_menge, angelegt_am,'
-            . ' gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht, art, gruppe, apichange)'
-            . " VALUES (:article, :object, '', '0', :value, :currency, 1, CURDATE(),"
-            . " '0000-00-00', '', '', NOW(), 1, 0, :type, :group, 1)",
-            [
-                'article' => $articleId,
-                'object' => $group > 0 ? 'Gruppe' : 'Standard',
-                'value' => $value,
-                'currency' => ($old['waehrung'] ?? '') ?: 'EUR',
-                'type' => $group > 0 ? 'Gruppe' : 'Kunde',
-                'group' => $group > 0 ? $group : null,
-            ]
-        );
-        $effectivePrice = $group > 0 ? $this->groupPrice($articleId, $group, true) : $this->standardPrice($articleId, true);
-        if (FieldDiff::normalize('price_net', (string) ($effectivePrice['preis'] ?? '')) !== $value) {
+        $candidates = $group > 0 ? $this->groupPriceCandidates($articleId, $group, true)
+            : $this->standardPriceCandidates($articleId, true);
+        if (count($candidates) !== 1 || FieldDiff::normalize('price_net', (string) $candidates[0]['preis']) !== $value) {
             throw new RuntimeException('Eine weitere aktive Preiszeile verhindert die Preisaenderung fuer Artikel ' . $articleId . '.');
         }
     }

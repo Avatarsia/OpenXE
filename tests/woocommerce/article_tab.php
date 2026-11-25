@@ -45,6 +45,8 @@ final class ArticleTabDatabase
     public array $shops = [['id' => 5, 'bezeichnung' => 'Shop A', 'projekt' => 0, 'article_project' => 0]];
     public array $config = [];
     public array $price = ['id' => 4, 'preis' => '10.00', 'waehrung' => 'EUR'];
+    public array $additionalPrices = [];
+    private array $expiredPrice = [];
     private bool $transaction = false;
     public int $writes = 0;
     public int $group = 0;
@@ -53,6 +55,9 @@ final class ArticleTabDatabase
 
     public function fetchAll(string $sql, array $params): array
     {
+        if (str_contains($sql, 'FROM verkaufspreise')) {
+            return $this->price === [] ? [] : [$this->price, ...$this->additionalPrices];
+        }
         check(str_contains($sql, "s.modulename = 'shopimporter_woocommerce'"));
         check(str_contains($sql, 's.aktiv = 1') && str_contains($sql, 'ao.aktiv = 1'));
         return $params === ['article' => 9] ? $this->shops : [];
@@ -63,7 +68,6 @@ final class ArticleTabDatabase
         return match (true) {
             str_contains($sql, 'FROM artikel WHERE') => $this->article,
             str_contains($sql, 'FROM artikel_onlineshops') => $this->override,
-            str_contains($sql, 'FROM verkaufspreise') => $this->price,
             default => throw new RuntimeException('Unexpected query: ' . $sql),
         };
     }
@@ -85,10 +89,11 @@ final class ArticleTabDatabase
             $this->override[$match[1]] = $params['value'];
         } elseif (str_starts_with($sql, 'UPDATE verkaufspreise')) {
             same(4, $params['id']);
+            $this->expiredPrice = $this->price;
             $this->price = [];
         } elseif (str_starts_with($sql, 'INSERT INTO verkaufspreise')) {
-            same(9, $params['article']);
-            $this->price = ['id' => 7, 'preis' => $params['value'], 'waehrung' => $params['currency']];
+            same($this->expiredPrice['id'], $params['id']);
+            $this->price = array_replace($this->expiredPrice, ['id' => 7, 'preis' => $params['value']]);
         } elseif (str_starts_with($sql, 'INSERT INTO konfiguration')) {
             $this->config[$params['name']] = $params['wert'] ?? ($this->config[$params['name']] ?? '[]');
         } else {
@@ -299,6 +304,28 @@ runTests([
         $html = $tab->render(9, 5, $token);
         check(preg_match('/data-woo-key="price_net"[^>]+readonly/', $html) === 1);
         check(str_contains($html, 'Export sendet ohne Standardpreis keinen Preis'));
+    },
+    'ambiguous_price_is_readonly_and_unchanged_readonly_input_can_be_submitted' => static function () {
+        [$tab, $db, $token] = articleTabFixture();
+        $db->additionalPrices = [['id' => 6, 'preis' => '8.00', 'waehrung' => 'EUR']];
+        $html = $tab->render(9, 5, $token);
+        check(preg_match('/data-woo-key="price_net"[^>]+readonly[^>]+value="10.00"/', $html) === 1);
+        check(str_contains($html, 'Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen'));
+        $result = $tab->saveExtras(9, 5, ['woo_csrf_token' => $token, 'woo' => ['price_net' => '10.00', 'on_request' => '1']]);
+        same(['on_request' => ['old' => '0', 'new' => '1']], $result);
+    },
+    'ambiguous_price_change_is_rejected_in_prevalidation' => static function () {
+        [, $db, $token, $app] = articleTabFixture();
+        $db->additionalPrices = [['id' => 6, 'preis' => '8.00', 'waehrung' => 'EUR']];
+        submitArticleTab($app, '5', $token, ['price_net' => '28']);
+        check(prepareArticleTab($app));
+        same('', $app->Secure->GetPOST('speichern'));
+        $form = $app->FormHandler->CreateNew('artikel');
+        $form->UseTable('artikel');
+        $form->UseTemplate('artikel.tpl', 'PAGE');
+        $form->Edit();
+        check(str_contains($app->Tpl->values['MESSAGE'], 'Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen'));
+        same(0, $db->writes);
     },
     'tab_hidden_without_woocommerce_shop' => static function () {
         [$tab, $db, , $app] = articleTabFixture();
