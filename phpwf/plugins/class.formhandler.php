@@ -84,7 +84,7 @@ class FormActionHandler
   private $MandatoryList;
   private $CallbackList;
 
-  function __construct(&$app,$name)
+  function __construct(&$app,$name, private ?Closure $afterEditSave = null)
   {
     $this->app = $app;
     $this->name = base64_encode($name);
@@ -177,7 +177,7 @@ class FormActionHandler
 
 
 
-  function ActionAfterExecute()
+  function ActionAfterExecute(?string $editNotice = null)
   {
     $module = $this->app->Secure->GetGET("module");
     $action = $this->app->Secure->GetGET("action");
@@ -206,8 +206,8 @@ class FormActionHandler
     } 
     else if($action=="edit") 
     { 
-      $msg = base64_encode("<div class=\"error2\">Die Daten wurden gespeichert!</div>");
-      header("Location: index.php?module=$module&action=edit&id=".$id."&msg=".$msg);
+      $msg = base64_encode($editNotice ?? "<div class=\"error2\">Die Daten wurden gespeichert!</div>");
+      header("Location: index.php?module=$module&action=edit&id=".$id."&msg=".rawurlencode($msg));
       exit;
     } 
 
@@ -326,7 +326,9 @@ class FormActionHandler
         }
         if($this->table != 'shopexport')$this->app->erp->StartChangeLog($this->table);
         $tmp->Update();
+        $canRunAfterEditSave = $this->afterEditSave !== null && !$this->app->DB->error();
         $this->app->erp->WriteChangeLog();
+        $editNotice = $canRunAfterEditSave ? ($this->afterEditSave)((int)$tmp->GetId()) : null;
         //     $this->app->Tpl->Add('MESSAGE','<div class="error2">Die Daten wurden erfolgreich gespeichert!</div>');
         // passt und speichern
         //if($this->locafterexe!="")
@@ -336,7 +338,7 @@ class FormActionHandler
           $this->app->erp->RunHook($table . '_update', 1, $tableId);
         }
 
-        $this->ActionAfterExecute();
+        $this->ActionAfterExecute($editNotice);
         //	else
         //  $this->PrintForm();
       } else {
@@ -458,6 +460,7 @@ class FormHandler
 
   var $FormList;
   var $defaultmandatorycss;
+  private array $afterEditSave = [];
 
   /**
    * FormHandler constructor.
@@ -594,9 +597,14 @@ class FormHandler
   }
 
 
+  public function afterEditSave(string $name, Closure $callback): void
+  {
+    $this->afterEditSave[$name] = $callback;
+  }
+
   function CreateNew($name)
   {
-    return new FormActionHandler($this->app,$name);
+    return new FormActionHandler($this->app,$name,$this->afterEditSave[$name] ?? null);
   }
 
   // ********************************************************************** alt 

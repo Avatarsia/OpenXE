@@ -24,6 +24,10 @@
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
+use Xentral\Components\Http\Session\SessionHandler;
+use Xentral\Components\WooCommerce\AdminView;
+use Xentral\Components\WooCommerce\ArticleTab;
+use Xentral\Components\WooCommerce\RefundStatusService;
 use Xentral\Modules\Onlineshop\Data\ArticleExportResult;
 use Xentral\Widgets\SuperSearch\Result\ResultGroup;
 use Xentral\Widgets\SuperSearch\Result\ResultItem;
@@ -34,6 +38,10 @@ class Artikel extends GenArtikel {
   /** @var Application $app */
   var $app;
   const MODULE_NAME = 'Article';
+
+  public $stylesheet = ['./classes/Modules/Onlineshop/www/css/woocommerce-admin.css'];
+  public $javascript = ['./classes/Modules/Onlineshop/www/js/woocommerce-article-tab.js'];
+
   protected \Xentral\Modules\Article\Service\ArticleService $service;
 
   public function TableSearch($app, $name, $erlaubtevars)
@@ -7325,6 +7333,16 @@ class Artikel extends GenArtikel {
     }
     $id = $this->app->Secure->GetGET('id');
     $cmd = $this->app->Secure->GetGET('cmd');
+    if($cmd === 'woocommerce_compare')
+    {
+      $tab = new ArticleTab($this->app);
+      $shopId = (int)$this->app->Secure->GetGET('shop');
+      header('Content-Type: application/json; charset=UTF-8');
+      header('Cache-Control: no-store');
+      echo json_encode($tab->compare((int)$id, $shopId), JSON_INVALID_UTF8_SUBSTITUTE);
+      $this->app->ExitXentral();
+      return;
+    }
     if($id || $cmd === 'getshopbuttons')
     {
       if($cmd === 'getonlineshop')
@@ -7693,6 +7711,7 @@ class Artikel extends GenArtikel {
     $this->app->Tpl->Set('KURZTEXT_DE_ANZEIGE','<textarea readonly rows="2" cols="70" readonly style="background-color:#eee; border-color:#ddd;">'.$kurztext_de_anzeige.'</textarea>');
     $this->app->Tpl->Set('ARTIKELBESCHREIBUNG_DE_ANZEIGE','<textarea style="background-color:#eee; border-color:#ddd;" readonly rows="5" cols="70" style="color:grey" name="artikelbeschreibung_de_anzeige" id="artikelbeschreibung_de_anzeige">'.$artikelbeschreibung_de_anzeige.'</textarea>');
 
+    $this->prepareWooCommerceArticleTab((int)$id);
     parent::ArtikelEdit();
 
     /* anzeige formular */ 
@@ -7750,6 +7769,55 @@ class Artikel extends GenArtikel {
 
     $this->app->YUI->AutoComplete('herkunftsland', 'laender', 1);
 
+  }
+
+  private function prepareWooCommerceArticleTab(int $articleId): void
+  {
+    $this->app->Tpl->Set('WOOCOMMERCETABOPEN', '<!--');
+    $this->app->Tpl->Set('WOOCOMMERCETABCLOSE', '-->');
+    try {
+      $tab = new ArticleTab($this->app);
+      $shops = $tab->shopsFor($articleId);
+      if (!$shops) {
+        return;
+      }
+
+      $shopId = (int)$shops[0]['id'];
+      $session = $this->app->Container->get('Session');
+      $postedToken = $this->app->Secure->GetPOST('woo_csrf_token', '', '', 1);
+      $postedShop = $this->app->Secure->GetPOST('woo_shop', '', '', 1);
+      if ($this->app->Secure->GetPOST('speichern') !== '' && $postedShop !== '') {
+        $post = ['woo_csrf_token' => $postedToken, 'woo' => $this->app->Secure->GetPOST('woo', '', '', 1)];
+        // The form handler redirects immediately after a successful article update.
+        $this->app->FormHandler->afterEditSave('artikel', function (int $savedId) use ($tab, $post, $postedShop): ?string {
+          try {
+            $tab->saveExtras($savedId, is_string($postedShop) ? (int)$postedShop : 0, $post);
+            return null;
+          } catch (Throwable $error) {
+            $message = RefundStatusService::sanitizeError($error->getMessage());
+            $this->app->Container->get('Logger')->error('WooCommerce-Artikeldaten nicht gespeichert: ' . $message);
+            if (!$error instanceof InvalidArgumentException && !$error instanceof RuntimeException) {
+              $message = 'Bitte wenden Sie sich an die Administration.';
+            }
+            return '<div class="error">Artikel gespeichert. WooCommerce-Zusatzdaten konnten nicht gespeichert werden. '
+              . AdminView::e($message) . '</div>';
+          }
+        });
+      }
+
+      $token = $postedToken;
+      if (!is_string($token) || !$session->isCsrfTokenValid('woocommerce_admin', $token)) {
+        $token = $session->createCsrfToken('woocommerce_admin');
+        SessionHandler::commitSession($session);
+      }
+      $this->app->Tpl->Set('WOOCOMMERCETAB', $tab->render($articleId, $shopId, $token));
+      $this->app->Tpl->Set('WOOCOMMERCETABOPEN', '');
+      $this->app->Tpl->Set('WOOCOMMERCETABCLOSE', '');
+    } catch (Throwable $error) {
+      $this->app->Container->get('Logger')->error('WooCommerce-Artikelreiter fehlgeschlagen: '
+        . RefundStatusService::sanitizeError($error->getMessage()));
+      $this->app->Tpl->Add('MESSAGE', '<div class="error">WooCommerce-Artikeldaten konnten nicht geladen werden.</div>');
+    }
   }
 
   public function ArtikelEtiketten()

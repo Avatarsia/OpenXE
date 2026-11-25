@@ -19,3 +19,23 @@
 .wc-admin-pages { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
 .wc-admin button, .wc-admin input:not([type="checkbox"]) { min-height: 32px; }
 .wc-admin :focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+
+.wc-article-fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+    align-items: start;
+    gap: 1rem;
+}
+.wc-article-field {
+    display: grid;
+    gap: .25rem;
+    margin-bottom: .75rem;
+}
+.wc-article-field code, .wc-article-tab td { overflow-wrap: anywhere; }
+.wc-article-field input:not([type="checkbox"]), .wc-article-field textarea, .wc-article-field select {
+    box-sizing: border-box;
+    width: 100%;
+}
+.wc-article-tab [data-woo-results] { margin-bottom: 1rem; }
+.wc-article-tab [data-woo-results] table { min-width: 34rem; }
+.wc-article-tab [data-woo-results] td { max-width: 24rem; white-space: pre-wrap; }

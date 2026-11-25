@@ -111,6 +111,7 @@
 [DISABLEOPENTEXTE]<li><a href="#tabs-2">{|Texte und Beschreibungen|}</a></li>[DISABLECLOSETEXTE]
 [DISABLEOPENPARAMETER]<li><a href="#tabs-3">{|Parameter und Freifelder|}</a></li>[DISABLECLOSEPARAMETER]
         [DISABLEOPENSHOP]<li><a href="#tabs-4">{|Online-Shop Optionen|}</a></li>[DISABLECLOSESHOP]
+        [WOOCOMMERCETABOPEN]<li><a href="#tabs-6">WooCommerce</a></li>[WOOCOMMERCETABCLOSE]
         <li><a href="#tabs-5">{|Finanzbuchhaltung|}</a></li>
     </ul>
 
@@ -850,6 +851,7 @@
 
 [DISABLECLOSESHOP]
 
+[WOOCOMMERCETABOPEN]<div id="tabs-6">[WOOCOMMERCETAB]</div>[WOOCOMMERCETABCLOSE]
 <div id="tabs-5">
 <div class="row">
    <div class="row-height">
