@@ -76,6 +76,15 @@ runTests([
             array_column($pull->compare(2)['unmatched'], 'reason', 'id'));
         same([], $db->writes);
     },
+    'duplicate appearing on the same page after preview reports the SKU problem' => static function () {
+        [$pull, $db, $client] = bulkFixture();
+        $preview = $pull->compare(1);
+        same([9], array_keys($preview['articles']));
+        $client->pages[1][] = ['id' => 102, 'name' => 'Neu doppelt', 'sku' => 'SHOP-9'];
+        $identity = ['id' => 101, 'parent_id' => 0, 'sku' => 'SHOP-9'];
+        same('SKU mehrfach', $pull->apply([9 => ['shop_name']], 'bulk_pull', 1, [9 => $identity])[9]['error']);
+        same([], $db->writes);
+    },
     'incomplete SKU lookup cannot authorize an ERP write' => static function () {
         [$pull, $db, $client] = bulkFixture();
         $client->incompleteLookup = true;

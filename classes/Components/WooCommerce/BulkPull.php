@@ -68,6 +68,10 @@ final class BulkPull
                 $expected = $identities[$id] ?? null;
                 $identity = $current ?? $expected;
                 $issue = $identity === null ? null : $this->reader->skuIssue($identity);
+                // A concrete SKU problem explains a missing local match better than an identity change.
+                if ($product === null && $issue !== null) {
+                    throw new InvalidArgumentException($issue);
+                }
                 if ($expected !== null && $current !== $expected) {
                     throw new InvalidArgumentException('Shop-Produkt hat sich geaendert - bitte neu vergleichen');
                 }
