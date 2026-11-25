@@ -87,10 +87,30 @@ final class BulkPullClient
             'meta_data' => [['key' => 'rank_math_title', 'value' => 'SEO Vorschau']]],
     ]];
     public array $requests = [];
+    public array $lookupRequests = [];
+    public array $variations = [];
+    public bool $incompleteLookup = false;
+    private int $total = 0;
 
     public function get(string $endpoint, array $query): array
     {
+        if (isset($query['sku'])) {
+            $this->lookupRequests[] = $query['sku'];
+            $rows = array_values(array_filter(array_merge(...array_values($this->pages + $this->variations)),
+                static fn (array $row): bool => strcasecmp($row['sku'] ?? '', $query['sku']) === 0));
+            $this->total = count($rows) + (int) $this->incompleteLookup;
+            return array_map(static fn (array $row): array => $row + ['parent_id' => 0],
+                array_slice($rows, ($query['page'] - 1) * $query['per_page'], $query['per_page']));
+        }
         $this->requests[] = [$endpoint, $query['page'], $query['per_page']];
-        return $this->pages[$query['page']] ?? [];
+        $rows = $endpoint === 'products' ? ($this->pages[$query['page']] ?? []) : ($this->variations[$endpoint] ?? []);
+        $this->total = count($rows);
+        return $rows;
+    }
+
+    public function getLastResponse(): self { return $this; }
+    public function getHeader(string $name): ?string
+    {
+        return $name === 'X-WP-Total' ? (string) $this->total : null;
     }
 }

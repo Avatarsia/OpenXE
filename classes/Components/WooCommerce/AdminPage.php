@@ -12,6 +12,8 @@ use Xentral\Components\Http\Session\SessionHandler;
 /** Reuses onlineshops/edit authorization; every write also checks the session token. */
 final class AdminPage
 {
+    private const INCOMPLETE_PULL = 'Auswahl unvollstaendig uebertragen - bitte weniger Artikel auswaehlen';
+
     private $app;
     private $db;
     private $shopId;
@@ -155,35 +157,39 @@ final class AdminPage
             : $groups;
         $sessionKey = 'pull_' . $this->shopId;
 
-        if ($action) {
+        if ($action || ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+            $lastError = error_get_last();
+            if ((defined('OPENXE_INPUT_VARS_TRUNCATED') && OPENXE_INPUT_VARS_TRUNCATED)
+                || str_contains($lastError['message'] ?? '', 'Input variables exceeded')
+                || !$action) {
+                throw new RuntimeException(self::INCOMPLETE_PULL);
+            }
             $this->requireToken($session);
             if ($action !== 'apply_pull' || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
                 throw new RuntimeException('Aktion nicht verfuegbar.');
             }
             $preview = $session->getValue('woocommerce_admin', $sessionKey);
             $nonce = $secure->GetPOST('pull_preview', '', '', 1);
-            if (!is_string($nonce) || !$preview || $preview['page'] !== $page || !hash_equals($preview['nonce'], $nonce)) {
+            if (!is_string($nonce) || !isset($preview['articles']) || $preview['page'] !== $page
+                || !hash_equals($preview['nonce'], $nonce)) {
                 throw new RuntimeException('Vorschau erneut laden und Felder auswaehlen.');
             }
-            $selection = $secure->GetPOST('selection', '', '', 1);
-            if (!is_array($selection) || $selection === []) {
-                throw new RuntimeException('Bitte mindestens ein Feld auswaehlen.');
-            }
-            $accepted = $results = [];
+            $selection = $this->pullSelection();
+            $accepted = $identities = $results = [];
             foreach ($selection as $id => $keys) {
-                if (!isset($preview['fields'][$id]) || !is_array($keys) || $keys === []
-                    || array_filter($keys, static fn ($key): bool =>
-                        !is_string($key) || !isset($preview['fields'][$id][$key])) !== []) {
+                $allowed = $preview['articles'][$id] ?? null;
+                if ($allowed === null || array_diff_key(array_fill_keys($keys, true), $allowed['fields']) !== []) {
                     $results[$id] = ['error' => 'Feld war in der Vorschau nicht auswaehlbar.'];
                     continue;
                 }
                 $accepted[$id] = $keys;
+                $identities[$id] = $allowed['identity'];
             }
             if ($accepted !== []) {
                 $session->removeValue('woocommerce_admin', $sessionKey);
                 SessionHandler::commitSession($session);
                 try {
-                    $results += $this->bulkPull()->apply($accepted, 'bulk_pull', $page);
+                    $results += $this->bulkPull()->apply($accepted, 'bulk_pull', $page, $identities);
                 } catch (Throwable $error) {
                     $this->logPullError($error);
                     foreach ($accepted as $id => $keys) {
@@ -200,23 +206,54 @@ final class AdminPage
             $this->logPullError($error);
             throw new RuntimeException('WooCommerce-Artikeldaten konnten nicht verglichen werden.');
         }
-        $fields = [];
+        $articles = [];
         foreach ($data['articles'] as $id => &$article) {
             $article['rows'] = array_filter($article['rows'], static fn (array $row): bool =>
                 in_array($groupsByKey[$row['key']], $selectedGroups, true));
             foreach ($article['rows'] as $row) {
                 if ($row['pullable']) {
-                    $fields[$id][$row['key']] = true;
+                    $articles[$id]['identity'] = $article['identity'];
+                    $articles[$id]['fields'][$row['key']] = true;
                 }
             }
         }
         unset($article);
         $nonce = bin2hex(random_bytes(16));
-        $session->setValue('woocommerce_admin', $sessionKey, ['nonce' => $nonce, 'page' => $page, 'fields' => $fields]);
+        $session->setValue('woocommerce_admin', $sessionKey, ['nonce' => $nonce, 'page' => $page, 'articles' => $articles]);
         $token = $session->createCsrfToken('woocommerce_admin');
         SessionHandler::commitSession($session);
 
         return AdminView::pull($this->shopId, $token, $nonce, $page, $data, $groups, $selectedGroups);
+    }
+
+    private function pullSelection(): array
+    {
+        $secure = $this->app->Secure;
+        $submitted = $secure->GetPOST('pull', '', '', 1);
+        $expectedCount = filter_var($secure->GetPOST('pull_count', '', '', 1), FILTER_VALIDATE_INT);
+        $submitted = $submitted === '' ? [] : $submitted;
+        if (!is_array($submitted) || $expectedCount === false) {
+            throw new RuntimeException(self::INCOMPLETE_PULL);
+        }
+        if (count($submitted) > BulkPull::MAX_SELECTION) {
+            throw new RuntimeException('Pro Uebernahme sind hoechstens ' . BulkPull::MAX_SELECTION . ' Artikel auswaehlbar.');
+        }
+        $selection = [];
+        $count = 0;
+        foreach ($submitted as $id => $keys) {
+            if (!is_int($id) || $id <= 0 || !is_string($keys) || !preg_match('/^[a-z_]+(?:,[a-z_]+)*$/D', $keys)) {
+                throw new RuntimeException(self::INCOMPLETE_PULL);
+            }
+            $selection[$id] = array_values(array_unique(explode(',', $keys)));
+            $count += count($selection[$id]);
+        }
+        if ($count !== $expectedCount) {
+            throw new RuntimeException(self::INCOMPLETE_PULL);
+        }
+        if ($selection === []) {
+            throw new RuntimeException('Bitte mindestens ein Feld auswaehlen.');
+        }
+        return $selection;
     }
 
     private function bulkPull(): BulkPull

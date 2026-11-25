@@ -9,6 +9,8 @@ use Throwable;
 
 final class BulkPull
 {
+    public const MAX_SELECTION = 200;
+
     private Closure $articleIdForSku;
 
     /** The resolver returns an authorized article ID, or a row with id, nummer and name_de. */
@@ -28,18 +30,30 @@ final class BulkPull
             $openxe = $this->repo->load($id);
             $rows = array_values(array_filter(FieldDiff::compare($openxe, $product['values']),
                 static fn (array $row): bool => $row['differs']));
-            if ($rows !== []) {
-                $articles[$id] = [
-                    'nummer' => $article['nummer'] ?? $sku,
-                    'name' => $article['name_de'] ?? $openxe['shop_name']['value'],
-                    'rows' => $rows,
-                ];
+            if ($rows === []) {
+                continue;
             }
+            $identity = $this->identity($sku, $product);
+            if (in_array(true, array_column($rows, 'pullable'), true)) {
+                $issue = $this->reader->skuIssue($identity);
+                if ($issue !== null) {
+                    $unmatched[] = ['id' => $product['id'], 'name' => $product['values']['shop_name'] ?? $sku,
+                        'reason' => $issue];
+                    continue;
+                }
+            }
+            $articles[$id] = [
+                'nummer' => $article['nummer'] ?? $sku,
+                'name' => $article['name_de'] ?? $openxe['shop_name']['value'],
+                'rows' => $rows,
+                'identity' => $identity,
+            ];
         }
         return ['articles' => $articles, 'unmatched' => $unmatched, 'more' => $more];
     }
 
-    public function apply(array $selection, string $origin, int $page = 1): array
+    /** In shop administration, identities are supplied from the confirmed preview. */
+    public function apply(array $selection, string $origin, int $page = 1, array $identities = []): array
     {
         if ($selection === []) {
             return [];
@@ -49,10 +63,17 @@ final class BulkPull
         $results = [];
         foreach ($selection as $id => $keys) {
             try {
-                if (!isset($matches[$id])) {
-                    throw new InvalidArgumentException('Artikel auf dieser Seite nicht mehr eindeutig zugeordnet.');
+                [, $sku, $product] = $matches[$id] ?? [null, null, null];
+                $current = $product === null ? null : $this->identity($sku, $product);
+                $expected = $identities[$id] ?? null;
+                $identity = $current ?? $expected;
+                $issue = $identity === null ? null : $this->reader->skuIssue($identity);
+                if ($expected !== null && $current !== $expected) {
+                    throw new InvalidArgumentException('Shop-Produkt hat sich geaendert - bitte neu vergleichen');
                 }
-                $product = $matches[$id][2];
+                if ($product === null || $issue !== null) {
+                    throw new InvalidArgumentException($issue ?? 'Artikel auf dieser Seite nicht mehr eindeutig zugeordnet.');
+                }
                 $openxe = $this->repo->load($id);
                 $rows = array_column(FieldDiff::compare($openxe, $product['values']), null, 'key');
                 $values = [];
@@ -76,6 +97,11 @@ final class BulkPull
             }
         }
         return $results;
+    }
+
+    private function identity(string $sku, array $product): array
+    {
+        return ['id' => $product['id'], 'parent_id' => $product['parent_id'], 'sku' => $sku];
     }
 
     private function matchPage(int $page): array

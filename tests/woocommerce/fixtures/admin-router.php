@@ -7,6 +7,7 @@ if (!in_array($path, ['/index.php', '/tests/woocommerce/fixtures/admin-router.ph
     return false;
 }
 require_once $root . '/classes/Components/WooCommerce/AdminView.php';
+require_once $root . '/classes/Components/WooCommerce/BulkPull.php';
 use Xentral\Components\WooCommerce\AdminView;
 $view = $_GET['view'] ?? 'downloads';
 $html = $view === 'downloads'

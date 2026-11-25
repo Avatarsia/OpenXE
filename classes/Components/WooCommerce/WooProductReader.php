@@ -5,6 +5,7 @@ namespace Xentral\Components\WooCommerce;
 
 use InvalidArgumentException;
 use RuntimeException;
+use Throwable;
 
 final class WooProductReader
 {
@@ -50,6 +51,40 @@ final class WooProductReader
         }
 
         return $match;
+    }
+
+    /** A bulk pull requires a complete SKU lookup and the same identity as the product page. */
+    public function skuIssue(array $identity): ?string
+    {
+        $sku = $identity['sku'];
+        $failed = 'SKU-Pruefung fehlgeschlagen';
+        if ($sku === '0') {
+            // WooCommerce skips its SKU filter for PHP-empty values.
+            return $failed;
+        }
+        try {
+            // The wc/v3 SKU filter queries both product and product_variation.
+            $rows = $this->client->get('products', [
+                'sku' => $sku, 'status' => 'any', 'context' => 'edit', 'page' => 1,
+                'per_page' => 2, '_fields' => 'id,parent_id,sku',
+            ]);
+            $total = $this->client->getLastResponse()?->getHeader('X-WP-Total');
+            if (!is_array($rows) || !ctype_digit((string) $total) || count($rows) !== min(2, (int) $total)) {
+                return $failed;
+            }
+            if (count($rows) > 1) {
+                // WooCommerce also treats commas as separators in the SKU filter.
+                return str_contains($sku, ',') ? $failed : 'SKU mehrfach';
+            }
+            $row = (array) ($rows[0] ?? []);
+            if (($row['id'] ?? null) !== $identity['id'] || ($row['parent_id'] ?? null) !== $identity['parent_id']
+                || ($row['sku'] ?? null) !== $sku) {
+                return $failed;
+            }
+            return null;
+        } catch (Throwable) {
+            return $failed;
+        }
     }
 
     public function page(int $page): array

@@ -85,16 +85,27 @@ function adminFixture(array $post = [], array $get = [], $db = null, ?Session $s
     return [new AdminPage($app, 7), $db, $erp];
 }
 
+function bulkAdminPreview(BulkPullDatabase $db): array
+{
+    $client = Shopimporter_Woocommerce::$fixtureClient = new BulkPullClient();
+    $get = ['view' => 'pull'];
+    [$page] = adminFixture([], $get, $db);
+    $html = $page->render();
+    preg_match('/name="pull_preview" value="([^"]+)"/', $html, $preview);
+    preg_match('/name="csrf_token" value="([^"]+)"/', $html, $token);
+    return [$client, $get, ['wc_action' => 'apply_pull', 'csrf_token' => $token[1], 'pull_preview' => $preview[1]]];
+}
+
 runTests([
     'apply_requires_token' => static function () {
-        [$page, $db] = adminFixture(['wc_action' => 'apply_pull', 'selection' => [9 => ['shop_name']],
+        [$page, $db] = adminFixture(['wc_action' => 'apply_pull', 'pull' => [9 => 'shop_name'], 'pull_count' => '1',
             'csrf_token' => 'invalid'], ['view' => 'pull']);
         $html = $page->render();
         check(str_contains($html, 'Formular abgelaufen'));
         same([], $db->writes);
     },
     'apply_requires_a_matching_preview' => static function () {
-        [$page, $db] = adminFixture(['wc_action' => 'apply_pull', 'selection' => [9 => ['shop_name']]],
+        [$page, $db] = adminFixture(['wc_action' => 'apply_pull', 'pull' => [9 => 'shop_name'], 'pull_count' => '1'],
             ['view' => 'pull'], new BulkPullDatabase());
         check(str_contains($page->render(), 'Vorschau erneut laden'));
         same([], $db->writes);
@@ -103,15 +114,16 @@ runTests([
         $db = new BulkPullDatabase();
         $client = Shopimporter_Woocommerce::$fixtureClient = new BulkPullClient();
         $client->pages[2] = $client->pages[1];
+        unset($client->pages[1]);
         $client->pages[2][] = ['id' => 102, 'name' => 'Kein Zugriff', 'sku' => 'LOCAL-10'];
         $client->pages[2][] = ['id' => 103, 'name' => 'Interne Artikelnummer', 'sku' => 'LOCAL-9'];
         $db->articles[10]['projekt'] = 55;
         $get = ['view' => 'pull', 'page' => '2', 'filter' => '1', 'groups' => ['SEO']];
         [$page] = adminFixture([], $get, $db);
         $html = $page->render();
-        check(str_contains($html, 'name="selection[9][]" value="seo_title"'));
+        check(str_contains($html, 'data-pull-article="9" value="seo_title"'));
         check(!str_contains($html, 'value="shop_name"'));
-        check(!str_contains($html, 'name="selection[10][]"'));
+        check(!str_contains($html, 'data-pull-article="10"'));
         same(2, substr_count($html, 'kein OpenXE-Artikel'));
         same([], $db->writes);
         preg_match('/name="pull_preview" value="([^"]+)"/', $html, $preview);
@@ -119,16 +131,72 @@ runTests([
         $post = ['wc_action' => 'apply_pull', 'csrf_token' => $token[1], 'pull_preview' => $preview[1]];
         $client->pages[2][0]['meta_data'][0]['value'] = 'SEO aktuell';
 
-        [$page] = adminFixture($post + ['selection' => [9 => ['shop_name']]], $get, $db, new Session($_SESSION));
+        [$page] = adminFixture($post + ['pull' => [9 => 'shop_name'], 'pull_count' => '1'], $get, $db, new Session($_SESSION));
         check(str_contains($page->render(), 'Feld war in der Vorschau nicht ausw'));
         same([], $db->writes);
 
-        [$page] = adminFixture($post + ['selection' => [9 => ['seo_title']], 'seo_title' => 'Gefaelschter Wert'],
+        [$page] = adminFixture($post + ['pull' => [9 => 'seo_title'], 'pull_count' => '1', 'seo_title' => 'Gefaelschter Wert'],
             $get, $db, new Session($_SESSION));
         check(str_contains($page->render(), '1 Feld'));
         same('SEO aktuell', $db->articles[9]['metatitle_de']);
         same('Alter Name', $db->articles[9]['shop_name_de']);
         same([['products', 2, 100], ['products', 2, 100]], $client->requests);
+    },
+    'changed WooCommerce product id requires a new preview' => static function () {
+        $db = new BulkPullDatabase();
+        [$client, $get, $post] = bulkAdminPreview($db);
+        $client->pages[1][0]['id'] = 201;
+        $client->pages[1][0]['name'] = 'Ersatzprodukt';
+        [$page] = adminFixture($post + ['pull' => [9 => 'shop_name'],
+            'pull_count' => '1'], $get, $db, new Session($_SESSION));
+        $html = $page->render();
+        same([], $db->writes);
+        check(str_contains($html, 'Shop-Produkt hat sich geaendert - bitte neu vergleichen'));
+    },
+    'mismatched field count rejects the entire submission' => static function () {
+        $db = new BulkPullDatabase();
+        [$client, $get, $post] = bulkAdminPreview($db);
+        [$page] = adminFixture($post + ['pull' => [9 => 'shop_name'],
+            'pull_count' => '2'], $get, $db, new Session($_SESSION));
+        $html = $page->render();
+        same([], $db->writes);
+        check(str_contains($html, 'Auswahl unvollstaendig uebertragen - bitte weniger Artikel auswaehlen'));
+    },
+    'more than 200 articles rejects the entire submission' => static function () {
+        $db = new BulkPullDatabase();
+        [, $get, $post] = bulkAdminPreview($db);
+        $selection = array_fill_keys(range(9, 209), 'shop_name');
+        [$page] = adminFixture($post + ['pull' => $selection, 'pull_count' => '201'],
+            $get, $db, new Session($_SESSION));
+        $html = $page->render();
+        same([], $db->writes);
+        check(str_contains($html, 'hoechstens 200 Artikel auswaehlbar'));
+    },
+    'a SKU that became ambiguous after preview cannot be applied' => static function () {
+        $db = new BulkPullDatabase();
+        [$client, $get, $post] = bulkAdminPreview($db);
+        $client->pages[2] = [['id' => 201, 'name' => 'Zweites Produkt', 'sku' => 'SHOP-9']];
+        [$page] = adminFixture($post + ['pull' => [9 => 'shop_name'], 'pull_count' => '1'],
+            $get, $db, new Session($_SESSION));
+        $html = $page->render();
+        same([], $db->writes);
+        check(str_contains($html, 'SKU mehrfach'));
+        same(['SHOP-9', 'SHOP-9'], $client->lookupRequests);
+    },
+    'PHP input variable warning rejects even a matching count' => static function () {
+        $db = new BulkPullDatabase();
+        [$client, $get, $post] = bulkAdminPreview($db);
+        [$page] = adminFixture($post + ['pull' => [9 => 'shop_name'],
+            'pull_count' => '1'], $get, $db, new Session($_SESSION));
+        $maxInputVars = (int) ini_get('max_input_vars');
+        @parse_str(str_repeat('unused=1&', $maxInputVars + 1), $unused);
+        try {
+            $html = $page->render();
+            same([], $db->writes);
+            check(str_contains($html, 'Auswahl unvollstaendig uebertragen - bitte weniger Artikel auswaehlen'));
+        } finally {
+            error_clear_last();
+        }
     },
     'CSRF rejected before any writes' => static function () {
         [$page, $db] = adminFixture(['wc_action' => 'clear_downloads', 'article' => 9, 'csrf_token' => 'invalid']);

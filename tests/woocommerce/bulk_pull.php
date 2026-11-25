@@ -53,9 +53,40 @@ runTests([
         same([['products', 2, 100]], $client->requests);
         same([], $db->writes);
     },
+    'duplicate SKU on different pages cannot be previewed or applied on either page' => static function () {
+        [$pull, $db, $client] = bulkFixture();
+        $client->pages[2] = [['id' => 201, 'name' => 'Zweites Produkt', 'sku' => 'SHOP-9']];
+        foreach ([1 => 101, 2 => 201] as $page => $id) {
+            $preview = $pull->compare($page);
+            same([$id => 'SKU mehrfach'], array_column($preview['unmatched'], 'reason', 'id'));
+            same([], $preview['articles']);
+            same('SKU mehrfach', $pull->apply([9 => ['shop_name']], 'bulk_pull', $page)[9]['error']);
+        }
+        same([], $db->writes);
+        same([['products', 1, 100], ['products', 1, 100], ['products', 2, 100], ['products', 2, 100]], $client->requests);
+        same(array_fill(0, 4, 'SHOP-9'), $client->lookupRequests);
+    },
+    'shop-wide lookup sees variants on other pages' => static function () {
+        [$pull, $db, $client] = bulkFixture();
+        $client->pages[2] = [['id' => 200, 'type' => 'variable', 'sku' => 'OTHER']];
+        $client->variations['products/200/variations'] = [['id' => 201, 'parent_id' => 200, 'sku' => 'SHOP-9',
+            'meta_data' => [['key' => 'rank_math_title', 'value' => 'Varianten-SEO']]]];
+        same([101 => 'SKU mehrfach'], array_column($pull->compare(1)['unmatched'], 'reason', 'id'));
+        same([200 => 'kein OpenXE-Artikel', 201 => 'SKU mehrfach'],
+            array_column($pull->compare(2)['unmatched'], 'reason', 'id'));
+        same([], $db->writes);
+    },
+    'incomplete SKU lookup cannot authorize an ERP write' => static function () {
+        [$pull, $db, $client] = bulkFixture();
+        $client->incompleteLookup = true;
+        same([101 => 'SKU-Pruefung fehlgeschlagen'], array_column($pull->compare(1)['unmatched'], 'reason', 'id'));
+        same('SKU-Pruefung fehlgeschlagen', $pull->apply([9 => ['shop_name']], 'bulk_pull')[9]['error']);
+        same([], $db->writes);
+    },
     'apply_respects_group_filter_and_uses_current_woo_values' => static function () {
         [$pull, $db, $client] = bulkFixture();
         $client->pages[2] = $client->pages[1];
+        unset($client->pages[1]);
         $pull->compare(2);
         $client->pages[2][0]['meta_data'][0]['value'] = 'SEO aktuell';
         same([9 => ['seo_title' => ['old' => '', 'new' => 'SEO aktuell']]], $pull->apply([9 => ['seo_title']], 'bulk_pull', 2));

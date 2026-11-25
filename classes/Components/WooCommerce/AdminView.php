@@ -102,8 +102,11 @@ final class AdminView
         }
         $html .= '</div><p><button type="submit">Filtern</button></p></fieldset></form>';
 
-        $html .= '<form method="post" action="' . self::e(self::url($shopId, 'pull', $extra)) . '">'
-            . self::hidden('csrf_token', $token) . self::hidden('pull_preview', $preview);
+        $html .= '<form method="post" id="wc-pull-form" data-max-articles="' . BulkPull::MAX_SELECTION
+            . '" action="' . self::e(self::url($shopId, 'pull', $extra)) . '">'
+            . self::hidden('wc_action', 'apply_pull') . self::hidden('csrf_token', $token)
+            . self::hidden('pull_preview', $preview) . self::hidden('pull_count', '0')
+            . '<div id="wc-pull-selection" hidden></div>';
         $hasRows = $hasSelection = false;
         foreach ($data['articles'] as $id => $article) {
             if ($article['rows'] === []) {
@@ -120,7 +123,7 @@ final class AdminView
                     . '</td><td>' . self::pullValue($row['woocommerce']) . '</td><td>';
                 if ($row['pullable']) {
                     $hasSelection = true;
-                    $html .= '<input type="checkbox" name="selection[' . (int) $id . '][]" value="' . self::e($row['key'])
+                    $html .= '<input type="checkbox" data-pull-article="' . (int) $id . '" value="' . self::e($row['key'])
                         . '" aria-label="' . self::e($row['label'] . ' uebernehmen: ' . $label) . '">';
                 } else {
                     $html .= self::e($row['reason']);
@@ -130,7 +133,10 @@ final class AdminView
             $html .= '</tbody></table></div></fieldset>';
         }
         if ($hasSelection) {
-            $html .= '<p class="wc-admin-actions"><button type="submit" class="btnBlueNew" name="wc_action" value="apply_pull">Ausgew&auml;hlte Werte &uuml;bernehmen</button></p>';
+            $html .= '<p>Pro &Uuml;bernahme sind h&ouml;chstens ' . BulkPull::MAX_SELECTION . ' Artikel ausw&auml;hlbar.</p>'
+                . '<p id="wc-pull-limit" role="status" hidden>Auswahllimit erreicht. Entfernen Sie die Auswahl eines Artikels, um weitere Artikel auszuw&auml;hlen.</p>'
+                . '<p class="wc-admin-actions"><button type="submit" class="btnBlueNew" disabled>Ausgew&auml;hlte Werte &uuml;bernehmen</button></p>'
+                . '<noscript><p>Aktivieren Sie JavaScript, um ausgew&auml;hlte Werte zu &uuml;bernehmen.</p></noscript>';
         }
         $html .= '</form>';
         if (!$hasRows) {
