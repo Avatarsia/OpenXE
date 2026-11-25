@@ -48,30 +48,19 @@ final class ArticleDataDatabase
     public function fetchAll(string $sql, array $parameters): array
     {
         if (str_contains($sql, 'FROM verkaufspreise')) {
-            $group = $parameters['group'] ?? null;
-            $fallback = $group === null && str_contains($sql, 'v.ab_menge <= 1');
-            if ($fallback) {
-                check(str_contains($sql, "v.art = 'Kunde'") || str_contains($sql, 'FROM adresse_rolle'));
-                check(str_contains($sql, 'v.gueltig_ab <= CURDATE()') && str_contains($sql, 'v.gueltig_bis >= CURDATE()'));
-                check(str_contains($sql, "v.waehrung = 'EUR'"));
-            } elseif ($group !== null) {
-                check(str_contains($sql, "v.art = 'Gruppe'") && str_contains($sql, 'v.ab_menge <= 1'));
-                check(str_contains($sql, 'v.gueltig_ab <= CURDATE()') && str_contains($sql, 'v.gueltig_bis >= CURDATE()'));
-                check(str_contains($sql, 'ORDER BY v.ab_menge DESC, v.preis ASC'));
-            } else {
-                check(str_contains($sql, 'ab_menge = 1') && str_contains($sql, 'ORDER BY v.preis DESC'));
-            }
+            same(['article' => 9], $parameters);
+            check(str_contains($sql, "v.ab_menge = 1 AND v.geloescht = 0 AND v.art != 'Gruppe'"));
+            check(str_contains($sql, "(v.objekt = 'Standard' OR v.objekt = '') AND (v.adresse = '0' OR v.adresse = '')"));
+            check(str_contains($sql, "(v.gueltig_bis >= NOW() OR v.gueltig_bis = '0000-00-00')"));
+            check(str_contains($sql, 'ORDER BY v.preis DESC LIMIT 2'));
             $active = array_filter($this->prices, static fn (array $price): bool =>
-                !$price['expired'] && ($price['group'] ?? null) === $group
-                && (!$fallback || in_array($price['waehrung'], ['EUR', ''], true))
-                && ($group === null && !$fallback ? ($price['ab_menge'] ?? '1') == 1
-                    : ($price['ab_menge'] ?? '1') <= 1 && ($price['ab_menge'] ?? '1') > -1)
+                !$price['expired'] && ($price['geloescht'] ?? 0) === 0
+                && ($price['art'] ?? 'Kunde') !== 'Gruppe'
+                && in_array($price['objekt'] ?? 'Standard', ['Standard', ''], true)
+                && in_array($price['adresse'] ?? '0', ['0', ''], true)
+                && ($price['ab_menge'] ?? '1') == 1
             );
-            usort($active, static fn (array $left, array $right): int => $group !== null || $fallback
-                ? (($right['ab_menge'] ?? '1') <=> ($left['ab_menge'] ?? '1')) ?: ($left['preis'] <=> $right['preis'])
-                : $right['preis'] <=> $left['preis']
-            );
-            check(str_contains($sql, 'LIMIT 2'));
+            usort($active, static fn (array $left, array $right): int => $right['preis'] <=> $left['preis']);
             return array_slice($active, 0, 2);
         }
         throw new RuntimeException('Unexpected rows query: ' . $sql);
@@ -81,8 +70,8 @@ final class ArticleDataDatabase
     {
         if (str_contains($sql, 'FROM shopexport')) {
             same(['shop' => 5], $parameters);
-            return str_contains($sql, 'INNER JOIN gruppen') && str_contains($sql, 'g.aktiv = 1') && !$this->groupActive
-                ? false : $this->group;
+            check(str_contains($sql, 'INNER JOIN gruppen g ON s.preisgruppe = g.id AND g.aktiv = 1'));
+            return $this->groupActive ? $this->group : false;
         }
         if (str_contains($sql, 'FROM artikelnummer_fremdnummern')) {
             same(['article' => 9, 'shop' => 5], $parameters);
@@ -111,13 +100,17 @@ final class ArticleDataDatabase
         } elseif (str_starts_with($sql, 'INSERT INTO verkaufspreise')) {
             $id = count($this->prices) + 1;
             if (str_contains($sql, 'FROM verkaufspreise WHERE id = :id')) {
-                check(str_contains($sql, ':value, waehrung, ab_menge, vpe, vpe_menge'));
+                check(str_contains($sql, 'SELECT artikel, objekt, projekt, adresse, :value, waehrung, ab_menge, vpe, vpe_menge'));
+                check(str_contains($sql, 'bemerkung, bearbeiter, NOW(), firma, geloescht, kundenartikelnummer, art, gruppe, 1'));
                 $this->prices[$id] = array_replace($this->prices[$parameters['id']],
                     ['id' => $id, 'preis' => $parameters['value'], 'expired' => false]);
             } else {
+                same(9, $parameters['article']);
+                check(str_contains($sql, "VALUES (:article, 'Standard', '', '0', :value, 'EUR', 1, CURDATE(),"));
+                check(str_contains($sql, "1, 0, 'Kunde', NULL, 1)"));
                 $this->prices[$id] = ['id' => $id, 'preis' => $parameters['value'], 'waehrung' => 'EUR',
-                    'expired' => false, 'group' => $parameters['group'], 'ab_menge' => '1'];
-                same($parameters['group'] === null ? 'Kunde' : 'Gruppe', $parameters['type']);
+                    'expired' => false, 'gruppe' => null, 'ab_menge' => '1', 'objekt' => 'Standard', 'adresse' => '0',
+                    'art' => 'Kunde'];
             }
         } elseif (str_starts_with($sql, 'INSERT INTO konfiguration')) {
             if (!str_contains($sql, 'wert = VALUES(wert)')) {
@@ -147,13 +140,6 @@ function articleRepository(ArticleDataDatabase $db): ArticleDataRepository
         },
         'erp' => new class ($db) {
             public function __construct(private ArticleDataDatabase $db) {}
-            public function Firmendaten(string $key): string
-            {
-                return match ($key) {
-                    'waehrung' => 'EUR',
-                    'guenstigste_vk' => '0',
-                };
-            }
             public function GetVerkaufspreisGruppe(int $article, int $quantity, int $group): string
             {
                 same([9, 1, 7], [$article, $quantity, $group]);
@@ -202,120 +188,70 @@ runTests([
         $db->override['ausartikel'] = 1;
         same(['value' => '10.00', 'source' => 'artikel'], $repo->load(9)['pseudo_price']);
     },
-    'group_price_replaces_export_row_without_touching_standard_price' => static function () {
-        $db = new ArticleDataDatabase();
-        $db->group = 7;
-        $db->prices[1] = ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false];
-        $db->prices[2] = ['id' => 2, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => 7];
-        $repo = articleRepository($db);
-        same(['value' => '24.00', 'source' => 'group_price'], $repo->load(9)['price_net']);
-        same(['price_net' => ['old' => '24.00', 'new' => '20']], $repo->apply(9, ['price_net' => '20'], 'pull'));
-        same(false, $db->prices[1]['expired']);
-        same(true, $db->prices[2]['expired']);
-        same(7, $db->prices[3]['group']);
-        same(['value' => '20', 'source' => 'group_price'], $repo->load(9)['price_net']);
-    },
-    'multiple_group_candidates_are_not_pullable' => static function () {
+    'active_group_displays_erp_price_and_rejects_changes_before_any_write' => static function () {
         $db = new ArticleDataDatabase();
         $db->group = 7;
         $db->prices = [
             1 => ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false],
-            2 => ['id' => 2, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => 7],
-            3 => ['id' => 3, 'preis' => '26.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => 7],
-        ];
-        $stored = articleRepository($db)->load(9);
-        same('24.00', $stored['price_net']['value']);
-        $diff = array_column(FieldDiff::compare($stored, ['price_net' => '28']), null, 'key');
-        same(false, $diff['price_net']['pullable']);
-        same('Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen', $diff['price_net']['reason']);
-    },
-    'multiple_standard_candidates_are_not_pullable' => static function () {
-        $db = new ArticleDataDatabase();
-        $db->prices = [
-            1 => ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false],
             2 => ['id' => 2, 'preis' => '26.00', 'waehrung' => 'EUR', 'expired' => false],
         ];
-        $stored = articleRepository($db)->load(9);
-        same('26.00', $stored['price_net']['value']);
-        $diff = array_column(FieldDiff::compare($stored, ['price_net' => '28']), null, 'key');
-        same(false, $diff['price_net']['pullable']);
-        same('Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen', $diff['price_net']['reason']);
+        $repo = articleRepository($db);
+        $stored = $repo->load(9);
+        same(1, $db->groupPriceCalls);
+        same('24.00', $stored['price_net']['value']);
+        $reason = 'Shop nutzt eine Preisgruppe - Preis bitte unter Verkaufspreise pflegen';
+        same($reason, ArticleDataRepository::priceBlockReason($stored['price_net']['source']));
+        $diff = articleDiff($stored, ['price_net' => '28'], 'price_net');
+        same(false, $diff['pullable']);
+        same($reason, $diff['reason']);
+        try {
+            $repo->apply(9, ['pseudo_price' => '20', 'price_net' => '28'], 'pull');
+            throw new LogicException('Price change for a shop with an active group was accepted.');
+        } catch (InvalidArgumentException $error) {
+            same($reason, $error->getMessage());
+        }
+        same(0, $db->writes);
+        same(false, $db->inTransaction());
     },
-    'ambiguous_standard_fallback_is_readonly_and_rejects_price_changes' => static function () {
+    'multiple_standard_prices_display_the_highest_and_reject_changes_before_any_write' => static function () {
         $db = new ArticleDataDatabase();
-        $db->group = 7;
         $db->prices = [
             1 => ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false],
             2 => ['id' => 2, 'preis' => '26.00', 'waehrung' => 'EUR', 'expired' => false],
         ];
         $repo = articleRepository($db);
         $stored = $repo->load(9);
-        $diff = articleDiff($stored, ['price_net' => '28'], 'price_net');
+        same('26.00', $stored['price_net']['value']);
         $reason = 'Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen';
-        same('24.00', $stored['price_net']['value']);
         same($reason, ArticleDataRepository::priceBlockReason($stored['price_net']['source']));
+        $diff = articleDiff($stored, ['price_net' => '28'], 'price_net');
         same(false, $diff['pullable']);
         same($reason, $diff['reason']);
+
+        $db->beginTransaction();
         try {
-            $repo->apply(9, ['price_net' => '28'], 'pull');
-            throw new LogicException('Price change with multiple standard fallback candidates was accepted.');
+            $repo->apply(9, ['pseudo_price' => '20', 'price_net' => '28'], 'pull');
+            throw new LogicException('Price change with multiple standard prices was accepted.');
         } catch (InvalidArgumentException $error) {
             same($reason, $error->getMessage());
         }
         same(0, $db->writes);
+        same(true, $db->inTransaction());
+        $db->rollBack();
     },
-    'single_standard_fallback_is_replaced_without_creating_a_group_price' => static function () {
+    'no_standard_prices_inserts_standard_price_for_quantity_one' => static function () {
         $db = new ArticleDataDatabase();
-        $db->group = 7;
-        $db->prices[1] = ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false];
         $repo = articleRepository($db);
-        same(['price_net' => ['old' => '24.00', 'new' => '28']], $repo->apply(9, ['price_net' => '28'], 'pull'));
-        same(true, $db->prices[1]['expired']);
-        same(
-            ['id' => 2, 'preis' => '28', 'waehrung' => 'EUR', 'expired' => false],
-            $db->prices[2]
-        );
+        same(['value' => '', 'source' => 'price'], $repo->load(9)['price_net']);
+        same(['price_net' => ['old' => '', 'new' => '28']], $repo->apply(9, ['price_net' => '28'], 'pull'));
+        same(1, count($db->prices));
+        same(['Standard', '0', '1', 'Kunde', null],
+            array_map(static fn (string $key) => $db->prices[1][$key], ['objekt', 'adresse', 'ab_menge', 'art', 'gruppe']));
         same(['value' => '28', 'source' => 'price'], $repo->load(9)['price_net']);
-    },
-    'multiple_candidates_reject_changes_before_any_write_in_both_price_paths' => static function () {
-        foreach ([null, 7] as $group) {
-            $db = new ArticleDataDatabase();
-            $db->group = $group ?? 0;
-            $db->prices = [
-                1 => ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => $group],
-                2 => ['id' => 2, 'preis' => '26.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => $group],
-            ];
-            if ($group !== null) {
-                $db->prices[3] = ['id' => 3, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false];
-            }
-            $db->beginTransaction();
-            try {
-                articleRepository($db)->apply(9, ['pseudo_price' => '20', 'price_net' => '28'], 'pull');
-                throw new LogicException('Price change with multiple candidates was accepted.');
-            } catch (InvalidArgumentException $error) {
-                same('Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen', $error->getMessage());
-            }
-            same(0, $db->writes);
-            $db->rollBack();
-        }
-    },
-    'fractional_group_price_replacement_keeps_quantity_and_currency' => static function () {
-        $db = new ArticleDataDatabase();
-        $db->group = 7;
-        $db->prices = [
-            1 => ['id' => 1, 'preis' => '30.00', 'waehrung' => 'EUR', 'expired' => false],
-            2 => ['id' => 2, 'preis' => '24.00', 'waehrung' => 'CHF', 'expired' => false, 'group' => 7, 'ab_menge' => '0.5'],
-        ];
-        $repo = articleRepository($db);
-        same(['price_net' => ['old' => '24.00', 'new' => '28']], $repo->apply(9, ['price_net' => '28'], 'pull'));
-        same(true, $db->prices[2]['expired']);
-        same('0.5', $db->prices[3]['ab_menge']);
-        same('CHF', $db->prices[3]['waehrung']);
-        same('28', $repo->load(9)['price_net']['value']);
     },
     'fractional_standard_price_is_not_a_candidate_for_quantity_one' => static function () {
         $db = new ArticleDataDatabase();
-        $db->prices[1] = ['id' => 1, 'preis' => '24.00', 'waehrung' => 'CHF', 'expired' => false, 'ab_menge' => '0.5'];
+        $db->prices[1] = ['id' => 1, 'preis' => '24.00', 'waehrung' => 'CHF', 'expired' => false, 'ab_menge' => '0.5', 'adresse' => '0'];
         $repo = articleRepository($db);
         same('', $repo->load(9)['price_net']['value']);
         same(['price_net' => ['old' => '', 'new' => '28']], $repo->apply(9, ['price_net' => '28'], 'pull'));
@@ -337,18 +273,18 @@ runTests([
     'active_group_without_standard_row_has_no_export_price' => static function () {
         $db = new ArticleDataDatabase();
         $db->group = 7;
-        $db->prices[1] = ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false, 'group' => 7];
+        $db->prices[1] = ['id' => 1, 'preis' => '24.00', 'waehrung' => 'EUR', 'expired' => false, 'art' => 'Gruppe', 'gruppe' => 7];
         $repo = articleRepository($db);
         $stored = $repo->load(9);
-        same(['value' => '', 'source' => 'price_without_standard'], $stored['price_net']);
+        same('', $stored['price_net']['value']);
         $diff = array_column(FieldDiff::compare($stored, ['price_net' => '19']), null, 'key');
         same(false, $diff['price_net']['pullable']);
-        same('Export sendet ohne Standardpreis keinen Preis', $diff['price_net']['reason']);
+        same('Shop nutzt eine Preisgruppe - Preis bitte unter Verkaufspreise pflegen', $diff['price_net']['reason']);
         try {
             $repo->apply(9, ['price_net' => '19'], 'pull');
             throw new LogicException('Price change without a standard row was accepted.');
         } catch (InvalidArgumentException $error) {
-            same('Export sendet ohne Standardpreis keinen Preis', $error->getMessage());
+            same('Shop nutzt eine Preisgruppe - Preis bitte unter Verkaufspreise pflegen', $error->getMessage());
         }
         same(0, $db->writes);
         same(0, $db->groupPriceCalls);
@@ -417,13 +353,16 @@ runTests([
         same(false, $rows['weight']['differs']);
         check(!isset($rows['sku']));
     },
-    'standard_price_replaces_export_row_with_history' => static function () {
+    'standard_price_replaces_export_row_preserving_attributes_and_history' => static function () {
         $db = new ArticleDataDatabase();
-        $db->prices[1] = ['id' => 1, 'preis' => '30.00', 'waehrung' => 'CHF', 'expired' => false];
+        $original = ['id' => 1, 'preis' => '30.00', 'waehrung' => 'CHF', 'expired' => false,
+            'ab_menge' => '1.0000', 'adresse' => '0', 'objekt' => '', 'art' => 'Kunde', 'gruppe' => 11,
+            'vpe' => '2', 'projekt' => '3', 'bemerkung' => 'Price note'];
+        $db->prices[1] = $original;
         $repo = articleRepository($db);
         same(['price_net' => ['old' => '30.00', 'new' => '20.5']], $repo->apply(9, ['price_net' => '20,50'], 'pull'));
-        same(true, $db->prices[1]['expired']);
-        same('CHF', $db->prices[2]['waehrung']);
+        same(array_replace($original, ['expired' => true]), $db->prices[1]);
+        same(array_replace($original, ['id' => 2, 'preis' => '20.5']), $db->prices[2]);
         same(['value' => '20.5', 'source' => 'price'], $repo->load(9)['price_net']);
     },
     'empty_shop_price_is_visible_but_not_pullable' => static function () {

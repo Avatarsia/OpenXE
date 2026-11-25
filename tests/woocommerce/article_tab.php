@@ -137,7 +137,11 @@ function articleTabFixture(): array
                 return str_replace(',', '.', $value);
             }
             public function UserProjektRecht(int $project): bool { return $project === 0; }
-            public function GetVerkaufspreisGruppe(int $article, int $quantity, int $group): string { return '10'; }
+            public function GetVerkaufspreisGruppe(int $article, int $quantity, int $group): string
+            {
+                same([9, 1, 7], [$article, $quantity, $group]);
+                return '24.00';
+            }
         },
         'Secure' => new class {
             public array $get = ['module' => 'artikel', 'id' => 9];
@@ -296,14 +300,20 @@ runTests([
             check(str_contains($html, 'value="LOCAL-9"') && !str_contains($html, 'value="bad"'));
         }
     },
-    'price_control_is_editable_with_group_and_readonly_without_standard' => static function () {
+    'active_group_renders_readonly_erp_price_and_allows_saving_other_fields' => static function () {
         [$tab, $db, $token] = articleTabFixture();
         $db->group = 7;
-        check(preg_match('/data-woo-key="price_net"[^>]+readonly/', $tab->render(9, 5, $token)) === 0);
+        $reason = 'Shop nutzt eine Preisgruppe - Preis bitte unter Verkaufspreise pflegen';
+        $html = $tab->render(9, 5, $token);
+        check(preg_match('/data-woo-key="price_net"[^>]+readonly[^>]+value="24.00"/', $html) === 1);
+        check(str_contains($html, $reason));
+        $result = $tab->saveExtras(9, 5, ['woo_csrf_token' => $token,
+            'woo' => ['price_net' => '24.00', 'on_request' => '1']]);
+        same(['on_request' => ['old' => '0', 'new' => '1']], $result);
         $db->price = [];
         $html = $tab->render(9, 5, $token);
-        check(preg_match('/data-woo-key="price_net"[^>]+readonly/', $html) === 1);
-        check(str_contains($html, 'Export sendet ohne Standardpreis keinen Preis'));
+        check(preg_match('/data-woo-key="price_net"[^>]+readonly[^>]+value=""/', $html) === 1);
+        check(str_contains($html, $reason));
     },
     'ambiguous_price_is_readonly_and_unchanged_readonly_input_can_be_submitted' => static function () {
         [$tab, $db, $token] = articleTabFixture();
@@ -314,18 +324,26 @@ runTests([
         $result = $tab->saveExtras(9, 5, ['woo_csrf_token' => $token, 'woo' => ['price_net' => '10.00', 'on_request' => '1']]);
         same(['on_request' => ['old' => '0', 'new' => '1']], $result);
     },
-    'ambiguous_price_change_is_rejected_in_prevalidation' => static function () {
-        [, $db, $token, $app] = articleTabFixture();
-        $db->additionalPrices = [['id' => 6, 'preis' => '8.00', 'waehrung' => 'EUR']];
-        submitArticleTab($app, '5', $token, ['price_net' => '28']);
-        check(prepareArticleTab($app));
-        same('', $app->Secure->GetPOST('speichern'));
-        $form = $app->FormHandler->CreateNew('artikel');
-        $form->UseTable('artikel');
-        $form->UseTemplate('artikel.tpl', 'PAGE');
-        $form->Edit();
-        check(str_contains($app->Tpl->values['MESSAGE'], 'Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen'));
-        same(0, $db->writes);
+    'readonly_price_change_is_rejected_in_prevalidation' => static function () {
+        foreach ([
+            0 => 'Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen',
+            7 => 'Shop nutzt eine Preisgruppe - Preis bitte unter Verkaufspreise pflegen',
+        ] as $group => $reason) {
+            [, $db, $token, $app] = articleTabFixture();
+            $db->group = $group;
+            if ($group === 0) {
+                $db->additionalPrices = [['id' => 6, 'preis' => '8.00', 'waehrung' => 'EUR']];
+            }
+            submitArticleTab($app, '5', $token, ['price_net' => '28']);
+            check(prepareArticleTab($app));
+            same('', $app->Secure->GetPOST('speichern'));
+            $form = $app->FormHandler->CreateNew('artikel');
+            $form->UseTable('artikel');
+            $form->UseTemplate('artikel.tpl', 'PAGE');
+            $form->Edit();
+            check(str_contains($app->Tpl->values['MESSAGE'], $reason));
+            same(0, $db->writes);
+        }
     },
     'tab_hidden_without_woocommerce_shop' => static function () {
         [$tab, $db, , $app] = articleTabFixture();

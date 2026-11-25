@@ -230,7 +230,6 @@ final class ArticleTab
         return '<div class="wc-article-field"><label for="' . $id . '">' . AdminView::e($field['label'])
             . '</label><code>' . AdminView::e($field['wc']) . '</code>' . $input
             . ($override ? '<small>wird auch in der Shop-Zuordnung gesetzt</small>' : '')
-            . ($data['source'] === 'group_price' ? '<small>Gruppenpreis des Shops</small>' : '')
             . ($priceBlockReason !== null ? '<small>' . AdminView::e($priceBlockReason) . '</small>' : '') . '</div>';
     }
 }
