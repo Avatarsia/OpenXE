@@ -15,12 +15,12 @@ final class FieldDiff
             }
             $old = (string) ($openxe[$key]['value'] ?? '');
             $new = (string) $woo[$key];
-            $comparisonValue = $old;
+            $comparisonOld = $old;
+            $comparisonNew = $new;
             if (in_array($key, ['price_net', 'pseudo_price'], true)) {
-                $normalized = self::normalize($key, $old);
-                if (is_numeric($normalized)) {
-                    $comparisonValue = number_format((float) $normalized, 2, '.', '');
-                }
+                // Both sides at the export precision (ProductSynchronizer sends 2 decimals).
+                $comparisonOld = self::exportPrice($key, $old);
+                $comparisonNew = self::exportPrice($key, $new);
             }
             $pullable = $key !== 'price_net' || trim($new) !== '';
             $row = [
@@ -28,7 +28,7 @@ final class FieldDiff
                 'label' => $field['label'],
                 'openxe' => $old,
                 'woocommerce' => $new,
-                'differs' => !self::equivalent($key, $comparisonValue, $new),
+                'differs' => !self::equivalent($key, $comparisonOld, $comparisonNew),
                 'pullable' => $pullable,
             ];
             if (!$pullable) {
@@ -37,6 +37,12 @@ final class FieldDiff
             $rows[] = $row;
         }
         return $rows;
+    }
+
+    private static function exportPrice(string $key, string $value): string
+    {
+        $normalized = self::normalize($key, $value);
+        return is_numeric($normalized) ? number_format((float) $normalized, 2, '.', '') : $value;
     }
 
     public static function equivalent(string $key, string $openxe, string $new): bool

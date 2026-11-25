@@ -321,6 +321,8 @@ runTests([
         foreach (['price_net', 'pseudo_price'] as $key) {
             same(false, articleDiff([$key => ['value' => '8.395']], [$key => '8.40'], $key)['differs']);
             same(true, articleDiff([$key => ['value' => '8.395']], [$key => '8.39'], $key)['differs']);
+            same(false, articleDiff([$key => ['value' => '8.395']], [$key => '8.395'], $key)['differs']);
+            same(false, articleDiff([$key => ['value' => '8.395']], [$key => '8.396'], $key)['differs']);
         }
         same(true, articleDiff(['weight' => ['value' => '8.395']], ['weight' => '8.40'], 'weight')['differs']);
         $db = new ArticleDataDatabase();
