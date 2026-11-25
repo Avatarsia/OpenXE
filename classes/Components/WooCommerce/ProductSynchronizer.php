@@ -111,15 +111,12 @@ class ProductSynchronizer
         }
         foreach ($variants as $sourceId => $variant) {
             $source = $variant['source'];
-            if (!empty($options['extendedMapping']) && isset($article['ausverkauft'])) {
-                $source['ausverkauft'] = $source['ausverkauft'] ?? $article['ausverkauft'];
-            }
             $variationSku = $this->sku($source);
             $variation = $this->map($source, $options);
             $override = $options['variationPayloads'][$sourceId] ?? [];
             if (isset($override['meta_data'])) {
                 $overrideMeta = $this->filterYoastMeta($override['meta_data'], $options);
-                $override['meta_data'] = array_values(array_column(array_merge($variation['meta_data'] ?? [], $overrideMeta), null, 'key'));
+                $override['meta_data'] = array_merge($variation['meta_data'] ?? [], $overrideMeta);
             }
             $variation = array_replace($variation, $override);
             $variation['attributes'] = $variant['selection'];
@@ -233,10 +230,11 @@ class ProductSynchronizer
                 }
             }
 
-            $ean = $payload['global_unique_id'] ?? '';
-            $payload['global_unique_id'] = $ean;
-            $meta[] = ['key' => '_gm_gtin', 'value' => $ean];
-            $meta[] = ['key' => '_rank_math_gtin_code', 'value' => $ean];
+            if (array_key_exists('ean', $article)) {
+                $ean = $payload['global_unique_id'];
+                $meta[] = ['key' => '_gm_gtin', 'value' => $ean];
+                $meta[] = ['key' => '_rank_math_gtin_code', 'value' => $ean];
+            }
 
             if ($soldOut || array_key_exists('lieferzeitmanuell', $article)) {
                 $deliveryTime = $soldOut ? 'derzeit nicht lieferbar' : trim((string) $article['lieferzeitmanuell']);
@@ -392,6 +390,9 @@ class ProductSynchronizer
     {
         if (isset($payload['images'][0])) {
             $payload['image'] = $payload['images'][0];
+        }
+        if (isset($payload['meta_data'])) {
+            $payload['meta_data'] = array_values(array_column($payload['meta_data'], null, 'key'));
         }
         return array_intersect_key($payload, array_flip(['sku', 'description', 'status', 'regular_price', 'sale_price', 'weight', 'dimensions', 'global_unique_id', 'meta_data', 'backorders', 'stock_status', 'manage_stock', 'stock_quantity', 'attributes', 'image', 'downloadable', 'virtual', 'downloads']));
     }

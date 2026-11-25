@@ -296,6 +296,25 @@ runTests([
             '_gm_gtin' => '', '_rank_math_gtin_code' => '', '_lieferzeit' => -1, 'openxe_on_request' => '0',
         ], array_column($mapped['meta_data'] ?? [], 'value', 'key'));
     },
+    'missing_ean_omits_all_gtin_targets_in_variation_put' => static function () {
+        $api = new ProductApi();
+        $api->collections = [
+            'products' => [['id' => 7, 'sku' => 'P']],
+            'products/7/variations' => [['id' => 8, 'sku' => 'V']],
+        ];
+        (new ProductSynchronizer($api))->sync([
+            'nummer' => 'P', 'ean' => '4260',
+            'artikel_varianten' => [['artikel' => 8, 'nummer' => 'V']],
+        ], [], ['extendedMapping' => true]);
+        [$method, $endpoint, $payload] = $api->writes[1];
+        same('PUT', $method);
+        same('products/7/variations/8', $endpoint);
+        $meta = array_column($payload['meta_data'], 'value', 'key');
+        same([[], []], [
+            array_intersect_key($payload, ['global_unique_id' => true]),
+            array_intersect_key($meta, ['_gm_gtin' => true, '_rank_math_gtin_code' => true]),
+        ]);
+    },
     'unknown_delivery_time_not_sent' => static function () {
         $logger = new class {
             public array $warnings = [];
@@ -336,22 +355,23 @@ runTests([
         $withoutTerm = $sync->map($article, $options + ['deliveryTimeIds' => static fn(string $text): ?int => null]);
         check(!array_key_exists('_lieferzeit', array_column($withoutTerm['meta_data'] ?? [], 'value', 'key')));
     },
-    'variation_inherits_parent_sold_out_without_its_own_value' => static function () {
+    'variant_sold_out_flag_controls_its_on_request_state' => static function () {
         $api = new ProductApi();
         $api->collections = ['products' => [], 'products/1001/variations' => []];
         (new ProductSynchronizer($api))->sync([
             'nummer' => 'P', 'ausverkauft' => '1', 'artikel_varianten' => [
-                ['artikel' => 8, 'nummer' => 'V1', 'lag' => 4],
+                ['artikel' => 8, 'nummer' => 'V1', 'lag' => 4, 'ausverkauft' => '1'],
                 ['artikel' => 9, 'nummer' => 'V2', 'lag' => 0, 'ausverkauft' => '0'],
             ],
         ], [], [
             'extendedMapping' => true, 'onRequest' => true,
             'deliveryTimeIds' => static fn(string $text): ?int => $text === 'derzeit nicht lieferbar' ? 99 : null,
         ]);
-        $inherited = $api->writes[1][2];
-        same('outofstock', $inherited['stock_status']);
-        same('no', $inherited['backorders']);
-        same(99, array_column($inherited['meta_data'], 'value', 'key')['_lieferzeit']);
+        $soldOut = $api->writes[1][2];
+        same('outofstock', $soldOut['stock_status']);
+        same(0, $soldOut['stock_quantity']);
+        same('no', $soldOut['backorders']);
+        same(99, array_column($soldOut['meta_data'], 'value', 'key')['_lieferzeit']);
         $own = $api->writes[2][2];
         same('onbackorder', $own['stock_status']);
         same('notify', $own['backorders']);
@@ -359,6 +379,46 @@ runTests([
         same('1', $meta['openxe_on_request']);
         check(!array_key_exists('_lieferzeit', $meta), 'Do not clear omitted fields in sparse variant data');
         check(!array_key_exists('rank_math_title', $meta), 'Do not clear omitted fields in sparse variant data');
+    },
+    'variant_without_sold_out_flag_keeps_its_own_stock_and_delivery_state' => static function () {
+        $api = new ProductApi();
+        $api->collections = [
+            'products' => [['id' => 7, 'sku' => 'P']],
+            'products/7/variations' => [['id' => 8, 'sku' => 'V']],
+        ];
+        (new ProductSynchronizer($api))->sync([
+            'nummer' => 'P', 'ausverkauft' => '1',
+            'artikel_varianten' => [['artikel' => 8, 'nummer' => 'V', 'lag' => 4]],
+        ], [], [
+            'extendedMapping' => true, 'backorders' => 'notify',
+            'deliveryTimeIds' => static fn(string $text): ?int => $text === 'derzeit nicht lieferbar' ? 99 : null,
+        ]);
+        [$method, $endpoint, $payload] = $api->writes[1];
+        same('PUT', $method);
+        same('products/7/variations/8', $endpoint);
+        same('instock', $payload['stock_status']);
+        same(4, $payload['stock_quantity']);
+        same('notify', $payload['backorders']);
+        check(!array_key_exists('_lieferzeit', array_column($payload['meta_data'], 'value', 'key')));
+    },
+    'variation_put_deduplicates_source_meta_without_attachment_meta' => static function () {
+        $api = new ProductApi();
+        $api->collections = [
+            'products' => [['id' => 7, 'sku' => 'P']],
+            'products/7/variations' => [['id' => 8, 'sku' => 'V']],
+        ];
+        (new ProductSynchronizer($api))->sync([
+            'nummer' => 'P', 'artikel_varianten' => [[
+                'artikel' => 8, 'nummer' => 'V',
+                'metatitle_de' => 'Mapper',
+                'meta_data' => ['rank_math_title' => 'Source override'],
+            ]],
+        ], [], ['extendedMapping' => true]);
+        [$method, $endpoint, $payload] = $api->writes[1];
+        same('PUT', $method);
+        same('products/7/variations/8', $endpoint);
+        $titles = array_filter($payload['meta_data'], static fn(array $row): bool => $row['key'] === 'rank_math_title');
+        same(['Source override'], array_column($titles, 'value'));
     },
     'gross pricing and empty stock preserve price basis and unmanaged inventory' => static function () {
         $mapped = (new ProductSynchronizer(new ProductApi()))->map(['nummer' => 'N', 'preis' => 10, 'bruttopreis' => 11.9, 'pseudopreis' => 20, 'anzahl_lager' => ''], ['priceType' => 'gross']);
