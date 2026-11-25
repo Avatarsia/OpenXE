@@ -54142,6 +54142,86 @@
                         "adresse"
                     ],
                     "Non_unique": ""
+                },
+                {
+                    "Key_name": "doctype_doctypeid",
+                    "Index_type": "BTREE",
+                    "columns": [
+                        "doctype",
+                        "doctypeid"
+                    ],
+                    "Non_unique": ""
+                }
+            ]
+        },
+        {
+            "name": "lager_rechnung_lieferschein",
+            "collation": "utf8mb3_general_ci",
+            "type": "BASE TABLE",
+            "columns": [
+                {
+                    "Field": "rechnung",
+                    "Type": "int(11)",
+                    "Collation": null,
+                    "Null": "NO",
+                    "Key": "PRI",
+                    "Default": null,
+                    "Extra": "",
+                    "Privileges": "select,insert,update,references",
+                    "Comment": ""
+                },
+                {
+                    "Field": "lieferschein_position",
+                    "Type": "int(11)",
+                    "Collation": null,
+                    "Null": "NO",
+                    "Key": "PRI",
+                    "Default": null,
+                    "Extra": "",
+                    "Privileges": "select,insert,update,references",
+                    "Comment": ""
+                },
+                {
+                    "Field": "artikel",
+                    "Type": "int(11)",
+                    "Collation": null,
+                    "Null": "NO",
+                    "Key": "PRI",
+                    "Default": null,
+                    "Extra": "",
+                    "Privileges": "select,insert,update,references",
+                    "Comment": ""
+                },
+                {
+                    "Field": "menge",
+                    "Type": "decimal(14,4)",
+                    "Collation": null,
+                    "Null": "NO",
+                    "Key": "",
+                    "Default": null,
+                    "Extra": "",
+                    "Privileges": "select,insert,update,references",
+                    "Comment": ""
+                }
+            ],
+            "keys": [
+                {
+                    "Key_name": "PRIMARY",
+                    "Index_type": "BTREE",
+                    "columns": [
+                        "rechnung",
+                        "lieferschein_position",
+                        "artikel"
+                    ],
+                    "Non_unique": ""
+                },
+                {
+                    "Key_name": "lieferschein_position",
+                    "Index_type": "BTREE",
+                    "columns": [
+                        "lieferschein_position"
+                    ],
+                    "Non_unique": ""
                 }
             ]
         },
@@ -79522,6 +79602,17 @@
                     "Null": "NO",
                     "Key": "",
                     "Default": null,
+                    "Extra": "",
+                    "Privileges": "select,insert,update,references",
+                    "Comment": ""
+                },
+                {
+                    "Field": "rechnung_lagerentnahme",
+                    "Type": "tinyint(1)",
+                    "Collation": null,
+                    "Null": "NO",
+                    "Key": "",
+                    "Default": "1",
                     "Extra": "",
                     "Privileges": "select,insert,update,references",
                     "Comment": ""

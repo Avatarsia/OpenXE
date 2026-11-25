@@ -681,6 +681,10 @@ class Lieferschein extends GenLieferschein
     $schreibschutz = $this->app->DB->Select("SELECT schreibschutz FROM lieferschein WHERE id='$id' LIMIT 1");
 
     $mengegeliefert = $mengegeliefert + $this->app->DB->Select("SELECT ifnull(sum(olp.menge),0)+0 FROM objekt_lager_platz olp INNER JOIN lieferschein_position lp ON olp.objekt='lieferschein' AND olp.parameter=lp.id AND lp.lieferschein = '$id'");
+    $rechnungsauslagerung = array_sum($this->app->erp->LieferscheinRechnungsLagerMengen((int)$id));
+    $mengegeliefert += $rechnungsauslagerung;
+    $liefermengelagerartikel += $rechnungsauslagerung;
+    $liefermengelagerartikel2 += $rechnungsauslagerung;
 
     if ($status == "versendet" || $status == "freigegeben") {
 
@@ -1933,6 +1937,8 @@ class Lieferschein extends GenLieferschein
     $mengegeliefert = $this->app->DB->Select("SELECT ifnull(sum(geliefert),0) from lieferschein_position where lieferschein = '$id'");
 
     $mengegeliefert = $mengegeliefert + $this->app->DB->Select("SELECT ifnull(sum(olp.menge),0)+0 FROM objekt_lager_platz olp INNER JOIN lieferschein_position lp ON olp.objekt='lieferschein' AND olp.parameter=lp.id AND lp.lieferschein = '$id'");
+    $rechnungsauslagerung = array_sum($this->app->erp->LieferscheinRechnungsLagerMengen((int)$id));
+    $mengegeliefert += $rechnungsauslagerung;
 
     if($mengegeliefert <= 0 && $liefermengelagerartikel <=0 && $schreibschutz=="1" && $status!='angelegt' && $status!='storniert' && $anzahllagerartikel > 0) {
       $this->app->Tpl->Add('MESSAGE',"<div class=\"warning\">Der Lieferschein wurde noch nicht ausgelagert! <input type=\"button\" value=\"Jetzt auslagern\" onclick=\"window.location.href='index.php?module=lieferschein&action=auslagern&id=$id'\"></div>");
@@ -2700,20 +2706,38 @@ class Lieferschein extends GenLieferschein
       LEFT JOIN artikel AS art ON ap.artikel = art.id 
       WHERE ap.lieferschein='$lieferschein' AND ap.geliefert < ap.menge ");
     }
+    $rechnungsMengen = $this->app->erp->LieferscheinRechnungsLagerMengen((int)$lieferschein, true);
+    $restMengen = [];
+    $artikelMitRechnung = [];
+    if ($rechnungsMengen) {
+      $ausgelagert = $this->app->erp->LieferscheinAusgelagerteMengen((int)$lieferschein);
+      foreach ($artikelarr ?: [] as $position) {
+        $artikelId = (int)$position['artikel'];
+        $pos = (int)$position['id'];
+        $geliefert = max((float)$position['geliefert'], (float)($ausgelagert[$pos] ?? 0));
+        $restMengen[$artikelId] = ($restMengen[$artikelId] ?? 0)
+          + max(0, $position['menge'] - $geliefert - ($rechnungsMengen[$pos] ?? 0));
+        if (array_key_exists($pos, $rechnungsMengen)) {
+          $artikelMitRechnung[$artikelId] = true;
+        }
+      }
+    }
     $cartikelarr = !empty($artikelarr)?count($artikelarr):0;
     for($k=0;$k<$cartikelarr; $k++) {
-      $menge = $artikelarr[$k]['menge'] - $artikelarr[$k]['gelieferte'];
+      $menge = $artikelarr[$k]['menge'] - $artikelarr[$k]['geliefert'];
       $artikel = $artikelarr[$k]['artikel'];
       $artikel_position_id = $artikelarr[$k]['id'];
       $lagerartikel = $artikelarr[$k]['artlagerartikel'];
       if($lagerartikel==1)
       {
-        $gesamte_menge_im_lieferschein= $this->app->DB->Select("SELECT SUM(menge-geliefert) FROM lieferschein_position WHERE lieferschein='$lieferschein' AND artikel='$artikel'");
-        if($gesamte_menge_im_lieferschein > $menge) {
-          $menge = $gesamte_menge_im_lieferschein;
+        if (isset($artikelMitRechnung[$artikel])) {
+          $menge = round($restMengen[$artikel], 4);
+        } else {
+          $gesamte_menge_im_lieferschein = $this->app->DB->Select("SELECT SUM(menge-geliefert) FROM lieferschein_position WHERE lieferschein='$lieferschein' AND artikel='$artikel'");
+          $menge = max($menge, $gesamte_menge_im_lieferschein);
         }
 
-        if($this->app->erp->LagerCheck($adresse,$artikel,$menge,'lieferschein',$lieferschein, $lagercheckjustStorage)>0){
+        if($menge <= 0 || $this->app->erp->LagerCheck($adresse,$artikel,$menge,'lieferschein',$lieferschein, $lagercheckjustStorage)>0){
           $positionen_vorhanden++;
         }
         else {

@@ -7686,13 +7686,24 @@ CREATE TABLE `lager_bewegung` (
   `is_interim` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   KEY `artikel` (`artikel`),
-  KEY `adresse` (`adresse`)
+  KEY `adresse` (`adresse`),
+  KEY `doctype_doctypeid` (`doctype`,`doctypeid`)
 ) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
 -- Table structure for table `lager_charge`
 --
+
+DROP TABLE IF EXISTS `lager_rechnung_lieferschein`;
+CREATE TABLE `lager_rechnung_lieferschein` (
+  `rechnung` int(11) NOT NULL,
+  `lieferschein_position` int(11) NOT NULL,
+  `artikel` int(11) NOT NULL,
+  `menge` decimal(14,4) NOT NULL,
+  PRIMARY KEY (`rechnung`,`lieferschein_position`,`artikel`),
+  KEY `lieferschein_position` (`lieferschein_position`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3 COLLATE=utf8mb3_general_ci;
 
 DROP TABLE IF EXISTS `lager_charge`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
@@ -11407,6 +11418,7 @@ CREATE TABLE `projekt` (
   `multiorderpicking` tinyint(1) NOT NULL DEFAULT 0,
   `standardlager` int(11) NOT NULL DEFAULT 0,
   `standardlagerproduktion` int(11) NOT NULL DEFAULT 0,
+  `rechnung_lagerentnahme` tinyint(1) NOT NULL DEFAULT 1,
   `klarna_merchantid` text NOT NULL,
   `klarna_sharedsecret` text NOT NULL,
   `nurlagerartikel` tinyint(1) NOT NULL DEFAULT 1,

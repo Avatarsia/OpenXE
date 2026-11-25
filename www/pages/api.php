@@ -8480,6 +8480,7 @@ XML;
       case 7: $message = "Username exists already"; break;
       case 8: $message = "Data not found"; break;
       case 9: $message = "Wrong or no api_id provided. (https://community.xentral.com/hc/de/articles/360017436919-API-Dokumentation#toc-0)"; break;
+      case 10: $message = "Invoice stock posting failed"; break;
       default: $message = "Unknown message code";
     }
     return $message;
@@ -9508,9 +9509,15 @@ XML;
       if(!$intern) {
         if(!empty($ret)) {
           if(!empty($ret['error'])) {
-            $this->XMLResponse($ret['error']);
+            $detail = isset($ret['detail'])
+              ? '<detail>' . htmlspecialchars($ret['detail'], ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</detail>'
+              : '';
+            $this->XMLResponse($ret['error'], $detail);
           }
-          $this->XMLResponse(1,"<id>$id</id><belegnr>".$ret['belegnr'].'</belegnr>');
+          $warning = isset($ret['warning'])
+            ? '<warning>' . htmlspecialchars($ret['warning'], ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</warning>'
+            : '';
+          $this->XMLResponse(1,"<id>$id</id><belegnr>".$ret['belegnr'].'</belegnr>' . $warning);
         }
       }
 
@@ -9613,9 +9620,23 @@ XML;
     if(in_array($row['status'], ['storniert','abgeschlossen','versendet'])) {
       return ['error' => 8];
     }
-    $this->app->erp->BelegFreigabe($typ, $id);
+    try {
+      $this->app->erp->BelegFreigabe($typ, $id);
+    } catch (DomainException $e) {
+      if ($typ !== 'rechnung') {
+        throw $e;
+      }
+      return ['error' => 10, 'detail' => $e->getMessage()];
+    }
 
-    return ['id' => $id, 'belegnr' => $this->app->DB->Select(sprintf('SELECT belegnr FROM `%s` WHERE id = %d', $typ, $id))];
+    $result = ['id' => $id, 'belegnr' => $this->app->DB->Select(sprintf('SELECT belegnr FROM `%s` WHERE id = %d', $typ, $id))];
+    if ($typ === 'rechnung') {
+      $warning = $this->app->erp->RechnungLagerwarnung((int)$id);
+      if ($warning !== '') {
+        $result['warning'] = $warning;
+      }
+    }
+    return $result;
   }
 
   function ApiEtikettendrucker($intern=false)

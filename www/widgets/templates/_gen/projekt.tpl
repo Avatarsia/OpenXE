@@ -125,6 +125,10 @@
                 <td>[DEACTIVATEAUTOSHIPPING][MSGDEACTIVATEAUTOSHIPPING]</td>    
               </tr>
               <tr>
+                <td>{|Lagerartikel bei Rechnungsfreigabe ausbuchen|}:</td>
+                <td>[RECHNUNG_LAGERENTNAHME][MSGRECHNUNG_LAGERENTNAHME]</td>
+              </tr>
+              <tr>
                 <td>
                     Standard Versandart:</td><td>[VERSANDART][MSGVERSANDART]
                 </td>
