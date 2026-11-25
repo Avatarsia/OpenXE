@@ -29,6 +29,7 @@ use Xentral\Components\WooCommerce\ProductSynchronizer;
 use Xentral\Components\WooCommerce\CategorySynchronizer;
 use Xentral\Components\WooCommerce\VariationMedia;
 use Xentral\Components\WooCommerce\DownloadSettings;
+use Xentral\Components\WooCommerce\DeliveryTimeMap;
 use Automattic\WooCommerce\HttpClient\HttpClientException;
 
 class Shopimporter_Woocommerce extends ShopimporterBase
@@ -78,6 +79,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   protected $dump;
 
   private $downloadSettings;
+  private string $deliveryTimeMapping = '';
+  private ?DeliveryTimeMap $cachedDeliveryTimeMap = null;
 
   /*
    * Variables for wordpress API
@@ -1217,8 +1220,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ImportWooCommerceApiKey = $felder['ImportWoocommerceApiKey'] ?? '';
     $ImportWooCommerceApiUrl = $felder['ImportWoocommerceApiUrl'] ?? '';
 
-    $this->ImportWordpressUserName = $felder['ImportWordpressUserName'];
-    $this->ImportWordpressApplicationPassword = $felder['ImportWordpressApplicationPassword'];
+    $this->ImportWordpressUserName = $felder['ImportWordpressUserName'] ?? '';
+    $this->ImportWordpressApplicationPassword = $felder['ImportWordpressApplicationPassword'] ?? '';
 
     $this->filenamesmarty = $felder['filenamesmarty'];
     $this->productsmarty = $felder['productsmarty'];
@@ -1249,6 +1252,9 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $this->importCompletedOrders = !empty($felder['importCompletedOrders']);
 
     $this->backorders = $felder['backorders'];
+    $deliveryTimeMapping = $felder['deliveryTimeMapping'] ?? '';
+    $this->deliveryTimeMapping = is_string($deliveryTimeMapping) ? $deliveryTimeMapping : '';
+    $this->cachedDeliveryTimeMap = null;
 
     $this->url = $ImportWooCommerceApiUrl;
     $this->client = new ClientWrapper(
@@ -1548,6 +1554,12 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         'priceType' => array('typ' => 'select', 'bezeichnung' => '{|Preisberechnungsgrundlage bei Auftragsimport|}', 'optionen' => array('netcalculated' => '{|Nettopreis zurückrechnen (Standard)|}', 'grosscalculated' => '{|Bruttopreis zurückrechnen|}')),
         'timeout' => array('typ' => 'text', 'bezeichnung' => '{|Timeout in Sekunden|}:', 'size' => 40, 'default' => '30', 'info' => ''),
         'backorders' => array('typ' => 'select', 'bezeichnung' => '{|Einstellungen für Backorders|}:', 'optionen' => $this->backorders_array, 'info' => ''),
+        'deliveryTimeMapping' => [
+            'typ' => 'textarea',
+            'cols' => 60,
+            'rows' => 5,
+            'bezeichnung' => '{|Lieferzeit-Zuordnung (Text=ID, nur falls WordPress-API nicht erreichbar)|}',
+        ],
         'productsmarty' => [
             'typ' => 'textarea',
             'cols' => 80,
@@ -1607,6 +1619,29 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   protected static function emptyString($string)
   {
     return (strlen(trim($string)) == 0);
+  }
+
+  public function deliveryTimeMap(): DeliveryTimeMap
+  {
+    return $this->cachedDeliveryTimeMap ??= new DeliveryTimeMap(function (): array {
+      if (empty($this->ImportWordpressUserName) || empty($this->ImportWordpressApplicationPassword)) {
+        throw new RuntimeException('WordPress credentials are missing');
+      }
+
+      $result = $this->wordpress_request('product_delivery_times?per_page=100', ssl_ignore: $this->ssl_ignore);
+      if (!$result['status'] || !array_is_list($result['response'])) {
+        throw new RuntimeException('Could not fetch WordPress delivery time terms');
+      }
+
+      $terms = [];
+      foreach ($result['response'] as $term) {
+        if (!is_int($term['id'] ?? null) || $term['id'] <= 0 || !is_string($term['name'] ?? null)) {
+          throw new RuntimeException('Invalid WordPress delivery time term');
+        }
+        $terms[$term['id']] = $term['name'];
+      }
+      return $terms;
+    }, $this->deliveryTimeMapping);
   }
 
   function wordpress_request(string $endpoint, $postdata = null, $method = null, $getdata = null, string $content_disposition = null, string $content_type = null, $debug = false, $debugurl = null, bool $ssl_ignore = false, int $timeout_seconds = 30) {
