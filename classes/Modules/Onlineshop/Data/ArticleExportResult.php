@@ -8,5 +8,6 @@ class ArticleExportResult {
     public ?string $message = null;
     public bool $categoryAssignmentDeferred = false;
     public bool $requiresActiveAssignment = false;
+    public bool $retryExport = false;
     public ?string $extArticleId = null;
 }

@@ -1091,6 +1091,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         $availability = $this->loadExportAvailability($tmp[$i], $this->extendedFieldMapping ? $categoryStore : null);
       } catch (Throwable $error) {
         $return[$i]->message = $this->reportAvailabilityLookupFailure((int) $artikel, $error);
+        $return[$i]->retryExport = true;
         continue;
       }
       $return[$i]->success = true;

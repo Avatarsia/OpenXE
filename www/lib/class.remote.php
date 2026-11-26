@@ -2265,7 +2265,7 @@ class Remote
         if (!empty($result) && is_array($result)) {
             /** @var ArticleExportResult $articleResult */
             foreach ($result as $articleResult) {
-                if (!$articleResult instanceof ArticleExportResult || !$articleResult->success) {
+                if (!$articleResult instanceof ArticleExportResult || $articleResult->retryExport) {
                     continue;
                 }
                 /** @var Shopexport $objShopexport */
