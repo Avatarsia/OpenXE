@@ -137,6 +137,7 @@ final class CsvImportDatabaseFake
         if (str_contains($sql, 'FROM shopexport')) {
             check(str_contains($sql, 'a.aktiv = 1') && !str_contains($sql, 'ausartikel'));
             check(str_contains($sql, 'shopimporter_woocommerce') && str_contains($sql, 's.geloescht = 0'));
+            check(str_contains($sql, 's.aktiv = 1'), 'price import must ignore deactivated shops');
             same(9, $params['article']);
             return array_map(static fn ($id) => ['shop' => $id], $this->activeShopIds);
         }

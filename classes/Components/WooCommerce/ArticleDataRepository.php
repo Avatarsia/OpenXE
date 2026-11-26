@@ -111,7 +111,7 @@ final class ArticleDataRepository
                 . ' INNER JOIN artikel AS art ON art.id = :article'
                 . ' LEFT JOIN artikel_onlineshops AS a ON a.artikel = art.id AND a.shop = s.id AND a.aktiv = 1'
                 . ' WHERE (a.id IS NOT NULL OR s.id IN (art.shop, art.shop2, art.shop3))'
-                . " AND s.geloescht = 0 AND s.modulename = 'shopimporter_woocommerce' ORDER BY s.id FOR UPDATE",
+                . " AND s.aktiv = 1 AND s.geloescht = 0 AND s.modulename = 'shopimporter_woocommerce' ORDER BY s.id FOR UPDATE",
                 ['article' => $articleId]
             );
             if ($shops === []) {
