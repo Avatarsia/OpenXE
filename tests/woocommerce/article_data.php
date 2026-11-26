@@ -30,6 +30,7 @@ final class ArticleDataDatabase
     public array $prices = [];
     public int $group = 0;
     public bool $groupActive = true;
+    public bool $matrixParent = false;
     public int $groupPriceCalls = 0;
     public int $writes = 0;
     public bool $failLog = false;
@@ -83,6 +84,9 @@ final class ArticleDataDatabase
 
     public function fetchValue(string $sql, array $parameters)
     {
+        if (str_contains($sql, 'SELECT matrixprodukt FROM artikel')) {
+            return $this->matrixParent;
+        }
         if (str_contains($sql, 'FROM shopexport')) {
             same(['shop' => 5], $parameters);
             check(str_contains($sql, 'INNER JOIN gruppen g ON s.preisgruppe = g.id AND g.aktiv = 1'));
@@ -214,6 +218,27 @@ runTests([
         same(['value' => '12.00', 'source' => 'shop'], $repo->load(9)['pseudo_price']);
         $db->override['ausartikel'] = 1;
         same(['value' => '10.00', 'source' => 'artikel'], $repo->load(9)['pseudo_price']);
+    },
+    'variant_fields_follow_the_nested_payload_and_do_not_use_shop_overrides' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->article += ['variante' => 1, 'variante_von' => 8, 'metatitle_de' => 'Nicht exportiert'];
+        $db->prices[1] = ['id' => 1, 'preis' => '40', 'expired' => false];
+        $repo = articleRepository($db);
+        $local = $repo->load(9);
+        $row = articleDiff($local, ['price_net' => '30'], 'price_net');
+        same(false, $row['pullable']);
+        same('Variantenpreis bitte unter Verkaufspreise pflegen', $row['reason']);
+        same('10.00', $local['pseudo_price']['value']);
+        same(false, articleDiff($local, ['pseudo_price' => '30'], 'pseudo_price')['pullable']);
+        same([], FieldDiff::compare($local, ['seo_title' => 'Neuer Titel', 'delivery_time' => '2 Tage']));
+        $db->matrixParent = true;
+        same(false, articleDiff($repo->load(9), ['delivery_time' => '2 Tage'], 'delivery_time')['pullable']);
+        try {
+            $repo->apply(9, ['pseudo_price' => '30'], 'bulk_pull');
+            throw new LogicException('Variant override was writable.');
+        } catch (InvalidArgumentException) {
+            same(0, $db->writes);
+        }
     },
     'active_group_displays_erp_price_and_rejects_changes_before_any_write' => static function () {
         $db = new ArticleDataDatabase();

@@ -70,7 +70,7 @@ runTests([
         [$pull, $db, $client] = bulkFixture();
         $client->pages[2] = [['id' => 200, 'type' => 'variable', 'sku' => 'OTHER']];
         $client->variations['products/200/variations'] = [['id' => 201, 'parent_id' => 200, 'sku' => 'SHOP-9',
-            'meta_data' => [['key' => 'rank_math_title', 'value' => 'Varianten-SEO']]]];
+            'description' => 'Variantenbeschreibung']];
         same([101 => 'SKU mehrfach'], array_column($pull->compare(1)['unmatched'], 'reason', 'id'));
         same([200 => 'kein OpenXE-Artikel', 201 => 'SKU mehrfach'],
             array_column($pull->compare(2)['unmatched'], 'reason', 'id'));

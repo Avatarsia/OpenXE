@@ -447,6 +447,19 @@ A9;7;25
         same(['id' => 8, 'preis' => '40', 'active' => false], $db->prices[1]);
         same('csv_import', json_decode($db->audit['woocommerce_pull_log_7'], true)[0]['origin']);
     },
+    'csv_variant_row_only_changes_fields_in_the_nested_export_payload' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate('1:nummer;2:ean;3:pseudolager;4:metatitle_de;5:woo_preis_netto'));
+        $db->article += ['variante' => 1, 'variante_von' => 8, 'ean' => '111', 'metatitle_de' => 'Alt'];
+        $before = $db->prices;
+        $result = runCsvImport($db, "nummer;ean;pseudolager;metatitle_de;standardpreisnetto
+A9;222;4;Neu;25
+", 12);
+        check(str_contains($result['message'], 'Variantenpreis'));
+        same('222', $db->article['ean']);
+        same('0', $db->article['pseudolager']);
+        same('Alt', $db->article['metatitle_de']);
+        same($before, $db->prices);
+    },
     'unchanged_csv_values_preserve_different_effective_shop_overrides' => static function () {
         $db = new CsvImportDatabaseFake(csvImportTemplate('1:nummer;2:pseudolager;3:lieferzeitmanuell'));
         $db->article['lieferzeitmanuell'] = 'Artikelwert';

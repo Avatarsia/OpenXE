@@ -55,7 +55,17 @@ final class ArticleDataRepository
         return match ($source) {
             'group_price' => self::PRICE_GROUP,
             'price_ambiguous' => self::PRICE_AMBIGUOUS,
+            'variant_price' => 'Variantenpreis bitte unter Verkaufspreise pflegen',
             'price_missing' => 'Kein Standardpreis vorhanden - bitte unter Verkaufspreise anlegen',
+            default => null,
+        };
+    }
+
+    public static function fieldBlockReason(?string $source): ?string
+    {
+        return self::priceBlockReason($source) ?? match ($source) {
+            'variant_shop' => 'Variantenfeld bitte im Artikelstamm pflegen',
+            'variant_unavailable' => 'Dieses Feld wird fuer die Variante nicht exportiert.',
             default => null,
         };
     }
@@ -180,7 +190,16 @@ final class ArticleDataRepository
             $changes = [];
             $audit = [];
             foreach ($updates as $key => [$new, $storage, $column]) {
-                $effective = $state['fields'][$key]['value'];
+                $storedField = $state['fields'][$key];
+                $blocked = self::fieldBlockReason($storedField['source']);
+                if ($blocked !== null) {
+                    if ($storage === 'price') {
+                        // A blocked price with the same value is harmless outside CSV.
+                        continue;
+                    }
+                    throw new InvalidArgumentException($blocked);
+                }
+                $effective = $storedField['value'];
                 // CSV mirroring preserves the actual column value, including empty pseudolager.
                 $exact = $origin === 'csv_import' && $storage === 'shop' && $key !== 'pseudo_price';
                 $effectiveChanged = $exact ? $effective !== $new : !FieldDiff::equivalent($key, $effective, $new);
@@ -247,7 +266,11 @@ final class ArticleDataRepository
         if (!$article) {
             throw new InvalidArgumentException('OpenXE-Artikel ' . $articleId . ' wurde nicht gefunden.');
         }
-        $override = $overrideId === 0 ? false : $this->database->fetchRow(
+        $variant = ArticleFieldCatalog::isVariant($article);
+        $matrix = $variant && !empty($article['variante_von']) && (bool) $this->database->fetchValue(
+            'SELECT matrixprodukt FROM artikel WHERE id = :parent', ['parent' => (int) $article['variante_von']]
+        );
+        $override = $variant || $overrideId === 0 ? false : $this->database->fetchRow(
             'SELECT * FROM artikel_onlineshops WHERE artikel = :article AND shop = :shop AND aktiv = 1'
             . ' AND ausartikel = 0' . ($overrideId === null ? '' : ' AND id = :override') . ' LIMIT 1' . $lockSql,
             $overrideId === null ? $shopParams : $shopParams + ['override' => $overrideId]
@@ -258,11 +281,13 @@ final class ArticleDataRepository
             $shopParams
         );
         $sku = trim($foreign === false || $foreign === null ? (string) $article['nummer'] : (string) $foreign);
-        $group = $this->priceGroup($lock);
-        $candidates = $this->standardPriceCandidates($articleId, $lock);
+        $group = $variant ? 0 : $this->priceGroup($lock);
+        $candidates = $variant ? [] : $this->standardPriceCandidates($articleId, $lock);
         $priceValue = $candidates[0]['preis'] ?? '';
         $priceSource = $candidates === [] ? 'price_missing' : 'price';
-        if ($group) {
+        if ($variant) {
+            $priceSource = 'variant_price';
+        } elseif ($group) {
             $priceSource = 'group_price';
             // The export resolves the group price only after a hit in the standard query.
             if ($candidates !== [] && method_exists($this->app->erp, 'GetVerkaufspreisGruppe')) {
@@ -283,6 +308,11 @@ final class ArticleDataRepository
                 'shop' => $override ? [$override[$column] ?? '', 'shop'] : [$article[$column] ?? '', 'artikel'],
                 default => [$article[$column] ?? '', 'artikel'],
             };
+            if ($variant && !ArticleFieldCatalog::supportsVariantField($field['key'], $matrix)) {
+                $source = 'variant_unavailable';
+            } elseif ($variant && $storage === 'shop') {
+                $source = 'variant_shop';
+            }
             $fields[$field['key']] = ['value' => (string) $value, 'source' => $source];
         }
 

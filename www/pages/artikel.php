@@ -7869,7 +7869,7 @@ class Artikel extends GenArtikel {
     $shop = $db->SelectRow("SELECT projekt FROM shopexport WHERE id = '$shopId' AND geloescht = 0"
       . " AND modulename = 'shopimporter_woocommerce' LIMIT 1");
     $article = $db->SelectRow("SELECT projekt, variante, variante_von FROM artikel WHERE id = '$articleId' LIMIT 1");
-    if (!$shop || !$article || !empty($article['variante_von']) || !empty($article['variante'])
+    if (!$shop || !$article || ArticleFieldCatalog::isVariant($article)
         || !$this->app->erp->UserProjektRecht((int)$shop['projekt'])
         || !$this->app->erp->UserProjektRecht((int)$article['projekt'])) {
       return [];

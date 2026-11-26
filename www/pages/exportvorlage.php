@@ -13,6 +13,7 @@
 */
 ?>
 <?php
+use Xentral\Components\WooCommerce\ArticleFieldCatalog;
 use Xentral\Components\WooCommerce\TemplateInstaller;
 
 include '_gen/exportvorlage.php';
@@ -328,10 +329,14 @@ ean;';
     $sql_fields_where = ltrim($sql_fields_where,' AND');
 
 
+    $wooCommerceCsv = !$xls && $ziel === 'artikel'
+      && ($exportvorlageArr['bezeichnung'] ?? '') === TemplateInstaller::LABEL
+      && $exportdatenmaskierung === 'gaensefuesschen';
     switch($ziel)
     {
       case "artikel":
-        $sql = "SELECT $sql_fields, art.id as systemid FROM artikel AS art ";
+        $variantSelect = $wooCommerceCsv ? ', (art.variante = 1 OR art.variante_von > 0) AS woo_csv_variant' : '';
+        $sql = "SELECT $sql_fields, art.id as systemid$variantSelect FROM artikel AS art ";
         break;
       case "ansprechpartner":
         $sql = "SELECT $sql_fields FROM ansprechpartner AS anspr ";
@@ -391,9 +396,6 @@ ean;';
     }elseif($exporttrennzeichen==='komma') {
       $exporttrennzeichen=',';
     }
-    $wooCommerceCsv = !$xls && $ziel === 'artikel'
-      && ($exportvorlageArr['bezeichnung'] ?? '') === TemplateInstaller::LABEL
-      && $exportdatenmaskierung === 'gaensefuesschen';
     if($exportdatenmaskierung==='gaensefuesschen') {
       $exportdatenmaskierung='"';
     }
@@ -776,7 +778,7 @@ ean;';
         $firstRow = $this->app->DB->Fetch_Assoc($query);
         if($wooCommerceCsv) {
           if($firstRow) {
-            unset($firstRow['systemid']);
+            unset($firstRow['systemid'], $firstRow['woo_csv_variant']);
             $returnValue .= $this->quotedCsvRow(array_keys($firstRow), $exporttrennzeichen);
           }
         } else {
@@ -797,7 +799,14 @@ ean;';
       while($row = $this->app->DB->Fetch_Assoc($query))
       {
         if($wooCommerceCsv) {
-          unset($row['systemid']);
+          $variant = !empty($row['woo_csv_variant']);
+          unset($row['systemid'], $row['woo_csv_variant']);
+          if($variant) {
+            $editable = ArticleFieldCatalog::editableVariantCsvColumns();
+            foreach(array_diff(array_keys($row), $editable) as $column) {
+              $row[$column] = '';
+            }
+          }
           $returnValue .= $this->quotedCsvRow($row, $exporttrennzeichen);
         } else {
           $returnValue .= $this->Exportinner($row,$exportdatenmaskierung,$exporttrennzeichen, $returnResultByFunction, $ziel, $xls);

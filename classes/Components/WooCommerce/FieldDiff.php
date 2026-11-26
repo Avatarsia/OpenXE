@@ -10,7 +10,7 @@ final class FieldDiff
         $rows = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
             $key = $field['key'];
-            if (!$field['pull'] || !isset($woo[$key])) {
+            if (!$field['pull'] || !isset($woo[$key]) || ($openxe[$key]['source'] ?? '') === 'variant_unavailable') {
                 continue;
             }
             $old = (string) ($openxe[$key]['value'] ?? '');
@@ -22,8 +22,8 @@ final class FieldDiff
                 $comparisonOld = self::exportPrice($key, $old);
                 $comparisonNew = self::exportPrice($key, $new);
             }
-            $priceBlockReason = ArticleDataRepository::priceBlockReason($openxe[$key]['source'] ?? null);
-            $pullable = $priceBlockReason === null && ($key !== 'price_net' || trim($new) !== '');
+            $fieldBlockReason = ArticleDataRepository::fieldBlockReason($openxe[$key]['source'] ?? null);
+            $pullable = $fieldBlockReason === null && ($key !== 'price_net' || trim($new) !== '');
             $row = [
                 'key' => $key,
                 'label' => $field['label'],
@@ -33,7 +33,7 @@ final class FieldDiff
                 'pullable' => $pullable,
             ];
             if (!$pullable) {
-                $row['reason'] = $priceBlockReason ?? 'leerer Shop-Preis wird nicht uebernommen';
+                $row['reason'] = $fieldBlockReason ?? 'leerer Shop-Preis wird nicht uebernommen';
             }
             $rows[] = $row;
         }

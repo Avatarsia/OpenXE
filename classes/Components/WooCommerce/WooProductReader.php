@@ -233,12 +233,16 @@ final class WooProductReader
         $values = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
             $key = $field['key'];
-            if (!$field['pull'] || ($parentId > 0 && in_array($key, ['shop_name', 'short_description'], true))) {
+            if (!$field['pull']) {
                 continue;
             }
             if ($parentId > 0 && in_array($key, ['weight', 'length', 'width', 'height'], true)) {
                 // The REST API returns parent values when the variation does not set its own.
                 $values[$key] = null;
+                continue;
+            }
+            // The local repository further narrows matrix-only fields for ordinary variants.
+            if ($parentId > 0 && !ArticleFieldCatalog::supportsVariantField($key, true)) {
                 continue;
             }
             // A variable parent has no independently editable price in WooCommerce.

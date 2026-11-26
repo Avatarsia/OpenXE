@@ -1972,7 +1972,7 @@ class Importvorlage extends GenImportvorlage {
           }
           if($updateOnly) {
             $article = $this->app->Container->get('Database')->fetchRow(
-              'SELECT projekt FROM artikel WHERE id = :article', ['article' => (int)$artikelid]
+              'SELECT projekt, variante, variante_von FROM artikel WHERE id = :article', ['article' => (int)$artikelid]
             );
             if(!$article || !$this->app->erp->UserProjektRecht((int)$article['projekt'])) {
               $importvorlagedoresult['messages'][] = 'Kein Projektzugriff, Zeile: ' . $i . ' uebersprungen';
@@ -2030,7 +2030,17 @@ class Importvorlage extends GenImportvorlage {
             if($artikelid > 0)
             {
               $wooCommerceShopValues = [];
-              foreach($fieldset as $key=>$val)
+              if($updateOnly && ArticleFieldCatalog::isVariant($article)) {
+                if(trim($tmp['woo_preis_netto'][$i] ?? '') !== '') {
+                  $importvorlagedoresult['messages'][] = 'Variantenpreis bitte unter Verkaufspreise pflegen, Zeile: ' . $i;
+                }
+                $rowFields = array_filter($fieldset, static fn (array $field): bool =>
+                  in_array($field['field'], ArticleFieldCatalog::editableVariantCsvColumns(), true)
+                );
+              } else {
+                $rowFields = $fieldset;
+              }
+              foreach($rowFields as $key=>$val)
               {
                 $valu = $val['field'];
 
@@ -2065,7 +2075,7 @@ class Importvorlage extends GenImportvorlage {
               }
               $this->app->erp->RunHook('importvorlage_artikel', 3, $artikelid, $tmp, $i);
 
-              foreach($fieldset as $key=>$val)
+              foreach($rowFields as $key=>$val)
               {
                 $value = $val['field'];
                 $wooCommerceOnly = in_array($value, ['shop_name_de', 'ausverkauft', 'lieferzeitmanuell', 'woo_preis_netto'], true);

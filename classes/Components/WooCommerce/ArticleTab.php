@@ -74,6 +74,9 @@ final class ArticleTab
         $groups = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
             $key = $field['key'];
+            if ($values[$key]['source'] === 'variant_unavailable') {
+                continue;
+            }
             $groups[$field['group']][] = $this->renderField($field, $values[$key], $article, $draft[$key] ?? null);
         }
         foreach ($groups as $group => $fields) {
@@ -209,14 +212,14 @@ final class ArticleTab
         $override = $data['source'] === 'shop';
         $value = $override ? (string) ($article[$mirror] ?? '') : $data['value'];
         $id = 'wc-article-' . $key;
-        $priceBlockReason = ArticleDataRepository::priceBlockReason($data['source']);
-        $readonly = !$field['edit'] || $priceBlockReason !== null;
+        $fieldBlockReason = ArticleDataRepository::fieldBlockReason($data['source']);
+        $readonly = !$field['edit'] || $fieldBlockReason !== null;
         if (!$readonly && is_string($draft)) {
             $value = $draft;
         }
         $attributes = ' id="' . $id . '" name="woo[' . $key . ']" data-woo-key="' . $key . '"'
-            . ($mirror !== '' ? ' data-mirror="' . $mirror . '"' : '')
-            . ($readonly ? ' readonly' : '');
+            . (!$readonly && $mirror !== '' ? ' data-mirror="' . $mirror . '"' : '')
+            . ($readonly ? (in_array($key, self::CHECKBOXES, true) ? ' disabled' : ' readonly') : '');
 
         if (in_array($key, self::CHECKBOXES, true)) {
             $input = ($key === 'on_request' ? '<input type="hidden" name="woo[on_request]" value="0">' : '')
@@ -230,6 +233,6 @@ final class ArticleTab
         return '<div class="wc-article-field"><label for="' . $id . '">' . AdminView::e($field['label'])
             . '</label><code>' . AdminView::e($field['wc']) . '</code>' . $input
             . ($override ? '<small>wird auch in der Shop-Zuordnung gesetzt</small>' : '')
-            . ($priceBlockReason !== null ? '<small>' . AdminView::e($priceBlockReason) . '</small>' : '') . '</div>';
+            . ($fieldBlockReason !== null ? '<small>' . AdminView::e($fieldBlockReason) . '</small>' : '') . '</div>';
     }
 }

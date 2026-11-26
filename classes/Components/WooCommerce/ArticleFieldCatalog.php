@@ -9,6 +9,37 @@ final class ArticleFieldCatalog
 {
     public const CSV_PRICE_HEADER = 'standardpreisnetto';
 
+    // Fields consumed by ProductSynchronizer from the nested ordinary and matrix
+    // RemoteSendArticleList payloads, including the separately read delivery flags.
+    private const VARIANT_FIELDS = [
+        'sku', 'description', 'price_net', 'pseudo_price', 'inactive', 'pseudo_stock',
+        'rest_quantity', 'sold_out', 'on_request', 'weight', 'ean', 'customs_tariff',
+    ];
+    private const MATRIX_ONLY_FIELDS = ['delivery_time'];
+
+    public static function isVariant(array $article): bool
+    {
+        return !empty($article['variante_von']) || !empty($article['variante']);
+    }
+
+    public static function supportsVariantField(string $key, bool $matrix): bool
+    {
+        return in_array($key, self::VARIANT_FIELDS, true)
+            || ($matrix && in_array($key, self::MATRIX_ONLY_FIELDS, true));
+    }
+
+    public static function editableVariantCsvColumns(): array
+    {
+        $columns = ['nummer'];
+        foreach (self::FIELDS as $key => $field) {
+            if ($field['csv'] !== null && in_array($key, self::VARIANT_FIELDS, true)
+                && !str_starts_with($field['storage'], 'shop:') && $field['storage'] !== 'price') {
+                $columns[] = $field['csv'];
+            }
+        }
+        return $columns;
+    }
+
     private const FIELDS = [
         'sku' => [
             'label' => 'Shop-SKU (Fremdnummer)', 'group' => 'Identitaet', 'storage' => 'foreign_number',
