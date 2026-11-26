@@ -29,6 +29,7 @@ use Xentral\Modules\Onlineshop\Data\OrderStatusUpdateRequest;
 use Xentral\Modules\Onlineshop\Data\Shipment;
 use Xentral\Modules\Onlineshop\Data\ShopConnectorResponseInterface;
 use Xentral\Components\Logger\Logger;
+use Xentral\Components\WooCommerce\ShopAssignment;
 use Xentral\Components\WooCommerce\ShopCategoryStore;
 
 class Remote
@@ -2279,7 +2280,11 @@ class Remote
                         $shop_id
                     )
                 );
-                if (empty($checkAo)) {
+                if (empty($checkAo) && $articleResult->requiresActiveAssignment) {
+                    if (!$this->ensureWooCommerceExportAssignment($articleResult->articleId, $shop_id)) {
+                        continue;
+                    }
+                } elseif (empty($checkAo)) {
                     $this->app->DB->Insert(
                         sprintf(
                             'INSERT INTO artikel_onlineshops (artikel, shop, aktiv, ausartikel)
@@ -2339,6 +2344,31 @@ class Remote
             $this->sendlistlager($shop_id, $data);
         }
         return $result;
+    }
+
+    private function ensureWooCommerceExportAssignment(int $articleId, int $shopId): bool
+    {
+        $database = $this->app->Container->get('Database');
+        $database->beginTransaction();
+        try {
+            // The assignment can change after the connector releases its REST write lock.
+            $assigned = ShopAssignment::isAssigned($database, $articleId, $shopId);
+            if ($assigned && !$database->fetchValue(
+                'SELECT id FROM artikel_onlineshops WHERE artikel = :article AND shop = :shop LIMIT 1 FOR UPDATE',
+                ['article' => $articleId, 'shop' => $shopId]
+            )) {
+                $database->perform(
+                    'INSERT INTO artikel_onlineshops (artikel, shop, aktiv, ausartikel, pseudolager, lieferzeitmanuell, last_article_hash)'
+                    . " VALUES (:article, :shop, 1, 1, '', '', '')",
+                    ['article' => $articleId, 'shop' => $shopId]
+                );
+            }
+            $database->commit();
+            return $assigned;
+        } catch (\Throwable $error) {
+            $database->rollBack();
+            throw $error;
+        }
     }
 
     public function getDataToSendForUpdateOrder(int $shopId, int $orderId): ?OrderStatusUpdateRequest

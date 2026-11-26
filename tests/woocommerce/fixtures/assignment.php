@@ -131,13 +131,16 @@ final class AssignmentFixtureDatabase
 
     private function filteredCatalog(string $sql, array $params): array
     {
-        $catalog = $this->catalog ?: [array_merge($this->article, ['in_shop' => $this->assignment['aktiv'] ?? 0])];
+        $legacyOnly = !$this->assignment && str_contains($sql, 'assignment_owner.shop2')
+            && in_array(7, [$this->article['shop'], $this->article['shop2'], $this->article['shop3']], true);
+        $catalog = $this->catalog ?: [array_merge($this->article,
+            ['in_shop' => ($this->assignment['aktiv'] ?? 0) || $legacyOnly, 'legacy_only' => $legacyOnly])];
         preg_match('/a\.projekt IN \(([0-9,]+)\)/', $sql, $projects);
         return array_values(array_filter($catalog, function (array $article) use ($sql, $params, $projects): bool {
             if ($article['projekt'] > 0 && !in_array((string) $article['projekt'], explode(',', $projects[1] ?? ''), true)) {
                 return false;
             }
-            if (str_contains($sql, 'AND NOT EXISTS (SELECT 1 FROM artikel_onlineshops') && $article['in_shop']) {
+            if (str_contains($sql, 'AND NOT (EXISTS (SELECT 1 FROM artikel_onlineshops') && $article['in_shop']) {
                 return false;
             }
             $key = $params['article_prefix'] . $article['id'];

@@ -86,10 +86,7 @@ final class VisibilityQueue
             }
             $this->transactional(function () use ($articleId, $snapshot, $hide, $mayStartRequest, &$result): void {
                 // Lock in assignment-then-queue order, as when editing a shop assignment.
-                $assigned = $this->database->fetchValue(
-                    'SELECT id FROM artikel_onlineshops WHERE artikel = :article AND shop = :shop AND aktiv = 1 LIMIT 1 FOR UPDATE',
-                    ['article' => $articleId, 'shop' => $this->shopId]
-                );
+                $assigned = ShopAssignment::isAssigned($this->database, $articleId, $this->shopId);
                 $entries = $this->lockedEntries();
                 if (($entries[$articleId] ?? null) !== $snapshot) {
                     return;

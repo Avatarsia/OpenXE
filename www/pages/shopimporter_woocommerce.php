@@ -32,6 +32,7 @@ use Xentral\Components\WooCommerce\ProductSynchronizer;
 use Xentral\Components\WooCommerce\CategorySynchronizer;
 use Xentral\Components\WooCommerce\ShopCategoryExporter;
 use Xentral\Components\WooCommerce\RefundStatusService;
+use Xentral\Components\WooCommerce\ShopAssignment;
 use Xentral\Components\WooCommerce\ShopCategoryStore;
 use Xentral\Components\WooCommerce\VariationMedia;
 use Xentral\Components\WooCommerce\DownloadSettings;
@@ -1066,6 +1067,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
     for ($i = 0; $i < $ctmp; $i++) {
       $return[$i] = new ArticleExportResult();
+      $return[$i]->requiresActiveAssignment = $this->visibilitySync;
       $artikel = $tmp[$i]['artikel'];
 
         if (!empty($this->productsmarty)) {
@@ -1538,24 +1540,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
   private function isShopUnassigned($database, int $articleId): bool
   {
-    // Both standalone and nested variants follow their main article. Take the article lock
-    // before the assignment lock, as in AssignmentPage, including for a legacy-only assignment.
-    $owner = $database->fetchRow(
-      'SELECT id, shop, shop2, shop3 FROM artikel WHERE id = ('
-      . 'SELECT CASE WHEN variante = 1 THEN variante_von ELSE id END FROM artikel WHERE id = :article AND geloescht = 0'
-      . ') FOR UPDATE',
-      ['article' => $articleId]
-    );
-    $shopId = (int) $this->shopid;
-    if (!$owner || in_array($shopId, array_map('intval', [$owner['shop'], $owner['shop2'], $owner['shop3']]), true)) {
-      return false;
-    }
-    $assignment = $database->fetchRow(
-      'SELECT id, aktiv FROM artikel_onlineshops WHERE shop = :shop AND artikel = :article'
-      . ' ORDER BY aktiv DESC, id LIMIT 1 FOR UPDATE',
-      ['shop' => $shopId, 'article' => (int) $owner['id']]
-    );
-    return $assignment && (int) $assignment['aktiv'] === 0;
+    return !ShopAssignment::isAssigned($database, $articleId, (int) $this->shopid);
   }
 
   private function withAssignmentLocks(callable $write): mixed

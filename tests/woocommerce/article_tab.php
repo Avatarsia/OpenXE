@@ -39,9 +39,9 @@ final class Shopimporter_Woocommerce
 
 final class ArticleTabDatabase
 {
-    public array $article = ['id' => 9, 'nummer' => 'LOCAL-9', 'pseudopreis' => '15.00',
+    public array $article = ['id' => 9, 'nummer' => 'LOCAL-9', 'projekt' => 0, 'pseudopreis' => '15.00',
         'autolagerlampe' => '0', 'pseudolager' => '', 'restmenge' => '0', 'lieferzeitmanuell' => ''];
-    public array $override = ['id' => 6, 'pseudopreis' => '12.00'];
+    public array $override = ['id' => 6, 'shop' => 5, 'pseudopreis' => '12.00'];
     public array $shops = [['id' => 5, 'bezeichnung' => 'Shop A', 'projekt' => 0, 'article_project' => 0]];
     public array $config = [];
     public array $price = ['id' => 4, 'preis' => '10.00', 'waehrung' => 'EUR'];
@@ -74,6 +74,12 @@ final class ArticleTabDatabase
 
     public function fetchValue(string $sql, array $params)
     {
+        if (str_contains($sql, 'FROM artikel_onlineshops')) {
+            return ($this->override['shop'] ?? 0) === $params['shop'] && !empty($this->override['aktiv']) ? 6 : false;
+        }
+        if (str_starts_with($sql, 'SELECT COALESCE') && str_contains($sql, 'FROM artikel AS a')) {
+            return $this->article['nummer'];
+        }
         return str_contains($sql, 'FROM shopexport') ? $this->group : ($this->config[$params['name'] ?? ''] ?? false);
     }
 
@@ -86,7 +92,17 @@ final class ArticleTabDatabase
         if (str_starts_with($sql, 'UPDATE artikel_onlineshops SET last_article_hash')) {
             return;
         }
-        if (str_starts_with($sql, 'UPDATE artikel SET ')) {
+        if (str_starts_with($sql, 'UPDATE artikel SET shop = IF')) {
+            foreach (['shop', 'shop2', 'shop3'] as $column) {
+                if (($this->article[$column] ?? 0) === $params['shop']) {
+                    $this->article[$column] = 0;
+                }
+            }
+        } elseif (str_starts_with($sql, 'DELETE FROM artikel_onlineshops')) {
+            $this->override = [];
+        } elseif (str_starts_with($sql, 'UPDATE konfiguration')) {
+            $this->config[$params['name']] = $params['wert'];
+        } elseif (str_starts_with($sql, 'UPDATE artikel SET ')) {
             preg_match('/SET \x60([a-z_]+)\x60/', $sql, $match);
             $this->article[$match[1]] = $params['value'];
         } elseif (str_starts_with($sql, 'UPDATE artikel_onlineshops SET shop =')) {
@@ -221,6 +237,7 @@ runTests([
         $app->DB = new class ($db) {
             public function __construct(private ArticleTabDatabase $db) {}
             public function Select(string $sql) { return '5'; }
+            public function error(): string { return ''; }
             public function Update(string $sql): bool
             {
                 if (str_contains($sql, 'a.pseudopreis')) {
@@ -253,6 +270,7 @@ runTests([
                     public function __construct(private string $scenario) {}
                     public function Select(string $sql): int { return $this->scenario === 'old_shop' ? 7 : 5; }
                     public function Update(string $sql): bool { $this->updates[] = $sql; return true; }
+                    public function error(): string { return ''; }
                     public function SelectRow(string $sql)
                     {
                         if (str_contains($sql, 'FROM artikel')) {
@@ -261,7 +279,8 @@ runTests([
                         if ($this->scenario === 'other_module') {
                             return false;
                         }
-                        return ['projekt' => $this->scenario === 'shop' || str_contains($sql, "id = '7'") ? 42 : 0];
+                        return ['projekt' => $this->scenario === 'shop' || str_contains($sql, "id = '7'") ? 42 : 0,
+                            'modulename' => 'shopimporter_woocommerce', 'einstellungen_json' => '{}'];
                     }
                 };
                 $page = articleTabPage($app);
@@ -284,6 +303,51 @@ runTests([
                 unset($_SERVER['REQUEST_METHOD']);
             } else {
                 $_SERVER['REQUEST_METHOD'] = $requestMethod;
+            }
+        }
+    },
+    'legacy_shop_dialog_deactivation_and_delete_queue_only_enabled_visibility_transitions' => static function () {
+        $method = $_SERVER['REQUEST_METHOD'] ?? null;
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        try {
+            foreach ([true, false] as $visibility) {
+                [, $db, $token, $app] = articleTabFixture();
+                $db->override += ['shop' => 5, 'aktiv' => '1'];
+                $db->article['shop2'] = 5;
+                $app->Secure->POST = ['aktiv' => '0', 'ausartikel' => '1', 'woo_dialog_token' => $token];
+                $app->DB = new class ($visibility) {
+                    public function __construct(private bool $visibility) {}
+                    public function Select(string $sql): int { return 5; }
+                    public function SelectRow(string $sql): array
+                    {
+                        return ['projekt' => 0, 'modulename' => 'shopimporter_woocommerce',
+                            'einstellungen_json' => json_encode(['felder' => ['visibilitySync' => $this->visibility]])];
+                    }
+                    public function Update(string $sql): bool { return true; }
+                    public function error(): string { return ''; }
+                };
+                $page = articleTabPage($app);
+                $save = new ReflectionMethod($page, 'saveOnlineShopFields');
+                same([], $save->invoke($page, 9, 6, 5, ['aktiv', 'ausartikel']));
+                $queue = new \Xentral\Components\WooCommerce\VisibilityQueue($db, 5);
+                same($visibility ? ['LOCAL-9'] : [], array_column($queue->pending(), 'sku'));
+                if ($visibility) {
+                    same(0, $db->article['shop2']);
+                    same('0', $db->override['aktiv']);
+                    $queue->cancel(9);
+                    $db->override['aktiv'] = '1';
+                    $db->article['shop2'] = 5;
+                    $delete = new ReflectionMethod($page, 'deleteOnlineShopWithVisibility');
+                    same(true, $delete->invoke($page, 9, 6, 5));
+                    same([], $db->override);
+                    same(['LOCAL-9'], array_column($queue->pending(), 'sku'));
+                }
+            }
+        } finally {
+            if ($method === null) {
+                unset($_SERVER['REQUEST_METHOD']);
+            } else {
+                $_SERVER['REQUEST_METHOD'] = $method;
             }
         }
     },

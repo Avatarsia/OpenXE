@@ -47,7 +47,7 @@ final class AdminDatabaseFake
                 ? [['id' => 9, 'nummer' => 'A9', 'name_de' => 'Artikel', 'projekt' => $this->articleProject]] : [];
         }
         if (strpos($sql, 'FROM artikel') !== false) {
-            check(isset($params['shop'], $params['shop2'], $params['shop3'], $params['assigned_shop']));
+            same(7, $params['assigned_shop']);
             return $this->assigned ? [['id' => 9, 'nummer' => 'A9', 'name_de' => 'Artikel', 'projekt' => $this->articleProject]] : [];
         }
         return [];
@@ -139,6 +139,14 @@ function bulkAdminPreview(BulkPullDatabase $db): array
 }
 
 runTests([
+    'bulk_pull_preview_resolves_a_sku_assigned_through_the_article_stammdaten' => static function () {
+        $db = new BulkPullDatabase();
+        $db->assignments[9] = false;
+        $db->legacyAssignments[9] = true;
+        Shopimporter_Woocommerce::$fixtureClient = new BulkPullClient();
+        [$page] = adminFixture([], ['view' => 'pull'], $db);
+        check(str_contains($page->render(), 'data-pull-article="9" value="seo_title"'));
+    },
     'category_preview_requires_confirm_and_uses_the_existing_sku_resolver' => static function () {
         $db = new AdminDatabaseFake();
         Shopimporter_Woocommerce::$fixtureClient = $client = categoryImportClient();

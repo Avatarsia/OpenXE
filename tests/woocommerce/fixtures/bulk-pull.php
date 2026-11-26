@@ -8,6 +8,7 @@ final class BulkPullDatabase
         10 => ['id' => 10, 'nummer' => 'LOCAL-10', 'name_de' => 'Artikel 10', 'projekt' => 0],
     ];
     public array $assignments = [9 => true, 10 => true];
+    public array $legacyAssignments = [];
     public array $foreignNumbers = [9 => 'SHOP-9'];
     public array $audit = [];
     public array $writes = [];
@@ -35,7 +36,8 @@ final class BulkPullDatabase
         if (str_contains($sql, 'FROM artikel AS a')) {
             $rows = [];
             foreach ($this->articles as $id => $article) {
-                if (($this->assignments[$id] ?? false) && ($this->foreignNumbers[$id] ?? $article['nummer']) === $params['sku']) {
+                $legacy = str_contains($sql, 'assignment_owner.shop2') && ($this->legacyAssignments[$id] ?? false);
+                if ((($this->assignments[$id] ?? false) || $legacy) && ($this->foreignNumbers[$id] ?? $article['nummer']) === $params['sku']) {
                     $rows[] = $article;
                 }
             }

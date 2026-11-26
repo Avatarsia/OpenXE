@@ -7,5 +7,6 @@ class ArticleExportResult {
     public bool $success = false;
     public ?string $message = null;
     public bool $categoryAssignmentDeferred = false;
+    public bool $requiresActiveAssignment = false;
     public ?string $extArticleId = null;
 }

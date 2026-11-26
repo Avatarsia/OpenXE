@@ -22,6 +22,7 @@ final class VisibilityDatabase
 {
     public array $config = [];
     public array $assigned = [];
+    public array $legacy = [];
     public bool $unavailable = false;
     private ?array $snapshot = null;
     private ?string $locked = null;
@@ -70,6 +71,9 @@ final class VisibilityDatabase
 
     public function fetchRow(string $sql, array $params): array
     {
+        if (str_contains($sql, 'FROM artikel WHERE')) {
+            return ['id' => $params['article'], 'shop' => 0, 'shop2' => $this->legacy[$params['article']] ?? 0, 'shop3' => 0];
+        }
         same(7, $params['shop']);
         return ['modulename' => 'shopimporter_woocommerce', 'projekt' => 0];
     }
@@ -188,6 +192,17 @@ runTests([
         $seen = [];
         $queue->drain(static function (string $sku) use (&$seen): void { $seen[] = $sku; });
         same(['other shop'], $seen);
+        same([], $queue->pending());
+    },
+    'reassigning_through_an_article_shop_reference_cancels_a_pending_hide' => static function () {
+        $db = new VisibilityDatabase();
+        $queue = new VisibilityQueue($db, 7);
+        $queue->enqueue(41, 'legacy');
+        $db->legacy[41] = 7;
+        $calls = [];
+        $result = $queue->drain(static function (string $sku) use (&$calls): void { $calls[] = $sku; });
+        same([], $calls);
+        same([41], $result['processed']);
         same([], $queue->pending());
     },
     'failed_hide_stays_queued' => static function () {

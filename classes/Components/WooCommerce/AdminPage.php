@@ -365,10 +365,9 @@ final class AdminPage
     private function articleForSku(string $sku): ?array
     {
         $rows = $this->db->fetchAll(
-            'SELECT a.id, a.nummer, a.name_de, a.projekt FROM artikel AS a WHERE a.geloescht = 0 '
-            . 'AND EXISTS (SELECT 1 FROM artikel_onlineshops AS ao WHERE ao.artikel = a.id '
-            . 'AND ao.shop = :assigned_shop AND ao.aktiv = 1) '
-            . 'AND CAST(' . ArticleDataRepository::SHOP_SKU_SQL . ' AS BINARY) = CAST(:sku AS BINARY) LIMIT 2',
+            'SELECT a.id, a.nummer, a.name_de, a.projekt FROM artikel AS a' . ShopAssignment::ownerJoinSql()
+            . ' WHERE a.geloescht = 0 AND ' . ShopAssignment::assignedSql('assignment_owner', ':assigned_shop')
+            . ' AND CAST(' . ArticleDataRepository::SHOP_SKU_SQL . ' AS BINARY) = CAST(:sku AS BINARY) LIMIT 2',
             ['assigned_shop' => $this->shopId, 'shop' => $this->shopId, 'sku' => $sku]
         );
         if (count($rows) !== 1 || !$this->app->erp->UserProjektRecht((int) $rows[0]['projekt'])) {
@@ -398,11 +397,10 @@ final class AdminPage
     private function findArticles($where, array $params)
     {
         $rows = $this->db->fetchAll(
-            'SELECT a.id, a.nummer, a.name_de, a.projekt FROM artikel AS a WHERE a.geloescht = 0 '
-            . 'AND (a.shop = :shop OR a.shop2 = :shop2 OR a.shop3 = :shop3 OR EXISTS '
-            . '(SELECT 1 FROM artikel_onlineshops AS ao WHERE ao.artikel = a.id AND ao.shop = :assigned_shop AND ao.aktiv = 1)) '
-            . 'AND ' . $where . ' ORDER BY a.nummer, a.id LIMIT 50',
-            $params + ['shop' => $this->shopId, 'shop2' => $this->shopId, 'shop3' => $this->shopId, 'assigned_shop' => $this->shopId]
+            'SELECT a.id, a.nummer, a.name_de, a.projekt FROM artikel AS a' . ShopAssignment::ownerJoinSql()
+            . ' WHERE a.geloescht = 0 AND ' . ShopAssignment::assignedSql('assignment_owner', ':assigned_shop')
+            . ' AND ' . $where . ' ORDER BY a.nummer, a.id LIMIT 50',
+            $params + ['assigned_shop' => $this->shopId]
         );
         return array_values(array_filter($rows, function ($row) {
             return $this->app->erp->UserProjektRecht((int) $row['projekt']);

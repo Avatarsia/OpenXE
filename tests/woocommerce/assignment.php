@@ -8,6 +8,15 @@ use Xentral\Components\WooCommerce\VisibilityQueue;
 require_once __DIR__ . '/fixtures/assignment.php';
 
 $tests = [
+    'legacy_only_assignment_is_checked_and_excluded_from_unassigned_filter' => function (): void {
+        [$page, $db] = assignmentSetup();
+        $db->article['shop2'] = 7;
+        $html = $page->render();
+        expect(true, str_contains($html, 'ueber Artikelstamm zugeordnet'));
+        expect(1, preg_match('/data-command="toggle_shop"[^>]+ checked/', $html));
+        $page = new AssignmentPage(assignmentFixtureApp($db, ['unassigned' => 1]));
+        expect(false, str_contains($page->render(), 'data-article="9"'));
+    },
     'unchecking_a_legacy_only_assignment_clears_all_matching_slots_and_queues_hide' => function (): void {
         [$page, $db] = assignmentSetup();
         $db->article = array_replace($db->article, ['shop' => 7, 'shop2' => 8, 'shop3' => 7]);

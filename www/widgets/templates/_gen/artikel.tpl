@@ -1036,7 +1036,7 @@ function deleteonlineshop(id)
         url: 'index.php?module=artikel&action=edit&cmd=deleteonlineshop&id=[ID]',
         type: 'POST',
         dataType: 'json',
-        data: { sid: id},
+        data: { sid: id, woo_dialog_token: '[WOOCOMMERCEDIALOGTOKEN]' },
         success: function(data) {
           var oTable = $('#artikel_onlineshops').DataTable( );
           oTable.ajax.reload();

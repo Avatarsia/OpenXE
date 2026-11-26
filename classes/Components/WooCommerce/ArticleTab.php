@@ -27,13 +27,10 @@ final class ArticleTab
         }
         $rows = $this->database->fetchAll(
             "SELECT s.id, s.bezeichnung, s.projekt, a.projekt AS article_project
-             FROM artikel a
-             JOIN shopexport s ON s.aktiv = 1 AND s.geloescht = 0 AND s.modulename = 'shopimporter_woocommerce'
-             WHERE a.id = :article AND a.geloescht = 0
-             AND (s.id IN (a.shop, a.shop2, a.shop3) OR EXISTS (
-                 SELECT 1 FROM artikel_onlineshops ao WHERE ao.artikel = a.id AND ao.shop = s.id AND ao.aktiv = 1
-             ))
-             ORDER BY s.id",
+             FROM artikel a" . ShopAssignment::ownerJoinSql()
+            . " JOIN shopexport s ON s.aktiv = 1 AND s.geloescht = 0 AND s.modulename = 'shopimporter_woocommerce'
+             WHERE a.id = :article AND a.geloescht = 0 AND "
+            . ShopAssignment::assignedSql('assignment_owner', 's.id') . ' ORDER BY s.id',
             ['article' => $articleId]
         );
         return array_values(array_filter($rows, fn (array $shop): bool =>

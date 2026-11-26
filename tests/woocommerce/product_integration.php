@@ -259,12 +259,14 @@ function categoryRetryFixture(): array
     configureProductDatabase($connector, $db);
     $legacyDb = new class($db) {
         public ?Closure $beforeHashWrite = null;
+        public bool $hasAssignment = true;
         public function __construct(private AssignmentFixtureDatabase $db) {}
         public function Select(string $sql): int|string
         {
-            return str_starts_with($sql, 'SELECT id FROM artikel_onlineshops') ? 10 : 'PARENT';
+            return str_starts_with($sql, 'SELECT id FROM artikel_onlineshops') ? ($this->hasAssignment ? 10 : 0) : 'PARENT';
         }
         public function real_escape_string(?string $value): string { return $value ?? ''; }
+        public function Insert(string $sql): void { $this->db->assignment = ['aktiv' => 1]; }
         public function Update(string $sql): void
         {
             check(str_contains($sql, "last_article_hash = 'current-hash'"));
@@ -360,6 +362,16 @@ runTests([
         same(true, $connector->ImportSendList()[0]->success);
         same('publish', $connector->client->collections['products'][0]['status']);
         same('publish', $connector->client->collections['products/20/variations'][0]['status']);
+    },
+    'stale_export_after_dialog_delete_does_not_recreate_an_assignment' => static function () {
+        [$db, , $connector, $remote, $app, $article] = categoryRetryFixture();
+        $db->assignment = null;
+        $app->DB->hasAssignment = false;
+        (new ReflectionProperty(Shopimporter_Woocommerce::class, 'visibilitySync'))->setValue($connector, true);
+        $result = $remote->export([$article]);
+        same(true, $result[0]->success);
+        same('private', $connector->client->collections['products'][0]['status']);
+        same(null, $db->assignment);
     },
     'legacy_assignment_allows_full_export_without_an_active_row' => static function () {
         $db = new AssignmentFixtureDatabase();

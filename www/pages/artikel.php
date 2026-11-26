@@ -32,6 +32,9 @@ use Xentral\Components\WooCommerce\AdminView;
 use Xentral\Components\WooCommerce\ArticleTab;
 use Xentral\Components\WooCommerce\AssignmentPage;
 use Xentral\Components\WooCommerce\RefundStatusService;
+use Xentral\Components\WooCommerce\ShopAssignment;
+use Xentral\Components\WooCommerce\ShopCategoryStore;
+use Xentral\Components\WooCommerce\VisibilityQueue;
 use Xentral\Modules\Onlineshop\Data\ArticleExportResult;
 use Xentral\Widgets\SuperSearch\Result\ResultGroup;
 use Xentral\Widgets\SuperSearch\Result\ResultItem;
@@ -7465,19 +7468,6 @@ class Artikel extends GenArtikel {
             $this->app->ExitXentral();
             return;
           }
-          if(!$this->app->DB->error())
-          {
-            $shop = $this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
-            if($this->app->DB->Select("SELECT id FROM artikel_onlineshops WHERE artikel = '$id' AND shop = '$shop' AND aktiv = 1 LIMIT 1")){
-              $shop = null;
-            }
-            if($shop)
-            {
-              $this->app->DB->Update("UPDATE artikel SET shop = 0 WHERE id = '$id' AND shop = '$shop' LIMIT 1");
-              $this->app->DB->Update("UPDATE artikel SET shop2 = 0 WHERE id = '$id' AND shop2 = '$shop' LIMIT 1");
-              $this->app->DB->Update("UPDATE artikel SET shop3 = 0 WHERE id = '$id' AND shop3 = '$shop' LIMIT 1");
-            }
-          }
           echo json_encode(['status' => 1, 'articleFields' => $articleFields], JSON_INVALID_UTF8_SUBSTITUTE);
           $this->app->ExitXentral();
         }
@@ -7486,8 +7476,21 @@ class Artikel extends GenArtikel {
       }
       if($cmd === 'deleteonlineshop')
       {
-        $sid = $this->app->Secure->GetPOST("sid");
-        $shop = $this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
+        $sid = (int)$this->app->Secure->GetPOST("sid");
+        $shop = (int)$this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
+        try {
+          if ($shop && $this->deleteOnlineShopWithVisibility((int)$id, $sid, $shop)) {
+            echo json_encode(['status' => 1]);
+            $this->app->ExitXentral();
+            return;
+          }
+        } catch (Throwable $error) {
+          $this->app->Container->get('Logger')->error('Artikel-Shop-Zuordnung nicht geloescht: '
+            . RefundStatusService::sanitizeError($error->getMessage()));
+          echo json_encode(['status' => 0, 'Error' => 'Die Shop-Zuordnung konnte nicht geloescht werden.']);
+          $this->app->ExitXentral();
+          return;
+        }
         if($shop)
         {
           $this->app->DB->Update("UPDATE artikel SET shop = 0 WHERE id = '$id' AND shop = '$shop' LIMIT 1");
@@ -7813,76 +7816,171 @@ class Artikel extends GenArtikel {
 
   private function saveOnlineShopFields(int $articleId, int $assignmentId, int $shopId, array $fields): array
   {
-    $db = $this->app->DB;
-    $assignments = ["ao.shop = '$shopId'"];
-    foreach ($fields as $field) {
-      $value = $this->app->Secure->GetPOST($field);
-      $assignments[] = "ao.$field = '$value'";
-    }
-    $scope = " WHERE ao.id = '$assignmentId' AND ao.artikel = '$articleId'";
-    $shared = $this->onlineShopOverrideValues($articleId, $assignmentId, $shopId);
-    if ($shared === []) {
-      if (!$db->Update('UPDATE artikel_onlineshops ao SET ' . implode(', ', $assignments) . $scope)) {
+    $context = $this->wooDialogContext($articleId, $assignmentId, $shopId);
+    $shared = $this->onlineShopOverrideValues($shopId, $context);
+    if ($shared === [] && empty($context['visibility'])) {
+      $db = $this->app->DB;
+      $assignments = ["ao.shop = '$shopId'"];
+      foreach ($fields as $field) {
+        $value = $this->app->Secure->GetPOST($field);
+        $assignments[] = "ao.$field = '$value'";
+      }
+      if (!$db->Update('UPDATE artikel_onlineshops ao SET ' . implode(', ', $assignments)
+        . " WHERE ao.id = '$assignmentId' AND ao.artikel = '$articleId'")) {
         throw new RuntimeException($db->error() ?: 'UPDATE artikel_onlineshops fehlgeschlagen.');
+      }
+      if (!$db->error()
+        && !$db->Select("SELECT id FROM artikel_onlineshops WHERE artikel = '$articleId' AND shop = '$shopId' AND aktiv = 1 LIMIT 1")
+        && $shopId > 0) {
+        $db->Update("UPDATE artikel SET shop = 0 WHERE id = '$articleId' AND shop = '$shopId' LIMIT 1");
+        $db->Update("UPDATE artikel SET shop2 = 0 WHERE id = '$articleId' AND shop2 = '$shopId' LIMIT 1");
+        $db->Update("UPDATE artikel SET shop3 = 0 WHERE id = '$articleId' AND shop3 = '$shopId' LIMIT 1");
       }
       return [];
     }
 
-    $database = $this->app->Container->get('Database');
-    $repository = new ArticleDataRepository($this->app, $shopId);
-    $values = array_column($shared, 'value', 'key');
     $params = ['shop' => $shopId, 'assignment' => $assignmentId, 'article' => $articleId];
     $set = ['shop = :shop'];
     foreach ($fields as $field) {
       $params[$field] = $this->app->Secure->GetPOST($field, '', '', 1);
       $set[] = "$field = :$field";
     }
+    return $this->mutateWooDialogAssignment($articleId, $assignmentId, $context,
+      function ($database) use ($params, $set, $shared): array {
+        $articleId = $params['article'];
+        $shopId = $params['shop'];
+        $database->perform('UPDATE artikel_onlineshops SET ' . implode(', ', $set)
+          . ' WHERE id = :assignment AND artikel = :article', $params);
+        // Match the legacy cleanup when the target shop has no active assignment row.
+        if (empty($params['aktiv']) && !$database->fetchValue(
+          'SELECT id FROM artikel_onlineshops WHERE artikel = :article AND shop = :shop AND aktiv = 1 LIMIT 1 FOR UPDATE',
+          ['article' => $articleId, 'shop' => $shopId]
+        )) {
+          $this->clearWooDialogLegacyReference($database, $articleId, $shopId);
+        }
+        if ($shared === []) {
+          return [];
+        }
+        (new ArticleDataRepository($this->app, $shopId))->apply(
+          $articleId, array_column($shared, 'value', 'key'), 'online_shop_dialog', $params['assignment']
+        );
+        return $database->fetchRow('SELECT ' . implode(', ', array_keys($shared)) . ' FROM artikel WHERE id = :article',
+          ['article' => $articleId]) ?: [];
+      }
+    );
+  }
+
+  private function deleteOnlineShopWithVisibility(int $articleId, int $assignmentId, int $shopId): bool
+  {
+    $context = $this->wooDialogContext($articleId, $assignmentId, $shopId);
+    if (empty($context['visibility'])) {
+      return false;
+    }
+    $this->mutateWooDialogAssignment($articleId, $assignmentId, $context,
+      function ($database) use ($articleId, $assignmentId, $shopId): void {
+        $this->clearWooDialogLegacyReference($database, $articleId, $shopId);
+        $database->perform('DELETE FROM artikel_onlineshops WHERE artikel = :article AND id = :assignment LIMIT 1',
+          ['article' => $articleId, 'assignment' => $assignmentId]);
+      }
+    );
+    return true;
+  }
+
+  private function clearWooDialogLegacyReference($database, int $articleId, int $shopId): void
+  {
+    $database->perform(
+      'UPDATE artikel SET shop = IF(shop = :shop, 0, shop), shop2 = IF(shop2 = :shop, 0, shop2),'
+      . ' shop3 = IF(shop3 = :shop, 0, shop3) WHERE id = :article',
+      ['article' => $articleId, 'shop' => $shopId]
+    );
+  }
+
+  private function mutateWooDialogAssignment(int $articleId, int $assignmentId, array $context, callable $mutate): mixed
+  {
+    $database = $this->app->Container->get('Database');
     $database->beginTransaction();
     try {
-      $database->fetchValue('SELECT id FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
-      $database->perform('UPDATE artikel_onlineshops SET ' . implode(', ', $set)
-        . ' WHERE id = :assignment AND artikel = :article', $params);
-      $repository->apply($articleId, $values, 'online_shop_dialog', $assignmentId);
-      $columns = array_keys($shared);
-      $article = $database->fetchRow('SELECT ' . implode(', ', $columns) . ' FROM artikel WHERE id = :article',
-        ['article' => $articleId]);
+      $article = $database->fetchRow('SELECT projekt FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
+      $assignment = $database->fetchRow(
+        'SELECT shop FROM artikel_onlineshops WHERE id = :assignment AND artikel = :article FOR UPDATE',
+        ['assignment' => $assignmentId, 'article' => $articleId]
+      );
+      if (!$article || !$this->app->erp->UserProjektRecht((int)($article['projekt'] ?? 0))
+        || !$assignment || (int)($assignment['shop'] ?? 0) !== $context['oldShop']) {
+        throw new RuntimeException('Die Shop-Zuordnung hat sich geaendert. Bitte neu laden.');
+      }
+
+      $before = [];
+      foreach ($context['visibility'] as $shopId) {
+        $before[$shopId] = ShopAssignment::isAssigned($database, $articleId, $shopId);
+      }
+      $result = $mutate($database);
+      foreach ($before as $shopId => $wasAssigned) {
+        $assigned = ShopAssignment::isAssigned($database, $articleId, $shopId);
+        $queue = new VisibilityQueue($database, $shopId);
+        if ($wasAssigned && !$assigned) {
+          $sku = $database->fetchValue(
+            'SELECT ' . ArticleDataRepository::SHOP_SKU_SQL . ' FROM artikel AS a WHERE a.id = :article',
+            ['article' => $articleId, 'shop' => $shopId]
+          );
+          $queue->enqueue($articleId, (string)$sku);
+        } elseif (!$wasAssigned && $assigned) {
+          (new ShopCategoryStore($database, $shopId))->invalidateArticleExport($articleId);
+          $queue->cancel($articleId);
+        }
+      }
       $database->commit();
-      return $article ?: [];
+      return $result;
     } catch (Throwable $error) {
       $database->rollBack();
       throw $error;
     }
   }
 
-  private function onlineShopOverrideValues(int $articleId, int $assignmentId, int $shopId): array
+  private function wooDialogContext(int $articleId, int $assignmentId, int $shopId): array
   {
-    $secure = $this->app->Secure;
-    $token = $secure->GetPOST('woo_dialog_token', '', '', 1);
+    $token = $this->app->Secure->GetPOST('woo_dialog_token', '', '', 1);
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !is_string($token) || $token === ''
-        || $secure->GetPOST('aktiv') !== '1' || $secure->GetPOST('ausartikel') !== '0'
         || !$this->app->erp->RechteVorhanden('onlineshops', 'edit')
         || !$this->app->erp->RechteVorhanden('artikel', 'edit')
         || !$this->app->Container->get('Session')->isCsrfTokenValid('woocommerce_admin', $token)) {
       return [];
     }
     $db = $this->app->DB;
-    $shop = $db->SelectRow("SELECT projekt FROM shopexport WHERE id = '$shopId' AND geloescht = 0"
-      . " AND modulename = 'shopimporter_woocommerce' LIMIT 1");
     $article = $db->SelectRow("SELECT projekt, variante, variante_von FROM artikel WHERE id = '$articleId' LIMIT 1");
-    if (!$shop || !$article || ArticleFieldCatalog::isVariant($article)
-        || !$this->app->erp->UserProjektRecht((int)$shop['projekt'])
+    if (!$article || ArticleFieldCatalog::isVariant($article)
         || !$this->app->erp->UserProjektRecht((int)$article['projekt'])) {
       return [];
     }
     $oldShopId = (int)$db->Select("SELECT shop FROM artikel_onlineshops WHERE id = '$assignmentId'"
       . " AND artikel = '$articleId' LIMIT 1");
-    if ($oldShopId > 0 && $oldShopId !== $shopId) {
-      $oldShop = $db->SelectRow("SELECT projekt FROM shopexport WHERE id = '$oldShopId' LIMIT 1");
-      if (!$oldShop || !$this->app->erp->UserProjektRecht((int)$oldShop['projekt'])) {
+    $shopIds = array_unique(array_filter([$shopId, $oldShopId]));
+    sort($shopIds, SORT_NUMERIC);
+    $visibility = [];
+    $wooTarget = false;
+    foreach ($shopIds as $id) {
+      $shop = $db->SelectRow("SELECT projekt, modulename, einstellungen_json, geloescht FROM shopexport WHERE id = '$id' LIMIT 1");
+      if (!$shop || !$this->app->erp->UserProjektRecht((int)$shop['projekt'])) {
         return [];
       }
+      if ($shop['modulename'] !== 'shopimporter_woocommerce' || !empty($shop['geloescht'])) {
+        continue;
+      }
+      $wooTarget = $wooTarget || $id === $shopId;
+      $settings = json_decode((string)$shop['einstellungen_json'], true)['felder'] ?? [];
+      if (!empty($settings['visibilitySync'])) {
+        $visibility[] = $id;
+      }
     }
+    return ['oldShop' => $oldShopId, 'wooTarget' => $wooTarget, 'visibility' => $visibility];
+  }
 
+  private function onlineShopOverrideValues(int $shopId, array $context): array
+  {
+    $secure = $this->app->Secure;
+    if (empty($context['wooTarget']) || $secure->GetPOST('aktiv') !== '1' || $secure->GetPOST('ausartikel') !== '0') {
+      return [];
+    }
     $values = [];
     foreach (ArticleFieldCatalog::fields() as $field) {
       if (str_starts_with($field['storage'], 'shop:')) {

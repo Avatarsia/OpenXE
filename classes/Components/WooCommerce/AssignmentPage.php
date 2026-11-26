@@ -202,10 +202,9 @@ final class AssignmentPage
             }
         }
         $projectFilter = $projectIds === [] ? '' : ' OR a.projekt IN (' . implode(',', $projectIds) . ')';
-        $membership = 'EXISTS (SELECT 1 FROM artikel_onlineshops AS ao'
-            . ' WHERE ao.artikel = CASE WHEN a.variante = 1 THEN a.variante_von ELSE a.id END'
-            . ' AND ao.shop = :shop AND ao.aktiv = 1)';
-        $from = ' FROM artikel AS a LEFT JOIN konfiguration AS wc ON wc.name = CONCAT(:article_prefix, a.id)'
+        $membership = ShopAssignment::assignedSql('assignment_owner', ':shop');
+        $from = ' FROM artikel AS a' . ShopAssignment::ownerJoinSql()
+            . ' LEFT JOIN konfiguration AS wc ON wc.name = CONCAT(:article_prefix, a.id)'
             . ' WHERE a.geloescht = 0 AND (COALESCE(a.projekt, 0) <= 0' . $projectFilter . ')';
         $params = ['article_prefix' => $store->articleConfigPrefix()];
         if ($category === 0) {
@@ -222,9 +221,11 @@ final class AssignmentPage
         $lastPage = max(1, (int) ceil($count / self::PAGE_SIZE));
         $page = max(1, min($lastPage, $requestedPage));
         $inShop = $onlyUnassigned ? '0' : $membership;
+        $legacyOnly = $onlyUnassigned ? '0' : '(' . ShopAssignment::legacySql('assignment_owner', ':shop')
+            . ' AND NOT ' . ShopAssignment::activeSql('assignment_owner', ':shop') . ')';
         $rows = $this->db->fetchAll(
-            'SELECT a.id, a.nummer, a.name_de, a.ausverkauft, a.variante, ' . $inShop . ' AS in_shop'
-            . $from . ' ORDER BY a.nummer, a.id LIMIT ' . self::PAGE_SIZE . ' OFFSET ' . (($page - 1) * self::PAGE_SIZE),
+            'SELECT a.id, a.nummer, a.name_de, a.ausverkauft, a.variante, a.variante_von, ' . $inShop . ' AS in_shop, '
+            . $legacyOnly . ' AS legacy_only' . $from . ' ORDER BY a.nummer, a.id LIMIT ' . self::PAGE_SIZE . ' OFFSET ' . (($page - 1) * self::PAGE_SIZE),
             $params + ['shop' => $shopId]
         );
         return [$rows, $page, $lastPage];
@@ -257,12 +258,14 @@ final class AssignmentPage
             $number = AdminView::e($row['nummer']);
             $html .= '<tr data-article="' . $id . '"><th scope="row">' . $number . '</th><td>' . AdminView::e($row['name_de']) . '</td>';
             foreach ($columns as $cmd => $label) {
-                if ($cmd === 'toggle_shop' && (int) $row['variante'] === 1) {
+                if ($cmd === 'toggle_shop' && ArticleFieldCatalog::isVariant($row)) {
                     $html .= '<td>folgt Hauptartikel</td>';
                     continue;
                 }
                 $html .= '<td><input type="checkbox" data-command="' . $cmd . '" aria-label="' . $label . ' (' . $number . ')"'
-                    . ($checked[$cmd] ? ' checked' : '') . '></td>';
+                    . ($checked[$cmd] ? ' checked' : '') . '>'
+                    . ($cmd === 'toggle_shop' && !empty($row['legacy_only']) ? ' <small>ueber Artikelstamm zugeordnet</small>' : '')
+                    . '</td>';
             }
             if ($category !== 0) {
                 $html .= '<td><button type="button" data-command="cat_unassign" aria-label="Kategoriezuordnung f&uuml;r '
@@ -379,14 +382,14 @@ final class AssignmentPage
 
         $id = (int) $article['id'];
         $enabled = str_starts_with($cmd, 'toggle_') ? $this->integer($post['enabled'] ?? null, 0, 1) : 0;
-        if ($cmd === 'toggle_shop' && (int) $article['variante'] === 1) {
+        if ($cmd === 'toggle_shop' && ArticleFieldCatalog::isVariant($article)) {
             throw new DomainException('Die Shop-Zuordnung der Variante folgt dem Hauptartikel.');
         }
         // Invalidate first so article edits also take assignment locks before the tree lock.
         $store->invalidateArticleExport($id);
         switch ($cmd) {
             case 'toggle_shop':
-                $hadLegacyAssignment = in_array($shopId, array_map('intval', [$article['shop'], $article['shop2'], $article['shop3']]), true);
+                $hadLegacyAssignment = ShopAssignment::hasLegacyReference($article, $shopId);
                 $this->toggleShop($shopId, $id, $enabled, !empty($this->settings($shop)['visibilitySync']), $hadLegacyAssignment);
                 break;
             case 'toggle_soldout':
