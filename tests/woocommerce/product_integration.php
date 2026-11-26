@@ -2,6 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/fixtures/category-store.php';
+require __DIR__ . '/fixtures/assignment.php';
+
+use Xentral\Components\WooCommerce\AssignmentPage;
+use Xentral\Components\WooCommerce\ShopCategoryStore;
+use Xentral\Components\WooCommerce\VisibilityQueue;
 require dirname(__DIR__, 2) . '/www/lib/ShopimporterBase.php';
 require dirname(__DIR__, 2) . '/www/pages/shopimporter_woocommerce.php';
 
@@ -13,6 +18,8 @@ class IntegrationProductApi
     public ?Closure $duringCategoryPost = null;
     public bool $failCategoryReads = false;
     public ?string $failCategoryAssignment = null;
+    public ?Closure $duringProductLookup = null;
+    private int $total = 0;
     private $nextId = 100;
 
     public function get($endpoint, $query = [])
@@ -34,14 +41,41 @@ class IntegrationProductApi
                 return ($row['sku'] ?? '') === $query['sku'];
             }));
         }
+        if (isset($query['parent'])) {
+            $rows = array_values(array_filter($rows, static fn (array $row): bool => $row['parent'] === $query['parent']));
+        }
         $size = (int) ($query['per_page'] ?? 100);
+        $this->total = count($rows);
+        if ($endpoint === 'products' && isset($query['sku'])) {
+            ($this->duringProductLookup)?->__invoke($query);
+        }
         return array_map(static function ($row) { return (object) $row; }, array_slice($rows, ((int) ($query['page'] ?? 1) - 1) * $size, $size));
+    }
+
+    public function getLastResponse(): object
+    {
+        return new class($this->total) {
+            public function __construct(private int $total) {}
+            public function getHeader(string $name): int
+            {
+                return strtolower($name) === 'x-wp-totalpages' ? (int) ($this->total > 0) : $this->total;
+            }
+        };
+    }
+
+    public function delete(string $endpoint, array $query): void
+    {
+        $this->writes[] = ['DELETE', $endpoint, $query];
+        $id = (int) basename($endpoint);
+        $this->collections['products/categories'] = array_values(array_filter(
+            $this->collections['products/categories'], static fn (array $term): bool => $term['id'] !== $id
+        ));
     }
 
     public function post($endpoint, $payload)
     {
         $this->writes[] = ['POST', $endpoint, $payload];
-        $row = array_merge(['parent_id' => 0, 'categories' => []], $payload, ['id' => ++$this->nextId]);
+        $row = array_merge(['parent_id' => 0, 'categories' => [], 'count' => 0], $payload, ['id' => ++$this->nextId]);
         $this->collections[$endpoint][] = $row;
         if ($endpoint === 'products/categories' && $this->duringCategoryPost !== null) {
             ($this->duringCategoryPost)();
@@ -114,9 +148,10 @@ function productConnector(array $articles, array $settings = []): IntegrationPro
     $connector->logger = new class {
         public array $warnings = [];
         public array $warningContexts = [];
+        public array $errors = [];
         public function debug(...$args) {}
         public function info(...$args) {}
-        public function error(...$args) {}
+        public function error(...$args) { $this->errors[] = $args; }
         public function warning(string $message, array $context = []): void
         {
             $this->warnings[] = $message;
@@ -174,16 +209,117 @@ function productWrite(IntegrationProductApi $api, string $endpoint): array
     throw new RuntimeException('Missing product write ' . $endpoint);
 }
 
-function configureProductDatabase(IntegrationProductConnector $connector, CategoryStoreDatabase $db): void
+function configureProductDatabase(IntegrationProductConnector $connector, object $db): void
 {
     $container = new class($db) {
-        public function __construct(private CategoryStoreDatabase $db) {}
-        public function get(string $name): CategoryStoreDatabase { same('Database', $name); return $this->db; }
+        public function __construct(private object $db) {}
+        public function get(string $name): object { same('Database', $name); return $this->db; }
     };
     (new ReflectionProperty(Shopimporter_Woocommerce::class, 'app'))->setValue($connector, (object) ['Container' => $container]);
 }
 
 runTests([
+    'guard_reads_current_assignment_after_sku_lookup_for_a_prequeued_export' => static function () {
+        $db = new AssignmentFixtureDatabase();
+        $db->article['shop'] = $db->article['shop3'] = 7;
+        $db->article['shop2'] = 8;
+        $db->assignment = ['aktiv' => 1];
+        $page = new AssignmentPage(assignmentFixtureApp($db));
+        $queued = remoteProduct([
+            'artikel' => 9,
+            'nummer' => 'WC-ARTICLE',
+            'artikel_varianten' => [['artikel' => 10, 'nummer' => 'CHILD', 'preis' => 12, 'inaktiv' => 0]],
+        ]);
+        $connector = productConnector([$queued], ['visibilitySync' => true]);
+        $connector->shopid = 7;
+        $connector->lastImportTimestamp = '2025-01-01T00:00:00';
+        configureProductDatabase($connector, $db);
+        $connector->client->collections['products'][] = ['id' => 20, 'sku' => 'WC-ARTICLE', 'parent_id' => 0, 'status' => 'publish'];
+        $connector->client->duringProductLookup = static function (array $query) use ($connector, $page): void {
+            if ($query['per_page'] !== 100) {
+                return;
+            }
+            $connector->client->duringProductLookup = null;
+            same(true, $page->handle('toggle_shop', ['shop' => 7, 'article' => 9, 'enabled' => 0, 'csrf_token' => 'assignment-token'])['ok']);
+            same(0, $connector->ImportGetAuftraegeAnzahl());
+            same('private', $connector->client->collections['products'][0]['status']);
+        };
+
+        same(true, $connector->ImportSendList()[0]->success);
+        same([], (new VisibilityQueue($db, 7))->pending());
+        same(['private', 'private', 'private'], array_map(static fn ($write) => $write[2]['status'], $connector->client->writes));
+        same('private', $connector->client->collections['products/20/variations'][0]['status']);
+        same([0, 8, 0], [$db->article['shop'], $db->article['shop2'], $db->article['shop3']]);
+        same(true, $page->handle('toggle_shop', ['shop' => 7, 'article' => 9, 'enabled' => 1, 'csrf_token' => 'assignment-token'])['ok']);
+        same(true, $connector->ImportSendList()[0]->success);
+        same('publish', $connector->client->collections['products'][0]['status']);
+        same('publish', $connector->client->collections['products/20/variations'][0]['status']);
+    },
+    'variants_export_sold_out_over_on_request_in_standard_and_matrix_payloads' => static function () {
+        $db = new CategoryStoreDatabase();
+        $db->soldOut = [8 => 1, 10 => 1];
+        $store = new ShopCategoryStore($db, 5);
+        $store->setOnRequest(8, true);
+        $store->setOnRequest(10, true);
+        $product = remoteMatrixProduct(['artikel_varianten' => [['artikel' => 10, 'nummer' => 'BLUE', 'preis' => 12, 'lag' => '7']]]);
+        $connector = productConnector([$product], ['extendedFieldMapping' => true]);
+        configureProductDatabase($connector, $db);
+
+        same(true, $connector->ImportSendList()[0]->success);
+        $variants = array_column($connector->client->collections['products/101/variations'], null, 'sku');
+        foreach (['RED', 'BLUE'] as $sku) {
+            $variant = $variants[$sku];
+            same('outofstock', $variant['stock_status']);
+            same('no', $variant['backorders']);
+            same(0, $variant['stock_quantity']);
+            same('0', array_column($variant['meta_data'], 'value', 'key')['openxe_on_request']);
+        }
+    },
+    'order_import_syncs_empty_categories_without_any_article_exports' => static function () {
+        $db = new AssignmentFixtureDatabase();
+        $store = new ShopCategoryStore($db, 7);
+        $page = new AssignmentPage(assignmentFixtureApp($db));
+        $connector = productConnector([], ['shopCategoryTree' => true]);
+        $connector->shopid = 7;
+        $connector->lastImportTimestamp = '2025-01-01T00:00:00';
+        configureProductDatabase($connector, $db);
+        $command = static fn (string $cmd, array $post): array => $page->handle($cmd,
+            $post + ['shop' => 7, 'csrf_token' => 'assignment-token', 'parent' => 0]);
+
+        $node = $command('cat_create', ['name' => 'Empty category'])['category'];
+        $root = $command('cat_create', ['name' => 'Root'])['category'];
+        $connector->client->failCategoryReads = true;
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same([], $connector->client->writes);
+        same(1, count($connector->logger->errors));
+        check($store->pendingTreeSync() !== null);
+        $connector->client->failCategoryReads = false;
+        $connector->client->duringCategoryPost = static function () use ($connector, $command, $node): void {
+            $connector->client->duringCategoryPost = null;
+            same(true, $command('cat_rename', ['category' => $node, 'name' => 'Edited during export'])['ok']);
+        };
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same(['Empty category', 'Root'], array_column($connector->client->collections['products/categories'], 'name'));
+        check($store->pendingTreeSync() !== null);
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same('Edited during export', $connector->client->collections['products/categories'][0]['name']);
+        same(null, $store->pendingTreeSync());
+
+        same(true, $command('cat_rename', ['category' => $node, 'name' => 'Renamed'])['ok']);
+        same(true, $command('cat_move', ['category' => $node, 'parent' => $root, 'sort' => 0])['ok']);
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same('Renamed', $connector->client->collections['products/categories'][0]['name']);
+        same(102, $connector->client->collections['products/categories'][0]['parent']);
+
+        same(true, $command('cat_delete', ['category' => $node])['ok']);
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same(['Root'], array_column($connector->client->collections['products/categories'], 'name'));
+        same([], $store->pendingDeletions());
+        $errors = $connector->logger->errors;
+        $connector->client->failCategoryReads = true;
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same($errors, $connector->logger->errors);
+    },
     'shop_category_tree_replaces_the_legacy_source_and_assigns_the_product' => static function () {
         $db = new CategoryStoreDatabase();
         $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 5);

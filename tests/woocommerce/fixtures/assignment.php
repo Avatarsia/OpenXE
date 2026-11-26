@@ -19,13 +19,17 @@ final class AssignmentFixtureDatabase
     public array $shop = ['id' => '7', 'bezeichnung' => 'WooCommerce Testshop', 'projekt' => '3',
         'einstellungen_json' => '{"felder":{"visibilitySync":true,"shopCategoryTree":true}}'];
     public array $article = ['id' => '9', 'nummer' => 'ERP-ARTICLE', 'name_de' => 'Heizblock V1', 'projekt' => '4',
-        'ausverkauft' => 0];
+        'ausverkauft' => 0, 'variante' => 0, 'variante_von' => 0, 'shop' => 0, 'shop2' => 0, 'shop3' => 0];
+    public array $catalog = [];
+    public array $batchArticleIds = [];
+    public bool $rejectAssignmentWritesAfterTreeLock = false;
+    private bool $treeLocked = false;
     public ?array $assignment = null;
     private ?array $snapshot = null;
 
     public function inTransaction(): bool { return $this->snapshot !== null; }
     public function beginTransaction(): void { $this->snapshot = [$this->config, $this->article, $this->assignment]; }
-    public function commit(): void { $this->snapshot = null; }
+    public function commit(): void { $this->snapshot = null; $this->treeLocked = false; }
     public function rollBack(): void
     {
         [$this->config, $this->article, $this->assignment] = $this->snapshot;
@@ -43,10 +47,22 @@ final class AssignmentFixtureDatabase
         throw new LogicException($sql);
     }
 
-    public function fetchValue(string $sql, array $params): string|false
+    public function fetchValue(string $sql, array $params): int|string|false
     {
+        if (str_contains($sql, 'GET_LOCK') || str_contains($sql, 'RELEASE_LOCK')) {
+            return 1;
+        }
         if (str_contains($sql, 'FROM konfiguration')) {
+            if (str_contains($sql, 'FOR UPDATE') && str_starts_with($params['name'], 'woocommerce_category_tree_')) {
+                $this->treeLocked = true;
+            }
             return $this->config[$params['name']] ?? false;
+        }
+        if (str_starts_with($sql, 'SELECT COUNT(*) FROM artikel AS a')) {
+            return count($this->filteredCatalog($sql, $params));
+        }
+        if (str_contains($sql, 'FROM artikel_onlineshops')) {
+            return !empty($this->assignment['aktiv']) ? 10 : false;
         }
         if (str_contains($sql, 'FROM artikelnummer_fremdnummern')) {
             return 'WC-ARTICLE';
@@ -59,8 +75,24 @@ final class AssignmentFixtureDatabase
         if (str_contains($sql, 'FROM shopexport')) {
             return [$this->shop];
         }
+        if ($sql === 'SELECT id FROM projekt') {
+            return [['id' => 3], ['id' => 4], ['id' => 5]];
+        }
         if (str_contains($sql, 'FROM artikel ')) {
-            return [array_merge($this->article, ['in_shop' => $this->assignment['aktiv'] ?? 0])];
+            if (preg_match('/LIMIT (\d+) OFFSET (\d+)$/', $sql, $page)) {
+                return array_slice($this->filteredCatalog($sql, $params), (int) $page[2], (int) $page[1]);
+            }
+            return $this->catalog ?: [array_merge($this->article, ['in_shop' => $this->assignment['aktiv'] ?? 0])];
+        }
+        if (str_contains($sql, 'FROM konfiguration WHERE name IN (')) {
+            $this->batchArticleIds = array_map(static fn (string $name): int => (int) substr($name, strrpos($name, '_') + 1), array_values($params));
+            $rows = [];
+            foreach ($params as $name) {
+                if (isset($this->config[$name])) {
+                    $rows[] = ['name' => $name, 'wert' => $this->config[$name]];
+                }
+            }
+            return $rows;
         }
         if (str_contains($sql, 'FROM konfiguration')) {
             $prefix = str_replace('!_', '_', substr($params['prefix'], 0, -1));
@@ -75,8 +107,32 @@ final class AssignmentFixtureDatabase
         throw new LogicException($sql);
     }
 
+    private function filteredCatalog(string $sql, array $params): array
+    {
+        $catalog = $this->catalog ?: [array_merge($this->article, ['in_shop' => $this->assignment['aktiv'] ?? 0])];
+        preg_match('/a\.projekt IN \(([0-9,]+)\)/', $sql, $projects);
+        return array_values(array_filter($catalog, function (array $article) use ($sql, $params, $projects): bool {
+            if ($article['projekt'] > 0 && !in_array((string) $article['projekt'], explode(',', $projects[1] ?? ''), true)) {
+                return false;
+            }
+            if (str_contains($sql, 'AND NOT EXISTS (SELECT 1 FROM artikel_onlineshops') && $article['in_shop']) {
+                return false;
+            }
+            $key = $params['article_prefix'] . $article['id'];
+            $categories = json_decode($this->config[$key] ?? '{}', true)['categories'] ?? [];
+            return isset($params['category_id'])
+                ? in_array((int) $params['category_id'], $categories, true) : $categories === [];
+        }));
+    }
+
     public function perform(string $sql, array $params): void
     {
+        if (str_starts_with($sql, 'DELETE FROM konfiguration')) {
+            if (($this->config[$params['name']] ?? null) === $params['revision']) {
+                unset($this->config[$params['name']]);
+            }
+            return;
+        }
         if (!$this->inTransaction()) {
             throw new LogicException('Writes require a transaction.');
         }
@@ -90,12 +146,21 @@ final class AssignmentFixtureDatabase
             }
             $this->assignment = ['aktiv' => 1, 'pseudolager' => '', 'lieferzeitmanuell' => '', 'last_article_hash' => ''];
         } elseif (str_starts_with($sql, 'UPDATE artikel_onlineshops')) {
+            if ($this->rejectAssignmentWritesAfterTreeLock && $this->treeLocked) {
+                throw new LogicException('Assignment write after acquiring the tree lock.');
+            }
             if ($this->assignment !== null) {
                 if (isset($params['enabled'])) {
                     $this->assignment['aktiv'] = $params['enabled'];
                 }
                 if (str_contains($sql, "last_article_hash = ''")) {
                     $this->assignment['last_article_hash'] = '';
+                }
+            }
+        } elseif (str_starts_with($sql, 'UPDATE artikel SET shop =')) {
+            foreach (['shop', 'shop2', 'shop3'] as $slot) {
+                if ($this->article[$slot] === $params[$slot]) {
+                    $this->article[$slot] = 0;
                 }
             }
         } elseif (str_starts_with($sql, 'UPDATE artikel SET ausverkauft')) {

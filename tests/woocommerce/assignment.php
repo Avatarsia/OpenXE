@@ -8,6 +8,66 @@ use Xentral\Components\WooCommerce\VisibilityQueue;
 require_once __DIR__ . '/fixtures/assignment.php';
 
 $tests = [
+    'unchecking_a_legacy_only_assignment_clears_all_matching_slots_and_queues_hide' => function (): void {
+        [$page, $db] = assignmentSetup();
+        $db->article = array_replace($db->article, ['shop' => 7, 'shop2' => 8, 'shop3' => 7]);
+        expect(true, assignmentCommand($page, 'toggle_shop')['ok']);
+        expect([0, 8, 0], array_values(array_intersect_key($db->article, array_flip(['shop', 'shop2', 'shop3']))));
+        expect('WC-ARTICLE', (new VisibilityQueue($db, 7))->pending()[9]['sku']);
+    },
+    'variants_follow_the_main_article_but_can_change_delivery_flags' => function (): void {
+        [$page, $db, $store] = assignmentSetup();
+        $db->article['variante'] = 1;
+        $db->article['variante_von'] = 6;
+        $html = $page->render();
+        expect(false, str_contains($html, 'data-command="toggle_shop"'));
+        expect(true, str_contains($html, 'folgt Hauptartikel'));
+        expect(true, str_contains($html, 'data-command="toggle_soldout"'));
+        expect(true, str_contains($html, 'data-command="toggle_onrequest"'));
+        expect(false, assignmentCommand($page, 'toggle_shop', ['enabled' => 1])['ok']);
+        expect(true, assignmentCommand($page, 'toggle_soldout', ['enabled' => 1])['ok']);
+        expect(true, assignmentCommand($page, 'toggle_onrequest', ['enabled' => 1])['ok']);
+        expect(1, $db->article['ausverkauft']);
+        expect(true, $store->isOnRequest(9));
+    },
+    'category_project_and_shop_filters_apply_before_sql_pagination' => function (): void {
+        [, $db, $store] = assignmentSetup();
+        $category = $store->create('Parts');
+        for ($id = 1; $id <= 420; $id++) {
+            $db->catalog[$id] = [
+                'id' => $id, 'nummer' => sprintf('%04d', $id), 'name_de' => 'Part',
+                'projekt' => $id % 2 === 0 ? 4 : 5, 'ausverkauft' => 0, 'variante' => 0,
+                'in_shop' => $id % 8 === 0 ? 1 : 0,
+            ];
+            if ($id % 4 === 0) {
+                $store->assign($id, [$category]);
+            }
+        }
+        foreach ([
+            [0, false, range(202, 398, 4), 'Seite 2 von 3'],
+            [$category, true, range(404, 420, 8), 'Seite 2 von 2'],
+        ] as [$selected, $filter, $ids, $label]) {
+            $page = new AssignmentPage(assignmentFixtureApp($db, [
+                'page' => 2, 'category' => $selected, 'unassigned' => (int) $filter,
+            ]));
+            $html = $page->render();
+            preg_match_all('/<tr data-article="(\d+)">/', $html, $rows);
+            expect($ids, array_map('intval', $rows[1]));
+            expect(true, str_contains($html, $label));
+            expect($ids, $db->batchArticleIds);
+        }
+    },
+    'tree_changes_release_the_tree_lock_before_invalidating_assignments' => function (): void {
+        [$page, $db, $store] = assignmentSetup();
+        $category = $store->create('Parts');
+        $store->assign(9, [$category]);
+        $db->assignment = ['aktiv' => 1, 'last_article_hash' => 'old'];
+        $db->rejectAssignmentWritesAfterTreeLock = true;
+        expect(true, assignmentCommand($page, 'cat_rename', ['category' => $category, 'name' => 'Tools'])['ok']);
+        expect('Tools', $store->tree()[0]['name']);
+        expect('', $db->assignment['last_article_hash']);
+        expect(true, assignmentCommand($page, 'toggle_onrequest', ['enabled' => 1])['ok']);
+    },
     'toggle_shop_creates_assignment_with_required_columns' => function (): void {
         [$page, $db] = assignmentSetup();
         expect(true, assignmentCommand($page, 'toggle_shop', ['enabled' => '1'])['ok']);

@@ -53,10 +53,7 @@ final class AssignmentPage
             $category = 0;
         }
         $onlyUnassigned = $secure->GetGET('unassigned') === '1';
-        $articles = $this->articles($store, $shopId, $category, $onlyUnassigned);
-        $lastPage = max(1, (int) ceil(count($articles) / self::PAGE_SIZE));
-        $page = max(1, min($lastPage, (int) $secure->GetGET('page')));
-        $rows = array_slice($articles, ($page - 1) * self::PAGE_SIZE, self::PAGE_SIZE);
+        [$rows, $page, $lastPage] = $this->articles($store, $shopId, $category, $onlyUnassigned, (int) $secure->GetGET('page'));
         $url = self::URL . '&shop=' . $shopId;
         $categoryUrl = $url . '&category=' . $category;
         $viewUrl = $categoryUrl . ($onlyUnassigned ? '&unassigned=1' : '');
@@ -188,31 +185,42 @@ final class AssignmentPage
         return $html;
     }
 
-    private function articles(ShopCategoryStore $store, int $shopId, int $category, bool $onlyUnassigned): array
+    private function articles(ShopCategoryStore $store, int $shopId, int $category, bool $onlyUnassigned, int $requestedPage): array
     {
-        $membership = 'EXISTS (SELECT 1 FROM artikel_onlineshops AS ao WHERE ao.artikel = a.id AND ao.shop = :shop AND ao.aktiv = 1)';
-        $sql = 'SELECT a.id, a.nummer, a.name_de, a.projekt, a.ausverkauft, ' . $membership
-            . ' AS in_shop FROM artikel AS a WHERE a.geloescht = 0';
-        if ($category !== 0) {
-            $ids = $store->articlesIn($category);
-            if ($ids === []) {
-                return [];
+        $projectIds = [];
+        foreach ($this->db->fetchAll('SELECT id FROM projekt') as $project) {
+            $id = (int) $project['id'];
+            if ($this->app->erp->UserProjektRecht($id)) {
+                $projectIds[] = $id;
             }
-            // The store supplies only positive integer article IDs.
-            $sql .= ' AND a.id IN (' . implode(',', $ids) . ')';
         }
-        $rows = $this->db->fetchAll($sql . ($onlyUnassigned ? ' HAVING in_shop = 0' : '') . ' ORDER BY nummer, id',
-            ['shop' => $shopId]);
-        $ids = $category === 0 ? array_fill_keys($store->articlesWithoutCategory(array_map('intval', array_column($rows, 'id'))), true)
-            : null;
-        $allowed = [];
-        return array_values(array_filter($rows, function (array $row) use ($ids, &$allowed): bool {
-            if ($ids !== null && !isset($ids[$row['id']])) {
-                return false;
-            }
-            $project = (int) $row['projekt'];
-            return $allowed[$project] ??= $this->app->erp->UserProjektRecht($project);
-        }));
+        $projectFilter = $projectIds === [] ? '' : ' OR a.projekt IN (' . implode(',', $projectIds) . ')';
+        $membership = 'EXISTS (SELECT 1 FROM artikel_onlineshops AS ao'
+            . ' WHERE ao.artikel = CASE WHEN a.variante = 1 THEN a.variante_von ELSE a.id END'
+            . ' AND ao.shop = :shop AND ao.aktiv = 1)';
+        $from = ' FROM artikel AS a LEFT JOIN konfiguration AS wc ON wc.name = CONCAT(:article_prefix, a.id)'
+            . ' WHERE a.geloescht = 0 AND (COALESCE(a.projekt, 0) <= 0' . $projectFilter . ')';
+        $params = ['article_prefix' => $store->articleConfigPrefix()];
+        if ($category === 0) {
+            $from .= " AND COALESCE(JSON_LENGTH(wc.wert, '$.categories'), 0) = 0";
+        } else {
+            $from .= " AND JSON_CONTAINS(wc.wert, :category_id, '$.categories') = 1";
+            $params['category_id'] = (string) $category;
+        }
+        if ($onlyUnassigned) {
+            $from .= ' AND NOT ' . $membership;
+            $params['shop'] = $shopId;
+        }
+        $count = (int) $this->db->fetchValue('SELECT COUNT(*)' . $from, $params);
+        $lastPage = max(1, (int) ceil($count / self::PAGE_SIZE));
+        $page = max(1, min($lastPage, $requestedPage));
+        $inShop = $onlyUnassigned ? '0' : $membership;
+        $rows = $this->db->fetchAll(
+            'SELECT a.id, a.nummer, a.name_de, a.ausverkauft, a.variante, ' . $inShop . ' AS in_shop'
+            . $from . ' ORDER BY a.nummer, a.id LIMIT ' . self::PAGE_SIZE . ' OFFSET ' . (($page - 1) * self::PAGE_SIZE),
+            $params + ['shop' => $shopId]
+        );
+        return [$rows, $page, $lastPage];
     }
 
     private function articleTable(ShopCategoryStore $store, array $rows, int $category): string
@@ -231,14 +239,23 @@ final class AssignmentPage
             $html .= '<th scope="col">' . $label . '</th>';
         }
         $html .= $category === 0 ? '</tr></thead><tbody>' : '<th scope="col">Kategorie</th></tr></thead><tbody>';
+        $states = $store->articleStates(array_map('intval', array_column($rows, 'id')));
         foreach ($rows as $row) {
             $id = (int) $row['id'];
-            $checked = [(bool) $row['in_shop'], (bool) $row['ausverkauft'], $store->isOnRequest($id)];
+            $checked = [
+                'toggle_shop' => (bool) $row['in_shop'],
+                'toggle_soldout' => (bool) $row['ausverkauft'],
+                'toggle_onrequest' => $states[$id]['onRequest'],
+            ];
             $number = AdminView::e($row['nummer']);
             $html .= '<tr data-article="' . $id . '"><th scope="row">' . $number . '</th><td>' . AdminView::e($row['name_de']) . '</td>';
             foreach ($columns as $cmd => $label) {
+                if ($cmd === 'toggle_shop' && (int) $row['variante'] === 1) {
+                    $html .= '<td>folgt Hauptartikel</td>';
+                    continue;
+                }
                 $html .= '<td><input type="checkbox" data-command="' . $cmd . '" aria-label="' . $label . ' (' . $number . ')"'
-                    . (array_shift($checked) ? ' checked' : '') . '></td>';
+                    . ($checked[$cmd] ? ' checked' : '') . '></td>';
             }
             if ($category !== 0) {
                 $html .= '<td><button type="button" data-command="cat_unassign" aria-label="Kategoriezuordnung f&uuml;r '
@@ -265,20 +282,20 @@ final class AssignmentPage
             }
 
             $store = new ShopCategoryStore($this->db, $shopId);
-            $this->db->beginTransaction();
-            try {
-                $result = match ($cmd) {
-                    'cat_create', 'cat_rename', 'cat_move', 'cat_delete' => $this->editTree($store, $shopId, $cmd, $post),
-                    'toggle_shop', 'toggle_soldout', 'toggle_onrequest', 'cat_assign', 'cat_unassign'
-                        => $this->editArticle($store, $shop, $cmd, $post),
-                    default => throw new DomainException('Unbekannte Aktion.'),
-                };
-                $this->db->commit();
-            } catch (Throwable $error) {
-                if ($this->db->inTransaction()) {
-                    $this->db->rollBack();
-                }
-                throw $error;
+            $result = $this->transactional(fn (): array => match ($cmd) {
+                'cat_create', 'cat_rename', 'cat_move', 'cat_delete' => $this->editTree($store, $cmd, $post),
+                'toggle_shop', 'toggle_soldout', 'toggle_onrequest', 'cat_assign', 'cat_unassign'
+                    => $this->editArticle($store, $shop, $cmd, $post),
+                default => throw new DomainException('Unbekannte Aktion.'),
+            });
+            if ($cmd === 'cat_rename' || $cmd === 'cat_move') {
+                // ArticleDataRepository takes assignment locks before the tree lock.
+                // Commit the tree change before touching assignments. Deleted nodes must be empty.
+                $this->transactional(function () use ($store, $shopId, $result): void {
+                    foreach ($store->articlesIn($result['category']) as $articleId) {
+                        $this->invalidateExport($shopId, $articleId);
+                    }
+                });
             }
             return ['ok' => true, 'error' => null] + $result;
         } catch (Throwable $error) {
@@ -286,24 +303,37 @@ final class AssignmentPage
         }
     }
 
-    private function editTree(ShopCategoryStore $store, int $shopId, string $cmd, array $post): array
+    private function transactional(callable $write): mixed
+    {
+        $this->db->beginTransaction();
+        try {
+            $result = $write();
+            $this->db->commit();
+            return $result;
+        } catch (Throwable $error) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            throw $error;
+        }
+    }
+
+    private function editTree(ShopCategoryStore $store, string $cmd, array $post): array
     {
         if ($cmd === 'cat_create') {
-            return ['category' => $store->create($this->name($post), $this->integer($post['parent'] ?? null, 0))];
-        }
-        $category = $this->integer($post['category'] ?? null, 1);
-        if ($cmd === 'cat_delete') {
-            $store->delete($category);
-            return ['category' => 0];
-        }
-        if ($cmd === 'cat_rename') {
-            $store->rename($category, $this->name($post));
+            $category = $store->create($this->name($post), $this->integer($post['parent'] ?? null, 0));
         } else {
-            $store->move($category, $this->integer($post['parent'] ?? null, 0), $this->integer($post['sort'] ?? null, 0));
+            $category = $this->integer($post['category'] ?? null, 1);
+            if ($cmd === 'cat_delete') {
+                $store->delete($category);
+                $category = 0;
+            } elseif ($cmd === 'cat_rename') {
+                $store->rename($category, $this->name($post));
+            } else {
+                $store->move($category, $this->integer($post['parent'] ?? null, 0), $this->integer($post['sort'] ?? null, 0));
+            }
         }
-        foreach ($store->articlesIn($category) as $articleId) {
-            $this->invalidateExport($shopId, $articleId);
-        }
+        $store->markTreeSyncPending();
         return ['category' => $category];
     }
 
@@ -322,7 +352,7 @@ final class AssignmentPage
             $article = $matches[0];
         } else {
             $article = $this->db->fetchRow(
-                'SELECT id, projekt FROM artikel WHERE id = :article AND geloescht = 0 FOR UPDATE',
+                'SELECT id, projekt, variante, shop, shop2, shop3 FROM artikel WHERE id = :article AND geloescht = 0 FOR UPDATE',
                 ['article' => $this->integer($post['article'] ?? null, 1)]
             );
         }
@@ -332,9 +362,15 @@ final class AssignmentPage
 
         $id = (int) $article['id'];
         $enabled = str_starts_with($cmd, 'toggle_') ? $this->integer($post['enabled'] ?? null, 0, 1) : 0;
+        if ($cmd === 'toggle_shop' && (int) $article['variante'] === 1) {
+            throw new DomainException('Die Shop-Zuordnung der Variante folgt dem Hauptartikel.');
+        }
+        // Invalidate first so article edits also take assignment locks before the tree lock.
+        $this->invalidateExport($shopId, $id);
         switch ($cmd) {
             case 'toggle_shop':
-                $this->toggleShop($shopId, $id, $enabled, !empty($this->settings($shop)['visibilitySync']));
+                $hadLegacyAssignment = in_array($shopId, array_map('intval', [$article['shop'], $article['shop2'], $article['shop3']]), true);
+                $this->toggleShop($shopId, $id, $enabled, !empty($this->settings($shop)['visibilitySync']), $hadLegacyAssignment);
                 break;
             case 'toggle_soldout':
                 $this->db->perform('UPDATE artikel SET ausverkauft = :enabled WHERE id = :article',
@@ -349,11 +385,10 @@ final class AssignmentPage
                 $store->assign($id, $cmd === 'cat_assign' ? [...$categories, $category] : array_diff($categories, [$category]));
                 break;
         }
-        $this->invalidateExport($shopId, $id);
         return ['article' => $id];
     }
 
-    private function toggleShop(int $shopId, int $articleId, int $enabled, bool $visibilitySync): void
+    private function toggleShop(int $shopId, int $articleId, int $enabled, bool $visibilitySync, bool $hadLegacyAssignment): void
     {
         $params = ['shop' => $shopId, 'article' => $articleId];
         // Lock the assignment before the visibility queue, in the same order as its drain.
@@ -363,17 +398,26 @@ final class AssignmentPage
             $params
         );
         $queue = new VisibilityQueue($this->db, $shopId);
-        if ($assignment && $enabled === 0) {
-            $this->db->perform('UPDATE artikel_onlineshops SET aktiv = :enabled WHERE artikel = :article AND shop = :shop',
-                $params + ['enabled' => 0]);
-            if ($visibilitySync && (int) $assignment['aktiv'] === 1) {
+        if ($enabled === 0) {
+            if ($assignment) {
+                $this->db->perform('UPDATE artikel_onlineshops SET aktiv = :enabled WHERE artikel = :article AND shop = :shop',
+                    $params + ['enabled' => 0]);
+            }
+            if ($hadLegacyAssignment) {
+                $this->db->perform(
+                    'UPDATE artikel SET shop = IF(shop = :shop, 0, shop), shop2 = IF(shop2 = :shop2, 0, shop2),'
+                    . ' shop3 = IF(shop3 = :shop3, 0, shop3) WHERE id = :article',
+                    $params + ['shop2' => $shopId, 'shop3' => $shopId]
+                );
+            }
+            if ($visibilitySync && ((int) ($assignment['aktiv'] ?? 0) === 1 || $hadLegacyAssignment)) {
                 $sku = $this->db->fetchValue(
                     'SELECT ' . ArticleDataRepository::SHOP_SKU_SQL . ' FROM artikel AS a WHERE a.id = :article',
                     $params
                 );
                 $queue->enqueue($articleId, (string) $sku);
             }
-        } elseif ($enabled === 1) {
+        } else {
             if ($assignment) {
                 $this->db->perform('UPDATE artikel_onlineshops SET aktiv = :enabled WHERE id = :id',
                     ['enabled' => 1, 'id' => (int) $assignment['id']]);

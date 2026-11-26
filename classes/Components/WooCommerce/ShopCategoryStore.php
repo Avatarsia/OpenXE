@@ -20,6 +20,7 @@ final class ShopCategoryStore
     private string $treeKey;
     private string $deletionKey;
     private string $skipKey;
+    private string $treeSyncKey;
     private string $articlePrefix;
 
     public function __construct(private $database, int $shopId)
@@ -27,7 +28,27 @@ final class ShopCategoryStore
         $this->treeKey = 'woocommerce_category_tree_' . $shopId;
         $this->deletionKey = 'woocommerce_category_deletions_' . $shopId;
         $this->skipKey = 'woocommerce_category_skips_' . $shopId;
+        $this->treeSyncKey = 'woocommerce_category_sync_pending_' . $shopId;
         $this->articlePrefix = 'woocommerce_article_' . $shopId . '_';
+    }
+
+    public function markTreeSyncPending(): void
+    {
+        $this->writeConfig($this->treeSyncKey, ['revision' => bin2hex(random_bytes(16))]);
+    }
+
+    public function pendingTreeSync(): ?string
+    {
+        return $this->readConfig($this->treeSyncKey, '{}')['revision'] ?? null;
+    }
+
+    public function acknowledgeTreeSync(string $revision): void
+    {
+        // Compare and clear atomically so edits made during the REST calls remain pending.
+        $this->database->perform('DELETE FROM konfiguration WHERE name = :name AND wert = :revision', [
+            'name' => $this->treeSyncKey,
+            'revision' => json_encode(['revision' => $revision], self::CONFIG_JSON_FLAGS),
+        ]);
     }
 
     /** Each node includes its local id and a list of children ordered by sort, then id. */
@@ -284,6 +305,31 @@ final class ShopCategoryStore
     public function articlesIn(int $categoryId): array
     {
         return $this->assignedArticles($categoryId);
+    }
+
+    public function articleConfigPrefix(): string
+    {
+        return $this->articlePrefix;
+    }
+
+    /** @return array<int,array{categories:list<int>,onRequest:bool}> */
+    public function articleStates(array $articleIds): array
+    {
+        if ($articleIds === []) {
+            return [];
+        }
+        $states = array_fill_keys($articleIds, self::ARTICLE_DEFAULTS);
+        $params = [];
+        foreach (array_keys($states) as $id) {
+            $params['article_' . $id] = $this->articlePrefix . $id;
+        }
+        $placeholders = ':' . implode(', :', array_keys($params));
+        $rows = $this->database->fetchAll('SELECT name, wert FROM konfiguration WHERE name IN (' . $placeholders . ')', $params);
+        foreach ($rows as $row) {
+            $id = (int) substr($row['name'], strlen($this->articlePrefix));
+            $states[$id] = json_decode($row['wert'], true, 512, JSON_THROW_ON_ERROR) + self::ARTICLE_DEFAULTS;
+        }
+        return $states;
     }
 
     public function articlesWithoutCategory(array $articleIds): array

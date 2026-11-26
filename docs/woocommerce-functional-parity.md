@@ -65,3 +65,17 @@ Open a WooCommerce shop, then choose **WooCommerce** in its menu. Both views reu
 - **Refund-Status:** paginated queue/journal state, Woo order/refund IDs, credit-note ID, attempts, sanitized last error and UTC attempt times. **Erneut versuchen** advances only the existing retry schedule; it never clears pending financial markers, creates gateway refunds or triggers restocking. Uncertain pending states require manual recovery.
 
 Local rendering uses the real AdminView with original OpenXE styles and synthetic fixtures; it does not establish live ERP/shop integration.
+
+## Artikelliste > WooCommerce
+
+Unter **Artikel > WooCommerce** pflegst du die Shop-Zuordnung der Hauptartikel, den Shop-Kategorienbaum und die Lieferstatus je Artikel. Varianten folgen bei der Shop-Zuordnung dem Hauptartikel und behalten ihre eigenen Lieferstatus.
+
+Erforderlich sind die Bearbeitungsrechte **artikel/edit** und **onlineshops/edit** sowie Zugriff auf das Projekt des Shops und des Artikels. Nicht-Admins benoetigen zusaetzlich in den OpenXE-Benutzerrechten (userrights) die Freigabe fuer Modul **artikel**, Aktion **woocommerce**. Diese Freigabe schaltet den Menuepunkt und den Zugriff auf die Action frei.
+
+Die folgenden Shop-Einstellungen sind standardmaessig deaktiviert. Pruefe vor der Aktivierung, ob die aktuell angebotenen Hauptartikel eine aktive Zuordnung fuer diesen Shop haben, und uebernimm die vorhandenen WooCommerce-Kategorien in den Shop-Baum.
+
+- **shopCategoryTree** exportiert den separaten Baum. Der Bestellimport synchronisiert vorgemerkte Baumaenderungen auch bei leerer Artikel-Exportqueue. Das Produkt-Kategorieverhalten folgt **categorySyncMode**.
+- **visibilitySync** macht aktive Hauptartikel-Zuordnungen fuer die Veroeffentlichung verbindlich. Beim Entfernen der Zuordnung wird der Artikel beim naechsten Bestellimport in WooCommerce auf privat gesetzt.
+- **extendedFieldMapping** aktiviert den Export von **auf Nachfrage lieferbar**. Sind beide Lieferstatus gesetzt, hat **nicht mehr lieferbar** Vorrang.
+
+Pruefe die Einstellungen beim Rollout mit einem Testartikel und dessen Varianten, einschliesslich Kategoriezuordnung, Lieferstatus, Ausblenden und erneutem Aktivieren.

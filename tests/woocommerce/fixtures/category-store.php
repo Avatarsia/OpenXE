@@ -4,6 +4,7 @@
 final class CategoryStoreDatabase
 {
     public array $config = [];
+    public array $soldOut = [];
     public bool $failDeletionReasonWrites = false;
     public bool $failSkipReasonWrites = false;
     private ?array $snapshot = null;
@@ -28,6 +29,9 @@ final class CategoryStoreDatabase
 
     public function fetchValue(string $sql, array $params)
     {
+        if (str_contains($sql, 'SELECT ausverkauft FROM artikel')) {
+            return $this->soldOut[$params['article']] ?? false;
+        }
         $name = $params['name'];
         if (str_ends_with($sql, ' FOR UPDATE')) {
             check($this->inTransaction());

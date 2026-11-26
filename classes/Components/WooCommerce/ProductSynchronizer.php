@@ -19,8 +19,8 @@ class ProductSynchronizer
      * $payload contains already prepared fields (e.g. uploaded images/attachment metadata).
      * Options: backorders (no/notify/yes or 0/1/2), metadataprefix, priceType (net/gross),
      * yoastMeta and extendedMapping default to false. Extended mapping uses onRequest,
-     * a deliveryTimeIds callable and an optional logger. variationPayloads and onRequestForVariant
-     * use the source article ID.
+     * a deliveryTimeIds callable and an optional logger. variationPayloads, onRequestForVariant
+     * and soldOutForVariant use the source article ID. writeWithVisibility optionally wraps each REST write.
      * Source properties use local WC attributes.
      * @return array{id:int,variations:array}
      */
@@ -81,14 +81,14 @@ class ProductSynchronizer
                 throw new RuntimeException('A variable parent SKU already belongs to a WooCommerce variation.');
             }
             $id = (int) $existing['id'];
-            $this->client->put('products/' . $parentId . '/variations/' . $id, $this->variationPayload($mapped));
+            $this->write('put', 'products/' . $parentId . '/variations/' . $id, $this->variationPayload($mapped), $options);
             return ['id' => $id, 'variations' => []];
         }
         if ($existing !== null) {
             $id = (int) $existing['id'];
-            $this->client->put('products/' . $id, $mapped);
+            $this->write('put', 'products/' . $id, $mapped, $options);
         } else {
-            $created = (array) $this->client->post('products', array_merge(['type' => 'simple'], $mapped, ['sku' => $sku]));
+            $created = (array) $this->write('post', 'products', array_merge(['type' => 'simple'], $mapped, ['sku' => $sku]), $options);
             $id = (int) ($created['id'] ?? 0);
             if ($id <= 0) {
                 throw new RuntimeException('WooCommerce product creation returned no ID.');
@@ -119,6 +119,9 @@ class ProductSynchronizer
             $variantOptions = $options;
             $variantOptions['onRequest'] = isset($options['onRequestForVariant'])
                 && $options['onRequestForVariant']((int) $sourceId);
+            if (isset($options['soldOutForVariant'])) {
+                $source['ausverkauft'] = $options['soldOutForVariant']((int) $sourceId);
+            }
             $variation = $this->map($source, $variantOptions);
             $override = $options['variationPayloads'][$sourceId] ?? [];
             if (isset($override['meta_data'])) {
@@ -131,9 +134,9 @@ class ProductSynchronizer
             $variation = $this->variationPayload($variation);
             if (isset($bySku[$variationSku])) {
                 $variationId = $bySku[$variationSku];
-                $this->client->put($endpoint . '/' . $variationId, $variation);
+                $this->write('put', $endpoint . '/' . $variationId, $variation, $options);
             } else {
-                $created = (array) $this->client->post($endpoint, $variation);
+                $created = (array) $this->write('post', $endpoint, $variation, $options);
                 $variationId = (int) ($created['id'] ?? 0);
                 if ($variationId <= 0) {
                     throw new RuntimeException('WooCommerce variation creation returned no ID.');
@@ -143,6 +146,12 @@ class ProductSynchronizer
             $result['variations'][$sourceId] = $variationId;
         }
         return $result;
+    }
+
+    private function write(string $method, string $endpoint, array $payload, array $options): mixed
+    {
+        $write = fn (array $data) => $this->client->$method($endpoint, $data);
+        return isset($options['writeWithVisibility']) ? $options['writeWithVisibility']($payload, $write) : $write($payload);
     }
 
     /** Maps actual remote export keys; absent optional fields do not erase shop values. */

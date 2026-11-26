@@ -18,6 +18,23 @@ function pendingCategoryStore(): ShopCategoryStore
 }
 
 runTests([
+    'tree_export_stops_before_starting_a_request_outside_its_budget' => static function () {
+        $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
+        $store->create('Parts');
+        $store->create('Tools');
+        $client = new CategoryExportClient();
+        $remaining = 2;
+        $exporter = new ShopCategoryExporter($client, $store, null, static function () use (&$remaining): bool {
+            return $remaining-- > 0;
+        });
+        try {
+            $exporter->syncTree();
+        } catch (RuntimeException $error) {
+            check(str_contains($error->getMessage(), 'Zeitbudget'));
+        }
+        same(['parts'], array_column($client->terms, 'slug'));
+        same(false, $exporter->completed());
+    },
     'sync_creates_missing_terms_with_stored_slug' => static function () {
         $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
         $parent = $store->create('Replacement parts');

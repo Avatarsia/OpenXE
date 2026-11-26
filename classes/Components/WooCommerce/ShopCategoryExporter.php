@@ -14,8 +14,25 @@ final class ShopCategoryExporter
     private array $deferredDeletions = [];
     private array $skippedNodes = [];
 
-    public function __construct(private $client, private ShopCategoryStore $store, private ?\Closure $logWarning = null)
+    public function __construct(
+        private $client,
+        private ShopCategoryStore $store,
+        private ?\Closure $logWarning = null,
+        private ?\Closure $mayStartRequest = null
+    ) {
+    }
+
+    private function request(string $method, string $endpoint, array ...$args): mixed
     {
+        if ($this->mayStartRequest !== null && !($this->mayStartRequest)()) {
+            throw new RuntimeException('Zeitbudget fuer WooCommerce-Kategorieexport erreicht.');
+        }
+        return $this->client->$method($endpoint, ...$args);
+    }
+
+    public function completed(): bool
+    {
+        return $this->termIds !== null && $this->deferredDeletions === [] && $this->skippedNodes === [];
     }
 
     /** @return array<int,int> OpenXE node ID to WooCommerce term ID */
@@ -32,7 +49,7 @@ final class ShopCategoryExporter
 
         $terms = $seenSlugs = [];
         for ($page = 1; ; $page++) {
-            $rows = $this->client->get('products/categories', [
+            $rows = $this->request('get', 'products/categories', [
                 'per_page' => 100, 'page' => $page, 'hide_empty' => false, 'orderby' => 'id',
             ]);
             if (!is_array($rows)) {
@@ -57,7 +74,7 @@ final class ShopCategoryExporter
         foreach ($pending as $id => $slug) {
             try {
                 if (isset($terms[$id])) {
-                    $term = (array) $this->client->get('products/categories/' . $id);
+                    $term = (array) $this->request('get', 'products/categories/' . $id);
                     if (($term['slug'] ?? null) !== $slug) {
                         throw new RuntimeException('WooCommerce-Slug stimmt nicht mit der vorgemerkten Kategorie ueberein.');
                     }
@@ -67,7 +84,7 @@ final class ShopCategoryExporter
                     $this->requireEmptyCollection('products', ['category' => $id, 'status' => 'any', 'per_page' => 1], 'Produkte');
                     $this->requireEmptyCollection('products/categories', ['parent' => $id, 'per_page' => 1, 'hide_empty' => false], 'Unterkategorien');
                     // The WooCommerce term endpoint requires force for confirmed-empty categories.
-                    $this->client->delete('products/categories/' . $id, ['force' => true]);
+                    $this->request('delete', 'products/categories/' . $id, ['force' => true]);
                     unset($terms[$id]);
                 }
                 $this->store->acknowledgeDeletion($id);
@@ -106,7 +123,7 @@ final class ShopCategoryExporter
     private function requireEmptyCollection(string $endpoint, array $query, string $label): void
     {
         try {
-            $rows = $this->client->get($endpoint, $query);
+            $rows = $this->request('get', $endpoint, $query);
             $total = $this->client->getLastResponse()?->getHeader('X-WP-Total');
         } catch (Throwable $error) {
             throw new RuntimeException('WooCommerce-Abfrage fehlgeschlagen (' . $label . '): ' . $error->getMessage(), 0, $error);
@@ -197,12 +214,12 @@ final class ShopCategoryExporter
                 'name' => (string) ($match['name'] ?? ''), 'parent' => (int) ($match['parent'] ?? -1),
             ]);
             if ($changes !== []) {
-                $this->client->put('products/categories/' . $id, $changes);
+                $this->request('put', 'products/categories/' . $id, $changes);
             }
             return $id;
         }
 
-        $created = (array) $this->client->post('products/categories', $payload + ['slug' => $slug]);
+        $created = (array) $this->request('post', 'products/categories', $payload + ['slug' => $slug]);
         $id = (int) ($created['id'] ?? 0);
         if ($id <= 0 || ($created['slug'] ?? null) !== $slug) {
             throw new RuntimeException('WooCommerce-Kategorie konnte nicht mit dem Slug ' . $slug . ' angelegt werden.');

@@ -138,6 +138,9 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if ($this->visibilitySync) {
       $this->drainVisibilityQueue();
     }
+    if ($this->shopCategoryTree) {
+      $this->syncPendingCategoryTree();
+    }
     $count = $this->getOrderReconciler()->count();
     if ($this->refundSync && $this->getRefundRetryQueue()->hasDue()) {
       $count = max(1, $count);
@@ -1145,6 +1148,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       if ($this->extendedFieldMapping) {
         $productOptions['deliveryTimeIds'] = [$this->deliveryTimeMap(), 'idFor'];
         $productOptions['onRequestForVariant'] = $categoryStore->isOnRequest(...);
+        $productOptions['soldOutForVariant'] = fn (int $id): bool => (bool) $this->app->Container->get('Database')->fetchValue(
+          'SELECT ausverkauft FROM artikel WHERE id = :article', ['article' => $id]
+        );
+      }
+      if ($this->visibilitySync) {
+        $productOptions['writeWithVisibility'] = fn (array $payload, callable $write) =>
+          $this->writeProductWithVisibility((int) $artikel, $payload, $write);
       }
       $productData = $tmp[$i];
       if (!$this->extendedFieldMapping) {
@@ -1419,6 +1429,70 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     });
     foreach ($result['failed'] as $orderId => $message) {
       $this->logger->error('WooCommerce refund deferred', ['shop' => $this->shopid, 'order' => $orderId, 'reason' => $message]);
+    }
+  }
+
+  private function writeProductWithVisibility(int $articleId, array $payload, callable $write): mixed
+  {
+    $database = $this->app->Container->get('Database');
+    $database->beginTransaction();
+    try {
+      // A queued standalone variant and a nested variant both follow the main article.
+      // Hold the assignment lock through the write so an uncheck/drain cannot race a publish.
+      $assigned = $database->fetchValue(
+        'SELECT id FROM artikel_onlineshops WHERE shop = :shop AND aktiv = 1 AND artikel = ('
+        . 'SELECT CASE WHEN variante = 1 THEN variante_von ELSE id END FROM artikel WHERE id = :article AND geloescht = 0'
+        . ') LIMIT 1 FOR UPDATE',
+        ['shop' => (int) $this->shopid, 'article' => $articleId]
+      );
+      if (!$assigned) {
+        $payload['status'] = 'private';
+      }
+      $result = $write($payload);
+      $database->commit();
+      return $result;
+    } catch (Throwable $error) {
+      if ($database->inTransaction()) {
+        $database->rollBack();
+      }
+      throw $error;
+    }
+  }
+
+  private function syncPendingCategoryTree(): void
+  {
+    try {
+      $database = $this->app->Container->get('Database');
+      $shopId = (int) $this->shopid;
+      $store = new ShopCategoryStore($database, $shopId);
+      if ($store->pendingTreeSync() === null) {
+        return;
+      }
+      $lock = ['name' => 'openxe_wc_category_sync_' . $shopId];
+      if ((int) $database->fetchValue('SELECT GET_LOCK(:name, 0)', $lock) !== 1) {
+        return;
+      }
+      try {
+        $revision = $store->pendingTreeSync();
+        if ($revision === null) {
+          return;
+        }
+        $deadline = hrtime(true) + 20_000_000_000;
+        $exporter = new ShopCategoryExporter($this->client, $store,
+          fn (string $message, array $context) => $this->logVisibility('warning', $message, ['shop' => $shopId] + $context),
+          static fn (): bool => hrtime(true) < $deadline
+        );
+        $exporter->syncTree();
+        if ($exporter->completed()) {
+          $store->acknowledgeTreeSync($revision);
+        }
+      } finally {
+        $database->fetchValue('SELECT RELEASE_LOCK(:name)', $lock);
+      }
+    } catch (Throwable $error) {
+      $this->logVisibility('error', 'WooCommerce category tree sync deferred', [
+        'shop' => $this->shopid, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
+      ]);
     }
   }
 

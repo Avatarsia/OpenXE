@@ -44,6 +44,10 @@ if ($view === 'assignment') {
     require_once __DIR__ . '/assignment.php';
     $db = new AssignmentFixtureDatabase();
     $db->assignment = ['aktiv' => 1];
+    if (($_GET['variant'] ?? '') === '1') {
+        $db->article['variante'] = 1;
+        $db->article['name_de'] = 'Heizblock V1 - Variante';
+    }
     $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 7);
     $parent = $store->create('Ersatzteile');
     $category = $store->create('Hotends', $parent);
