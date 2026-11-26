@@ -70,6 +70,9 @@ final class BulkPullDatabase
     public function perform(string $sql, array $params): void
     {
         $this->writes[] = [$sql, $params];
+        if (str_starts_with($sql, 'UPDATE artikel_onlineshops SET last_article_hash')) {
+            return;
+        }
         if (preg_match('/^UPDATE artikel SET `([a-z_]+)`/', $sql, $matches)) {
             $this->articles[$params['article']][$matches[1]] = $params['value'];
         } elseif (str_starts_with($sql, 'INSERT INTO konfiguration')) {

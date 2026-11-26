@@ -161,6 +161,9 @@ final class CsvImportDatabaseFake
     public function perform(string $sql, array $params): void
     {
         $this->writes[] = $sql;
+        if (str_starts_with($sql, 'UPDATE artikel_onlineshops SET last_article_hash')) {
+            return;
+        }
         if (str_starts_with($sql, 'UPDATE verkaufspreise SET gueltig_bis')) {
             foreach ($this->prices as &$price) {
                 if ($price['id'] === $params['id']) {

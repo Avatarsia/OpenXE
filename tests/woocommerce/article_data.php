@@ -1,6 +1,7 @@
 <?php
 // SPDX-License-Identifier: AGPL-3.0-only
 require __DIR__ . '/bootstrap.php';
+require dirname(__DIR__, 2) . '/www/pages/shopexport.php';
 
 use Xentral\Components\WooCommerce\ArticleDataRepository;
 use Xentral\Components\WooCommerce\DeliveryTimeMap;
@@ -13,6 +14,19 @@ final class ArticleDataDatabase
     public array $article = ['id' => 9, 'nummer' => 'LOCAL-9', 'pseudopreis' => '10.00'];
     public array $override = ['id' => 18, 'aktiv' => 1, 'ausartikel' => 0, 'pseudopreis' => '12.00'];
     public array $config = [];
+    public array $exportRows = [];
+
+    public function SelectRow(string $sql): array
+    {
+        if (preg_match('/FROM artikel WHERE id = ([0-9]+)/', $sql, $match)) {
+            return (int)$match[1] === 9 ? $this->article : ['id' => (int)$match[1]];
+        }
+        if (preg_match('/FROM artikel_onlineshops WHERE artikel = ([0-9]+) AND shop = ([0-9]+)/', $sql, $match)) {
+            return $this->exportRows[(int)$match[2]][(int)$match[1]] ?? [];
+        }
+        throw new LogicException($sql);
+    }
+    public function SelectArr(string $sql): array { return []; }
     public array $prices = [];
     public int $group = 0;
     public bool $groupActive = true;
@@ -95,6 +109,18 @@ final class ArticleDataDatabase
                 same(18, $parameters['id']);
                 $this->override[$match[2]] = $parameters['value'];
             }
+        } elseif (str_starts_with($sql, 'UPDATE artikel_onlineshops SET last_article_hash')) {
+            foreach ($this->exportRows as $shop => &$rows) {
+                if (isset($parameters['shop']) && $parameters['shop'] !== $shop) {
+                    continue;
+                }
+                foreach ([$parameters['article'], $this->article['variante_von'] ?? 0] as $id) {
+                    if (isset($rows[$id])) {
+                        $rows[$id]['last_article_hash'] = '';
+                    }
+                }
+            }
+            unset($rows);
         } elseif (str_starts_with($sql, 'UPDATE verkaufspreise')) {
             check(str_contains($sql, 'DATE_SUB'));
             $this->prices[$parameters['id']]['expired'] = true;
@@ -440,6 +466,35 @@ runTests([
         same('10.00', $db->article['pseudopreis']);
         same('12.00', $db->override['pseudopreis']);
         same([], $db->config);
+    },
+    'price_only_changes_invalidate_real_cron_hash_for_all_assigned_shops' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->prices[1] = ['id' => 1, 'preis' => '25', 'expired' => false];
+        $export = new Shopexport((object)['DB' => $db], true);
+        foreach ([5, 6] as $shop) {
+            $db->exportRows[$shop][9] = ['last_article_hash' => $export->getArticleHash(9, $shop)];
+            same(false, $export->hasArticleHashChanged(9, $shop)['changed']);
+        }
+        articleRepository($db)->apply(9, ['price_net' => '27'], 'article_tab');
+        foreach ([5, 6] as $shop) {
+            same(true, $export->hasArticleHashChanged(9, $shop)['changed']);
+        }
+    },
+    'on_request_only_invalidates_real_cron_hash_for_variant_and_parent_in_its_shop' => static function () {
+        $db = new ArticleDataDatabase();
+        $db->article['variante_von'] = 8;
+        $export = new Shopexport((object)['DB' => $db], true);
+        foreach ([5, 6] as $shop) {
+            foreach ([8, 9] as $id) {
+                $db->exportRows[$shop][$id] = ['last_article_hash' => $export->getArticleHash($id, $shop)];
+                same(false, $export->hasArticleHashChanged($id, $shop)['changed']);
+            }
+        }
+        articleRepository($db)->apply(9, ['on_request' => '1'], 'article_tab');
+        foreach ([8, 9] as $id) {
+            same(true, $export->hasArticleHashChanged($id, 5)['changed']);
+            same(false, $export->hasArticleHashChanged($id, 6)['changed']);
+        }
     },
     'on_request_preserves_other_article_config' => static function () {
         $db = new ArticleDataDatabase();

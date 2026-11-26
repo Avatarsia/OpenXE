@@ -218,6 +218,8 @@ final class ArticleDataRepository
             }
 
             if ($audit !== []) {
+                $articleChanged = (bool) array_intersect(['artikel', 'price'], array_column($audit, 'target'));
+                $this->categoryStore->invalidateArticleExport($articleId, $articleChanged);
                 $this->appendLog($articleId, $audit, $origin);
             }
             if ($ownTransaction) {

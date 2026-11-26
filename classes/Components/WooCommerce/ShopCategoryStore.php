@@ -156,13 +156,14 @@ final class ShopCategoryStore
         }
     }
 
-    public function invalidateArticleExport(int $articleId): void
+    public function invalidateArticleExport(int $articleId, bool $allShops = false): void
     {
         // The normal and matrix variant payloads are exported through their parent article.
         $this->database->perform(
-            "UPDATE artikel_onlineshops SET last_article_hash = '' WHERE shop = :shop "
-            . 'AND (artikel = :article OR artikel = (SELECT variante_von FROM artikel WHERE id = :source))',
-            ['shop' => $this->shopId, 'article' => $articleId, 'source' => $articleId]
+            "UPDATE artikel_onlineshops SET last_article_hash = '' WHERE "
+            . ($allShops ? '' : 'shop = :shop AND ')
+            . '(artikel = :article OR artikel = (SELECT variante_von FROM artikel WHERE id = :source))',
+            ($allShops ? [] : ['shop' => $this->shopId]) + ['article' => $articleId, 'source' => $articleId]
         );
     }
 

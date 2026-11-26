@@ -83,6 +83,9 @@ final class ArticleTabDatabase
         if ($this->failWrites) {
             throw new RuntimeException('Synthetic extras write failure');
         }
+        if (str_starts_with($sql, 'UPDATE artikel_onlineshops SET last_article_hash')) {
+            return;
+        }
         if (str_starts_with($sql, 'UPDATE artikel SET ')) {
             preg_match('/SET \x60([a-z_]+)\x60/', $sql, $match);
             $this->article[$match[1]] = $params['value'];
