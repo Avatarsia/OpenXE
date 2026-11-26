@@ -1247,9 +1247,17 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $categoryLabel = $categoryIds === [] ? '' : ' (' . implode(', ', $categoryIds) . ')';
     $message = 'WooCommerce-Kategorieexport' . $categoryLabel . ': ' . $reason;
     $result->message = trim(($result->message ?? '') . "\n" . $message);
-    $this->logger->warning($message, [
-      'shop' => (int) $this->shopid, 'article' => $result->articleId, 'categories' => $categoryIds,
-    ]);
+    try {
+      $this->logger->warning($message, [
+        'shop' => (int) $this->shopid, 'article' => $result->articleId, 'categories' => $categoryIds,
+      ]);
+    } catch (Throwable $error) {
+      try {
+        error_log($message);
+      } catch (Throwable $fallbackError) {
+        // A failing log must not interrupt product export.
+      }
+    }
   }
 
   /**

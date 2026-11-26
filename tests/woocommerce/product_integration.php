@@ -249,6 +249,14 @@ runTests([
             ['shopCategoryTree' => true]);
         configureProductDatabase($connector, $db);
         $connector->client->failCategoryReads = true;
+        $connector->logger = new class {
+            public function debug(...$args): void {}
+            public function info(...$args): void {}
+            public function warning(string $message, array $context = []): void
+            {
+                throw new RuntimeException('Log insert failed');
+            }
+        };
         $results = $connector->ImportSendList();
         same([true, true], array_column($results, 'success'));
         foreach ($results as $result) {

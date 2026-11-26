@@ -211,7 +211,7 @@ runTests([
         check(str_contains($html, 'parts'));
         check(str_contains($html, 'WooCommerce meldet die Kategorie nicht als leer.'));
     },
-    'category_admin_shows_the_blocked_slug_even_before_the_next_retry' => static function () {
+    'category_admin_shows_the_blocked_slug_after_export' => static function () {
         $db = new AdminDatabaseFake();
         $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 7);
         $id = $store->create('Parts');
@@ -220,9 +220,35 @@ runTests([
             $store->delete($id);
             $store->create('Parts');
         };
-        (new \Xentral\Components\WooCommerce\ShopCategoryExporter($client, $store))->syncTree();
+        $exporter = new \Xentral\Components\WooCommerce\ShopCategoryExporter($client, $store);
+        $exporter->syncTree();
+        $client->duringPost = null;
+        $client->terms[1001]['count'] = 1;
+        $exporter->syncTree();
         [$page] = adminFixture([], ['view' => 'categories'], $db);
         check(str_contains($page->render(), 'Slug parts ist noch durch eine nicht loeschbare WooCommerce-Kategorie belegt'));
+    },
+    'category_admin_shows_the_export_conflict_with_a_renamed_pending_term_until_the_node_syncs' => static function () {
+        $db = new AdminDatabaseFake();
+        $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 7);
+        $original = $store->create('Original');
+        $store->setWcId($original, 11, 'original');
+        $store->delete($original);
+        $node = $store->create('Renamed');
+        $client = new CategoryExportClient([categoryTerm(11, 'Renamed', 'renamed')]);
+        $exporter = new \Xentral\Components\WooCommerce\ShopCategoryExporter($client, $store);
+        same([], $exporter->syncTree());
+        $reason = 'Slug renamed ist noch durch eine nicht loeschbare WooCommerce-Kategorie belegt';
+        same([$node => $reason], $exporter->assign(40, [$node], 'additive'));
+
+        [$page] = adminFixture([], ['view' => 'categories'], $db);
+        $html = $page->render();
+        check(str_contains($html, $reason), 'The admin must show the exporter conflict for renamed.');
+        check(str_contains($html, 'WooCommerce-Slug stimmt nicht mit der vorgemerkten Kategorie ueberein.'));
+
+        unset($client->terms[11]);
+        same([$node => 1001], $exporter->syncTree());
+        check(!str_contains($page->render(), $reason));
     },
     'changed_category_assignment_requires_a_new_preview' => static function () {
         $db = new AdminDatabaseFake();

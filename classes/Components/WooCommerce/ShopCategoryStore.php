@@ -12,19 +12,21 @@ final class ShopCategoryStore
 {
     private const CONFIG_LIMIT = 65000;
     private const CONFIG_JSON_FLAGS = JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES;
-    private const DELETION_REASON_LIMIT = 200;
-    private const DELETION_ENTRY_LIMIT = 200;
+    private const REASON_LENGTH_LIMIT = 200;
+    private const REASON_ENTRY_LIMIT = 200;
     private const EMPTY_TREE = '{"nextId":1,"nodes":{}}';
     private const ARTICLE_DEFAULTS = ['categories' => [], 'onRequest' => false];
 
     private string $treeKey;
     private string $deletionKey;
+    private string $skipKey;
     private string $articlePrefix;
 
     public function __construct(private $database, int $shopId)
     {
         $this->treeKey = 'woocommerce_category_tree_' . $shopId;
         $this->deletionKey = 'woocommerce_category_deletions_' . $shopId;
+        $this->skipKey = 'woocommerce_category_skips_' . $shopId;
         $this->articlePrefix = 'woocommerce_article_' . $shopId . '_';
     }
 
@@ -139,17 +141,7 @@ final class ShopCategoryStore
             $reasons = $stored + ($state['pendingDeletionReasons'] ?? []);
             // Put reasons observed in this run at the end, in observation order.
             $reasons = array_diff_key($reasons, $deferred) + $deferred;
-            $reasons = array_intersect_key($reasons, $state['pendingDeletions'] ?? []);
-            $reasons = array_slice($reasons, -self::DELETION_ENTRY_LIMIT, null, true);
-            foreach ($reasons as &$entry) {
-                preg_match('/^.{0,' . self::DELETION_REASON_LIMIT . '}/us', $entry, $match);
-                $entry = $match[0] ?? 'Fehlerdetails nicht verfuegbar.';
-            }
-            unset($entry);
-            // Unicode escaping can exceed the TEXT byte limit even with bounded character counts.
-            while (strlen(json_encode($reasons, self::CONFIG_JSON_FLAGS)) >= self::CONFIG_LIMIT) {
-                unset($reasons[array_key_first($reasons)]);
-            }
+            $reasons = self::boundReasons(array_intersect_key($reasons, $state['pendingDeletions'] ?? []));
             if ($reasons !== $stored) {
                 $this->writeConfig($this->deletionKey, $reasons);
             }
@@ -161,11 +153,38 @@ final class ShopCategoryStore
         });
     }
 
-    /** @return array<string> Current local slugs reserved by pending deletions. */
-    public function pendingDeletionSlugConflicts(): array
+    /** @return array<int,string> Last export skip reasons by local node ID. */
+    public function skipReasons(): array
     {
         $state = $this->readConfig($this->treeKey, self::EMPTY_TREE);
-        return array_intersect(array_column($state['nodes'], 'slug'), $state['pendingDeletions'] ?? []);
+        return array_intersect_key($this->readConfig($this->skipKey, '{}'), $state['nodes']);
+    }
+
+    public function updateSkipReasons(array $skipped, array $synced): void
+    {
+        $this->mutate(function (array $state) use ($skipped, $synced): void {
+            $stored = $this->readConfig($this->skipKey, '{}');
+            $reasons = array_diff_key($stored, $skipped) + $skipped;
+            $reasons = self::boundReasons(array_intersect_key(array_diff_key($reasons, $synced), $state['nodes']));
+            if ($reasons !== $stored) {
+                $this->writeConfig($this->skipKey, $reasons);
+            }
+        });
+    }
+
+    private static function boundReasons(array $reasons): array
+    {
+        $reasons = array_slice($reasons, -self::REASON_ENTRY_LIMIT, null, true);
+        foreach ($reasons as &$entry) {
+            preg_match('/^.{0,' . self::REASON_LENGTH_LIMIT . '}/us', $entry, $match);
+            $entry = $match[0] ?? 'Fehlerdetails nicht verfuegbar.';
+        }
+        unset($entry);
+        // Unicode escaping can exceed the TEXT byte limit even with bounded character counts.
+        while (strlen(json_encode($reasons, self::CONFIG_JSON_FLAGS)) >= self::CONFIG_LIMIT) {
+            unset($reasons[array_key_first($reasons)]);
+        }
+        return $reasons;
     }
 
     private function queueTermDeletion(array &$state, int $wcId, string $slug): void

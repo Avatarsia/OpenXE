@@ -8,6 +8,8 @@ use Throwable;
 
 final class ShopCategoryExporter
 {
+    private const UNSYNCED_REASON = 'Kategorie wurde im Exportlauf nicht synchronisiert.';
+
     private ?array $termIds = null;
     private array $deferredDeletions = [];
     private array $skippedNodes = [];
@@ -90,7 +92,15 @@ final class ShopCategoryExporter
             }
         }
         $termsBySlug = array_column($terms, null, 'slug');
-        return $this->termIds = $this->syncBranch($tree, 0, $terms, $termsBySlug, $blockedSlugs);
+        $this->termIds = $this->syncBranch($tree, 0, $terms, $termsBySlug, $blockedSlugs);
+        try {
+            $this->store->updateSkipReasons($this->skippedNodes, $this->termIds);
+        } catch (Throwable $error) {
+            $this->warn('Gruende fuer uebersprungene WooCommerce-Kategorien konnten nicht gespeichert werden.', [
+                'reason' => RefundStatusService::sanitizeError($error->getMessage()),
+            ]);
+        }
+        return $this->termIds;
     }
 
     private function requireEmptyCollection(string $endpoint, array $query, string $label): void
@@ -122,7 +132,7 @@ final class ShopCategoryExporter
         $categories = $skipped = [];
         foreach ($nodeIds as $nodeId) {
             if (!isset($ids[$nodeId])) {
-                $skipped[$nodeId] = $this->skippedNodes[$nodeId] ?? 'Kategorie wurde im Exportlauf nicht synchronisiert.';
+                $skipped[$nodeId] = $this->skippedNodes[$nodeId] ?? self::UNSYNCED_REASON;
                 continue;
             }
             $categories[] = $ids[$nodeId];
@@ -134,7 +144,7 @@ final class ShopCategoryExporter
         return $skipped;
     }
 
-    public static function blockedSlugReason(string $slug): string
+    private static function blockedSlugReason(string $slug): string
     {
         return 'Slug ' . $slug . ' ist noch durch eine nicht loeschbare WooCommerce-Kategorie belegt';
     }
@@ -148,7 +158,7 @@ final class ShopCategoryExporter
             $slug = $node['slug'];
             $context = ['category' => $nodeId, 'term' => $blockedSlugs[$slug] ?? $wcId];
             if (isset($blockedSlugs[$slug])) {
-                $this->skipNode($nodeId, self::blockedSlugReason($slug), $context);
+                $this->skipNode($node, self::blockedSlugReason($slug), $context);
                 continue;
             }
 
@@ -156,11 +166,11 @@ final class ShopCategoryExporter
                 $id = $this->syncNode($node, $parent, $terms[$wcId] ?? null, $termsBySlug[$slug] ?? null);
                 $context['term'] = $id;
                 if ($id !== $wcId && !$this->store->setWcId($nodeId, $id, $slug)) {
-                    $this->skipNode($nodeId, 'Kategorie wurde waehrend des Exports lokal entfernt.', $context);
+                    $this->skipNode($node, 'Kategorie wurde waehrend des Exports lokal entfernt.', $context);
                     continue;
                 }
             } catch (Throwable $error) {
-                $this->skipNode($nodeId, RefundStatusService::sanitizeError($error->getMessage()), $context);
+                $this->skipNode($node, RefundStatusService::sanitizeError($error->getMessage()), $context);
                 continue;
             }
             $ids[$nodeId] = $id;
@@ -200,16 +210,35 @@ final class ShopCategoryExporter
         return $id;
     }
 
-    private function skipNode(int $nodeId, string $reason, array $context): void
+    private function skipNode(array $node, string $reason, array $context): void
     {
-        $this->skippedNodes[$nodeId] = $reason ?: 'Kategorie konnte nicht synchronisiert werden.';
-        $this->warn($this->skippedNodes[$nodeId], $context);
+        $reason = $reason ?: 'Kategorie konnte nicht synchronisiert werden.';
+        $this->skippedNodes[$node['id']] = $reason;
+        $this->skipDescendants($node['children']);
+        $this->warn($reason, $context);
+    }
+
+    private function skipDescendants(array $nodes): void
+    {
+        foreach ($nodes as $node) {
+            $this->skippedNodes[$node['id']] = self::UNSYNCED_REASON;
+            $this->skipDescendants($node['children']);
+        }
     }
 
     private function warn(string $message, array $context): void
     {
-        if ($this->logWarning !== null) {
+        if ($this->logWarning === null) {
+            return;
+        }
+        try {
             ($this->logWarning)($message, $context);
+        } catch (Throwable $error) {
+            try {
+                error_log($message);
+            } catch (Throwable $fallbackError) {
+                // A failing log must not interrupt category synchronization.
+            }
         }
     }
 }

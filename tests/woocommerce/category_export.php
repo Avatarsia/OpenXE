@@ -266,14 +266,55 @@ runTests([
         same([11 => 'parts'], $store->pendingDeletions());
         check(str_contains(json_encode($warnings), 'Deletion reasons unavailable'));
     },
-    'a_failed_node_skips_its_subtree_and_does_not_stop_a_sibling' => static function () {
+    'a_failed_node_skips_its_subtree_and_does_not_stop_a_sibling_when_logging_fails' => static function () {
         $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
         $parent = $store->create('Broken');
         $store->create('Child', $parent);
         $other = $store->create('Tools');
         $client = new CategoryExportClient([categoryTerm(11, 'Unrelated name', 'broken')]);
-        same([$other => 1001], (new ShopCategoryExporter($client, $store))->syncTree());
+        $exporter = new ShopCategoryExporter($client, $store, static function (): void {
+            throw new Error('Log insert failed');
+        });
+        same([$other => 1001], $exporter->syncTree());
         same(['tools'], array_column(array_column($client->writes, 2), 'slug'));
+        same([$parent => 'WooCommerce-Slug bereits belegt: broken'], $exporter->assign(40, [$parent], 'additive'));
+    },
+    'skip_reasons_are_bounded_outside_the_tree' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new ShopCategoryStore($db, 7);
+        for ($id = 1; $id <= 201; $id++) {
+            $store->create('Category ' . $id);
+        }
+        $treeBeforeSync = $db->config['woocommerce_category_tree_7'];
+        $client = new CategoryExportClient();
+        $client->duringPost = static function (): void {
+            throw new RuntimeException(str_repeat("\u{1F527}", 250));
+        };
+        same([], (new ShopCategoryExporter($client, $store))->syncTree());
+
+        $json = $db->config['woocommerce_category_skips_7'] ?? '';
+        check($json !== '', 'Skip reasons must use their own configuration entry.');
+        check(strlen($json) < 65000);
+        $reasons = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        same(range(176, 201), array_keys($reasons));
+        same(str_repeat("\u{1F527}", 200), $reasons[201]);
+        same($treeBeforeSync, $db->config['woocommerce_category_tree_7']);
+    },
+    'a_skip_reason_write_failure_preserves_the_sync_and_assignment_results' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new ShopCategoryStore($db, 7);
+        $broken = $store->create('Broken');
+        $other = $store->create('Tools');
+        $db->failSkipReasonWrites = true;
+        $client = new CategoryExportClient([categoryTerm(11, 'Unrelated name', 'broken')]);
+        $warnings = [];
+        $exporter = new ShopCategoryExporter($client, $store, static function ($message, $context) use (&$warnings): void {
+            $warnings[] = [$message, $context];
+        });
+
+        same([$other => 1001], $exporter->syncTree());
+        same([$broken => 'WooCommerce-Slug bereits belegt: broken'], $exporter->assign(40, [$broken], 'additive'));
+        check(str_contains(json_encode($warnings), 'Skip reasons unavailable'));
     },
     'import_pages_through_categories_and_product_assignments' => static function () {
         $terms = $products = [];

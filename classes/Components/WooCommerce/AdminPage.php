@@ -172,7 +172,8 @@ final class AdminPage
         $pending = $store->pendingDeletions();
         if ($store->tree() !== [] || $pending !== []) {
             return AdminView::categoryNotice('Die Erst&uuml;bernahme erfordert einen leeren Shop-Kategorienbaum ohne offene L&ouml;schungen.')
-                . AdminView::pendingCategoryDeletions($pending, $store->pendingDeletionReasons(), $store->pendingDeletionSlugConflicts());
+                . AdminView::pendingCategoryDeletions($pending, $store->pendingDeletionReasons())
+                . AdminView::categorySkipReasons($store->skipReasons());
         }
 
         try {

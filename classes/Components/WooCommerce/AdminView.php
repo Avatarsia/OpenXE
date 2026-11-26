@@ -86,19 +86,27 @@ final class AdminView
         return $html . '</nav>';
     }
 
-    public static function pendingCategoryDeletions(array $pending, array $reasons, array $conflictingSlugs): string
+    public static function pendingCategoryDeletions(array $pending, array $reasons): string
     {
         if ($pending === []) {
             return '';
         }
         $html = '<h2>Vorgemerkte WooCommerce-Kategoriel&ouml;schungen</h2><ul class="wc-admin-results">';
-        $conflicts = array_fill_keys($conflictingSlugs, true);
         foreach ($pending as $termId => $slug) {
             $reason = $reasons[$termId] ?? 'Wartet auf den naechsten Kategorieexport.';
-            if (isset($conflicts[$slug])) {
-                $reason .= ' ' . ShopCategoryExporter::blockedSlugReason($slug);
-            }
             $html .= '<li>#' . (int) $termId . ' (' . self::e($slug) . ') &ndash; ' . self::e($reason) . '</li>';
+        }
+        return $html . '</ul>';
+    }
+
+    public static function categorySkipReasons(array $reasons): string
+    {
+        if ($reasons === []) {
+            return '';
+        }
+        $html = '<h2>Im Kategorieexport &uuml;bersprungene OpenXE-Kategorien</h2><ul class="wc-admin-results">';
+        foreach ($reasons as $nodeId => $reason) {
+            $html .= '<li>#' . (int) $nodeId . ' &ndash; ' . self::e($reason) . '</li>';
         }
         return $html . '</ul>';
     }
