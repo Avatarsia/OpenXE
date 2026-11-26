@@ -120,7 +120,7 @@ Die Tabelle folgt `ArticleFieldCatalog::fields()`. Die erste Zeile ergaenzt den 
 
 Der Tab zeigt die Shop-SKU lesend an. Kategorien, Bilder, Eigenschaften und Variantenstruktur werden an ihren bestehenden Pflegestellen bearbeitet. Der Lagerbestand wird aus den Lagerbuchungen berechnet. Die erweiterte Zuordnung sendet fuer EAN / GTIN zusaetzlich `_gm_gtin` und `_rank_math_gtin_code`.
 
-Der Netto-Verkaufspreis ist im Tab, bei der Rueckholung und per CSV nur schreibbar, wenn der Shop keine aktive Preisgruppe verwendet und der Artikel genau eine gueltige Standardpreiszeile ab Menge 1 hat. Der CSV-Import setzt mindestens eine aktive WooCommerce-Shop-Zuordnung voraus und prueft die Preisgruppe jedes zugeordneten aktiven WooCommerce-Shops. Der Tab zeigt bei einem gesperrten Preisfeld den Grund an. Der CSV-Import meldet, warum er eine Preisaenderung ueberspringt. Pflege den Preis in diesen Faellen unter **Verkaufspreise**.
+Der Netto-Verkaufspreis ist im Tab, bei der Rueckholung und per CSV nur schreibbar, wenn der Shop keine aktive Preisgruppe verwendet und der Artikel genau eine gueltige Standardpreiszeile ab Menge 1 hat. Der CSV-Import setzt mindestens eine aktive WooCommerce-Shop-Zuordnung voraus und prueft die Preisgruppe jedes zugeordneten aktiven WooCommerce-Shops. Der Tab zeigt bei einem gesperrten Preisfeld den Grund an. Der CSV-Import meldet, warum er eine Preisaenderung ueberspringt. Fehlt die Standardpreiszeile, lege sie unter **Verkaufspreise** an. Die WooCommerce-Funktionen aktualisieren nur einen vorhandenen Standardpreis.
 
 ### Shop-Einstellungen und Leerwerte
 

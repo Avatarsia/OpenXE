@@ -240,26 +240,23 @@ runTests([
         same(true, $db->inTransaction());
         $db->rollBack();
     },
-    'no_standard_prices_inserts_standard_price_for_quantity_one' => static function () {
-        $db = new ArticleDataDatabase();
-        $repo = articleRepository($db);
-        same(['value' => '', 'source' => 'price'], $repo->load(9)['price_net']);
-        same(['price_net' => ['old' => '', 'new' => '28']], $repo->apply(9, ['price_net' => '28'], 'pull'));
-        same(1, count($db->prices));
-        same(['Standard', '0', '1', 'Kunde', null],
-            array_map(static fn (string $key) => $db->prices[1][$key], ['objekt', 'adresse', 'ab_menge', 'art', 'gruppe']));
-        same(['value' => '28', 'source' => 'price'], $repo->load(9)['price_net']);
-    },
-    'fractional_standard_price_is_not_a_candidate_for_quantity_one' => static function () {
-        $db = new ArticleDataDatabase();
-        $db->prices[1] = ['id' => 1, 'preis' => '24.00', 'waehrung' => 'CHF', 'expired' => false, 'ab_menge' => '0.5', 'adresse' => '0'];
-        $repo = articleRepository($db);
-        same('', $repo->load(9)['price_net']['value']);
-        same(['price_net' => ['old' => '', 'new' => '28']], $repo->apply(9, ['price_net' => '28'], 'pull'));
-        same(false, $db->prices[1]['expired']);
-        same('0.5', $db->prices[1]['ab_menge']);
-        same('1', $db->prices[2]['ab_menge']);
-        same('28', $repo->load(9)['price_net']['value']);
+    'missing_standard_price_cannot_be_created_by_any_woocommerce_writer' => static function () {
+        foreach (['pull', 'article_tab', 'csv_import'] as $origin) {
+            $db = new ArticleDataDatabase();
+            $db->prices[1] = ['id' => 1, 'preis' => '24', 'expired' => false, 'ab_menge' => '0.5'];
+            $before = $db->prices;
+            $repo = articleRepository($db);
+            $reason = 'Kein Standardpreis vorhanden - bitte unter Verkaufspreise anlegen';
+            same($reason, articleDiff($repo->load(9), ['price_net' => '28'], 'price_net')['reason'] ?? null);
+            try {
+                $repo->apply(9, ['price_net' => '28'], $origin);
+                throw new LogicException('The WooCommerce writer created a price.');
+            } catch (InvalidArgumentException $error) {
+                same($reason, $error->getMessage());
+            }
+            same($before, $db->prices);
+            same(0, $db->writes);
+        }
     },
     'inactive_group_uses_the_editable_standard_price' => static function () {
         $db = new ArticleDataDatabase();

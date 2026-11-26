@@ -55,6 +55,7 @@ final class ArticleDataRepository
         return match ($source) {
             'group_price' => self::PRICE_GROUP,
             'price_ambiguous' => self::PRICE_AMBIGUOUS,
+            'price_missing' => 'Kein Standardpreis vorhanden - bitte unter Verkaufspreise anlegen',
             default => null,
         };
     }
@@ -174,7 +175,7 @@ final class ArticleDataRepository
                 }
 
                 if ($storage === 'price') {
-                    $this->writePrice($articleId, $state['price'], $new);
+                    $this->writePrice($articleId, (int) $state['price']['id'], $new);
                     $audit[] = ['field' => $key, 'target' => 'price', 'old' => $effective, 'new' => $new];
                 } elseif ($storage === 'onrequest') {
                     $this->categoryStore->setOnRequest($articleId, $new === '1');
@@ -240,7 +241,7 @@ final class ArticleDataRepository
         $group = $this->priceGroup($lock);
         $candidates = $this->standardPriceCandidates($articleId, $lock);
         $priceValue = $candidates[0]['preis'] ?? '';
-        $priceSource = 'price';
+        $priceSource = $candidates === [] ? 'price_missing' : 'price';
         if ($group) {
             $priceSource = 'group_price';
             // The export resolves the group price only after a hit in the standard query.
@@ -337,31 +338,21 @@ final class ArticleDataRepository
         );
     }
 
-    private function writePrice(int $articleId, array $old, string $value): void
+    private function writePrice(int $articleId, int $priceId, string $value): void
     {
-        if ($old) {
-            $this->database->perform(
-                'UPDATE verkaufspreise SET gueltig_bis = DATE_SUB(CURDATE(), INTERVAL 1 DAY), apichange = 1 WHERE id = :id',
-                ['id' => (int) $old['id']]
-            );
-            $this->database->perform(
-                'INSERT INTO verkaufspreise (artikel, objekt, projekt, adresse, preis, waehrung, ab_menge,'
-                . ' vpe, vpe_menge, angelegt_am, gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht,'
-                . ' kundenartikelnummer, art, gruppe, apichange, nichtberechnet, inbelegausblenden, gueltig_ab, kurs, kursdatum)'
-                . " SELECT artikel, objekt, projekt, adresse, :value, waehrung, ab_menge, vpe, vpe_menge, CURDATE(),"
-                . " '0000-00-00', bemerkung, bearbeiter, NOW(), firma, geloescht, kundenartikelnummer, art, gruppe, 1,"
-                . ' nichtberechnet, inbelegausblenden, gueltig_ab, kurs, kursdatum FROM verkaufspreise WHERE id = :id',
-                ['id' => (int) $old['id'], 'value' => $value]
-            );
-        } else {
-            $this->database->perform(
-                'INSERT INTO verkaufspreise (artikel, objekt, projekt, adresse, preis, waehrung, ab_menge, angelegt_am,'
-                . ' gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht, art, gruppe, apichange)'
-                . " VALUES (:article, 'Standard', '', '0', :value, 'EUR', 1, CURDATE(),"
-                . " '0000-00-00', '', '', NOW(), 1, 0, 'Kunde', NULL, 1)",
-                ['article' => $articleId, 'value' => $value]
-            );
-        }
+        $this->database->perform(
+            'UPDATE verkaufspreise SET gueltig_bis = DATE_SUB(CURDATE(), INTERVAL 1 DAY), apichange = 1 WHERE id = :id',
+            ['id' => $priceId]
+        );
+        $this->database->perform(
+            'INSERT INTO verkaufspreise (artikel, objekt, projekt, adresse, preis, waehrung, ab_menge,'
+            . ' vpe, vpe_menge, angelegt_am, gueltig_bis, bemerkung, bearbeiter, logdatei, firma, geloescht,'
+            . ' kundenartikelnummer, art, gruppe, apichange, nichtberechnet, inbelegausblenden, gueltig_ab, kurs, kursdatum)'
+            . " SELECT artikel, objekt, projekt, adresse, :value, waehrung, ab_menge, vpe, vpe_menge, CURDATE(),"
+            . " '0000-00-00', bemerkung, bearbeiter, NOW(), firma, geloescht, kundenartikelnummer, art, gruppe, 1,"
+            . ' nichtberechnet, inbelegausblenden, gueltig_ab, kurs, kursdatum FROM verkaufspreise WHERE id = :id',
+            ['id' => $priceId, 'value' => $value]
+        );
         $candidates = $this->standardPriceCandidates($articleId, true);
         if (count($candidates) !== 1 || FieldDiff::normalize('price_net', (string) $candidates[0]['preis']) !== $value) {
             throw new RuntimeException('Eine weitere aktive Preiszeile verhindert die Preisaenderung fuer Artikel ' . $articleId . '.');
