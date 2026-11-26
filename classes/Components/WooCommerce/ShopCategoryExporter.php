@@ -13,26 +13,35 @@ final class ShopCategoryExporter
     private ?array $termIds = null;
     private array $deferredDeletions = [];
     private array $skippedNodes = [];
+    private bool $budgetExhausted = false;
 
     public function __construct(
         private $client,
         private ShopCategoryStore $store,
         private ?\Closure $logWarning = null,
-        private ?\Closure $mayStartRequest = null
+        private ?\Closure $mayStartRequest = null,
+        private $syncClient = null
     ) {
+        $this->syncClient ??= $this->client;
     }
 
     private function request(string $method, string $endpoint, array ...$args): mixed
     {
         if ($this->mayStartRequest !== null && !($this->mayStartRequest)()) {
+            $this->budgetExhausted = true;
             throw new RuntimeException('Zeitbudget fuer WooCommerce-Kategorieexport erreicht.');
         }
-        return $this->client->$method($endpoint, ...$args);
+        return $this->syncClient->$method($endpoint, ...$args);
     }
 
     public function completed(): bool
     {
         return $this->termIds !== null && $this->deferredDeletions === [] && $this->skippedNodes === [];
+    }
+
+    public function budgetExhausted(): bool
+    {
+        return $this->budgetExhausted;
     }
 
     /** @return array<int,int> OpenXE node ID to WooCommerce term ID */
@@ -41,6 +50,7 @@ final class ShopCategoryExporter
         $this->termIds = null;
         $this->deferredDeletions = [];
         $this->skippedNodes = [];
+        $this->budgetExhausted = false;
         $tree = $this->store->tree();
         $pending = $this->store->pendingDeletions();
         if ($tree === [] && $pending === []) {
@@ -89,6 +99,9 @@ final class ShopCategoryExporter
                 }
                 $this->store->acknowledgeDeletion($id);
             } catch (Throwable $error) {
+                if ($this->budgetExhausted) {
+                    throw $error;
+                }
                 $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'WooCommerce-Loeschung fehlgeschlagen.';
                 $this->deferredDeletions[$id] = $reason;
                 $blockedSlugs[$slug] = $id;
@@ -124,7 +137,7 @@ final class ShopCategoryExporter
     {
         try {
             $rows = $this->request('get', $endpoint, $query);
-            $total = $this->client->getLastResponse()?->getHeader('X-WP-Total');
+            $total = $this->syncClient->getLastResponse()?->getHeader('X-WP-Total');
         } catch (Throwable $error) {
             throw new RuntimeException('WooCommerce-Abfrage fehlgeschlagen (' . $label . '): ' . $error->getMessage(), 0, $error);
         }
@@ -187,6 +200,9 @@ final class ShopCategoryExporter
                     continue;
                 }
             } catch (Throwable $error) {
+                if ($this->budgetExhausted) {
+                    throw $error;
+                }
                 $this->skipNode($node, RefundStatusService::sanitizeError($error->getMessage()), $context);
                 continue;
             }

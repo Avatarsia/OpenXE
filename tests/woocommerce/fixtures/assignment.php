@@ -23,6 +23,8 @@ final class AssignmentFixtureDatabase
     public array $catalog = [];
     public array $batchArticleIds = [];
     public bool $rejectAssignmentWritesAfterTreeLock = false;
+    public bool $failAssignmentWrites = false;
+    public array $advisoryLocks = [];
     private bool $treeLocked = false;
     public ?array $assignment = null;
     private ?array $snapshot = null;
@@ -42,6 +44,14 @@ final class AssignmentFixtureDatabase
             return $this->assignment === null ? false : $this->assignment + ['id' => 10];
         }
         if (str_contains($sql, 'FROM artikel ')) {
+            if (str_contains($sql, 'SELECT CASE WHEN variante')) {
+                if ((int) $this->article['id'] !== $params['article'] && $params['article'] !== 10) {
+                    throw new LogicException('Unexpected product/variant identity.');
+                }
+                if (!$this->inTransaction() || !str_ends_with($sql, 'FOR UPDATE')) {
+                    throw new LogicException('Product owner must be locked.');
+                }
+            }
             return $this->article;
         }
         throw new LogicException($sql);
@@ -49,7 +59,15 @@ final class AssignmentFixtureDatabase
 
     public function fetchValue(string $sql, array $params): int|string|false
     {
-        if (str_contains($sql, 'GET_LOCK') || str_contains($sql, 'RELEASE_LOCK')) {
+        if (str_contains($sql, 'GET_LOCK')) {
+            if (isset($this->advisoryLocks[$params['name']])) {
+                return 0;
+            }
+            $this->advisoryLocks[$params['name']] = true;
+            return 1;
+        }
+        if (str_contains($sql, 'RELEASE_LOCK')) {
+            unset($this->advisoryLocks[$params['name']]);
             return 1;
         }
         if (str_contains($sql, 'FROM konfiguration')) {
@@ -63,6 +81,9 @@ final class AssignmentFixtureDatabase
         }
         if (str_contains($sql, 'FROM artikel_onlineshops')) {
             return !empty($this->assignment['aktiv']) ? 10 : false;
+        }
+        if (str_starts_with($sql, 'SELECT ausverkauft FROM artikel')) {
+            return (int) $this->article['id'] === $params['article'] ? $this->article['ausverkauft'] : 0;
         }
         if (str_contains($sql, 'FROM artikelnummer_fremdnummern')) {
             return 'WC-ARTICLE';
@@ -133,7 +154,7 @@ final class AssignmentFixtureDatabase
             }
             return;
         }
-        if (!$this->inTransaction()) {
+        if (!$this->inTransaction() && !str_starts_with($params['name'] ?? '', 'woocommerce_category_sync_budget_')) {
             throw new LogicException('Writes require a transaction.');
         }
         if (str_starts_with($sql, 'INSERT INTO konfiguration') || str_starts_with($sql, 'UPDATE konfiguration')) {
@@ -141,11 +162,14 @@ final class AssignmentFixtureDatabase
                 $this->config[$params['name']] = $params['wert'];
             }
         } elseif (str_starts_with($sql, 'INSERT INTO artikel_onlineshops')) {
-            if (!preg_match("/pseudolager, lieferzeitmanuell, last_article_hash\) VALUES \(:article, :shop, 1, '', '', ''\)/", $sql)) {
+            if (!preg_match("/pseudolager, lieferzeitmanuell, last_article_hash\) VALUES \(:article, :shop, :enabled, '', '', ''\)/", $sql)) {
                 throw new LogicException('Missing or uninitialized NOT NULL columns');
             }
-            $this->assignment = ['aktiv' => 1, 'pseudolager' => '', 'lieferzeitmanuell' => '', 'last_article_hash' => ''];
+            $this->assignment = ['aktiv' => $params['enabled'], 'pseudolager' => '', 'lieferzeitmanuell' => '', 'last_article_hash' => ''];
         } elseif (str_starts_with($sql, 'UPDATE artikel_onlineshops')) {
+            if ($this->failAssignmentWrites) {
+                throw new RuntimeException('Assignment writes unavailable.');
+            }
             if ($this->rejectAssignmentWritesAfterTreeLock && $this->treeLocked) {
                 throw new LogicException('Assignment write after acquiring the tree lock.');
             }

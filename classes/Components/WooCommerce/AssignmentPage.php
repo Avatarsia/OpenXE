@@ -14,6 +14,7 @@ final class AssignmentPage
 {
     private const URL = 'index.php?module=artikel&action=woocommerce';
     private const PAGE_SIZE = 50;
+    private const EXPORT_INVALIDATION_WARNING = 'Kategorie gespeichert. Die Aktualisierung der Artikel-Export-Hashes steht noch aus.';
     private $db;
 
     public function __construct(private $app)
@@ -174,6 +175,12 @@ final class AssignmentPage
     private function categoryErrors(ShopCategoryStore $store): string
     {
         $html = '';
+        if ($store->treeSyncBudgetExhaustions() >= 3) {
+            $html .= '<p class="warning" role="status">Die Synchronisierung des Kategorienbaums hat mindestens dreimal in Folge das Zeitbudget erreicht.</p>';
+        }
+        if ($store->hasPendingExportInvalidations()) {
+            $html .= '<p class="warning" role="status">' . self::EXPORT_INVALIDATION_WARNING . '</p>';
+        }
         foreach ($store->skipReasons() as $id => $reason) {
             $html .= '<p class="warning" role="status">Kategorie ' . (int) $id . ': ' . AdminView::e($reason) . '</p>';
         }
@@ -289,13 +296,20 @@ final class AssignmentPage
                 default => throw new DomainException('Unbekannte Aktion.'),
             });
             if ($cmd === 'cat_rename' || $cmd === 'cat_move') {
-                // ArticleDataRepository takes assignment locks before the tree lock.
-                // Commit the tree change before touching assignments. Deleted nodes must be empty.
-                $this->transactional(function () use ($store, $shopId, $result): void {
-                    foreach ($store->articlesIn($result['category']) as $articleId) {
-                        $this->invalidateExport($shopId, $articleId);
+                // The tree change is already committed. Keep the export work pending on failure.
+                try {
+                    $store->drainExportInvalidations();
+                    if ($store->hasPendingExportInvalidations()) {
+                        $result['warning'] = self::EXPORT_INVALIDATION_WARNING;
                     }
-                });
+                } catch (Throwable $error) {
+                    $result['warning'] = self::EXPORT_INVALIDATION_WARNING;
+                    try {
+                        $this->errorMessage($error);
+                    } catch (Throwable) {
+                        // A failed log cannot change the outcome of the committed edit.
+                    }
+                }
             }
             return ['ok' => true, 'error' => null] + $result;
         } catch (Throwable $error) {
@@ -334,6 +348,9 @@ final class AssignmentPage
             }
         }
         $store->markTreeSyncPending();
+        if ($cmd === 'cat_rename' || $cmd === 'cat_move') {
+            $store->markExportInvalidationPending($category);
+        }
         return ['category' => $category];
     }
 
@@ -366,7 +383,7 @@ final class AssignmentPage
             throw new DomainException('Die Shop-Zuordnung der Variante folgt dem Hauptartikel.');
         }
         // Invalidate first so article edits also take assignment locks before the tree lock.
-        $this->invalidateExport($shopId, $id);
+        $store->invalidateArticleExport($id);
         switch ($cmd) {
             case 'toggle_shop':
                 $hadLegacyAssignment = in_array($shopId, array_map('intval', [$article['shop'], $article['shop2'], $article['shop3']]), true);
@@ -402,6 +419,9 @@ final class AssignmentPage
             if ($assignment) {
                 $this->db->perform('UPDATE artikel_onlineshops SET aktiv = :enabled WHERE artikel = :article AND shop = :shop',
                     $params + ['enabled' => 0]);
+            } elseif ($hadLegacyAssignment && $visibilitySync) {
+                // Keep an explicit unassignment after clearing the only legacy reference.
+                $this->insertAssignment($params, 0);
             }
             if ($hadLegacyAssignment) {
                 $this->db->perform(
@@ -422,23 +442,18 @@ final class AssignmentPage
                 $this->db->perform('UPDATE artikel_onlineshops SET aktiv = :enabled WHERE id = :id',
                     ['enabled' => 1, 'id' => (int) $assignment['id']]);
             } else {
-                $this->db->perform(
-                    'INSERT INTO artikel_onlineshops (artikel, shop, aktiv, pseudolager, lieferzeitmanuell, last_article_hash)'
-                    . " VALUES (:article, :shop, 1, '', '', '')",
-                    $params
-                );
+                $this->insertAssignment($params, 1);
             }
             $queue->cancel($articleId);
         }
     }
 
-    private function invalidateExport(int $shopId, int $articleId): void
+    private function insertAssignment(array $params, int $enabled): void
     {
-        // The normal and matrix variant payloads are exported through their parent article.
         $this->db->perform(
-            "UPDATE artikel_onlineshops SET last_article_hash = '' WHERE shop = :shop "
-            . 'AND (artikel = :article OR artikel = (SELECT variante_von FROM artikel WHERE id = :source))',
-            ['shop' => $shopId, 'article' => $articleId, 'source' => $articleId]
+            'INSERT INTO artikel_onlineshops (artikel, shop, aktiv, pseudolager, lieferzeitmanuell, last_article_hash)'
+            . " VALUES (:article, :shop, :enabled, '', '', '')",
+            $params + ['enabled' => $enabled]
         );
     }
 

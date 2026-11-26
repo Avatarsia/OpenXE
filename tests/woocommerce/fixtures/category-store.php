@@ -32,6 +32,9 @@ final class CategoryStoreDatabase
         if (str_contains($sql, 'SELECT ausverkauft FROM artikel')) {
             return $this->soldOut[$params['article']] ?? false;
         }
+        if (str_contains($sql, 'GET_LOCK') || str_contains($sql, 'RELEASE_LOCK')) {
+            return 1;
+        }
         $name = $params['name'];
         if (str_ends_with($sql, ' FOR UPDATE')) {
             check($this->inTransaction());

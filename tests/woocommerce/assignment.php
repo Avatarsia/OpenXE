@@ -14,6 +14,7 @@ $tests = [
         expect(true, assignmentCommand($page, 'toggle_shop')['ok']);
         expect([0, 8, 0], array_values(array_intersect_key($db->article, array_flip(['shop', 'shop2', 'shop3']))));
         expect('WC-ARTICLE', (new VisibilityQueue($db, 7))->pending()[9]['sku']);
+        expect(0, $db->assignment['aktiv'] ?? null);
     },
     'variants_follow_the_main_article_but_can_change_delivery_flags' => function (): void {
         [$page, $db, $store] = assignmentSetup();

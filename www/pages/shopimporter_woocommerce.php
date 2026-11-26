@@ -47,6 +47,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public $data;
 
   const TIMEOUT = 30;
+  private const CATEGORY_SYNC_TIMEOUT = 10;
+  private const CATEGORY_SYNC_BUDGET = 20;
 
   /**
    * @var ClientWrapper $client
@@ -69,6 +71,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   private bool $yoastMeta = false;
   private bool $visibilitySync = false;
   private bool $shopCategoryTree = false;
+  private ?ClientWrapper $categorySyncClient = null;
   private $importModifiedFrom = '';
   private $importCompletedOrders = false;
 
@@ -138,9 +141,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if ($this->visibilitySync) {
       $this->drainVisibilityQueue();
     }
-    if ($this->shopCategoryTree) {
-      $this->syncPendingCategoryTree();
-    }
+    $this->drainCategoryChanges();
     $count = $this->getOrderReconciler()->count();
     if ($this->refundSync && $this->getRefundRetryQueue()->hasDue()) {
       $count = max(1, $count);
@@ -728,7 +729,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
     // --- Step 1: Collect all SKUs and compute desired stock params ---
 
-    // $pendingUpdates: sku => stock payload
+    // $pendingUpdates: sku => article identity and stock payload
     $pendingUpdates = [];
 
     for ($i = 0; $i < $ctmp; $i++) {
@@ -761,15 +762,16 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         $status = 'private';
       }
 
-      $pendingUpdates[$nummer] = [
+      $payload = [
         'manage_stock' => true,
         'stock_quantity' => $lageranzahl,
         'status' => $status,
       ];
       if ($onRequest) {
-        $pendingUpdates[$nummer]['backorders'] = 'no';
-        $pendingUpdates[$nummer]['stock_status'] = 'outofstock';
+        $payload['backorders'] = 'no';
+        $payload['stock_status'] = 'outofstock';
       }
+      $pendingUpdates[$nummer] = ['article' => (int) $artikel, 'payload' => $payload];
     }
 
     if (empty($pendingUpdates)) {
@@ -829,7 +831,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       }
 
       $info = $skuMap[$sku];
-      $item = ['id' => $info['id']] + $params;
+      $item = ['article' => $params['article'], 'payload' => ['id' => $info['id']] + $params['payload']];
 
       if ($info['isvariant']) {
         $variationItems[$info['parent']][] = $item;
@@ -843,8 +845,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     // Simple products
     foreach (array_chunk($simpleItems, 100) as $chunk) {
       try {
-        $response = $this->client->post('products/batch', ['update' => $chunk]);
-        $anzahl += $this->processBatchResponse($response, 'products/batch');
+        $anzahl += $this->sendStockBatch('products/batch', $chunk);
       } catch (\Throwable $e) {
         $this->logger->error('WooCommerce Batch-Request fehlgeschlagen fuer products/batch: ' . $e->getMessage());
       }
@@ -855,8 +856,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       foreach (array_chunk($items, 100) as $chunk) {
         $endpoint = 'products/' . $parentId . '/variations/batch';
         try {
-          $response = $this->client->post($endpoint, ['update' => $chunk]);
-          $anzahl += $this->processBatchResponse($response, $endpoint);
+          $anzahl += $this->sendStockBatch($endpoint, $chunk);
         } catch (\Throwable $e) {
           $this->logger->error('WooCommerce Batch-Request fehlgeschlagen fuer ' . $endpoint . ': ' . $e->getMessage());
         }
@@ -864,6 +864,31 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     }
 
     return $anzahl;
+  }
+
+  private function sendStockBatch(string $endpoint, array $items): int
+  {
+    $send = function (array $payloads) use ($endpoint): int {
+      if ($payloads === []) {
+        return 0;
+      }
+      $response = $this->client->post($endpoint, ['update' => $payloads]);
+      return $this->processBatchResponse($response, $endpoint);
+    };
+    if (!$this->visibilitySync) {
+      return $send(array_column($items, 'payload'));
+    }
+
+    return $this->withAssignmentLocks(function ($database) use ($items, $send): int {
+      // Recheck every chunk after the SKU lookup and retain the locks until WooCommerce responds.
+      $payloads = [];
+      foreach ($items as $item) {
+        if (!$this->isShopUnassigned($database, $item['article'])) {
+          $payloads[] = $item['payload'];
+        }
+      }
+      return $send($payloads);
+    });
   }
 
   /**
@@ -956,11 +981,10 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if ($this->shopCategoryTree) {
       try {
         $categoryStore ??= new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid);
-        $categoryExporter = new ShopCategoryExporter($this->client, $categoryStore,
-          function (string $message, array $context): void {
-            $this->logger->warning($message, ['shop' => (int) $this->shopid] + $context);
-          });
-        $categoryExporter->syncTree();
+        $categoryExporter = $this->syncCategoryTree($categoryStore, false);
+        if ($categoryExporter === null) {
+          throw new RuntimeException('WooCommerce-Kategorien werden bereits synchronisiert.');
+        }
       } catch (Throwable $error) {
         $categoryTreeError = $error;
       }
@@ -1144,13 +1168,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         'extendedMapping' => $this->extendedFieldMapping,
         'yoastMeta' => $this->yoastMeta,
         'onRequest' => $this->extendedFieldMapping && $categoryStore->isOnRequest((int) $artikel),
+        'soldOutForVariant' => fn (int $id): bool => (bool) $this->app->Container->get('Database')->fetchValue(
+          'SELECT ausverkauft FROM artikel WHERE id = :article', ['article' => $id]
+        ),
       ];
       if ($this->extendedFieldMapping) {
         $productOptions['deliveryTimeIds'] = [$this->deliveryTimeMap(), 'idFor'];
         $productOptions['onRequestForVariant'] = $categoryStore->isOnRequest(...);
-        $productOptions['soldOutForVariant'] = fn (int $id): bool => (bool) $this->app->Container->get('Database')->fetchValue(
-          'SELECT ausverkauft FROM artikel WHERE id = :article', ['article' => $id]
-        );
       }
       if ($this->visibilitySync) {
         $productOptions['writeWithVisibility'] = fn (array $payload, callable $write) =>
@@ -1384,6 +1408,15 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $this->ssl_ignore
     );
 
+    $this->categorySyncClient = $this->shopCategoryTree ? new ClientWrapper(
+      $ImportWooCommerceApiUrl,
+      $ImportWooCommerceApiKey,
+      $ImportWooCommerceApiSecret,
+      ['query_string_auth' => true, 'timeout' => self::CATEGORY_SYNC_TIMEOUT],
+      $this->logger,
+      $this->ssl_ignore
+    ) : null;
+
     $storedTimestamp = $preferences['felder']['letzter_import_timestamp'] ?? null;
     if (!empty($storedTimestamp)) {
       $this->lastImportTimestamp = $storedTimestamp;
@@ -1434,21 +1467,42 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
   private function writeProductWithVisibility(int $articleId, array $payload, callable $write): mixed
   {
+    return $this->withAssignmentLocks(function ($database) use ($articleId, $payload, $write): mixed {
+      if ($this->isShopUnassigned($database, $articleId)) {
+        $payload['status'] = 'private';
+      }
+      return $write($payload);
+    });
+  }
+
+  private function isShopUnassigned($database, int $articleId): bool
+  {
+    // Both standalone and nested variants follow their main article. Take the article lock
+    // before the assignment lock, as in AssignmentPage, including for a legacy-only assignment.
+    $owner = $database->fetchRow(
+      'SELECT id, shop, shop2, shop3 FROM artikel WHERE id = ('
+      . 'SELECT CASE WHEN variante = 1 THEN variante_von ELSE id END FROM artikel WHERE id = :article AND geloescht = 0'
+      . ') FOR UPDATE',
+      ['article' => $articleId]
+    );
+    $shopId = (int) $this->shopid;
+    if (!$owner || in_array($shopId, array_map('intval', [$owner['shop'], $owner['shop2'], $owner['shop3']]), true)) {
+      return false;
+    }
+    $assignment = $database->fetchRow(
+      'SELECT id, aktiv FROM artikel_onlineshops WHERE shop = :shop AND artikel = :article'
+      . ' ORDER BY aktiv DESC, id LIMIT 1 FOR UPDATE',
+      ['shop' => $shopId, 'article' => (int) $owner['id']]
+    );
+    return $assignment && (int) $assignment['aktiv'] === 0;
+  }
+
+  private function withAssignmentLocks(callable $write): mixed
+  {
     $database = $this->app->Container->get('Database');
     $database->beginTransaction();
     try {
-      // A queued standalone variant and a nested variant both follow the main article.
-      // Hold the assignment lock through the write so an uncheck/drain cannot race a publish.
-      $assigned = $database->fetchValue(
-        'SELECT id FROM artikel_onlineshops WHERE shop = :shop AND aktiv = 1 AND artikel = ('
-        . 'SELECT CASE WHEN variante = 1 THEN variante_von ELSE id END FROM artikel WHERE id = :article AND geloescht = 0'
-        . ') LIMIT 1 FOR UPDATE',
-        ['shop' => (int) $this->shopid, 'article' => $articleId]
-      );
-      if (!$assigned) {
-        $payload['status'] = 'private';
-      }
-      $result = $write($payload);
+      $result = $write($database);
       $database->commit();
       return $result;
     } catch (Throwable $error) {
@@ -1459,41 +1513,73 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     }
   }
 
-  private function syncPendingCategoryTree(): void
+  private function drainCategoryChanges(): void
   {
+    $shopId = (int) $this->shopid;
+    // Retry hashes even when tree export is disabled or the remote revision has already been synced.
     try {
-      $database = $this->app->Container->get('Database');
-      $shopId = (int) $this->shopid;
-      $store = new ShopCategoryStore($database, $shopId);
-      if ($store->pendingTreeSync() === null) {
-        return;
-      }
-      $lock = ['name' => 'openxe_wc_category_sync_' . $shopId];
-      if ((int) $database->fetchValue('SELECT GET_LOCK(:name, 0)', $lock) !== 1) {
-        return;
-      }
-      try {
-        $revision = $store->pendingTreeSync();
-        if ($revision === null) {
-          return;
-        }
-        $deadline = hrtime(true) + 20_000_000_000;
-        $exporter = new ShopCategoryExporter($this->client, $store,
-          fn (string $message, array $context) => $this->logVisibility('warning', $message, ['shop' => $shopId] + $context),
-          static fn (): bool => hrtime(true) < $deadline
-        );
-        $exporter->syncTree();
-        if ($exporter->completed()) {
-          $store->acknowledgeTreeSync($revision);
-        }
-      } finally {
-        $database->fetchValue('SELECT RELEASE_LOCK(:name)', $lock);
+      $store = new ShopCategoryStore($this->app->Container->get('Database'), $shopId);
+      $store->drainExportInvalidations();
+    } catch (Throwable $error) {
+      $this->logVisibility('error', 'WooCommerce category export hash invalidation deferred', [
+        'shop' => $shopId, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
+      ]);
+    }
+    if (!$this->shopCategoryTree || !isset($store)) {
+      return;
+    }
+    try {
+      if ($store->pendingTreeSync() !== null) {
+        $this->syncCategoryTree($store, true);
       }
     } catch (Throwable $error) {
       $this->logVisibility('error', 'WooCommerce category tree sync deferred', [
-        'shop' => $this->shopid, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
+        'shop' => $shopId, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
       ]);
     }
+  }
+
+  private function syncCategoryTree(ShopCategoryStore $store, bool $pendingOnly): ?ShopCategoryExporter
+  {
+    $database = $this->app->Container->get('Database');
+    $shopId = (int) $this->shopid;
+    $lock = ['name' => 'openxe_wc_category_sync_' . $shopId];
+    if ((int) $database->fetchValue('SELECT GET_LOCK(:name, 0)', $lock) !== 1) {
+      return null;
+    }
+    try {
+      $revision = $store->pendingTreeSync();
+      if ($pendingOnly && $revision === null) {
+        return null;
+      }
+
+      // Leave room for the full REST timeout before starting another request in the order drain.
+      $lastRequestStart = $this->categorySyncTime() + (self::CATEGORY_SYNC_BUDGET - self::CATEGORY_SYNC_TIMEOUT) * 1_000_000_000;
+      $mayStartRequest = $pendingOnly ? fn (): bool => $this->categorySyncTime() <= $lastRequestStart : null;
+      $exporter = new ShopCategoryExporter($this->client, $store,
+        fn (string $message, array $context) => $this->logVisibility('warning', $message, ['shop' => $shopId] + $context),
+        $mayStartRequest,
+        $this->categorySyncClient
+      );
+      try {
+        $exporter->syncTree();
+        if ($exporter->completed() && $revision !== null) {
+          $store->acknowledgeTreeSync($revision);
+        }
+        return $exporter;
+      } finally {
+        if ($pendingOnly || $exporter->completed()) {
+          $store->recordTreeSyncBudgetResult($exporter->budgetExhausted());
+        }
+      }
+    } finally {
+      $database->fetchValue('SELECT RELEASE_LOCK(:name)', $lock);
+    }
+  }
+
+  protected function categorySyncTime(): int
+  {
+    return hrtime(true);
   }
 
   private function drainVisibilityQueue(): void

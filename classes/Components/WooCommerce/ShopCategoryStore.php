@@ -21,14 +21,18 @@ final class ShopCategoryStore
     private string $deletionKey;
     private string $skipKey;
     private string $treeSyncKey;
+    private string $treeSyncBudgetKey;
+    private string $exportInvalidationKey;
     private string $articlePrefix;
 
-    public function __construct(private $database, int $shopId)
+    public function __construct(private $database, private int $shopId)
     {
         $this->treeKey = 'woocommerce_category_tree_' . $shopId;
         $this->deletionKey = 'woocommerce_category_deletions_' . $shopId;
         $this->skipKey = 'woocommerce_category_skips_' . $shopId;
         $this->treeSyncKey = 'woocommerce_category_sync_pending_' . $shopId;
+        $this->treeSyncBudgetKey = 'woocommerce_category_sync_budget_' . $shopId;
+        $this->exportInvalidationKey = 'woocommerce_category_export_invalidation_' . $shopId;
         $this->articlePrefix = 'woocommerce_article_' . $shopId . '_';
     }
 
@@ -45,9 +49,81 @@ final class ShopCategoryStore
     public function acknowledgeTreeSync(string $revision): void
     {
         // Compare and clear atomically so edits made during the REST calls remain pending.
+        $this->acknowledgeConfig($this->treeSyncKey, ['revision' => $revision]);
+    }
+
+    public function treeSyncBudgetExhaustions(): int
+    {
+        return (int) ($this->readConfig($this->treeSyncBudgetKey, '{}')['exhaustions'] ?? 0);
+    }
+
+    /** Called under the shop's tree sync advisory lock. */
+    public function recordTreeSyncBudgetResult(bool $exhausted): void
+    {
+        $previous = $this->treeSyncBudgetExhaustions();
+        if ($exhausted) {
+            $this->writeConfig($this->treeSyncBudgetKey, ['exhaustions' => $previous + 1]);
+        } elseif ($previous > 0) {
+            $this->acknowledgeConfig($this->treeSyncBudgetKey, ['exhaustions' => $previous]);
+        }
+    }
+
+    /** Enqueue in the same transaction as the tree edit. */
+    public function markExportInvalidationPending(int $nodeId): void
+    {
+        $state = $this->lockConfig($this->exportInvalidationKey, '{}');
+        $nodeIds = $state['nodes'] ?? [];
+        if (!in_array($nodeId, $nodeIds, true)) {
+            $nodeIds[] = $nodeId;
+        }
+        $this->writeConfig($this->exportInvalidationKey, [
+            'nodes' => $nodeIds,
+            'revision' => bin2hex(random_bytes(16)),
+        ]);
+    }
+
+    public function hasPendingExportInvalidations(): bool
+    {
+        return $this->readConfig($this->exportInvalidationKey, '{}') !== [];
+    }
+
+    /** Assignment rows are updated outside the tree locks. */
+    public function drainExportInvalidations(): void
+    {
+        $state = $this->readConfig($this->exportInvalidationKey, '{}');
+        if (empty($state['nodes'])) {
+            return;
+        }
+        $this->database->beginTransaction();
+        try {
+            foreach ($this->assignedArticlesMatching($state['nodes']) as $articleId) {
+                $this->invalidateArticleExport($articleId);
+            }
+            $this->acknowledgeConfig($this->exportInvalidationKey, $state);
+            $this->database->commit();
+        } catch (Throwable $error) {
+            if ($this->database->inTransaction()) {
+                $this->database->rollBack();
+            }
+            throw $error;
+        }
+    }
+
+    public function invalidateArticleExport(int $articleId): void
+    {
+        // The normal and matrix variant payloads are exported through their parent article.
+        $this->database->perform(
+            "UPDATE artikel_onlineshops SET last_article_hash = '' WHERE shop = :shop "
+            . 'AND (artikel = :article OR artikel = (SELECT variante_von FROM artikel WHERE id = :source))',
+            ['shop' => $this->shopId, 'article' => $articleId, 'source' => $articleId]
+        );
+    }
+
+    private function acknowledgeConfig(string $key, array $state): void
+    {
         $this->database->perform('DELETE FROM konfiguration WHERE name = :name AND wert = :revision', [
-            'name' => $this->treeSyncKey,
-            'revision' => json_encode(['revision' => $revision], self::CONFIG_JSON_FLAGS),
+            'name' => $key,
+            'revision' => json_encode($state, self::CONFIG_JSON_FLAGS),
         ]);
     }
 
@@ -386,6 +462,11 @@ final class ShopCategoryStore
 
     private function assignedArticles(?int $categoryId = null, bool $forUpdate = false): array
     {
+        return $this->assignedArticlesMatching($categoryId === null ? [] : [$categoryId], $forUpdate);
+    }
+
+    private function assignedArticlesMatching(array $categoryIds, bool $forUpdate = false): array
+    {
         $rows = $this->database->fetchAll(
             "SELECT name, wert FROM konfiguration WHERE name LIKE :prefix ESCAPE '!'"
             . ($forUpdate ? ' FOR UPDATE' : ''),
@@ -398,7 +479,7 @@ final class ShopCategoryStore
                 continue;
             }
             $categories = json_decode($row['wert'], true, 512, JSON_THROW_ON_ERROR)['categories'] ?? [];
-            if ($categoryId === null ? $categories !== [] : in_array($categoryId, $categories, true)) {
+            if ($categoryIds === [] ? $categories !== [] : array_intersect($categoryIds, $categories) !== []) {
                 $ids[] = (int) $suffix;
             }
         }
