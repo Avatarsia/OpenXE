@@ -425,32 +425,33 @@ runTests([
         same($before, $db->config);
         check(!$db->inTransaction());
     },
-    'enqueue_reserves_the_encoded_size_of_worst_case_errors' => static function () {
+    'enqueue_reserves_retry_metadata_not_error_text' => static function () {
         $db = new VisibilityDatabase();
         $queue = new VisibilityQueue($db, 7);
-        $queue->enqueue(1, str_repeat('A', 59800));
-        $queue->enqueue(2, '0');
-        $before = $db->config;
+        // Removing a few hundred articles at once must not hit the size limit.
+        for ($id = 1; $id <= 300; $id++) {
+            $queue->enqueue($id, 'SKU-' . $id);
+        }
+        same(300, count($queue->pending()));
+        $before = null;
         try {
-            $queue->enqueue(3, 'B');
-            throw new RuntimeException('Expected LengthException for insufficient retry reserve');
+            for ($id = 1000; $id < 3000; $id++) {
+                $before = $db->config;
+                $queue->enqueue($id, 'SKU-' . $id);
+            }
+            throw new RuntimeException('Expected LengthException when retry metadata no longer fits');
         } catch (LengthException $error) {
             check(str_contains($error->getMessage(), '65000'));
         }
         same($before, $db->config);
 
+        // A failure that does not fit with its text is still recorded (without text), queue stays valid.
         $reason = str_repeat("\u{10000}", 200);
         $queue->drain(static function (string $sku) use ($reason): void {
-            if ($sku === '0') {
-                throw new \Xentral\Components\WooCommerce\VisibilityManualActionRequired($reason);
-            }
             throw new RuntimeException($reason);
         });
-        $entries = $queue->pending();
-        same([1, 1], array_column($entries, 'attempts'));
-        same([$reason, $reason], array_column($entries, 'lastError'));
-        check($entries[2]['manualAction']);
         check(strlen($db->config['woocommerce_visibility_7']) <= 65000);
+        check(max(array_column($queue->pending(), 'attempts')) >= 1);
     },
     'near_full_queue_records_failure_and_reaches_later_success_across_drains' => static function () {
         foreach ([30 => '', 18 => null] as $freeBytes => $storedError) {

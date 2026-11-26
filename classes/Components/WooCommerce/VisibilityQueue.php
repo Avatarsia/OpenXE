@@ -163,8 +163,9 @@ final class VisibilityQueue
 
     private function fitsWithRetryReserve(array $entries): bool
     {
-        // Supplementary characters use two six-byte JSON escapes per character.
-        $reservedError = str_repeat("\u{10000}", self::MAX_ERROR_CHARS);
+        // Reserve the retry metadata only. save() drops error text when space runs out,
+        // so reserving 200 escaped characters per entry would cap the queue at ~25 entries.
+        $reservedError = '';
         foreach ($entries as &$entry) {
             $entry['attempts'] = PHP_INT_MAX;
             $entry['lastAttemptAt'] = PHP_INT_MAX;
