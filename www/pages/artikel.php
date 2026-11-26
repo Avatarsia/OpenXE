@@ -26,6 +26,8 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 use Xentral\Components\Http\JsonResponse;
 use Xentral\Components\Http\Session\SessionHandler;
+use Xentral\Components\WooCommerce\ArticleDataRepository;
+use Xentral\Components\WooCommerce\ArticleFieldCatalog;
 use Xentral\Components\WooCommerce\AdminView;
 use Xentral\Components\WooCommerce\ArticleTab;
 use Xentral\Components\WooCommerce\AssignmentPage;
@@ -7812,32 +7814,93 @@ class Artikel extends GenArtikel {
   private function saveOnlineShopFields(int $articleId, int $assignmentId, int $shopId, array $fields): array
   {
     $db = $this->app->DB;
-    $isWooCommerce = $db->Select("SELECT id FROM shopexport WHERE id = '$shopId' AND modulename = 'shopimporter_woocommerce' LIMIT 1");
-    $sharedFields = $isWooCommerce ? ['pseudopreis', 'pseudolager', 'restmenge', 'lieferzeitmanuell', 'autolagerlampe'] : [];
     $assignments = ["ao.shop = '$shopId'"];
     foreach ($fields as $field) {
       $value = $this->app->Secure->GetPOST($field);
-      $shared = in_array($field, $sharedFields, true);
-      if ($shared && $field === 'pseudopreis') {
-        $value = $value === '' ? '0' : $this->app->erp->ReplaceBetrag(1, $value, 1);
-      }
       $assignments[] = "ao.$field = '$value'";
-      if ($shared) {
-        $assignments[] = "a.$field = '$value'";
+    }
+    $scope = " WHERE ao.id = '$assignmentId' AND ao.artikel = '$articleId'";
+    $shared = $this->onlineShopOverrideValues($articleId, $assignmentId, $shopId);
+    if ($shared === []) {
+      if (!$db->Update('UPDATE artikel_onlineshops ao SET ' . implode(', ', $assignments) . $scope)) {
+        throw new RuntimeException($db->error() ?: 'UPDATE artikel_onlineshops fehlgeschlagen.');
+      }
+      return [];
+    }
+
+    $database = $this->app->Container->get('Database');
+    $repository = new ArticleDataRepository($this->app, $shopId);
+    $values = array_column($shared, 'value', 'key');
+    $params = ['shop' => $shopId, 'assignment' => $assignmentId, 'article' => $articleId];
+    $set = ['shop = :shop'];
+    foreach ($fields as $field) {
+      $params[$field] = $this->app->Secure->GetPOST($field, '', '', 1);
+      $set[] = "$field = :$field";
+    }
+    $database->beginTransaction();
+    try {
+      $database->fetchValue('SELECT id FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
+      $database->perform('UPDATE artikel_onlineshops SET ' . implode(', ', $set)
+        . ' WHERE id = :assignment AND artikel = :article', $params);
+      $repository->apply($articleId, $values, 'online_shop_dialog', $assignmentId);
+      $columns = array_keys($shared);
+      $article = $database->fetchRow('SELECT ' . implode(', ', $columns) . ' FROM artikel WHERE id = :article',
+        ['article' => $articleId]);
+      $database->commit();
+      return $article ?: [];
+    } catch (Throwable $error) {
+      $database->rollBack();
+      throw $error;
+    }
+  }
+
+  private function onlineShopOverrideValues(int $articleId, int $assignmentId, int $shopId): array
+  {
+    $secure = $this->app->Secure;
+    $token = $secure->GetPOST('woo_dialog_token', '', '', 1);
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !is_string($token) || $token === ''
+        || $secure->GetPOST('aktiv') !== '1' || $secure->GetPOST('ausartikel') !== '0'
+        || !$this->app->erp->RechteVorhanden('onlineshops', 'edit')
+        || !$this->app->erp->RechteVorhanden('artikel', 'edit')
+        || !$this->app->Container->get('Session')->isCsrfTokenValid('woocommerce_admin', $token)) {
+      return [];
+    }
+    $db = $this->app->DB;
+    $shop = $db->SelectRow("SELECT projekt FROM shopexport WHERE id = '$shopId' AND geloescht = 0"
+      . " AND modulename = 'shopimporter_woocommerce' LIMIT 1");
+    $article = $db->SelectRow("SELECT projekt, variante, variante_von FROM artikel WHERE id = '$articleId' LIMIT 1");
+    if (!$shop || !$article || !empty($article['variante_von']) || !empty($article['variante'])
+        || !$this->app->erp->UserProjektRecht((int)$shop['projekt'])
+        || !$this->app->erp->UserProjektRecht((int)$article['projekt'])) {
+      return [];
+    }
+    $oldShopId = (int)$db->Select("SELECT shop FROM artikel_onlineshops WHERE id = '$assignmentId'"
+      . " AND artikel = '$articleId' LIMIT 1");
+    if ($oldShopId > 0 && $oldShopId !== $shopId) {
+      $oldShop = $db->SelectRow("SELECT projekt FROM shopexport WHERE id = '$oldShopId' LIMIT 1");
+      if (!$oldShop || !$this->app->erp->UserProjektRecht((int)$oldShop['projekt'])) {
+        return [];
       }
     }
-    // Both copies of a WooCommerce override are written in a single statement.
-    $join = $isWooCommerce ? ' JOIN artikel a ON a.id = ao.artikel' : '';
-    if (!$db->Update('UPDATE artikel_onlineshops ao' . $join . ' SET ' . implode(', ', $assignments)
-      . " WHERE ao.id = '$assignmentId' AND ao.artikel = '$articleId'")) {
-      throw new RuntimeException($db->error() ?: 'UPDATE artikel_onlineshops fehlgeschlagen.');
+
+    $values = [];
+    foreach (ArticleFieldCatalog::fields() as $field) {
+      if (str_starts_with($field['storage'], 'shop:')) {
+        $column = substr($field['storage'], 5);
+        $values[$column] = ['key' => $field['key'], 'value' => $secure->GetPOST($column, '', '', 1)];
+      }
     }
-    return $sharedFields ? ($db->SelectRow('SELECT ' . implode(', ', $sharedFields)
-      . " FROM artikel WHERE id = '$articleId' LIMIT 1") ?: []) : [];
+    try {
+      (new ArticleDataRepository($this->app, $shopId))->validate(array_column($values, 'value', 'key'));
+    } catch (InvalidArgumentException) {
+      return [];
+    }
+    return $values;
   }
 
   private function prepareWooCommerceArticleTab(int $articleId): bool
   {
+    $this->app->Tpl->Set('WOOCOMMERCEDIALOGTOKEN', '');
     $this->app->Tpl->Set('WOOCOMMERCETABOPEN', '<!--');
     $this->app->Tpl->Set('WOOCOMMERCETABCLOSE', '-->');
     $secure = $this->app->Secure;
@@ -7883,13 +7946,21 @@ class Artikel extends GenArtikel {
         }
       }
 
-      if ($shopId > 0) {
+      $token = '';
+      if ($shopId > 0 || ($this->app->erp->RechteVorhanden('artikel', 'edit')
+          && $this->app->erp->RechteVorhanden('onlineshops', 'edit')
+          && $this->app->erp->UserProjektRecht((int)$this->app->DB->Select(
+            "SELECT projekt FROM artikel WHERE id = '$articleId' LIMIT 1")))) {
         $session = $this->app->Container->get('Session');
         $token = $postedToken;
         if (!is_string($token) || !$session->isCsrfTokenValid('woocommerce_admin', $token)) {
           $token = $session->createCsrfToken('woocommerce_admin');
           SessionHandler::commitSession($session);
         }
+        $this->app->Tpl->Set('WOOCOMMERCEDIALOGTOKEN', $token);
+      }
+
+      if ($shopId > 0) {
         $this->app->Tpl->Set('WOOCOMMERCETAB', $tab->render($articleId, $shopId, $token,
           $submitted && is_array($draft) ? $draft : []));
         $this->app->Tpl->Set('WOOCOMMERCETABOPEN', '');

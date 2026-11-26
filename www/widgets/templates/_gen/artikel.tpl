@@ -975,6 +975,7 @@ $(document).ready(function() {
                 data: { 
                   "sid":$('#onlinshopspopup_sid').val(),
                   "shop":$('#onlinshopspopup_shop').val(),
+                  "woo_dialog_token":'[WOOCOMMERCEDIALOGTOKEN]',
                   "lagerkorrekturwert":$('#onlinshopspopup_lagerkorrekturwert').val(),
                   "pseudolager":$('#onlinshopspopup_pseudolager').val(),
                   "autolagerlampe":$('#onlinshopspopup_autolagerlampe').prop('checked')?1:0,

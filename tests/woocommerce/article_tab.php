@@ -83,7 +83,12 @@ final class ArticleTabDatabase
         if ($this->failWrites) {
             throw new RuntimeException('Synthetic extras write failure');
         }
-        if (str_starts_with($sql, 'UPDATE artikel_onlineshops SET ')) {
+        if (str_starts_with($sql, 'UPDATE artikel SET ')) {
+            preg_match('/SET \x60([a-z_]+)\x60/', $sql, $match);
+            $this->article[$match[1]] = $params['value'];
+        } elseif (str_starts_with($sql, 'UPDATE artikel_onlineshops SET shop =')) {
+            $this->override = array_replace($this->override, $params);
+        } elseif (str_starts_with($sql, 'UPDATE artikel_onlineshops SET ')) {
             same(6, $params['id']);
             preg_match('/SET \x60([a-z_]+)\x60/', $sql, $match);
             $this->override[$match[1]] = $params['value'];
@@ -140,6 +145,8 @@ function articleTabFixture(): array
                 same([1, 1], [$db, $fromForm]);
                 return str_replace(',', '.', $value);
             }
+            public bool $edit = true;
+            public function RechteVorhanden(string $module, string $action): bool { return $this->edit; }
             public function UserProjektRecht(int $project): bool { return $project === 0; }
             public function GetVerkaufspreisGruppe(int $article, int $quantity, int $group): string
             {
@@ -205,30 +212,77 @@ runTests([
         prepareArticleTab($app);
         check(str_contains($app->Tpl->values['WOOCOMMERCETAB'], 'name="woo_shop" value="5"'));
     },
-    'popup_saves_woocommerce_values_in_both_tables_and_returns_stored_fields' => static function () {
-        [, , , $app] = articleTabFixture();
-        $columns = ['pseudopreis' => '20.50', 'pseudolager' => '4', 'restmenge' => '1',
-            'lieferzeitmanuell' => '2 Tage', 'autolagerlampe' => '1'];
-        $app->Secure->POST = $columns + ['aktiv' => '1'];
-        $app->DB = new class ($columns) {
-            public array $updates = [];
-            public bool $woo = true;
-            public function __construct(private array $columns) {}
-            public function Select(string $sql) { check(str_contains($sql, 'shopimporter_woocommerce')); return $this->woo ? '5' : ''; }
-            public function Update(string $sql): bool { $this->updates[] = $sql; return true; }
-            public function SelectRow(string $sql): array { return $this->columns; }
+    'popup_keeps_article_pseudopreis_for_new_row_using_article_values' => static function () {
+        [, $db, , $app] = articleTabFixture();
+        $app->Secure->POST = ['pseudopreis' => '0', 'aktiv' => '1', 'ausartikel' => '1'];
+        $app->DB = new class ($db) {
+            public function __construct(private ArticleTabDatabase $db) {}
+            public function Select(string $sql) { return '5'; }
+            public function Update(string $sql): bool
+            {
+                if (str_contains($sql, 'a.pseudopreis')) {
+                    $this->db->article['pseudopreis'] = '0';
+                }
+                return true;
+            }
+            public function SelectRow(string $sql): array { return $this->db->article; }
         };
-        $page = articleTabPage($app);
-        $save = new ReflectionMethod($page, 'saveOnlineShopFields');
-        same($columns, $save->invoke($page, 9, 6, 5, [...array_keys($columns), 'aktiv']));
-        foreach ($columns as $column => $value) {
-            check(str_contains($app->DB->updates[0], "ao.$column = '$value'"));
-            check(str_contains($app->DB->updates[0], "a.$column = '$value'"));
+        (new ReflectionMethod(articleTabPage($app), 'saveOnlineShopFields'))
+            ->invoke(articleTabPage($app), 9, 6, 5, ['pseudopreis', 'aktiv', 'ausartikel']);
+        same('15.00', $db->article['pseudopreis']);
+    },
+    'popup_mirrors_values_only_with_post_token_rights_and_project_access' => static function () {
+        $requestMethod = $_SERVER['REQUEST_METHOD'] ?? null;
+        try {
+            foreach (['allowed', 'method', 'token', 'right', 'article', 'shop', 'old_shop', 'other_module', 'invalid'] as $scenario) {
+                [, $db, $token, $app] = articleTabFixture();
+                $_SERVER['REQUEST_METHOD'] = $scenario === 'method' ? 'GET' : 'POST';
+                $app->erp->edit = $scenario !== 'right';
+                $columns = ['pseudopreis' => '20.5', 'pseudolager' => '4', 'restmenge' => '1',
+                    'lieferzeitmanuell' => '2 Tage', 'autolagerlampe' => '1'];
+                $app->Secure->POST = $columns + ['aktiv' => '1', 'ausartikel' => '0',
+                    'woo_dialog_token' => $scenario === 'token' ? 'bad' : $token];
+                if ($scenario === 'invalid') {
+                    $app->Secure->POST['pseudopreis'] = 'invalid';
+                }
+                $app->DB = new class ($scenario) {
+                    public array $updates = [];
+                    public function __construct(private string $scenario) {}
+                    public function Select(string $sql): int { return $this->scenario === 'old_shop' ? 7 : 5; }
+                    public function Update(string $sql): bool { $this->updates[] = $sql; return true; }
+                    public function SelectRow(string $sql)
+                    {
+                        if (str_contains($sql, 'FROM artikel')) {
+                            return ['projekt' => $this->scenario === 'article' ? 42 : 0];
+                        }
+                        if ($this->scenario === 'other_module') {
+                            return false;
+                        }
+                        return ['projekt' => $this->scenario === 'shop' || str_contains($sql, "id = '7'") ? 42 : 0];
+                    }
+                };
+                $page = articleTabPage($app);
+                $save = new ReflectionMethod($page, 'saveOnlineShopFields');
+                $result = $save->invoke($page, 9, 6, 5, [...array_keys($columns), 'aktiv', 'ausartikel']);
+                if ($scenario === 'allowed') {
+                    same(array_values($columns), array_map(static fn ($key) => $result[$key], array_keys($columns)));
+                    same(array_values($columns), array_map(static fn ($key) => $db->article[$key], array_keys($columns)));
+                    same(array_values($columns), array_map(static fn ($key) => $db->override[$key], array_keys($columns)));
+                    same([], $app->DB->updates);
+                } else {
+                    same([], $result, $scenario);
+                    same('15.00', $db->article['pseudopreis'], $scenario);
+                    same(1, count($app->DB->updates), $scenario);
+                    check(!str_contains($app->DB->updates[0], 'JOIN artikel'));
+                }
+            }
+        } finally {
+            if ($requestMethod === null) {
+                unset($_SERVER['REQUEST_METHOD']);
+            } else {
+                $_SERVER['REQUEST_METHOD'] = $requestMethod;
+            }
         }
-        check(!str_contains($app->DB->updates[0], 'a.aktiv ='));
-        $app->DB->woo = false;
-        same([], $save->invoke($page, 9, 6, 5, [...array_keys($columns), 'aktiv']));
-        check(!str_contains($app->DB->updates[1], 'JOIN artikel'));
     },
     'save_extras_leaves_override_on_unrelated_article_save' => static function () {
         [$tab, $db, $token] = articleTabFixture();
@@ -360,7 +414,9 @@ runTests([
         $page = $class->newInstanceWithoutConstructor();
         $page->app = $app;
         $class->getMethod('prepareWooCommerceArticleTab')->invoke($page, 9);
-        same(['WOOCOMMERCETABOPEN' => '<!--', 'WOOCOMMERCETABCLOSE' => '-->'], $app->Tpl->values);
+        same('<!--', $app->Tpl->values['WOOCOMMERCETABOPEN']);
+        same('-->', $app->Tpl->values['WOOCOMMERCETABCLOSE']);
+        check($app->Tpl->values['WOOCOMMERCEDIALOGTOKEN'] !== '');
     },
     'tab_renders_all_catalog_fields_with_target' => static function () {
         [$tab, $db, $token] = articleTabFixture();
