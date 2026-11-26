@@ -12,6 +12,7 @@ final class BulkPullDatabase
     public array $foreignNumbers = [9 => 'SHOP-9'];
     public array $audit = [];
     public array $writes = [];
+    public ?Closure $beforeTransaction = null;
     private ?array $snapshot = null;
 
     public function fetchRow(string $sql, array $params)
@@ -85,7 +86,11 @@ final class BulkPullDatabase
     }
 
     public function inTransaction(): bool { return $this->snapshot !== null; }
-    public function beginTransaction(): void { $this->snapshot = [$this->articles, $this->audit]; }
+    public function beginTransaction(): void
+    {
+        ($this->beforeTransaction)?->__invoke();
+        $this->snapshot = [$this->articles, $this->audit];
+    }
     public function commit(): void { $this->snapshot = null; }
     public function rollBack(): void
     {

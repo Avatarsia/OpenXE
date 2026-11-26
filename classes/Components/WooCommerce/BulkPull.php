@@ -90,15 +90,18 @@ final class BulkPull
                 }
                 $openxe = $this->repo->load($id);
                 $rows = array_column(FieldDiff::compare($openxe, $product['values']), null, 'key');
-                $values = [];
+                $values = $expectedOpenXe = [];
                 foreach ($keys as $key) {
                     $row = $rows[$key] ?? null;
+                    if ($fingerprints !== []
+                        && ($row === null || ($fingerprints[$id][$key] ?? null) !== self::valueFingerprint($row))) {
+                        throw new InvalidArgumentException(ArticleDataRepository::PULL_VALUES_CHANGED);
+                    }
                     if ($row === null) {
                         throw new InvalidArgumentException('Ausgewaehltes Feld ist nicht mehr vergleichbar.');
                     }
-                    if ($fingerprints !== []
-                        && ($fingerprints[$id][$key] ?? null) !== self::valueFingerprint($row)) {
-                        throw new InvalidArgumentException('Werte haben sich geaendert - bitte neu vergleichen');
+                    if ($fingerprints !== []) {
+                        $expectedOpenXe[$key] = $row['openxe'];
                     }
                     if (!$row['differs']) {
                         continue;
@@ -109,7 +112,7 @@ final class BulkPull
                     $values[$key] = $row['woocommerce'];
                 }
                 $this->repo->validate($values);
-                $results[$id] = $values === [] ? [] : $this->repo->apply($id, $values, $origin);
+                $results[$id] = $values === [] ? [] : $this->repo->apply($id, $values, $origin, expectedFieldValues: $expectedOpenXe);
             } catch (Throwable $error) {
                 $results[$id] = ['error' => RefundStatusService::sanitizeError($error->getMessage())];
             }

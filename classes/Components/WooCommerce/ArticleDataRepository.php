@@ -17,6 +17,8 @@ final class ArticleDataRepository
     private const PRICE_GROUP = 'Shop nutzt eine Preisgruppe - Preis bitte unter Verkaufspreise pflegen';
     private const PRICE_AMBIGUOUS = 'Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen';
 
+    public const PULL_VALUES_CHANGED = 'Werte haben sich geaendert - bitte neu vergleichen';
+
     private const CONFIG_LIMIT = 65000;
     private const LOG_LIMIT = 500;
 
@@ -172,8 +174,13 @@ final class ArticleDataRepository
         }
     }
 
-    public function apply(int $articleId, array $values, string $origin, ?int $overrideId = null): array
-    {
+    public function apply(
+        int $articleId,
+        array $values,
+        string $origin,
+        ?int $overrideId = null,
+        array $expectedFieldValues = []
+    ): array {
         $updates = $this->prepareUpdates($values);
         $ownTransaction = !$this->database->inTransaction();
         if ($ownTransaction) {
@@ -181,6 +188,12 @@ final class ArticleDataRepository
         }
         try {
             $state = $this->loadState($articleId, true, $overrideId, isset($updates['on_request']));
+            foreach ($expectedFieldValues as $key => $expected) {
+                $field = $state['fields'][$key];
+                if ($field['value'] !== $expected || self::fieldBlockReason($field['source']) !== null) {
+                    throw new InvalidArgumentException(self::PULL_VALUES_CHANGED);
+                }
+            }
             $price = $state['fields']['price_net'];
             $reason = self::priceBlockReason($price['source']);
             if ($reason !== null && isset($updates['price_net'])

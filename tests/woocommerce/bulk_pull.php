@@ -103,15 +103,21 @@ runTests([
         same([], $db->writes);
     },
     'apply_skips_article_when_selected_preview_values_changed' => static function () {
-        foreach (['woo', 'openxe'] as $changedSide) {
+        foreach (['woo', 'openxe', 'field_removed', 'after_read'] as $changedSide) {
             [$pull, $db, $client] = bulkFixture();
             $article = $pull->compare(1)['articles'][9];
             $row = array_column($article['rows'], null, 'key')['seo_title'];
             $fingerprints = [9 => ['seo_title' => hash('sha256', serialize([$row['woocommerce'], $row['openxe']]))]];
             if ($changedSide === 'woo') {
                 $client->pages[1][0]['meta_data'][0]['value'] = 'SEO aktuell';
-            } else {
+            } elseif ($changedSide === 'openxe') {
                 $db->articles[9]['metatitle_de'] = 'OpenXE aktuell';
+            } elseif ($changedSide === 'field_removed') {
+                $db->articles[9]['variante'] = 1;
+            } else {
+                $db->beforeTransaction = static function () use ($db): void {
+                    $db->articles[9]['metatitle_de'] = 'OpenXE aktuell';
+                };
             }
             $results = $pull->apply([9 => ['seo_title']], 'bulk_pull', 1, [9 => $article['identity']], $fingerprints);
             same([9 => ['error' => 'Werte haben sich geaendert - bitte neu vergleichen']], $results);
