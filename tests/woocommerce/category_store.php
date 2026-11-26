@@ -174,6 +174,36 @@ runTests([
         $store->setOnRequest(10, true);
         same(['categories' => [], 'onRequest' => true], json_decode($db->config['woocommerce_article_5_10'], true));
     },
+    'bound_slug_cannot_change' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new ShopCategoryStore($db, 5);
+        $id = $store->create('Original');
+        $store->setWcId($id, 72, 'imported');
+        $store->setWcId($id, 72, 'imported');
+        try {
+            $store->setWcId($id, 72, 'changed');
+            check(false, 'changing a bound slug must fail');
+        } catch (InvalidArgumentException $error) {
+            same('imported', $store->tree()[0]['slug']);
+        }
+    },
+    'config_limit_is_exclusive' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new ShopCategoryStore($db, 5);
+        $store->create('Lock');
+        $db->beginTransaction();
+        $db->fetchValue('SELECT wert FROM konfiguration WHERE name = :name FOR UPDATE', ['name' => 'woocommerce_category_tree_5']);
+        $write = (new ReflectionClass($store))->getMethod('writeConfig');
+        $write->setAccessible(true);
+        $payload = static fn (int $bytes): array => ['x' => str_repeat('a', $bytes - strlen('{"x":""}'))];
+        $write->invoke($store, 'woocommerce_category_tree_5', $payload(64999));
+        try {
+            $write->invoke($store, 'woocommerce_category_tree_5', $payload(65000));
+            check(false, '65000 bytes must be rejected');
+        } catch (LengthException $error) {
+            check(true);
+        }
+    },
     'tree_json_stays_below_limit' => static function () {
         $db = new CategoryStoreDatabase();
         $store = new ShopCategoryStore($db, 5);

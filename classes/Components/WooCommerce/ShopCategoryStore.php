@@ -111,6 +111,10 @@ final class ShopCategoryStore
         $this->mutateTree(function (array &$state) use ($id, $wcId, $slug): void {
             $nodes = $state['nodes'];
             $this->requireNode($nodes, $id);
+            // Once bound to a WooCommerce term, the slug is the category's permanent identity.
+            if (!empty($nodes[$id]['wcId']) && $slug !== $nodes[$id]['slug']) {
+                throw new InvalidArgumentException('Der Slug einer bereits verknuepften Kategorie kann nicht geaendert werden.');
+            }
             unset($nodes[$id]);
             if ($slug === '' || in_array($slug, array_column($nodes, 'slug'), true)) {
                 throw new InvalidArgumentException('Der Kategorie-Slug muss im Shop eindeutig und darf nicht leer sein.');
@@ -293,8 +297,8 @@ final class ShopCategoryStore
     private function writeConfig(string $name, array $value): void
     {
         $json = json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
-        if (strlen($json) > self::CONFIG_LIMIT) {
-            throw new LengthException('WooCommerce-Konfiguration ' . $name . ' ist zu gross (max. 65000 Bytes).');
+        if (strlen($json) >= self::CONFIG_LIMIT) {
+            throw new LengthException('WooCommerce-Konfiguration ' . $name . ' ist zu gross (muss unter 65000 Bytes bleiben).');
         }
         $this->database->perform(
             'INSERT INTO konfiguration (name, wert, adresse, firma) VALUES (:name, :wert, 0, 0)'
