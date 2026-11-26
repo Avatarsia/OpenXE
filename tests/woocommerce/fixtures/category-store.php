@@ -4,6 +4,7 @@
 final class CategoryStoreDatabase
 {
     public array $config = [];
+    public bool $failDeletionReasonWrites = false;
     private ?array $snapshot = null;
     private ?string $lockedTree = null;
 
@@ -63,7 +64,11 @@ final class CategoryStoreDatabase
             return;
         }
         check(str_contains($sql, 'ON DUPLICATE KEY UPDATE wert = VALUES(wert)'));
-        $prefix = preg_replace('/^woocommerce_article_(\d+)_\d+$/D', 'woocommerce_category_tree_$1', $name);
+        if ($this->failDeletionReasonWrites && str_starts_with($name, 'woocommerce_category_deletions_')) {
+            throw new Error('Deletion reasons unavailable');
+        }
+        $prefix = preg_replace('/^woocommerce_(?:article_(\d+)_\d+|category_deletions_(\d+))$/D',
+            'woocommerce_category_tree_$1$2', $name);
         same($prefix, $this->lockedTree);
         $this->config[$name] = $params['wert'];
     }

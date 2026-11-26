@@ -211,6 +211,19 @@ runTests([
         check(str_contains($html, 'parts'));
         check(str_contains($html, 'WooCommerce meldet die Kategorie nicht als leer.'));
     },
+    'category_admin_shows_the_blocked_slug_even_before_the_next_retry' => static function () {
+        $db = new AdminDatabaseFake();
+        $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 7);
+        $id = $store->create('Parts');
+        $client = new CategoryExportClient();
+        $client->duringPost = static function () use ($store, $id): void {
+            $store->delete($id);
+            $store->create('Parts');
+        };
+        (new \Xentral\Components\WooCommerce\ShopCategoryExporter($client, $store))->syncTree();
+        [$page] = adminFixture([], ['view' => 'categories'], $db);
+        check(str_contains($page->render(), 'Slug parts ist noch durch eine nicht loeschbare WooCommerce-Kategorie belegt'));
+    },
     'changed_category_assignment_requires_a_new_preview' => static function () {
         $db = new AdminDatabaseFake();
         Shopimporter_Woocommerce::$fixtureClient = $client = categoryImportClient();

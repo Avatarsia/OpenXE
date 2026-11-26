@@ -28,6 +28,7 @@ use Xentral\Components\WooCommerce\RefundRetryQueue;
 use Xentral\Components\WooCommerce\ProductSynchronizer;
 use Xentral\Components\WooCommerce\CategorySynchronizer;
 use Xentral\Components\WooCommerce\ShopCategoryExporter;
+use Xentral\Components\WooCommerce\RefundStatusService;
 use Xentral\Components\WooCommerce\ShopCategoryStore;
 use Xentral\Components\WooCommerce\VariationMedia;
 use Xentral\Components\WooCommerce\DownloadSettings;
@@ -938,15 +939,21 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ctmp = (!empty($tmp) ? count($tmp) : 0);
     $this->logger->debug("WooCommerce ImportSendList ".$ctmp." entries");
 
-    $categoryStore = $this->shopCategoryTree || $this->extendedFieldMapping
+    $categoryStore = $this->extendedFieldMapping
       ? new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid)
       : null;
     $categoryExporter = null;
+    $categoryTreeError = null;
     if ($this->shopCategoryTree) {
-      $categoryExporter = new ShopCategoryExporter($this->client, $categoryStore);
-      $categoryExporter->syncTree();
-      foreach ($categoryExporter->deferredDeletions() as $termId => $reason) {
-        $this->logger->warning("WooCommerce-Kategorie $termId bleibt bestehen: $reason");
+      try {
+        $categoryStore ??= new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid);
+        $categoryExporter = new ShopCategoryExporter($this->client, $categoryStore,
+          function (string $message, array $context): void {
+            $this->logger->warning($message, ['shop' => (int) $this->shopid] + $context);
+          });
+        $categoryExporter->syncTree();
+      } catch (Throwable $error) {
+        $categoryTreeError = $error;
       }
     }
 
@@ -1200,22 +1207,49 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $product_id = $productResult['id'];
       $this->logger->info("WooCommerce Artikel synchronisiert: $nummer / $product_id");
 
-      if ($categoryExporter !== null && !$isVariant) {
-        $categoryExporter->assign($product_id, (int) $artikel, $this->categorySyncMode);
-      } elseif ($this->kategorienuebertragen && !$isVariant) {
-        $categories = $tmp[$i]['kategorien'] ?? [];
-        if ($this->categorySyncMode !== 'replace' && empty($categories) && !empty($tmp[$i]['kategoriename'])) {
-          $categories = [['name' => $tmp[$i]['kategoriename']]];
+      if (!$isVariant && ($this->shopCategoryTree || $this->kategorienuebertragen)) {
+        $categoryIds = [];
+        $skipped = [];
+        try {
+          if ($this->shopCategoryTree) {
+            $categoryIds = $categoryStore?->categoriesOf((int) $artikel) ?? [];
+            if ($categoryTreeError !== null) {
+              throw $categoryTreeError;
+            }
+            $skipped = $categoryExporter->assign($product_id, $categoryIds, $this->categorySyncMode);
+          } else {
+            $categories = $tmp[$i]['kategorien'] ?? [];
+            if ($this->categorySyncMode !== 'replace' && empty($categories) && !empty($tmp[$i]['kategoriename'])) {
+              $categories = [['name' => $tmp[$i]['kategoriename']]];
+            }
+            $categoryIds = array_column($categories, 'id');
+            $categorySync = new CategorySynchronizer($this->client, $this->shopid);
+            $termIds = $categorySync->sync($categories, $tmp[$i]['kompletter_kategorienbaum'] ?? []);
+            if ($termIds !== [] || $this->categorySyncMode === 'replace') {
+              $categorySync->assign($product_id, $termIds, $this->categorySyncMode);
+            }
+          }
+        } catch (Throwable $error) {
+          $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'Unbekannter Kategoriefehler.';
+          $this->logCategoryExportWarning($return[$i], $categoryIds, $reason);
         }
-        $categorySync = new CategorySynchronizer($this->client, $this->shopid);
-        $categoryIds = $categorySync->sync($categories, $tmp[$i]['kompletter_kategorienbaum'] ?? []);
-        if ($categoryIds !== [] || $this->categorySyncMode === 'replace') {
-          $categorySync->assign($product_id, $categoryIds, $this->categorySyncMode);
+        foreach ($skipped as $nodeId => $reason) {
+          $this->logCategoryExportWarning($return[$i], [$nodeId], $reason);
         }
       }
     }
     return $return;
     // return array($product_id,$anzahl,$nummer,$steuersatz, $preis);
+  }
+
+  private function logCategoryExportWarning(ArticleExportResult $result, array $categoryIds, string $reason): void
+  {
+    $categoryLabel = $categoryIds === [] ? '' : ' (' . implode(', ', $categoryIds) . ')';
+    $message = 'WooCommerce-Kategorieexport' . $categoryLabel . ': ' . $reason;
+    $result->message = trim(($result->message ?? '') . "\n" . $message);
+    $this->logger->warning($message, [
+      'shop' => (int) $this->shopid, 'article' => $result->articleId, 'categories' => $categoryIds,
+    ]);
   }
 
   /**

@@ -59,9 +59,9 @@ runTests([
             ['id' => 40, 'sku' => 'SHOP-9', 'categories' => [['id' => 12]]],
         ]);
         $exporter = new ShopCategoryExporter($client, $store);
-        $exporter->assign(40, 9, 'additive');
-        $exporter->assign(40, 9, 'replace');
-        $exporter->assign(40, 22, 'replace');
+        $exporter->assign(40, $store->categoriesOf(9), 'additive');
+        $exporter->assign(40, $store->categoriesOf(9), 'replace');
+        $exporter->assign(40, $store->categoriesOf(22), 'replace');
         same([
             ['PUT', 'products/40', ['categories' => [['id' => 12], ['id' => 11]]]],
             ['PUT', 'products/40', ['categories' => [['id' => 11]]]],
@@ -126,6 +126,7 @@ runTests([
             ['products/categories', ['parent' => 11, 'per_page' => 1, 'hide_empty' => false]],
         ], array_slice($client->reads, -2));
         same([], $store->pendingDeletions());
+        same([], $store->pendingDeletionReasons());
     },
     'zero_count_does_not_hide_a_private_product_from_the_deletion_check' => static function () {
         $store = pendingCategoryStore();
@@ -192,6 +193,87 @@ runTests([
         same([2 => 1002], $exporter->syncTree());
         same(['POST', 'DELETE', 'POST'], array_column($client->writes, 0));
         same([], $store->pendingDeletions());
+    },
+    'a_blocked_pending_term_is_never_rebound_to_a_recreated_node' => static function () {
+        $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
+        $id = $store->create('Parts');
+        $client = new CategoryExportClient();
+        $client->duringPost = static function () use ($store, $id): void {
+            $store->delete($id);
+            $store->create('Parts');
+        };
+        $exporter = new ShopCategoryExporter($client, $store);
+        same([], $exporter->syncTree());
+
+        $client->duringPost = null;
+        $client->terms[1001]['count'] = 1;
+        $other = $store->create('Tools');
+        same([$other => 1002], $exporter->syncTree());
+        same([1001 => 'parts'], $store->pendingDeletions());
+        same([0, 1002], array_column($store->tree(), 'wcId'));
+        same(['parts', 'tools'], array_column(array_column($client->writes, 2), 'slug'));
+    },
+    'many_long_deletion_reasons_are_stored_separately_and_bounded' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new ShopCategoryStore($db, 7);
+        $treeKey = 'woocommerce_category_tree_7';
+        $reasonKey = 'woocommerce_category_deletions_7';
+        $active = $store->create('Tools');
+        $state = json_decode($db->config[$treeKey], true);
+        $terms = [];
+        for ($id = 1; $id <= 150; $id++) {
+            $state['pendingDeletions'][$id] = 'parts-' . $id;
+            $terms[] = categoryTerm($id, 'Parts ' . $id, 'parts-' . $id);
+        }
+        $state['pendingDeletionReasons'] = [1 => 'Legacy error'];
+        $db->config[$treeKey] = json_encode($state);
+        same([1 => 'Legacy error'], $store->pendingDeletionReasons());
+        $client = new CategoryExportClient($terms);
+        $client->failedLookup = 'products';
+        $client->lookupError = str_repeat('Long REST error. ', 40);
+        same([$active => 1001], (new ShopCategoryExporter($client, $store))->syncTree());
+        $reasons = $store->pendingDeletionReasons();
+        same(150, count($reasons));
+        same(200, max(array_map('strlen', $reasons)));
+        same($reasons, json_decode($db->config[$reasonKey], true));
+        check(!isset(json_decode($db->config[$treeKey], true)['pendingDeletionReasons']));
+        same($state['pendingDeletions'], $store->pendingDeletions());
+
+        for ($id = 151; $id <= 201; $id++) {
+            $state['pendingDeletions'][$id] = 'parts-' . $id;
+            $client->terms[$id] = categoryTerm($id, 'Parts ' . $id, 'parts-' . $id);
+        }
+        $state['nodes'][$active]['wcId'] = 1001;
+        unset($state['pendingDeletionReasons']);
+        $db->config[$treeKey] = json_encode($state);
+        same([$active => 1001], (new ShopCategoryExporter($client, $store))->syncTree());
+        same(range(2, 201), array_keys($store->pendingDeletionReasons()));
+    },
+    'a_reason_write_failure_is_logged_and_does_not_stop_the_tree' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new ShopCategoryStore($db, 7);
+        $parts = $store->create('Parts');
+        $store->setWcId($parts, 11, 'parts');
+        $store->delete($parts);
+        $other = $store->create('Tools');
+        $client = new CategoryExportClient([categoryTerm(11, 'Parts', 'parts', 0, 1)]);
+        $db->failDeletionReasonWrites = true;
+        $warnings = [];
+        $exporter = new ShopCategoryExporter($client, $store, static function ($message, $context) use (&$warnings): void {
+            $warnings[] = [$message, $context];
+        });
+        same([$other => 1001], $exporter->syncTree());
+        same([11 => 'parts'], $store->pendingDeletions());
+        check(str_contains(json_encode($warnings), 'Deletion reasons unavailable'));
+    },
+    'a_failed_node_skips_its_subtree_and_does_not_stop_a_sibling' => static function () {
+        $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
+        $parent = $store->create('Broken');
+        $store->create('Child', $parent);
+        $other = $store->create('Tools');
+        $client = new CategoryExportClient([categoryTerm(11, 'Unrelated name', 'broken')]);
+        same([$other => 1001], (new ShopCategoryExporter($client, $store))->syncTree());
+        same(['tools'], array_column(array_column($client->writes, 2), 'slug'));
     },
     'import_pages_through_categories_and_product_assignments' => static function () {
         $terms = $products = [];

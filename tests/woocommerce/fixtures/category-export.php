@@ -11,6 +11,7 @@ final class CategoryExportClient
     public array $writes = [];
     public ?Closure $duringPost = null;
     public ?string $failedLookup = null;
+    public string $lookupError = 'Lookup failed';
     public bool $omitTotal = false;
     public array $reads = [];
     private ?int $total = null;
@@ -37,7 +38,7 @@ final class CategoryExportClient
             'products' => $this->products,
         };
         if ($params['per_page'] === 1 && $endpoint === $this->failedLookup) {
-            throw new RuntimeException('Lookup failed');
+            throw new RuntimeException($this->lookupError);
         }
         if (isset($params['category'])) {
             $rows = array_filter($rows, static fn (array $row): bool =>

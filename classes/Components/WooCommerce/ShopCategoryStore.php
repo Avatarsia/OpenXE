@@ -11,15 +11,20 @@ use Throwable;
 final class ShopCategoryStore
 {
     private const CONFIG_LIMIT = 65000;
+    private const CONFIG_JSON_FLAGS = JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES;
+    private const DELETION_REASON_LIMIT = 200;
+    private const DELETION_ENTRY_LIMIT = 200;
     private const EMPTY_TREE = '{"nextId":1,"nodes":{}}';
     private const ARTICLE_DEFAULTS = ['categories' => [], 'onRequest' => false];
 
     private string $treeKey;
+    private string $deletionKey;
     private string $articlePrefix;
 
     public function __construct(private $database, int $shopId)
     {
         $this->treeKey = 'woocommerce_category_tree_' . $shopId;
+        $this->deletionKey = 'woocommerce_category_deletions_' . $shopId;
         $this->articlePrefix = 'woocommerce_article_' . $shopId . '_';
     }
 
@@ -119,16 +124,48 @@ final class ShopCategoryStore
     /** @return array<int,string> Last reason a pending deletion was deferred. */
     public function pendingDeletionReasons(): array
     {
-        return $this->readConfig($this->treeKey, self::EMPTY_TREE)['pendingDeletionReasons'] ?? [];
+        $state = $this->readConfig($this->treeKey, self::EMPTY_TREE);
+        return array_intersect_key(
+            $this->readConfig($this->deletionKey, '{}') + ($state['pendingDeletionReasons'] ?? []),
+            $state['pendingDeletions'] ?? []
+        );
     }
 
-    public function deferDeletion(int $wcId, string $reason): void
+    public function updateDeletionReasons(array $deferred): void
     {
-        $this->mutateTree(static function (array &$state) use ($wcId, $reason): void {
-            if (isset($state['pendingDeletions'][$wcId])) {
-                $state['pendingDeletionReasons'][$wcId] = $reason;
+        // Serialize reason updates and pending identity changes with the same shop lock.
+        $this->mutate(function (array $state) use ($deferred): void {
+            $stored = $this->readConfig($this->deletionKey, '{}');
+            $reasons = $stored + ($state['pendingDeletionReasons'] ?? []);
+            // Put reasons observed in this run at the end, in observation order.
+            $reasons = array_diff_key($reasons, $deferred) + $deferred;
+            $reasons = array_intersect_key($reasons, $state['pendingDeletions'] ?? []);
+            $reasons = array_slice($reasons, -self::DELETION_ENTRY_LIMIT, null, true);
+            foreach ($reasons as &$entry) {
+                preg_match('/^.{0,' . self::DELETION_REASON_LIMIT . '}/us', $entry, $match);
+                $entry = $match[0] ?? 'Fehlerdetails nicht verfuegbar.';
+            }
+            unset($entry);
+            // Unicode escaping can exceed the TEXT byte limit even with bounded character counts.
+            while (strlen(json_encode($reasons, self::CONFIG_JSON_FLAGS)) >= self::CONFIG_LIMIT) {
+                unset($reasons[array_key_first($reasons)]);
+            }
+            if ($reasons !== $stored) {
+                $this->writeConfig($this->deletionKey, $reasons);
+            }
+            if (isset($state['pendingDeletionReasons'])) {
+                unset($state['pendingDeletionReasons']);
+                $state['nodes'] = (object) $state['nodes'];
+                $this->writeConfig($this->treeKey, $state);
             }
         });
+    }
+
+    /** @return array<string> Current local slugs reserved by pending deletions. */
+    public function pendingDeletionSlugConflicts(): array
+    {
+        $state = $this->readConfig($this->treeKey, self::EMPTY_TREE);
+        return array_intersect(array_column($state['nodes'], 'slug'), $state['pendingDeletions'] ?? []);
     }
 
     private function queueTermDeletion(array &$state, int $wcId, string $slug): void
@@ -375,7 +412,7 @@ final class ShopCategoryStore
 
     private function writeConfig(string $name, array $value): void
     {
-        $json = json_encode($value, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        $json = json_encode($value, self::CONFIG_JSON_FLAGS);
         if (strlen($json) >= self::CONFIG_LIMIT) {
             throw new LengthException('WooCommerce-Konfiguration ' . $name . ' ist zu gross (muss unter 65000 Bytes bleiben).');
         }

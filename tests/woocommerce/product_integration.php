@@ -10,17 +10,23 @@ class IntegrationProductApi
 {
     public $collections = ['products' => [], 'products/categories' => []];
     public $writes = [];
+    public ?Closure $duringCategoryPost = null;
+    public bool $failCategoryReads = false;
+    public ?string $failCategoryAssignment = null;
     private $nextId = 100;
 
     public function get($endpoint, $query = [])
     {
-        if (preg_match('#^products/(\d+)$#', $endpoint, $match)) {
-            foreach ($this->collections['products'] as $row) {
-                if ((int) $row['id'] === (int) $match[1]) {
+        if ($endpoint === 'products/categories' && $this->failCategoryReads) {
+            throw new Error('Category index unavailable');
+        }
+        if (preg_match('#^(products(?:/categories)?)/(\d+)$#', $endpoint, $match)) {
+            foreach ($this->collections[$match[1]] as $row) {
+                if ((int) $row['id'] === (int) $match[2]) {
                     return (object) $row;
                 }
             }
-            throw new RuntimeException('Product not found ' . $endpoint);
+            throw new RuntimeException('Resource not found ' . $endpoint);
         }
         $rows = $this->collections[$endpoint] ?? [];
         if (isset($query['sku'])) {
@@ -37,11 +43,17 @@ class IntegrationProductApi
         $this->writes[] = ['POST', $endpoint, $payload];
         $row = array_merge(['parent_id' => 0, 'categories' => []], $payload, ['id' => ++$this->nextId]);
         $this->collections[$endpoint][] = $row;
+        if ($endpoint === 'products/categories' && $this->duringCategoryPost !== null) {
+            ($this->duringCategoryPost)();
+        }
         return (object) $row;
     }
 
     public function put($endpoint, $payload)
     {
+        if ($endpoint === $this->failCategoryAssignment && isset($payload['categories'])) {
+            throw new Error('Category assignment unavailable');
+        }
         $this->writes[] = ['PUT', $endpoint, $payload];
         $parts = explode('/', $endpoint);
         $id = (int) array_pop($parts);
@@ -101,10 +113,15 @@ function productConnector(array $articles, array $settings = []): IntegrationPro
     $connector->shopid = 5;
     $connector->logger = new class {
         public array $warnings = [];
+        public array $warningContexts = [];
         public function debug(...$args) {}
         public function info(...$args) {}
         public function error(...$args) {}
-        public function warning(string $message): void { $this->warnings[] = $message; }
+        public function warning(string $message, array $context = []): void
+        {
+            $this->warnings[] = $message;
+            $this->warningContexts[] = $context;
+        }
     };
     foreach (array_replace(['backorders' => 0, 'metadatasmarty' => '', 'productsmarty' => '', 'filenamesmarty' => '', 'fileunique' => '-', 'kategorienuebertragen' => false, 'dateienuebertragen' => []], $settings) as $key => $value) {
         if ((new ReflectionClass(Shopimporter_Woocommerce::class))->hasProperty($key)) {
@@ -178,6 +195,66 @@ runTests([
         $connector->ImportSendList();
         same(['shop-category'], array_column($connector->client->collections['products/categories'], 'slug'));
         same([['id' => 101]], $connector->client->collections['products'][0]['categories']);
+    },
+    'export_continues_after_a_recreated_category_collides_with_a_blocked_pending_term' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 5);
+        $parts = $store->create('Parts');
+        $articles = [remoteProduct(), remoteProduct(['artikel' => 8, 'nummer' => 'OTHER'])];
+        $connector = productConnector($articles, ['shopCategoryTree' => true]);
+        configureProductDatabase($connector, $db);
+        $connector->client->duringCategoryPost = static function () use ($store, $parts): void {
+            $store->delete($parts);
+            $store->assign(7, [$store->create('Parts')]);
+            $store->assign(8, [$store->create('Tools')]);
+        };
+        same([true, true], array_column($connector->ImportSendList(), 'success'));
+        $connector->client->duringCategoryPost = null;
+        $connector->client->collections['products/categories'][0]['count'] = 1;
+        $store->assign(7, array_merge($store->categoriesOf(7), $store->categoriesOf(8)));
+
+        $results = $connector->ImportSendList();
+        same([true, true], array_column($results, 'success'));
+        $reason = 'Slug parts ist noch durch eine nicht loeschbare WooCommerce-Kategorie belegt';
+        check(str_contains($results[0]->message, $reason));
+        same(null, $results[1]->message);
+        same([['id' => 104]], $connector->client->collections['products'][0]['categories']);
+        same([['id' => 104]], $connector->client->collections['products'][1]['categories']);
+        same(['parts', 'tools'], array_column($connector->client->collections['products/categories'], 'slug'));
+        check(in_array($reason, $connector->logger->warnings, true));
+    },
+    'category_assignment_failure_preserves_the_result_and_exports_the_next_article' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 5);
+        $parts = $store->create('Parts');
+        $store->assign(7, [$parts]);
+        $store->assign(8, [$parts]);
+        $connector = productConnector([remoteProduct(), remoteProduct(['artikel' => 8, 'nummer' => 'OTHER'])],
+            ['shopCategoryTree' => true]);
+        configureProductDatabase($connector, $db);
+        $connector->client->failCategoryAssignment = 'products/102';
+        $results = $connector->ImportSendList();
+        same([true, true], array_column($results, 'success'));
+        check(str_contains($results[0]->message, 'Category assignment unavailable'));
+        same(null, $results[1]->message);
+        same([['id' => 101]], $connector->client->collections['products'][1]['categories']);
+        check(in_array(['shop' => 5, 'article' => 7, 'categories' => [$parts]], $connector->logger->warningContexts, true));
+    },
+    'category_index_failure_is_reported_for_each_article_and_does_not_stop_export' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 5);
+        $parts = $store->create('Parts');
+        $store->assign(7, [$parts]);
+        $connector = productConnector([remoteProduct(), remoteProduct(['artikel' => 8, 'nummer' => 'OTHER'])],
+            ['shopCategoryTree' => true]);
+        configureProductDatabase($connector, $db);
+        $connector->client->failCategoryReads = true;
+        $results = $connector->ImportSendList();
+        same([true, true], array_column($results, 'success'));
+        foreach ($results as $result) {
+            check(str_contains($result->message, 'Category index unavailable'));
+        }
+        same(['PARENT', 'OTHER'], array_column($connector->client->collections['products'], 'sku'));
     },
     'on_request_export_uses_each_variants_local_article_id' => static function () {
         $db = new CategoryStoreDatabase();

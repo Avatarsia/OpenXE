@@ -86,15 +86,19 @@ final class AdminView
         return $html . '</nav>';
     }
 
-    public static function pendingCategoryDeletions(array $pending, array $reasons): string
+    public static function pendingCategoryDeletions(array $pending, array $reasons, array $conflictingSlugs): string
     {
         if ($pending === []) {
             return '';
         }
         $html = '<h2>Vorgemerkte WooCommerce-Kategoriel&ouml;schungen</h2><ul class="wc-admin-results">';
+        $conflicts = array_fill_keys($conflictingSlugs, true);
         foreach ($pending as $termId => $slug) {
-            $html .= '<li>#' . (int) $termId . ' (' . self::e($slug) . ') &ndash; '
-                . self::e($reasons[$termId] ?? 'Wartet auf den naechsten Kategorieexport.') . '</li>';
+            $reason = $reasons[$termId] ?? 'Wartet auf den naechsten Kategorieexport.';
+            if (isset($conflicts[$slug])) {
+                $reason .= ' ' . ShopCategoryExporter::blockedSlugReason($slug);
+            }
+            $html .= '<li>#' . (int) $termId . ' (' . self::e($slug) . ') &ndash; ' . self::e($reason) . '</li>';
         }
         return $html . '</ul>';
     }
