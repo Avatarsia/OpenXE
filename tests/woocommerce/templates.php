@@ -6,6 +6,7 @@ use Xentral\Components\Http\Session\Session;
 use Xentral\Components\WooCommerce\ArticleFieldCatalog;
 use Xentral\Components\WooCommerce\TemplateInstaller;
 
+require __DIR__ . '/../../phpwf/plugins/class.user.php';
 require __DIR__ . '/../../www/pages/importvorlage.php';
 require __DIR__ . '/../../www/pages/exportvorlage.php';
 
@@ -382,6 +383,65 @@ A9;3
             } else {
                 $_SERVER['REQUEST_METHOD'] = $method;
             }
+        }
+    },
+    'queued_csv_execution_rechecks_binding_and_uses_the_confirming_user' => static function () {
+        $file = tmpfile();
+        fwrite($file, "nummer;ean
+A9;123
+");
+        $path = stream_get_meta_data($file)['uri'];
+        $worker = (object) ['GetID' => 99];
+        $app = (object) [
+            'User' => $worker,
+            'DB' => new class {
+                public bool $claimed = false;
+                public function SelectRow(string $sql): array
+                {
+                    check(str_contains($sql, 'id = 42 AND activ = 1'));
+                    return ['id' => 42, 'type' => 'mitarbeiter', 'adresse' => 17];
+                }
+                public function Update(string $sql): void
+                {
+                    check(str_contains($sql, "id = 4 AND status = 'in_queue'"));
+                    $this->claimed = true;
+                }
+                public function affected_rows(): int { return (int)$this->claimed; }
+            },
+        ];
+        $app->erp = new class ($app, dirname($path) . DIRECTORY_SEPARATOR) {
+            public function __construct(private object $app, private string $dir) {}
+            public function GetTMP(): string { return $this->dir; }
+            public function RechteVorhanden(string $module, string $action): bool
+            {
+                same(['importvorlage', 'import'], [$module, $action]);
+                return $this->app->User->GetID() === 42 && $this->app->User->GetAdresse() === 17;
+            }
+        };
+        $importer = new class ($app, true) extends Importvorlage {
+            public function ImportvorlageDo($charset = '', $parameter = null, $global_data = array())
+            {
+                same('UTF8', $charset);
+                same(42, $this->app->User->GetID());
+                same(12, $parameter['id']);
+                same(4, $parameter['importmasterdata_id']);
+                return ['success' => true, 'message' => ''];
+            }
+        };
+        $execute = new ReflectionMethod($importer, 'runConfirmedWooCsvJob');
+        $marker = new ReflectionMethod($importer, 'wooCsvJobMarker');
+        try {
+            $confirmation = ['user' => 42, 'template' => 12, 'job' => 4, 'file' => $path, 'hash' => hash_file('sha256', $path)];
+            $job = ['id' => 4, 'user_id' => 42, 'template_id' => 12, 'filename' => $path, 'message' => ''];
+            $parameter = ['is_cronjob' => true, 'importmasterdata_id' => 4];
+            same(false, $execute->invoke($importer, $job, $parameter, true)['success']);
+            same(false, $app->DB->claimed);
+            $job['message'] = $marker->invoke($importer, $confirmation);
+            same(true, $execute->invoke($importer, $job, $parameter, true)['success']);
+            same(true, $app->DB->claimed);
+            same($worker, $app->User);
+        } finally {
+            fclose($file);
         }
     },
     'registered_csv_execution_requires_an_authorized_preview' => static function () {
