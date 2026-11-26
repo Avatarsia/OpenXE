@@ -102,14 +102,33 @@ runTests([
         same('SKU-Pruefung fehlgeschlagen', $pull->apply([9 => ['shop_name']], 'bulk_pull')[9]['error']);
         same([], $db->writes);
     },
-    'apply_respects_group_filter_and_uses_current_woo_values' => static function () {
+    'apply_skips_article_when_selected_preview_values_changed' => static function () {
+        foreach (['woo', 'openxe'] as $changedSide) {
+            [$pull, $db, $client] = bulkFixture();
+            $article = $pull->compare(1)['articles'][9];
+            $row = array_column($article['rows'], null, 'key')['seo_title'];
+            $fingerprints = [9 => ['seo_title' => hash('sha256', serialize([$row['woocommerce'], $row['openxe']]))]];
+            if ($changedSide === 'woo') {
+                $client->pages[1][0]['meta_data'][0]['value'] = 'SEO aktuell';
+            } else {
+                $db->articles[9]['metatitle_de'] = 'OpenXE aktuell';
+            }
+            $results = $pull->apply([9 => ['seo_title']], 'bulk_pull', 1, [9 => $article['identity']], $fingerprints);
+            same([9 => ['error' => 'Werte haben sich geaendert - bitte neu vergleichen']], $results);
+            same([], $db->writes);
+        }
+    },
+    'apply_respects_group_filter_and_uses_confirmed_woo_values' => static function () {
         [$pull, $db, $client] = bulkFixture();
         $client->pages[2] = $client->pages[1];
         unset($client->pages[1]);
-        $pull->compare(2);
-        $client->pages[2][0]['meta_data'][0]['value'] = 'SEO aktuell';
-        same([9 => ['seo_title' => ['old' => '', 'new' => 'SEO aktuell']]], $pull->apply([9 => ['seo_title']], 'bulk_pull', 2));
-        same('SEO aktuell', $db->articles[9]['metatitle_de']);
+        $article = $pull->compare(2)['articles'][9];
+        $row = array_column($article['rows'], null, 'key')['seo_title'];
+        $fingerprints = [9 => ['seo_title' => hash('sha256', serialize([$row['woocommerce'], $row['openxe']]))]];
+        $client->pages[2][0]['name'] = 'New unselected name';
+        same([9 => ['seo_title' => ['old' => '', 'new' => 'SEO Vorschau']]],
+            $pull->apply([9 => ['seo_title']], 'bulk_pull', 2, [9 => $article['identity']], $fingerprints));
+        same('SEO Vorschau', $db->articles[9]['metatitle_de']);
         same('Alter Name', $db->articles[9]['shop_name_de']);
         $audit = json_decode($db->audit['woocommerce_pull_log_7'], true);
         same(['bulk_pull'], array_column($audit, 'origin'));

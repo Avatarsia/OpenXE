@@ -52,9 +52,19 @@ final class BulkPull
         return ['articles' => $articles, 'unmatched' => $unmatched, 'more' => $more];
     }
 
-    /** In shop administration, identities are supplied from the confirmed preview. */
-    public function apply(array $selection, string $origin, int $page = 1, array $identities = []): array
+    public static function valueFingerprint(array $row): string
     {
+        return hash('sha256', serialize([$row['woocommerce'], $row['openxe']]));
+    }
+
+    /** In shop administration, identities and fingerprints are supplied from the confirmed preview. */
+    public function apply(
+        array $selection,
+        string $origin,
+        int $page = 1,
+        array $identities = [],
+        array $fingerprints = []
+    ): array {
         if ($selection === []) {
             return [];
         }
@@ -85,6 +95,10 @@ final class BulkPull
                     $row = $rows[$key] ?? null;
                     if ($row === null) {
                         throw new InvalidArgumentException('Ausgewaehltes Feld ist nicht mehr vergleichbar.');
+                    }
+                    if ($fingerprints !== []
+                        && ($fingerprints[$id][$key] ?? null) !== self::valueFingerprint($row)) {
+                        throw new InvalidArgumentException('Werte haben sich geaendert - bitte neu vergleichen');
                     }
                     if (!$row['differs']) {
                         continue;

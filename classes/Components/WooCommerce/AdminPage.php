@@ -262,7 +262,7 @@ final class AdminPage
                 throw new RuntimeException('Vorschau erneut laden und Felder auswaehlen.');
             }
             $selection = $this->pullSelection();
-            $accepted = $identities = $results = [];
+            $accepted = $identities = $fingerprints = $results = [];
             foreach ($selection as $id => $keys) {
                 $allowed = $preview['articles'][$id] ?? null;
                 if ($allowed === null || array_diff_key(array_fill_keys($keys, true), $allowed['fields']) !== []) {
@@ -271,12 +271,13 @@ final class AdminPage
                 }
                 $accepted[$id] = $keys;
                 $identities[$id] = $allowed['identity'];
+                $fingerprints[$id] = $allowed['fields'];
             }
             if ($accepted !== []) {
                 $session->removeValue('woocommerce_admin', $sessionKey);
                 SessionHandler::commitSession($session);
                 try {
-                    $results += $this->bulkPull()->apply($accepted, 'bulk_pull', $page, $identities);
+                    $results += $this->bulkPull()->apply($accepted, 'bulk_pull', $page, $identities, $fingerprints);
                 } catch (Throwable $error) {
                     $this->logPullError($error);
                     foreach ($accepted as $id => $keys) {
@@ -300,7 +301,7 @@ final class AdminPage
             foreach ($article['rows'] as $row) {
                 if ($row['pullable']) {
                     $articles[$id]['identity'] = $article['identity'];
-                    $articles[$id]['fields'][$row['key']] = true;
+                    $articles[$id]['fields'][$row['key']] = BulkPull::valueFingerprint($row);
                 }
             }
         }
