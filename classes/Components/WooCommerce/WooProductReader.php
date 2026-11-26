@@ -9,7 +9,10 @@ use Throwable;
 
 final class WooProductReader
 {
+    public const SKU_ZERO_REASON = 'SKU 0 kann nicht eindeutig gesucht werden - bitte manuell ausblenden';
+
     private const PAGE_SIZE = 100;
+    private const SKU_LOOKUP_FAILED = 'SKU-Pruefung fehlgeschlagen';
 
     public function __construct(private $client, private DeliveryTimeMap $map)
     {
@@ -53,38 +56,78 @@ final class WooProductReader
         return $match;
     }
 
-    /** A bulk pull requires a complete SKU lookup and the same identity as the product page. */
-    public function skuIssue(array $identity): ?string
+    /** @return array{status: 'unique', id: int, parent_id: int}|array{status: 'multiple'|'not_found'}|array{status: 'failed', reason: string, manualAction?: bool} */
+    public function resolveSku(string $sku): array
     {
-        $sku = $identity['sku'];
-        $failed = 'SKU-Pruefung fehlgeschlagen';
-        if ($sku === '0') {
-            // WooCommerce skips its SKU filter for PHP-empty values.
+        $failed = ['status' => 'failed', 'reason' => self::SKU_LOOKUP_FAILED];
+        if ($sku === '') {
             return $failed;
         }
+        if ($sku === '0') {
+            // WooCommerce skips its SKU filter for PHP-empty values.
+            return ['status' => 'failed', 'reason' => self::SKU_ZERO_REASON, 'manualAction' => true];
+        }
+
+        $match = null;
+        $multiple = false;
+        $total = null;
+        $page = 1;
         try {
-            // The wc/v3 SKU filter queries both product and product_variation.
-            $rows = $this->client->get('products', [
-                'sku' => $sku, 'status' => 'any', 'context' => 'edit', 'page' => 1,
-                'per_page' => 2, '_fields' => 'id,parent_id,sku',
-            ]);
-            $total = $this->client->getLastResponse()?->getHeader('X-WP-Total');
-            if (!is_array($rows) || !ctype_digit((string) $total) || count($rows) !== min(2, (int) $total)) {
-                return $failed;
-            }
-            if (count($rows) > 1) {
-                // WooCommerce also treats commas as separators in the SKU filter.
-                return str_contains($sku, ',') ? $failed : 'SKU mehrfach';
-            }
-            $row = (array) ($rows[0] ?? []);
-            if (($row['id'] ?? null) !== $identity['id'] || ($row['parent_id'] ?? null) !== $identity['parent_id']
-                || ($row['sku'] ?? null) !== $sku) {
-                return $failed;
-            }
-            return null;
+            // The wc/v3 SKU filter includes variations and also searches comma-separated terms.
+            do {
+                $rows = $this->client->get('products', [
+                    'sku' => $sku, 'status' => 'any', 'context' => 'edit', 'page' => $page,
+                    'per_page' => self::PAGE_SIZE, '_fields' => 'id,parent_id,sku',
+                    'orderby' => 'id', 'order' => 'asc',
+                ]);
+                $response = $this->client->getLastResponse();
+                $rowTotal = (string) $response?->getHeader('X-WP-Total');
+                $pageTotal = (string) $response?->getHeader('X-WP-TotalPages');
+                if (!is_array($rows) || !ctype_digit($rowTotal) || !ctype_digit($pageTotal)) {
+                    return $failed;
+                }
+                $total ??= (int) $rowTotal;
+                $remaining = max(0, $total - ($page - 1) * self::PAGE_SIZE);
+                if ((int) $rowTotal !== $total || (int) $pageTotal !== (int) ceil($total / self::PAGE_SIZE)
+                    || count($rows) !== min(self::PAGE_SIZE, $remaining)) {
+                    return $failed;
+                }
+                foreach ($rows as $row) {
+                    $row = (array) $row;
+                    if (!is_string($row['sku'] ?? null)) {
+                        return $failed;
+                    }
+                    if ($row['sku'] !== $sku) {
+                        continue;
+                    }
+                    if (!is_int($row['id'] ?? null) || $row['id'] <= 0
+                        || !is_int($row['parent_id'] ?? null) || $row['parent_id'] < 0) {
+                        return $failed;
+                    }
+                    if ($match === null) {
+                        $match = ['status' => 'unique', 'id' => $row['id'], 'parent_id' => $row['parent_id']];
+                    } else {
+                        $multiple = true;
+                    }
+                }
+            } while ($page++ < (int) $pageTotal);
         } catch (Throwable) {
             return $failed;
         }
+        return $multiple ? ['status' => 'multiple'] : ($match ?? ['status' => 'not_found']);
+    }
+
+    /** A bulk pull requires a complete SKU lookup and the same identity as the product page. */
+    public function skuIssue(array $identity): ?string
+    {
+        $match = $this->resolveSku($identity['sku']);
+        return match ($match['status']) {
+            'multiple' => 'SKU mehrfach',
+            'failed' => $match['reason'],
+            'unique' => $match['id'] === $identity['id'] && $match['parent_id'] === $identity['parent_id']
+                ? null : self::SKU_LOOKUP_FAILED,
+            default => self::SKU_LOOKUP_FAILED,
+        };
     }
 
     public function page(int $page): array

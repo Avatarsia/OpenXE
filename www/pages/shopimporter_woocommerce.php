@@ -25,6 +25,7 @@ use Xentral\Components\WooCommerce\RefundStateStore;
 use Xentral\Components\WooCommerce\RefundSynchronizer;
 use Xentral\Components\WooCommerce\RefundPreflight;
 use Xentral\Components\WooCommerce\RefundRetryQueue;
+use Xentral\Components\WooCommerce\VisibilityManualActionRequired;
 use Xentral\Components\WooCommerce\VisibilityQueue;
 use Xentral\Components\WooCommerce\WooProductReader;
 use Xentral\Components\WooCommerce\ProductSynchronizer;
@@ -1429,20 +1430,16 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       // Visibility uses the product identity only, so no WordPress term lookup is needed.
       $reader = new WooProductReader($this->client, new DeliveryTimeMap(static fn () => [], ''));
       $result = $queue->drain(function (string $sku) use ($reader): void {
-        if ($sku === '0') {
-          // WooCommerce ignores a PHP-empty SKU filter, excluding variations from the results.
-          throw new \RuntimeException('WooCommerce kann die SKU 0 nicht eindeutig nachschlagen.');
-        }
-        $product = $reader->findBySku($sku);
-        if ($product === null) {
-          $this->logger->debug('WooCommerce visibility SKU not found', ['shop' => $this->shopid, 'sku' => $sku]);
+        $product = $reader->resolveSku($sku);
+        if ($product['status'] === 'not_found') {
+          $this->logVisibility('debug', 'WooCommerce visibility SKU not found', ['shop' => $this->shopid, 'sku' => $sku]);
           return;
         }
-
-        // findBySku treats a variation inheriting its parent's SKU as part of the parent.
-        $issue = $reader->skuIssue($product + ['sku' => $sku]);
-        if ($issue !== null || $product['id'] <= 0 || $product['parent_id'] < 0) {
-          throw new \RuntimeException($issue ?? 'Ungueltige WooCommerce-Produkt-ID.');
+        if (!empty($product['manualAction'])) {
+          throw new VisibilityManualActionRequired($product['reason']);
+        }
+        if ($product['status'] !== 'unique') {
+          throw new \RuntimeException($product['reason'] ?? 'SKU mehrfach in WooCommerce.');
         }
 
         $endpoint = $product['parent_id'] > 0
@@ -1455,14 +1452,27 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         }
       });
       foreach ($result['failed'] as $articleId => $message) {
-        $this->logger->error('WooCommerce visibility update deferred', [
+        $this->logVisibility('error', 'WooCommerce visibility update deferred', [
           'shop' => $this->shopid, 'article' => $articleId, 'reason' => $message,
         ]);
       }
     } catch (\Throwable $error) {
-      $this->logger->error('WooCommerce visibility queue failed', [
+      $this->logVisibility('error', 'WooCommerce visibility queue failed', [
         'shop' => $this->shopid, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
       ]);
+    }
+  }
+
+  private function logVisibility(string $level, string $message, array $context): void
+  {
+    try {
+      $this->logger->$level($message, $context);
+    } catch (\Throwable) {
+      try {
+        error_log($message . (isset($context['reason']) ? ': ' . $context['reason'] : ''));
+      } catch (\Throwable) {
+        // A failing log must not interrupt order import.
+      }
     }
   }
 

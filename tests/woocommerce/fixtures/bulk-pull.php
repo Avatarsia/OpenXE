@@ -100,17 +100,22 @@ final class BulkPullClient
     public array $variations = [];
     public bool $incompleteLookup = false;
     private int $total = 0;
+    private ?int $lookupPages = null;
 
     public function get(string $endpoint, array $query): array
     {
         if (isset($query['sku'])) {
             $this->lookupRequests[] = $query['sku'];
+            same('any', $query['status']);
+            $terms = array_map('strtolower', array_merge([$query['sku']], explode(',', $query['sku'])));
             $rows = array_values(array_filter(array_merge(...array_values($this->pages + $this->variations)),
-                static fn (array $row): bool => strcasecmp($row['sku'] ?? '', $query['sku']) === 0));
+                static fn (array $row): bool => in_array(strtolower($row['sku'] ?? ''), $terms, true)));
             $this->total = count($rows) + (int) $this->incompleteLookup;
+            $this->lookupPages = (int) ceil($this->total / $query['per_page']);
             return array_map(static fn (array $row): array => $row + ['parent_id' => 0],
                 array_slice($rows, ($query['page'] - 1) * $query['per_page'], $query['per_page']));
         }
+        $this->lookupPages = null;
         $this->requests[] = [$endpoint, $query['page'], $query['per_page']];
         $rows = $endpoint === 'products' ? ($this->pages[$query['page']] ?? []) : ($this->variations[$endpoint] ?? []);
         $this->total = count($rows);
@@ -120,6 +125,10 @@ final class BulkPullClient
     public function getLastResponse(): self { return $this; }
     public function getHeader(string $name): ?string
     {
-        return $name === 'X-WP-Total' ? (string) $this->total : null;
+        return match ($name) {
+            'X-WP-Total' => (string) $this->total,
+            'X-WP-TotalPages' => $this->lookupPages === null ? null : (string) $this->lookupPages,
+            default => null,
+        };
     }
 }

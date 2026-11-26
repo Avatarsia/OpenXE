@@ -94,10 +94,14 @@ final class AdminView
         }
         $html .= '<div class="wc-admin-scroll" tabindex="0" role="region" aria-label="Offene Ausblendungen">'
             . '<table class="wc-refund-table"><thead><tr><th scope="col">SKU</th><th scope="col">Versuche</th>'
-            . '<th scope="col">Letzter Fehler</th><th scope="col">Vorgemerkt (UTC)</th></tr></thead><tbody>';
+            . '<th scope="col">Letzter Fehler</th><th scope="col">Vorgemerkt (UTC)</th>'
+            . '<th scope="col">N&auml;chster Versuch (UTC)</th></tr></thead><tbody>';
         foreach ($pending as $entry) {
+            $nextAttempt = !empty($entry['manualAction']) ? 'Manuell ausblenden'
+                : self::time($entry['nextAttemptAt'] ?? null);
             $html .= '<tr><td>' . self::e($entry['sku']) . '</td><td>' . self::e($entry['attempts'])
-                . '</td><td>' . self::e($entry['lastError']) . '</td><td>' . self::time($entry['queuedAt']) . '</td></tr>';
+                . '</td><td>' . self::e($entry['lastError']) . '</td><td>' . self::time($entry['queuedAt'])
+                . '</td><td>' . $nextAttempt . '</td></tr>';
         }
         return $html . '</tbody></table></div>';
     }

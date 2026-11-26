@@ -6,6 +6,7 @@ require_once dirname(__DIR__, 2) . '/www/lib/ShopimporterBase.php';
 require_once dirname(__DIR__, 2) . '/www/pages/shopimporter_woocommerce.php';
 
 use Xentral\Components\WooCommerce\AdminPage;
+use Xentral\Components\WooCommerce\AdminView;
 use Xentral\Components\WooCommerce\VisibilityQueue;
 
 final class VisibilityDatabase
@@ -70,28 +71,38 @@ final class VisibilityApi
     public array $products = [];
     public array $updates = [];
     public int $lookups = 0;
+    public array $failures = [];
+    public int $orderCount = 0;
+    public bool $missingTotals = false;
     private int $total = 0;
+    private int $pages = 0;
 
     public function get(string $endpoint, array $query): array
     {
         if ($endpoint === 'orders') {
-            $this->total = 0;
+            $this->total = $this->orderCount;
             return [];
         }
         same('products', $endpoint);
         $this->lookups++;
+        if (in_array($query['sku'], $this->failures, true)) {
+            throw new RuntimeException('Lookup unavailable');
+        }
         $matches = $this->products[$query['sku']] ?? [];
         $this->total = count($matches);
-        return array_slice($matches, 0, $query['per_page']);
+        $this->pages = (int) ceil($this->total / $query['per_page']);
+        return array_slice($matches, ($query['page'] - 1) * $query['per_page'], $query['per_page']);
     }
 
     public function getLastResponse(): object
     {
-        return new class($this->total) {
-            public function __construct(private int $total) {}
-            public function getHeader(string $name): int
+        return new class($this->total, $this->pages, $this->missingTotals) {
+            public function __construct(private int $total, private int $pages, private bool $missingTotals) {}
+            public function getHeader(string $name): ?int
             {
-                return strtolower($name) === 'x-wp-totalpages' ? 1 : $this->total;
+                return strtolower($name) === 'x-wp-totalpages'
+                    ? ($this->missingTotals ? null : $this->pages)
+                    : $this->total;
             }
         };
     }
@@ -112,7 +123,14 @@ function visibilityConnector(VisibilityDatabase $db, bool $enabled = true): Shop
             $this->logger = new class {
                 public array $errors = [];
                 public array $debug = [];
-                public function error(...$args): void { $this->errors[] = $args; }
+                public bool $unavailable = false;
+                public function error(...$args): void
+                {
+                    if ($this->unavailable) {
+                        throw new Error('Logger unavailable');
+                    }
+                    $this->errors[] = $args;
+                }
                 public function debug(...$args): void { $this->debug[] = $args; }
             };
         }
@@ -182,8 +200,72 @@ runTests([
         check(strlen($reason) <= 200 && !str_contains($reason, 'secret') && !str_contains($reason, '<b>'));
         $queue->enqueue(41, 'A');
         same($before, $queue->pending());
+        same(60, $before[41]['nextAttemptAt'] - $before[41]['lastAttemptAt']);
+        same(['processed' => [], 'failed' => []], $queue->drain(static function (): void {
+            throw new RuntimeException('Retry started before it was due');
+        }));
+
+        $before[41]['nextAttemptAt'] = time() - 1;
+        $db->config['woocommerce_visibility_7'] = json_encode($before);
+        $queue->drain(static function (): void { throw new RuntimeException('Still unavailable'); });
+        $retry = $queue->pending()[41];
+        same(2, $retry['attempts']);
+        same(120, $retry['nextAttemptAt'] - $retry['lastAttemptAt']);
+
+        $retry['attempts'] = 50;
+        $retry['nextAttemptAt'] = time() - 1;
+        $db->config['woocommerce_visibility_7'] = json_encode([41 => $retry]);
+        $queue->drain(static function (): void { throw new RuntimeException('Still unavailable'); });
+        $retry = $queue->pending()[41];
+        same(86400, $retry['nextAttemptAt'] - $retry['lastAttemptAt']);
+
+        $retry['nextAttemptAt'] = time() - 1;
+        $db->config['woocommerce_visibility_7'] = json_encode([41 => $retry]);
         $queue->drain(static function (string $sku): void { same('A', $sku); });
         same([], $queue->pending());
+    },
+    'drain_bounds_backlog_and_prioritizes_never_attempted_entries' => static function () {
+        $db = new VisibilityDatabase();
+        $queue = new VisibilityQueue($db, 7);
+        $connector = visibilityConnector($db);
+        $connector->client->orderCount = 3;
+        foreach (range(1, 50) as $id) {
+            $sku = 'SKU-' . $id;
+            $queue->enqueue($id, $sku);
+            $connector->client->products[$sku] = [(object) ['id' => $id, 'parent_id' => 0, 'sku' => $sku]];
+        }
+        $connector->client->failures = array_map(static fn (int $id): string => 'SKU-' . $id, range(1, 10));
+        foreach ([10, 30, 40] as $run => $hidden) {
+            same(3, $connector->ImportGetAuftraegeAnzahl());
+            same(($run + 1) * 20, $connector->client->lookups);
+            same($hidden, count($connector->client->updates));
+            $pending = $queue->pending();
+            foreach (range(1, 10) as $id) {
+                same($run === 2 ? 2 : 1, $pending[$id]['attempts']);
+                $pending[$id]['nextAttemptAt'] = time() - 1;
+            }
+            $db->config['woocommerce_visibility_7'] = json_encode($pending);
+        }
+        same(range(1, 10), array_keys($queue->pending()));
+    },
+    'drain_tries_oldest_due_attempt_before_newer_due_attempt' => static function () {
+        $db = new VisibilityDatabase();
+        $db->config['woocommerce_visibility_7'] = json_encode([
+            1 => ['sku' => 'NEWER', 'attempts' => 1, 'lastError' => '', 'queuedAt' => 1, 'lastAttemptAt' => 100, 'nextAttemptAt' => 160],
+            2 => ['sku' => 'OLDER', 'attempts' => 1, 'lastError' => '', 'queuedAt' => 2, 'lastAttemptAt' => 50, 'nextAttemptAt' => 110],
+        ]);
+        $queue = new VisibilityQueue($db, 7);
+        same([2, 1], $queue->drain(static function (): void {})['processed']);
+    },
+    'drain_does_not_start_another_entry_at_the_time_limit' => static function () {
+        $db = new VisibilityDatabase();
+        $seconds = 0.0;
+        $queue = new VisibilityQueue($db, 7, static function () use (&$seconds): float { return $seconds; });
+        $queue->enqueue(1, 'A');
+        $queue->enqueue(2, 'B');
+        $result = $queue->drain(static function () use (&$seconds): void { $seconds += 20; });
+        same([1], $result['processed']);
+        same([2], array_keys($queue->pending()));
     },
     'drain_skipped_when_setting_off' => static function () {
         $db = new VisibilityDatabase();
@@ -218,7 +300,39 @@ runTests([
         same(1, count($connector->logger->debug));
         same(1, count($connector->logger->errors));
     },
-    'invalid_sku_filter_does_not_discard_a_potential_variation' => static function () {
+    'order_count_hides_paginated_exact_comma_sku_but_leaves_multiple_exact_matches' => static function () {
+        $db = new VisibilityDatabase();
+        $queue = new VisibilityQueue($db, 7);
+        $queue->enqueue(1, 'A,B');
+        $queue->enqueue(2, 'A');
+        $connector = visibilityConnector($db);
+        $connector->client->products = [
+            'A,B' => array_merge(
+                array_map(static fn (int $id): object => (object) ['id' => $id, 'parent_id' => 0, 'sku' => 'A'], range(1, 100)),
+                [(object) ['id' => 101, 'parent_id' => 0, 'sku' => 'A,B']]
+            ),
+            'A' => [
+                (object) ['id' => 1, 'parent_id' => 0, 'sku' => 'A'],
+                (object) ['id' => 2, 'parent_id' => 0, 'sku' => 'A'],
+            ],
+        ];
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same([['products/101', ['status' => 'private']]], $connector->client->updates);
+        same(3, $connector->client->lookups);
+        same(['A'], array_column($queue->pending(), 'sku'));
+        check(str_contains($queue->pending()[2]['lastError'], 'mehrfach'));
+    },
+    'empty_lookup_without_both_headers_keeps_the_entry' => static function () {
+        $db = new VisibilityDatabase();
+        $queue = new VisibilityQueue($db, 7);
+        $queue->enqueue(41, 'A');
+        $connector = visibilityConnector($db);
+        $connector->client->missingTotals = true;
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same(['A'], array_column($queue->pending(), 'sku'));
+        same([], $connector->client->updates);
+    },
+    'sku_zero_is_shown_for_manual_action_and_never_retried' => static function () {
         $db = new VisibilityDatabase();
         $queue = new VisibilityQueue($db, 7);
         $queue->enqueue(41, '0');
@@ -226,6 +340,15 @@ runTests([
         same(0, $connector->ImportGetAuftraegeAnzahl());
         same(['0'], array_column($queue->pending(), 'sku'));
         same([1], array_column($queue->pending(), 'attempts'));
+        $entry = $queue->pending()[41];
+        same('SKU 0 kann nicht eindeutig gesucht werden - bitte manuell ausblenden', $entry['lastError']);
+        check($entry['manualAction']);
+        check(str_contains(AdminView::visibility($queue->pending()), 'Manuell ausblenden'));
+        $entry['nextAttemptAt'] = time() - 1;
+        $db->config['woocommerce_visibility_7'] = json_encode([41 => $entry]);
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same([1], array_column($queue->pending(), 'attempts'));
+        same(0, $connector->client->lookups);
         same([], $connector->client->updates);
     },
     'storage_failure_does_not_break_order_count' => static function () {
@@ -239,6 +362,14 @@ runTests([
         same([], $connector->client->updates);
         $db->unavailable = false;
         same(['A'], array_column($queue->pending(), 'sku'));
+    },
+    'storage_and_logger_failure_do_not_break_order_count' => static function () {
+        $db = new VisibilityDatabase();
+        $db->unavailable = true;
+        $connector = visibilityConnector($db);
+        $connector->client->orderCount = 4;
+        $connector->logger->unavailable = true;
+        same(4, $connector->ImportGetAuftraegeAnzahl());
     },
     'enqueue_rejects_text_overflow_without_losing_previous_entries' => static function () {
         $db = new VisibilityDatabase();

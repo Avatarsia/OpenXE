@@ -18,7 +18,7 @@ function bulkFixture(): array
     }];
     $reader = new WooProductReader($client, new DeliveryTimeMap(static fn () => [], ''));
     $pull = new BulkPull(new ArticleDataRepository($app, 7), $reader, static fn (string $sku): ?int =>
-        ['SHOP-9' => 9, 'LOCAL-10' => 10][$sku] ?? null
+        ['SHOP-9' => 9, 'LOCAL-10' => 10, 'A,B' => 9][$sku] ?? null
     );
     return [$pull, $db, $client];
 }
@@ -84,6 +84,16 @@ runTests([
         $identity = ['id' => 101, 'parent_id' => 0, 'sku' => 'SHOP-9'];
         same('SKU mehrfach', $pull->apply([9 => ['shop_name']], 'bulk_pull', 1, [9 => $identity])[9]['error']);
         same([], $db->writes);
+    },
+    'unique exact comma SKU authorizes a write despite additional filter matches' => static function () {
+        [$pull, $db, $client] = bulkFixture();
+        $client->pages[1][0]['sku'] = 'A,B';
+        $client->pages[1][] = ['id' => 102, 'name' => 'Anderes Produkt', 'sku' => 'A'];
+        $preview = $pull->compare(1);
+        same([9], array_keys($preview['articles']));
+        $identity = $preview['articles'][9]['identity'];
+        $pull->apply([9 => ['shop_name']], 'bulk_pull', 1, [9 => $identity]);
+        same('Vorschau', $db->articles[9]['shop_name_de']);
     },
     'incomplete SKU lookup cannot authorize an ERP write' => static function () {
         [$pull, $db, $client] = bulkFixture();
