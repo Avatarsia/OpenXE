@@ -5,6 +5,8 @@ final class CategoryStoreDatabase
 {
     public array $config = [];
     public array $soldOut = [];
+    public array $failedSoldOutReads = [];
+    public array $stockRetries = [];
     public bool $failDeletionReasonWrites = false;
     public bool $failSkipReasonWrites = false;
     private ?array $snapshot = null;
@@ -30,7 +32,10 @@ final class CategoryStoreDatabase
     public function fetchValue(string $sql, array $params)
     {
         if (str_contains($sql, 'SELECT ausverkauft FROM artikel')) {
-            return $this->soldOut[$params['article']] ?? false;
+            if (in_array($params['article'], $this->failedSoldOutReads, true)) {
+                throw new RuntimeException('Variant availability unavailable');
+            }
+            return $this->soldOut[$params['article']] ?? 0;
         }
         if (str_contains($sql, 'GET_LOCK') || str_contains($sql, 'RELEASE_LOCK')) {
             return 1;
@@ -64,6 +69,10 @@ final class CategoryStoreDatabase
 
     public function perform(string $sql, array $params): void
     {
+        if (str_starts_with($sql, 'UPDATE artikel_onlineshops SET storage_cache = -999')) {
+            $this->stockRetries[] = $params;
+            return;
+        }
         check($this->inTransaction());
         check(str_starts_with($sql, 'INSERT INTO konfiguration (name, wert, adresse, firma)'));
         $name = $params['name'];

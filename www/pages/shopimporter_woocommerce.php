@@ -723,9 +723,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ctmp = (!empty($tmp) ? count($tmp) : 0);
     $this->logger->debug("WooCommerce ImportSendListLager ".$ctmp." entries");
 
-    $categoryStore = $this->extendedFieldMapping
-      ? new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid)
-      : null;
+    $categoryStore = null;
 
     // --- Step 1: Collect all SKUs and compute desired stock params ---
 
@@ -738,7 +736,21 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         continue;
       }
       $soldOut = !empty($tmp[$i]['ausverkauft']);
-      $onRequest = $categoryStore !== null && $categoryStore->isOnRequest((int) $artikel);
+      try {
+        $onRequest = $this->extendedFieldMapping && ($categoryStore ??= $this->newCategoryStore())->isOnRequest((int) $artikel);
+      } catch (Throwable $error) {
+        $this->reportAvailabilityLookupFailure((int) $artikel, $error);
+        try {
+          // The legacy sender may have cached stock before our lookup.
+          $this->app->Container->get('Database')->perform(
+            'UPDATE artikel_onlineshops SET storage_cache = -999 WHERE artikel = :article AND shop = :shop',
+            ['article' => (int) $artikel, 'shop' => (int) $this->shopid]
+          );
+        } catch (Throwable $retryError) {
+          $this->reportAvailabilityLookupFailure((int) $artikel, $retryError);
+        }
+        continue;
+      }
       if ($onRequest && !$soldOut) {
         $this->logger->debug('WooCommerce-Lagerexport fuer Artikel auf Anfrage uebersprungen.', ['article' => (int) $artikel]);
         continue;
@@ -973,15 +985,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ctmp = (!empty($tmp) ? count($tmp) : 0);
     $this->logger->debug("WooCommerce ImportSendList ".$ctmp." entries");
 
-    $categoryStore = $this->extendedFieldMapping
-      ? new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid)
-      : null;
+    $categoryStore = null;
     $categoryExporter = null;
     $categoryTreeError = null;
     $categoryTreeBusy = false;
     if ($this->shopCategoryTree) {
       try {
-        $categoryStore ??= new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid);
+        $categoryStore ??= $this->newCategoryStore();
         $categoryExporter = $this->syncCategoryTree($categoryStore, false);
         if ($categoryExporter === null) {
           $categoryTreeBusy = true;
@@ -1056,7 +1066,6 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
     for ($i = 0; $i < $ctmp; $i++) {
       $return[$i] = new ArticleExportResult();
-      $return[$i]->success = true;
       $artikel = $tmp[$i]['artikel'];
 
         if (!empty($this->productsmarty)) {
@@ -1073,6 +1082,16 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         }
 
       $return[$i]->articleId = intval($artikel);
+      try {
+        if ($this->extendedFieldMapping) {
+          $categoryStore ??= $this->newCategoryStore();
+        }
+        $availability = $this->loadExportAvailability($tmp[$i], $this->extendedFieldMapping ? $categoryStore : null);
+      } catch (Throwable $error) {
+        $return[$i]->message = $this->reportAvailabilityLookupFailure((int) $artikel, $error);
+        continue;
+      }
+      $return[$i]->success = true;
       $nummer = $tmp[$i]['nummer'];
       if (!empty($tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'])) {
         $nummer = $tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'];
@@ -1169,14 +1188,9 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         'backorders' => $this->backorders,
         'extendedMapping' => $this->extendedFieldMapping,
         'yoastMeta' => $this->yoastMeta,
-        'onRequest' => $this->extendedFieldMapping && $categoryStore->isOnRequest((int) $artikel),
-        'soldOutForVariant' => fn (int $id): bool => (bool) $this->app->Container->get('Database')->fetchValue(
-          'SELECT ausverkauft FROM artikel WHERE id = :article', ['article' => $id]
-        ),
-      ];
+      ] + $availability;
       if ($this->extendedFieldMapping) {
         $productOptions['deliveryTimeIds'] = [$this->deliveryTimeMap(), 'idFor'];
-        $productOptions['onRequestForVariant'] = $categoryStore->isOnRequest(...);
       }
       if ($this->visibilitySync) {
         $productOptions['writeWithVisibility'] = fn (array $payload, callable $write) =>
@@ -1285,6 +1299,48 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     }
     return $return;
     // return array($product_id,$anzahl,$nummer,$steuersatz, $preis);
+  }
+
+  private function newCategoryStore(): ShopCategoryStore
+  {
+    return new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid);
+  }
+
+  private function loadExportAvailability(array $article, ?ShopCategoryStore $store): array
+  {
+    $onRequest = $store !== null && $store->isOnRequest((int) $article['artikel']);
+    $variants = array_unique(array_merge(
+      array_column($article['artikel_varianten'] ?? [], 'artikel'),
+      array_keys($article['matrix_varianten']['artikel'] ?? [])
+    ));
+    $variantRequest = $variantSoldOut = [];
+    foreach ($variants as $id) {
+      $variantRequest[$id] = $store !== null && $store->isOnRequest((int) $id);
+      $soldOut = $this->app->Container->get('Database')->fetchValue(
+        'SELECT ausverkauft FROM artikel WHERE id = :article', ['article' => (int) $id]
+      );
+      if ($soldOut === false) {
+        throw new RuntimeException('Variantenartikel ' . (int) $id . ' wurde nicht gefunden.');
+      }
+      $variantSoldOut[$id] = (bool) $soldOut;
+    }
+    return [
+      'onRequest' => $onRequest,
+      'onRequestForVariant' => static fn (int $id): bool => $variantRequest[$id],
+      'soldOutForVariant' => static fn (int $id): bool => $variantSoldOut[$id],
+    ];
+  }
+
+  private function reportAvailabilityLookupFailure(int $articleId, Throwable $error): string
+  {
+    $message = 'WooCommerce-Lieferstatus nicht lesbar. Export erneut versuchen. '
+      . RefundStatusService::sanitizeError($error->getMessage());
+    try {
+      $this->logger->error($message, ['shop' => (int) $this->shopid, 'article' => $articleId]);
+    } catch (Throwable) {
+      error_log($message);
+    }
+    return $message;
   }
 
   private function logCategoryExportWarning(ArticleExportResult $result, array $categoryIds, string $reason): void

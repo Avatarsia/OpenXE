@@ -23,7 +23,8 @@ function stockConnector(array $articles, CategoryStoreDatabase $db, bool $enable
         public array $debug = [];
         public function debug(string $message, array $context = []): void { $this->debug[] = $context; }
         public function info(string $message, array $context = []): void {}
-        public function error(string $message): void { throw new RuntimeException($message); }
+        public array $errors = [];
+        public function error(string $message, array $context = []): void { $this->errors[] = [$message, $context]; }
     };
     $connector->client = new class {
         public array $writes = [];
@@ -55,6 +56,15 @@ function stockArticle(int $id, string $sku, bool $soldOut = false): array
 }
 
 runTests([
+    'unknown_on_request_state_never_writes_stock_or_status_and_later_items_export' => static function () {
+        $db = new CategoryStoreDatabase();
+        $db->config['woocommerce_article_5_7'] = '{';
+        $connector = stockConnector([stockArticle(7, 'REQUESTED-PRODUCT'), stockArticle(10, 'NORMAL-VARIATION')], $db, true);
+        same(1, $connector->ImportSendListLager());
+        same(['products/91/variations/batch'], array_keys($connector->client->writes));
+        same(7, $connector->logger->errors[0][1]['article']);
+        same([['article' => 7, 'shop' => 5]], $db->stockRetries);
+    },
     'on_request_products_and_variations_are_skipped_in_both_stock_batch_paths' => static function () {
         $db = new CategoryStoreDatabase();
         $store = new ShopCategoryStore($db, 5);

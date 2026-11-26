@@ -771,6 +771,25 @@ runTests([
         same(['parts', 'tools'], array_column($connector->client->collections['products/categories'], 'slug'));
         check(in_array($reason, $connector->logger->warnings, true));
     },
+    'availability_lookup_failure_skips_only_its_article_group_before_writes' => static function () {
+        foreach (['parent_request', 'variant_request', 'variant_sold_out'] as $failure) {
+            $db = new CategoryStoreDatabase();
+            if ($failure === 'variant_sold_out') {
+                $db->failedSoldOutReads = [8];
+            } else {
+                $id = $failure === 'parent_request' ? 7 : 8;
+                $db->config['woocommerce_article_5_' . $id] = '{';
+            }
+            $connector = productConnector([remoteMatrixProduct(), remoteProduct(['artikel' => 9, 'nummer' => 'LATER'])],
+                ['extendedFieldMapping' => $failure !== 'variant_sold_out']);
+            configureProductDatabase($connector, $db);
+            $results = $connector->ImportSendList();
+            same([false, true], array_column($results, 'success'));
+            same([7, 9], array_column($results, 'articleId'));
+            same(['LATER'], array_column(array_column($connector->client->writes, 2), 'sku'));
+            check(str_contains($results[0]->message, 'erneut versuchen'));
+        }
+    },
     'category_assignment_failure_preserves_the_result_and_exports_the_next_article' => static function () {
         $db = new CategoryStoreDatabase();
         $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 5);
