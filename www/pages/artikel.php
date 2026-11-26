@@ -7818,11 +7818,17 @@ class Artikel extends GenArtikel {
   {
     $context = $this->wooDialogContext($articleId, $assignmentId, $shopId);
     $shared = $this->onlineShopOverrideValues($shopId, $context);
+    $db = $this->app->DB;
+    $isWooCommerce = in_array('pseudopreis', $fields, true) && $db->Select(
+      "SELECT id FROM shopexport WHERE id = '$shopId' AND modulename = 'shopimporter_woocommerce' LIMIT 1"
+    );
     if ($shared === [] && empty($context['visibility'])) {
-      $db = $this->app->DB;
       $assignments = ["ao.shop = '$shopId'"];
       foreach ($fields as $field) {
         $value = $this->app->Secure->GetPOST($field);
+        if ($isWooCommerce && $field === 'pseudopreis') {
+          $value = $value === '' ? '0' : $this->app->erp->ReplaceBetrag(1, $value, 1);
+        }
         $assignments[] = "ao.$field = '$value'";
       }
       if (!$db->Update('UPDATE artikel_onlineshops ao SET ' . implode(', ', $assignments)
@@ -7842,7 +7848,11 @@ class Artikel extends GenArtikel {
     $params = ['shop' => $shopId, 'assignment' => $assignmentId, 'article' => $articleId];
     $set = ['shop = :shop'];
     foreach ($fields as $field) {
-      $params[$field] = $this->app->Secure->GetPOST($field, '', '', 1);
+      $value = $this->app->Secure->GetPOST($field, '', '', 1);
+      if ($isWooCommerce && $field === 'pseudopreis') {
+        $value = $value === '' ? '0' : $this->app->erp->ReplaceBetrag(1, $value, 1);
+      }
+      $params[$field] = $value;
       $set[] = "$field = :$field";
     }
     return $this->mutateWooDialogAssignment($articleId, $assignmentId, $context,

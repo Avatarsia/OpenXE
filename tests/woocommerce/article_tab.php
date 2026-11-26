@@ -251,6 +251,49 @@ runTests([
             ->invoke(articleTabPage($app), 9, 6, 5, ['pseudopreis', 'aktiv', 'ausartikel']);
         same('15.00', $db->article['pseudopreis']);
     },
+    'inactive_woo_override_keeps_localized_pseudo_price' => static function () {
+        $method = $_SERVER['REQUEST_METHOD'] ?? null;
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        try {
+            foreach ([false, true] as $visibility) {
+                [, $db, $token, $app] = articleTabFixture();
+                $db->override['aktiv'] = '0';
+                $app->Secure->POST = ['aktiv' => '0', 'ausartikel' => '0', 'pseudopreis' => '12,50',
+                    'woo_dialog_token' => $token];
+                $app->DB = new class ($db, $visibility) {
+                    public function __construct(private ArticleTabDatabase $db, private bool $visibility) {}
+                    public function Select(string $sql): int
+                    {
+                        return str_contains($sql, 'AND aktiv = 1') ? 0 : 5;
+                    }
+                    public function SelectRow(string $sql): array
+                    {
+                        return ['projekt' => 0, 'modulename' => 'shopimporter_woocommerce',
+                            'einstellungen_json' => json_encode(['felder' => ['visibilitySync' => $this->visibility]])];
+                    }
+                    public function Update(string $sql): bool
+                    {
+                        if (preg_match("/ao[.]pseudopreis = '([^']*)'/", $sql, $match)) {
+                            $this->db->override['pseudopreis'] = $match[1];
+                        }
+                        return true;
+                    }
+                    public function error(): string { return ''; }
+                };
+                $page = articleTabPage($app);
+                $save = new ReflectionMethod($page, 'saveOnlineShopFields');
+                same([], $save->invoke($page, 9, 6, 5, ['aktiv', 'ausartikel', 'pseudopreis']));
+                same('12.50', $db->override['pseudopreis']);
+                same('15.00', $db->article['pseudopreis']);
+            }
+        } finally {
+            if ($method === null) {
+                unset($_SERVER['REQUEST_METHOD']);
+            } else {
+                $_SERVER['REQUEST_METHOD'] = $method;
+            }
+        }
+    },
     'popup_mirrors_values_only_with_post_token_rights_and_project_access' => static function () {
         $requestMethod = $_SERVER['REQUEST_METHOD'] ?? null;
         try {
@@ -258,9 +301,9 @@ runTests([
                 [, $db, $token, $app] = articleTabFixture();
                 $_SERVER['REQUEST_METHOD'] = $scenario === 'method' ? 'GET' : 'POST';
                 $app->erp->edit = $scenario !== 'right';
-                $columns = ['pseudopreis' => '20.5', 'pseudolager' => '4', 'restmenge' => '1',
+                $columns = ['pseudopreis' => '12.5', 'pseudolager' => '4', 'restmenge' => '1',
                     'lieferzeitmanuell' => '2 Tage', 'autolagerlampe' => '1'];
-                $app->Secure->POST = $columns + ['aktiv' => '1', 'ausartikel' => '0',
+                $app->Secure->POST = ['pseudopreis' => '12,50'] + $columns + ['aktiv' => '1', 'ausartikel' => '0',
                     'woo_dialog_token' => $scenario === 'token' ? 'bad' : $token];
                 if ($scenario === 'invalid') {
                     $app->Secure->POST['pseudopreis'] = 'invalid';
@@ -289,7 +332,8 @@ runTests([
                 if ($scenario === 'allowed') {
                     same(array_values($columns), array_map(static fn ($key) => $result[$key], array_keys($columns)));
                     same(array_values($columns), array_map(static fn ($key) => $db->article[$key], array_keys($columns)));
-                    same(array_values($columns), array_map(static fn ($key) => $db->override[$key], array_keys($columns)));
+                    $expectedOverride = ['pseudopreis' => '12.50'] + $columns;
+                    same(array_values($expectedOverride), array_map(static fn ($key) => $db->override[$key], array_keys($columns)));
                     same([], $app->DB->updates);
                 } else {
                     same([], $result, $scenario);
