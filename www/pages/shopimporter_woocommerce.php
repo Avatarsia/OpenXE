@@ -25,6 +25,8 @@ use Xentral\Components\WooCommerce\RefundStateStore;
 use Xentral\Components\WooCommerce\RefundSynchronizer;
 use Xentral\Components\WooCommerce\RefundPreflight;
 use Xentral\Components\WooCommerce\RefundRetryQueue;
+use Xentral\Components\WooCommerce\VisibilityQueue;
+use Xentral\Components\WooCommerce\WooProductReader;
 use Xentral\Components\WooCommerce\ProductSynchronizer;
 use Xentral\Components\WooCommerce\CategorySynchronizer;
 use Xentral\Components\WooCommerce\ShopCategoryExporter;
@@ -132,6 +134,9 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public function ImportGetAuftraegeAnzahl()
   {
     $this->migrateAbNummerIfNeeded();
+    if ($this->visibilitySync) {
+      $this->drainVisibilityQueue();
+    }
     $count = $this->getOrderReconciler()->count();
     if ($this->refundSync && $this->getRefundRetryQueue()->hasDue()) {
       $count = max(1, $count);
@@ -1413,6 +1418,51 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     });
     foreach ($result['failed'] as $orderId => $message) {
       $this->logger->error('WooCommerce refund deferred', ['shop' => $this->shopid, 'order' => $orderId, 'reason' => $message]);
+    }
+  }
+
+  private function drainVisibilityQueue(): void
+  {
+    try {
+      $database = $this->app->Container->get('Database');
+      $queue = new VisibilityQueue($database, (int) $this->shopid);
+      // Visibility uses the product identity only, so no WordPress term lookup is needed.
+      $reader = new WooProductReader($this->client, new DeliveryTimeMap(static fn () => [], ''));
+      $result = $queue->drain(function (string $sku) use ($reader): void {
+        if ($sku === '0') {
+          // WooCommerce ignores a PHP-empty SKU filter, excluding variations from the results.
+          throw new \RuntimeException('WooCommerce kann die SKU 0 nicht eindeutig nachschlagen.');
+        }
+        $product = $reader->findBySku($sku);
+        if ($product === null) {
+          $this->logger->debug('WooCommerce visibility SKU not found', ['shop' => $this->shopid, 'sku' => $sku]);
+          return;
+        }
+
+        // findBySku treats a variation inheriting its parent's SKU as part of the parent.
+        $issue = $reader->skuIssue($product + ['sku' => $sku]);
+        if ($issue !== null || $product['id'] <= 0 || $product['parent_id'] < 0) {
+          throw new \RuntimeException($issue ?? 'Ungueltige WooCommerce-Produkt-ID.');
+        }
+
+        $endpoint = $product['parent_id'] > 0
+          ? 'products/' . $product['parent_id'] . '/variations/' . $product['id']
+          : 'products/' . $product['id'];
+        // The WooCommerce REST v3 variations controller accepts the private post status.
+        $response = $this->client->put($endpoint, ['status' => 'private']);
+        if (($response->status ?? null) !== 'private') {
+          throw new \RuntimeException('WooCommerce hat den Status private nicht bestaetigt.');
+        }
+      });
+      foreach ($result['failed'] as $articleId => $message) {
+        $this->logger->error('WooCommerce visibility update deferred', [
+          'shop' => $this->shopid, 'article' => $articleId, 'reason' => $message,
+        ]);
+      }
+    } catch (\Throwable $error) {
+      $this->logger->error('WooCommerce visibility queue failed', [
+        'shop' => $this->shopid, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
+      ]);
     }
   }
 

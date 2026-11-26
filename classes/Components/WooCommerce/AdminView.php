@@ -86,6 +86,22 @@ final class AdminView
         return $html . '</nav>';
     }
 
+    public static function visibility(array $pending): string
+    {
+        $html = '<h2>Vorgemerkte WooCommerce-Ausblendungen</h2>';
+        if ($pending === []) {
+            return $html . '<div class="info">Keine offenen Ausblendungen.</div>';
+        }
+        $html .= '<div class="wc-admin-scroll" tabindex="0" role="region" aria-label="Offene Ausblendungen">'
+            . '<table class="wc-refund-table"><thead><tr><th scope="col">SKU</th><th scope="col">Versuche</th>'
+            . '<th scope="col">Letzter Fehler</th><th scope="col">Vorgemerkt (UTC)</th></tr></thead><tbody>';
+        foreach ($pending as $entry) {
+            $html .= '<tr><td>' . self::e($entry['sku']) . '</td><td>' . self::e($entry['attempts'])
+                . '</td><td>' . self::e($entry['lastError']) . '</td><td>' . self::time($entry['queuedAt']) . '</td></tr>';
+        }
+        return $html . '</tbody></table></div>';
+    }
+
     public static function pendingCategoryDeletions(array $pending, array $reasons): string
     {
         if ($pending === []) {

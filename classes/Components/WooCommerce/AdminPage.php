@@ -46,13 +46,18 @@ final class AdminPage
         if (!$shop || $shop['modulename'] !== 'shopimporter_woocommerce' || !$this->app->erp->UserProjektRecht((int) $shop['projekt'])) {
             throw new RuntimeException('WooCommerce-Shop nicht vorhanden oder nicht freigegeben.');
         }
-        $session = $this->app->Container->get('Session');
         $view = match ($this->app->Secure->GetGET('view')) {
             'refunds' => 'refunds',
+            'visibility' => 'visibility',
             'pull' => 'pull',
             'categories' => 'categories',
             default => 'downloads',
         };
+        if ($view === 'visibility') {
+            $pending = (new VisibilityQueue($this->db, $this->shopId))->pending();
+            return $this->navigation($view) . AdminView::visibility($pending) . '</div>';
+        }
+        $session = $this->app->Container->get('Session');
         $action = $this->app->Secure->GetPOST('wc_action');
         if ($view === 'categories') {
             return $this->navigation($view) . $this->renderCategories($session, $action) . '</div>';
@@ -138,6 +143,7 @@ final class AdminPage
             . '<a' . ($view === 'downloads' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'downloads')) . '">Downloads</a> '
             . '<a href="index.php?module=shopimport&amp;action=einzelimport&amp;id=' . $this->shopId . '">Auftrag nachholen</a> '
             . '<a' . ($view === 'refunds' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'refunds')) . '">Refund-Status</a> '
+            . '<a' . ($view === 'visibility' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'visibility')) . '">Sichtbarkeit</a> '
             . '<a' . ($view === 'pull' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'pull')) . '">Artikeldaten abgleichen</a> '
             . '<a' . ($view === 'categories' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'categories')) . '">Shop-Kategorien</a></nav>';
     }
