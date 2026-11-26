@@ -39,7 +39,12 @@ final class AdminPage
         if (!$this->app->erp->RechteVorhanden('onlineshops', 'edit')) {
             throw new RuntimeException('Keine Berechtigung zur Shopverwaltung.');
         }
-        $shop = $this->db->fetchRow('SELECT id, modulename, projekt, einstellungen_json FROM shopexport WHERE id = :shop', ['shop' => $this->shopId]);
+        $shop = $this->db->fetchRow(
+            'SELECT s.id, s.modulename, s.projekt, s.einstellungen_json,'
+            . ' EXISTS(SELECT 1 FROM gruppen g WHERE g.id = s.preisgruppe AND g.aktiv = 1) AS active_price_group'
+            . ' FROM shopexport s WHERE s.id = :shop',
+            ['shop' => $this->shopId]
+        );
         if (!$shop || $shop['modulename'] !== 'shopimporter_woocommerce' || !$this->app->erp->UserProjektRecht((int) $shop['projekt'])) {
             throw new RuntimeException('WooCommerce-Shop nicht vorhanden oder nicht freigegeben.');
         }
@@ -50,6 +55,9 @@ final class AdminPage
             default => 'downloads',
         };
         $action = $this->app->Secure->GetPOST('wc_action');
+        if (!$action) {
+            (new TemplateInstaller($this->db))->ensure(empty($shop['active_price_group']));
+        }
         if ($view === 'pull') {
             return $this->navigation($view) . $this->renderPull($session, $action) . '</div>';
         }

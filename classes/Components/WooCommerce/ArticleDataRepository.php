@@ -75,7 +75,32 @@ final class ArticleDataRepository
         return $updates;
     }
 
-    public function apply(int $articleId, array $values, string $origin): array
+    public static function applyCsvShopFields($app, int $articleId, array $values): void
+    {
+        $database = $app->Container->get('Database');
+        $database->beginTransaction();
+        try {
+            // Lock the article before discovering and locking its overrides.
+            $database->fetchValue('SELECT id FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
+            $overrides = $database->fetchAll(
+                'SELECT a.id, a.shop FROM artikel_onlineshops AS a'
+                . ' INNER JOIN shopexport AS s ON s.id = a.shop'
+                . ' WHERE a.artikel = :article AND a.aktiv = 1 AND a.ausartikel = 0'
+                . " AND s.geloescht = 0 AND s.modulename = 'shopimporter_woocommerce' ORDER BY a.shop, a.id FOR UPDATE",
+                ['article' => $articleId]
+            );
+            // With no override, there is only the article value to update.
+            foreach ($overrides ?: [['shop' => 0, 'id' => 0]] as $override) {
+                (new self($app, (int) $override['shop']))->apply($articleId, $values, 'csv_import', (int) $override['id']);
+            }
+            $database->commit();
+        } catch (Throwable $error) {
+            $database->rollBack();
+            throw $error;
+        }
+    }
+
+    public function apply(int $articleId, array $values, string $origin, ?int $overrideId = null): array
     {
         $updates = $this->prepareUpdates($values);
         $ownTransaction = !$this->database->inTransaction();
@@ -83,7 +108,7 @@ final class ArticleDataRepository
             $this->database->beginTransaction();
         }
         try {
-            $state = $this->loadState($articleId, true);
+            $state = $this->loadState($articleId, true, $overrideId);
             $price = $state['fields']['price_net'];
             $reason = self::priceBlockReason($price['source']);
             if ($reason !== null && isset($updates['price_net'])
@@ -94,10 +119,12 @@ final class ArticleDataRepository
             $audit = [];
             foreach ($updates as $key => [$new, $storage, $column]) {
                 $effective = $state['fields'][$key]['value'];
-                $effectiveChanged = !FieldDiff::equivalent($key, $effective, $new);
+                // CSV mirroring preserves the actual column value, including empty pseudolager.
+                $exact = $origin === 'csv_import' && $storage === 'shop' && $key !== 'pseudo_price';
+                $effectiveChanged = $exact ? $effective !== $new : !FieldDiff::equivalent($key, $effective, $new);
                 $articleOld = (string) ($state['article'][$column] ?? '');
                 $articleChanged = $storage === 'shop'
-                    ? !FieldDiff::equivalent($key, $articleOld, $new)
+                    ? ($exact ? $articleOld !== $new : !FieldDiff::equivalent($key, $articleOld, $new))
                     : $effectiveChanged;
                 if (!$effectiveChanged && !$articleChanged) {
                     continue;
@@ -146,7 +173,7 @@ final class ArticleDataRepository
         }
     }
 
-    private function loadState(int $articleId, bool $lock): array
+    private function loadState(int $articleId, bool $lock, ?int $overrideId = null): array
     {
         $articleParams = ['article' => $articleId];
         $shopParams = $articleParams + ['shop' => $this->shopId];
@@ -155,10 +182,10 @@ final class ArticleDataRepository
         if (!$article) {
             throw new InvalidArgumentException('OpenXE-Artikel ' . $articleId . ' wurde nicht gefunden.');
         }
-        $override = $this->database->fetchRow(
+        $override = $overrideId === 0 ? false : $this->database->fetchRow(
             'SELECT * FROM artikel_onlineshops WHERE artikel = :article AND shop = :shop AND aktiv = 1'
-            . ' AND ausartikel = 0 LIMIT 1' . $lockSql,
-            $shopParams
+            . ' AND ausartikel = 0' . ($overrideId === null ? '' : ' AND id = :override') . ' LIMIT 1' . $lockSql,
+            $overrideId === null ? $shopParams : $shopParams + ['override' => $overrideId]
         );
         $foreign = $this->database->fetchValue(
             'SELECT nummer FROM artikelnummer_fremdnummern WHERE artikel = :article AND shopid = :shop'

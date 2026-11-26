@@ -32,8 +32,15 @@ final class AdminDatabaseFake
     public $module = 'shopimporter_woocommerce';
     public $articleProject = 0;
     public $assigned = true;
+    public bool $activePriceGroup = false;
+    private int $lastTemplateId = 0;
+    public array $templates = [];
     private $transaction = false;
-    public function fetchRow($sql, $params) { return ['id' => 7, 'modulename' => $this->module, 'projekt' => 0, 'einstellungen_json' => '{"felder":{"exportDownloads":1}}']; }
+    public function fetchRow($sql, $params) {
+        check(str_contains($sql, 'g.id = s.preisgruppe AND g.aktiv = 1'));
+        return ['id' => 7, 'modulename' => $this->module, 'projekt' => 0,
+            'einstellungen_json' => '{"felder":{"exportDownloads":1}}', 'active_price_group' => $this->activePriceGroup];
+    }
     public function fetchAll($sql, $params) {
         if (strpos($sql, 'FROM artikel') !== false) {
             check(isset($params['shop'], $params['shop2'], $params['shop3'], $params['assigned_shop']));
@@ -43,13 +50,21 @@ final class AdminDatabaseFake
     }
     public function fetchValue($sql, $params) {
         if (strpos($sql, 'GET_LOCK') !== false || strpos($sql, 'RELEASE_LOCK') !== false) return 1;
+        if (preg_match('/SELECT id FROM (exportvorlage|importvorlage)/', $sql, $match)) {
+            return $this->templates[$match[1]]['id'] ?? false;
+        }
         if (strpos($sql, 'COUNT') !== false) return 0;
         return $this->values[$params['name']] ?? false;
     }
     public function perform($sql, $params) {
+        if (preg_match('/INSERT INTO (exportvorlage|importvorlage)/', $sql, $match)) {
+            $this->templates[$match[1]] = ['id' => ++$this->lastTemplateId] + $params;
+            return;
+        }
         $this->writes[] = [$sql, $params];
         if (isset($params['name'])) $this->values[$params['name']] = $params['wert'] ?? $params['value'] ?? '';
     }
+    public function lastInsertId(): int { return $this->lastTemplateId; }
     public function inTransaction() { return $this->transaction; }
     public function beginTransaction() { $this->transaction = true; }
     public function commit() { $this->transaction = false; }
@@ -97,6 +112,16 @@ function bulkAdminPreview(BulkPullDatabase $db): array
 }
 
 runTests([
+    'authorized_admin_installs_templates_without_prices_for_active_price_group' => static function () {
+        $db = new AdminDatabaseFake();
+        $db->activePriceGroup = true;
+        [$page] = adminFixture([], [], $db);
+        $page->render();
+        check(isset($db->templates['exportvorlage'], $db->templates['importvorlage']));
+        check(!str_contains($db->templates['exportvorlage']['fields'], 'standardpreis'));
+        check(!str_contains($db->templates['importvorlage']['fields'], 'verkaufspreis'));
+        same('2', $db->values['importvorlage_update_only']);
+    },
     'apply_requires_token' => static function () {
         [$page, $db] = adminFixture(['wc_action' => 'apply_pull', 'pull' => [9 => 'shop_name'], 'pull_count' => '1',
             'csrf_token' => 'invalid'], ['view' => 'pull']);

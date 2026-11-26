@@ -46,6 +46,15 @@ final class BulkPullDatabase
 
     public function fetchValue(string $sql, array $params)
     {
+        if (str_contains($sql, '_LOCK(')) {
+            return 1;
+        }
+        if (str_contains($sql, 'SELECT id FROM exportvorlage') || str_contains($sql, 'SELECT id FROM importvorlage')) {
+            return 25;
+        }
+        if (($params['name'] ?? '') === 'importvorlage_update_only') {
+            return '25';
+        }
         if (str_contains($sql, 'FROM artikelnummer_fremdnummern')) {
             return $this->foreignNumbers[$params['article']] ?? false;
         }

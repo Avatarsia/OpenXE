@@ -20,6 +20,9 @@ use Xentral\Components\Exporter\Csv\CsvExporter;
 use Xentral\Components\Exporter\Json\JsonExporter;
 use Xentral\Components\Exporter\Json\JsonConfig;
 use Xentral\Components\Util\StringUtil;
+use Xentral\Components\WooCommerce\ArticleDataRepository;
+use Xentral\Components\WooCommerce\ArticleFieldCatalog;
+use Xentral\Components\WooCommerce\TemplateInstaller;
 use Xentral\Modules\ImportTemplate\Exception\ImportTemplateNotFoundException;
 use Xentral\Modules\ImportTemplate\Service\ImportTemplateJsonService;
 use Xentral\Modules\ImportTemplate\Exception\InvalidTemplateDataException;
@@ -906,7 +909,7 @@ class Importvorlage extends GenImportvorlage {
         $fieldsarray_items[0] = $colnr++;
       }
       $fieldsarray_items1 = trim(str_replace('!','',$fieldsarray_items[1]));
-      if($fieldsarray_items[1]!=""){
+      if($fieldsarray_items1 !== ''){
         if(strpos($fieldsarray_items[0],'"') === false)
         {
           $erg[$key]['nr'] = trim($fieldsarray_items[0]);
@@ -1046,7 +1049,8 @@ class Importvorlage extends GenImportvorlage {
     $importzeichensatz = $importVorlageRow['importzeichensatz'];
     $fields = $this->cleanFields($importVorlageRow['fields']);
     $ziel = $importVorlageRow['ziel'];
-    $format = $importVorlageRow['format'];
+    $updateOnly = $this->isUpdateOnlyArticleImport((int)$id, (string)$ziel);
+    $format = $importVorlageRow['format'] ?? self::FORMAT_CSV;
     $utf8decode = 0;//$this->app->DB->Select("SELECT utf8decode FROM importvorlage WHERE id='$id' LIMIT 1");
 
     $fieldset = $this->ImportvorlageGetFieldsNew($id);
@@ -1135,7 +1139,7 @@ class Importvorlage extends GenImportvorlage {
                 $create_count = 0;
                 $update_count = 0;
                 $prepare_result = array();
-                while (($data = fgetcsv($handle, 0, $importtrennzeichen)) !== FALSE) {
+                while (($data = fgetcsv($handle, 0, $importtrennzeichen, '"', $updateOnly ? '' : "\\")) !== FALSE) {
                     $rowcounter++;
                     if($rowcounter >= $importerstezeilenummer) {
                       $rowcounter_real++;
@@ -1144,12 +1148,14 @@ class Importvorlage extends GenImportvorlage {
                           $data[$key] = iconv($charset, 'UTF-8', $data[$key]."\0") ;
                         }
                       }
-                      foreach($data as $key=>$value) {
-                        $data[$key] = trim( $data[$key] );
-                        $data[$key] = str_replace('""', '"', $data[$key]);
-                        $data[$key] = preg_replace("/^\"(.*)\"$/sim", "$1", $data[$key]);
+                      if(!$updateOnly) {
+                        foreach($data as $key=>$value) {
+                          $data[$key] = trim( $data[$key] );
+                          $data[$key] = str_replace('""', '"', $data[$key]);
+                          $data[$key] = preg_replace("/^\"(.*)\"$/sim", "$1", $data[$key]);
+                        }
                       }
-                      $this->ImportPrepareRow($rowcounter, $ziel, $data, $fieldset, $create_count, $update_count, $prepare_result, global_data: $global_data);
+                      $this->ImportPrepareRow($rowcounter, $ziel, $data, $fieldset, $create_count, $update_count, $prepare_result, $global_data, $updateOnly);
                     }
                 }
             } else {
@@ -1162,9 +1168,9 @@ class Importvorlage extends GenImportvorlage {
               $jobId = $this->create($this->app->User->GetID(), $id, $stueckliste_csv, $rowcounter_real);
             }
 
-            $preview_headings = array_merge(['Zeile','Nummer','Aktion','Info','|'],array_column($prepare_result[0]['values'],'field'));
+            $preview_headings = array_merge(['Zeile','Nummer','Aktion','Info','|'],array_column($prepare_result[0]['values'] ?? [],'field'));
             $preview_headings[] = ""; // Last is always empty
-            $action_translate = array('none' => 'Keine', 'create' => 'Neu', 'update' => 'Aktualisieren');
+            $action_translate = array('none' => 'Keine', 'create' => 'Neu', 'update' => 'Aktualisieren', 'skip' => 'Ueberspringen');
 
             $preview_data = "";
             $preview_data .= $importdatenmaskierung.implode($importdatenmaskierung.$importtrennzeichen.$importdatenmaskierung,$preview_headings).$importdatenmaskierung.PHP_EOL;
@@ -1177,6 +1183,8 @@ class Importvorlage extends GenImportvorlage {
 
             $et = new EasyTable($this->app);
             $et->headings = $preview_headings;
+            $prepare_row_limit = 0;
+            $limit_erreicht = false;
 
             foreach ($prepare_result as $prepare_row) {
                 $row = array_merge(array($prepare_row['row'],$prepare_row['nummer'],$action_translate[$prepare_row['action']],$prepare_row['action_anzeige'],'|'),array_column($prepare_row['values'],'value'));
@@ -1187,7 +1195,8 @@ class Importvorlage extends GenImportvorlage {
                 }
             }
             $et->DisplayNew('ERGEBNIS');
-            $error_count = $rowcounter_real - $create_count - $update_count;
+            $skip_count = array_count_values(array_column($prepare_result, 'action'))['skip'] ?? 0;
+            $error_count = $rowcounter_real - $create_count - $update_count - $skip_count;
             if ($error_count > 0) {
                 $this->app->Tpl->Add(
                     'IMPORTBUTTON',
@@ -1197,6 +1206,7 @@ class Importvorlage extends GenImportvorlage {
                     . '</div>'
                 );
             } else {
+                $limit_text = '';
                 if ($limit_erreicht) {
                     $limit_text = 'Vorschau: Es werden aktuell nur 50 von <b>'
                     . $rowcounter_real . '</b> Datens&auml;tzen angezeigt. Importiert werden aber alle ';
@@ -1205,7 +1215,8 @@ class Importvorlage extends GenImportvorlage {
                     'IMPORTBUTTON',
                     '<div class="info"><input type="submit" name="import" value="importieren">'
                     . $limit_text
-                    . $rowcounter_real . ' Datens&auml;tze, davon '.$create_count.' neu, '.$update_count.' ge&auml;ndert.<input type="hidden" name="importdateiname" value="'
+                    . $rowcounter_real . ' Datens&auml;tze, davon '.$create_count.' neu, '.$update_count.' ge&auml;ndert'
+                    . ($skip_count ? ', '.$skip_count.' uebersprungen' : '') . '.<input type="hidden" name="importdateiname" value="'
                     . $stueckliste_csv . '"><input type="hidden" name="jobid" value="'.$jobId.'" />'
                     . ' <a href="index.php?module=importvorlage&action=preview">Vorschau als CSV herunterladen</a>'
                     . '</div>'
@@ -1368,7 +1379,7 @@ class Importvorlage extends GenImportvorlage {
    *
    * @return mixed
    */
-  function ImportvorlageGetCSV($stueckliste_csv,$id, $charset = '', $parameter = null)
+  function ImportvorlageGetCSV($stueckliste_csv,$id, $charset = '', $parameter = null, bool $updateOnly = false)
   {
     // einlesen von der CSV Datei
     if(empty($parameter) || !empty($id)) {
@@ -1426,10 +1437,11 @@ class Importvorlage extends GenImportvorlage {
     );
 
     $number_of_fields = (!empty($csv_fields_keys)?count($csv_fields_keys):0);
+    $lastColumn = $number_of_fields > 0 ? (int)max($csv_fields_keys) : 0;
     if (($handle = fopen($stueckliste_csv, 'r')) !== FALSE) {
       $rowcounter = 0;
       $rowcounter_real = 0;
-      while (($data = fgetcsv($handle, 0, $importtrennzeichen)) !== FALSE) {
+      while (($data = fgetcsv($handle, 0, $importtrennzeichen, '"', $updateOnly ? '' : "\\")) !== FALSE) {
         $rowcounter++;
         $num = (!empty($data)?count($data):0);
         if($rowcounter >= $importerstezeilenummer) {
@@ -1448,22 +1460,28 @@ class Importvorlage extends GenImportvorlage {
           if($isempty) {
             continue;
           }
+          if($updateOnly && $num < $lastColumn) {
+            fclose($handle);
+            return null;
+          }
           $rowcounter_real++;
-          foreach($data as $key=>$value) {
-            $data[$key] = trim( $data[$key] );
-            $data[$key] = str_replace('""', '"', $data[$key]);
-            $data[$key] = preg_replace("/^\"(.*)\"$/sim", "$1", $data[$key]);
+          if(!$updateOnly) {
+            foreach($data as $key=>$value) {
+              $data[$key] = trim( $data[$key] );
+              $data[$key] = str_replace('""', '"', $data[$key]);
+              $data[$key] = preg_replace("/^\"(.*)\"$/sim", "$1", $data[$key]);
+            }
           }
 
           for($j=0;$j<$number_of_fields;$j++) {
-            $value = trim($data[($csv_fields_keys[$j]-1)]);
+            $value = $updateOnly ? (string)$data[$csv_fields_keys[$j]-1] : trim($data[$csv_fields_keys[$j]-1]);
             //$fieldname = $csv_fields[$csv_fields_keys[$j]];
             $fieldname = $csv_fields_name[$j];
             $tmp[$fieldname][$rowcounter_real] = $value;
             $tmp['cmd'][$rowcounter_real] = 'create';
             $tmp['checked'][$rowcounter_real] = 1;
 
-            if($fieldname === 'ean' && $value != ''){
+            if(!$updateOnly && $fieldname === 'ean' && $value != ''){
               if(!isset($tmp['nummer'][$rowcounter_real]) && !$tmp['nummer'][$rowcounter_real]){
                 $nummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE ean='$value' AND ean<>'' AND geloescht <> 1 LIMIT 1");
                 if(!is_array($nummer) && $nummer){
@@ -1515,6 +1533,15 @@ class Importvorlage extends GenImportvorlage {
     else {
       $ziel = $parameter['ziel'];
     }
+    $updateOnly = $this->isUpdateOnlyArticleImport((int)$id, (string)$ziel);
+    $wooCommerceShopFields = [];
+    if($updateOnly) {
+      foreach(ArticleFieldCatalog::fields() as $field) {
+        if(str_starts_with($field['storage'], 'shop:')) {
+          $wooCommerceShopFields[substr($field['storage'], 5)] = $field['key'];
+        }
+      }
+    }
     $fieldset = $this->ImportvorlageGetFieldsNew($id, $parameter);
     if(empty($parameter) || !isset($parameter['row'])){
       $tmp = $this->app->Secure->GetPOST('row');
@@ -1535,7 +1562,7 @@ class Importvorlage extends GenImportvorlage {
     }
 
     if($stueckliste_csv != '') {
-      $tmp = $this->ImportvorlageGetCSV($stueckliste_csv,$id,$charset, $parameter);
+      $tmp = $this->ImportvorlageGetCSV($stueckliste_csv,$id,$charset, $parameter, $updateOnly);
     } else {
         return(array('success' => false, 'message' => 'Keine Datei angegeben.'));
     }
@@ -1568,7 +1595,7 @@ class Importvorlage extends GenImportvorlage {
       unset($artikelid);
       unset($adressid);
       if(isset($tmp['nummer']) && isset($tmp['nummer'][$i])) {
-        $tmp['nummer'][$i] = str_replace(' ','',trim($tmp['nummer'][$i]));
+        $tmp['nummer'][$i] = $updateOnly ? trim($tmp['nummer'][$i]) : str_replace(' ','',trim($tmp['nummer'][$i]));
       }
       if(isset($tmp['matrixproduktvon']) && isset($tmp['matrixproduktvon'][$i])) {
         $tmp['matrixproduktvon'][$i] = trim($tmp['matrixproduktvon'][$i]);
@@ -1585,39 +1612,32 @@ class Importvorlage extends GenImportvorlage {
       if(isset($tmp['lieferantennummer']) && isset($tmp['lieferantennummer'][$i])) {
         $tmp['lieferantennummer'][$i] = str_replace(' ','',trim($tmp['lieferantennummer'][$i]));
       }
-      if($tmp['lieferantennummer'][$i]!='' && ($tmp['kundennummer'][$i]!=='NEW' || $tmp['kundennummer'][$i]!=='NEU')) {
+      if(!empty($tmp['lieferantennummer'][$i]) && ($tmp['kundennummer'][$i]!=='NEW' || $tmp['kundennummer'][$i]!=='NEU')) {
         $lieferantid = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='".$this->app->DB->real_escape_string($tmp['lieferantennummer'][$i])."'
             AND lieferantennummer!='' LIMIT 1");
       }
 
-      if($tmp['kundennummer'][$i]!='' && ($tmp['kundennummer'][$i]!=='NEW' || $tmp['kundennummer'][$i]!=='NEU')) {
+      if(!empty($tmp['kundennummer'][$i]) && ($tmp['kundennummer'][$i]!=='NEW' || $tmp['kundennummer'][$i]!=='NEU')) {
         $kundenid = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='".$this->app->DB->real_escape_string($tmp['kundennummer'][$i])."' AND kundennummer!='' LIMIT 1");
       }
 
-      if($kundenid<=0) {
+      if(empty($kundenid) || $kundenid<=0) {
         $kundenid=0;
       }
-      if($lieferantid<=0) {
+      if(empty($lieferantid) || $lieferantid<=0) {
         $lieferantid=0;
       }
 
-      if($lieferantid<=0 && $tmp['lieferantname'][$i]!='') {
+      if($lieferantid<=0 && !empty($tmp['lieferantname'][$i])) {
         $lieferantid = $this->app->DB->Select("SELECT id FROM adresse WHERE name='".$this->app->DB->real_escape_string($tmp['lieferantname'][$i])."' LIMIT 1");
       }
 
       if($ziel!=='adresse') {
-        if(!empty($tmp['nummer'][$i])){
-          $articleNumber = $this->app->DB->real_escape_string($tmp['nummer'][$i]);
-          $artikelid = $this->app->DB->Select(
-            "SELECT `id` FROM `artikel`
-                WHERE `nummer`= '{$articleNumber}'
-                AND `nummer` != ''
-                AND `nummer` != 'DEL'
-                AND `geloescht` <> 1
-                LIMIT 1"
-          );
+        $number = $tmp['nummer'][$i] ?? '';
+        if($updateOnly ? $number !== '' : !empty($number)){
+          $artikelid = $this->findImportArticleId($number);
         }
-        elseif(!empty($tmp['ean'][$i])) {
+        elseif(!$updateOnly && !empty($tmp['ean'][$i])) {
             $ean = $this->app->DB->real_escape_string($tmp['ean'][$i]);
             $artikelid = $this->app->DB->Select(
                 "SELECT `id`
@@ -1629,7 +1649,7 @@ class Importvorlage extends GenImportvorlage {
                 LIMIT 1"
             );
         }
-        elseif(!empty($tmp['herstellernummer'][$i])) {
+        elseif(!$updateOnly && !empty($tmp['herstellernummer'][$i])) {
           $supplierArticleNumber = $this->app->DB->real_escape_string($tmp['herstellernummer'][$i]);
           $supplierName = $this->app->DB->real_escape_string($tmp['hersteller'][$i]);
           $artikelid = $this->app->DB->Select(
@@ -1645,7 +1665,7 @@ class Importvorlage extends GenImportvorlage {
         }
       }
 
-      if($ziel === 'artikel')
+      if(!$updateOnly && $ziel === 'artikel')
       {
         foreach($fieldset as $k => $v) {
           $bedingung = '';
@@ -1731,6 +1751,10 @@ class Importvorlage extends GenImportvorlage {
       {
         case "einkauf":
         case "artikel":
+          if($updateOnly && empty($artikelid)) {
+            $importvorlagedoresult['messages'][] = $this->unknownImportArticle($tmp['nummer'][$i] ?? '');
+            break;
+          }
           // START NEW CODE CREATE ARTIKEL
           if(empty($artikelid) && $tmp['cmd'][$i] == 'create')
           {
@@ -1781,6 +1805,7 @@ class Importvorlage extends GenImportvorlage {
           if (true) {
             if($artikelid > 0)
             {
+              $wooCommerceShopValues = [];
               foreach($fieldset as $key=>$val)
               {
                 $valu = $val['field'];
@@ -1793,7 +1818,7 @@ class Importvorlage extends GenImportvorlage {
 
                 if(isset($val['nr']))
                 {
-                  $value = trim($tmp[$valu][$i]);
+                  $value = $updateOnly ? $tmp[$valu][$i] : trim($tmp[$valu][$i]);
                   if(isset($val['inv']))
                   {
                     if($value != '1')
@@ -1816,11 +1841,22 @@ class Importvorlage extends GenImportvorlage {
               }
               $this->app->erp->RunHook('importvorlage_artikel', 3, $artikelid, $tmp, $i);
 
+              if($updateOnly && isset($tmp['verkaufspreis1netto'][$i])) {
+                // The standard price import expects these optional values to be present.
+                foreach(['gueltigab', 'gueltigbis', 'preisfuermenge', 'waehrung', 'internerkommentar'] as $suffix) {
+                  $tmp['verkaufspreis1' . $suffix][$i] ??= '';
+                }
+              }
+
               foreach($fieldset as $key=>$val)
               {
                 $value = $val['field'];
                 switch($value)
                 {
+                  case "nummer":
+                  case "verkaufspreis1menge":
+                    break;
+                  case "shop_name_de":
                   case "name_de":
                   case "name_en":
                   case "uebersicht_de":
@@ -1842,6 +1878,7 @@ class Importvorlage extends GenImportvorlage {
                   case "zolltarifnummer":
                   case "xvp":
                   case "inaktiv":
+                  case "ausverkauft":
                   case "ursprungsregion":
                   case "produktion":
                   case "gewicht":
@@ -1917,6 +1954,7 @@ class Importvorlage extends GenImportvorlage {
                   case "lagerkorrekturwert":
                   case "restmenge":
                   case "pseudopreis":
+                  case "lieferzeitmanuell":
                   case "intern_gesperrt":
                   case "geloescht":
                   case "juststueckliste":
@@ -1930,6 +1968,10 @@ class Importvorlage extends GenImportvorlage {
                   case 'artikelautokalkulation':
                   case 'artikelabschliessenkalkulation':
                   case 'artikelfifokalkulation':
+                    if(isset($wooCommerceShopFields[$value])) {
+                      $wooCommerceShopValues[$wooCommerceShopFields[$value]] = $tmp[$value][$i];
+                      break;
+                    }
                     $this->app->DB->Update("UPDATE artikel SET ".$value."='".$this->app->DB->real_escape_string($tmp[$value][$i])."' WHERE id='".$artikelid."' LIMIT 1");
                     break;
                   case "matrixproduktvon":
@@ -2125,6 +2167,9 @@ class Importvorlage extends GenImportvorlage {
                     if($tmp[$value][$i]=="befreit")$this->app->DB->Update("UPDATE artikel SET umsatzsteuer='befreit' WHERE id='".$artikelid."' LIMIT 1");
                     break;
                   case "matrixprodukt":
+                    if($updateOnly) {
+                      break;
+                    }
                     if($tmp[$value][$i]=="1")
                     {
                       $this->app->DB->Update("UPDATE artikel SET matrixprodukt=1 WHERE id='".$artikelid."' LIMIT 1");
@@ -2827,6 +2872,14 @@ class Importvorlage extends GenImportvorlage {
                   case  "verkaufspreis9netto":
                   case  "verkaufspreis10netto":
 
+                    if($updateOnly && $value === 'verkaufspreis1netto') {
+                      $amount = trim($tmp['verkaufspreis1menge'][$i] ?? '');
+                      if(!preg_match('/^1(?:\.0+)?$/D', $amount)) {
+                        $importvorlagedoresult['messages'][] = 'Standardpreismenge muss 1 sein, Zeile: ' . $i;
+                        break;
+                      }
+                      $tmp['verkaufspreis1menge'][$i] = '1';
+                    }
                     $verkaufspreisanzahl = str_replace(array('verkaufspreis','netto'),array('',''),$value);
 
                     $gruppe = '';
@@ -3080,6 +3133,17 @@ class Importvorlage extends GenImportvorlage {
                   break;
                 }
               }
+              if($wooCommerceShopValues !== []) {
+                try {
+                  ArticleDataRepository::applyCsvShopFields($this->app, (int)$artikelid, $wooCommerceShopValues);
+                } catch (\Throwable $error) {
+                  $this->app->Container->get('Logger')->error('WooCommerce CSV shop field update failed', [
+                    'article' => (int)$artikelid,
+                    'exception' => $error,
+                  ]);
+                  $importvorlagedoresult['messages'][] = 'WooCommerce-Artikelfelder konnten nicht gespeichert werden, Zeile: ' . $i;
+                }
+              }
               if(isset($this->teilprojekt) && isset($this->projekt))
               {
                 $sort = 1+(int)$this->app->DB->Select("SELECT max(sort) FROM projekt_artikel WHERE teilprojekt = '".$this->teilprojekt."'");
@@ -3131,7 +3195,7 @@ class Importvorlage extends GenImportvorlage {
                     $feldnameohnepsrache = str_replace($sprachenSet,'',$feldnameohnepsrache);
                   }
 
-                  $haystack = $zuImportierendeSprachen[$sprache]?$zuImportierendeSprachen[$sprache]:array();
+                  $haystack = $zuImportierendeSprachen[$sprache] ?? [];
                   if(in_array($feldnameohnepsrache, $erlaubtefelder,false) && !in_array($sprachenSet,$haystack,false)){
                     $zuImportierendeSprachen[$sprache][] = $sprachenSet;
                   }
@@ -3207,8 +3271,9 @@ class Importvorlage extends GenImportvorlage {
                 $sql = "INSERT INTO artikeleigenschaftenwerte (artikel, artikeleigenschaften, wert) VALUES ('".$artikelid."' ,(SELECT id FROM artikeleigenschaften WHERE name = '".$key."'), '".$value."') ON DUPLICATE KEY UPDATE wert = '".$value."'";
                 $this->app->DB->Update($sql);
             }
-            $sql = "DELETE FROM artikeleigenschaftenwerte WHERE wert = ''";
-            $this->app->DB->Delete($sql);
+            if(!$updateOnly || $artikeleigenschaften !== []) {
+              $this->app->DB->Delete("DELETE FROM artikeleigenschaftenwerte WHERE wert = ''");
+            }
 
             //freifelduebersetzungen
             foreach ($tmp as $feldname => $feldwerte) {
@@ -5063,7 +5128,33 @@ class Importvorlage extends GenImportvorlage {
    * @param array  $data
    * @param array  $fieldset
    */
-  function ImportPrepareRow($rowcounter,$ziel,$data,$fieldset, &$create_count, &$update_count, &$prepare_result, $global_data)
+  private function isUpdateOnlyArticleImport(int $id, string $target): bool
+  {
+    return $id > 0 && in_array($target, ['artikel', 'einkauf'], true) && TemplateInstaller::isUpdateOnly(
+      $id,
+      (string)$this->app->erp->GetKonfiguration(TemplateInstaller::UPDATE_ONLY)
+    );
+  }
+
+  private function findImportArticleId(string $number): int
+  {
+    $articleNumber = $this->app->DB->real_escape_string($number);
+    return (int)$this->app->DB->Select(
+      "SELECT `id` FROM `artikel`
+          WHERE `nummer`= '{$articleNumber}'
+          AND `nummer` != ''
+          AND `nummer` != 'DEL'
+          AND `geloescht` <> 1
+          LIMIT 1"
+    );
+  }
+
+  private function unknownImportArticle(string $number): string
+  {
+    return 'Artikelnummer ' . htmlspecialchars($number, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . ' unbekannt, uebersprungen';
+  }
+
+  function ImportPrepareRow($rowcounter,$ziel,$data,$fieldset, &$create_count, &$update_count, &$prepare_result, $global_data, bool $updateOnly = false)
   {
     $number_of_fields =(!empty($fieldset)?count($fieldset):0);
     //Standard
@@ -5079,7 +5170,8 @@ class Importvorlage extends GenImportvorlage {
         $bedingung = $fieldset[$j]['bedingung'];
       }
       if(isset($fieldset[$j]['nr'])) {
-        $value = trim($data[$fieldset[$j]['nr'] - 1]);
+        $cell = $data[$fieldset[$j]['nr'] - 1] ?? '';
+        $value = $updateOnly ? (string)$cell : trim($cell);
         if(isset($fieldset[$j]['inv'])) {
           if($value != '1') {
             $value = 1;
@@ -5096,7 +5188,7 @@ class Importvorlage extends GenImportvorlage {
         $value = $this->ImportvorlageBedingung($value, $fieldset[$j]['bedingung']);
       }
       $fieldname = $fieldset[$j]['field'];
-      switch($fieldname) {
+      switch($updateOnly ? '' : $fieldname) {
         case "herstellernummer":
           $fields['herstellernummer'] = $value;
           if($value != ''){
@@ -5279,6 +5371,18 @@ class Importvorlage extends GenImportvorlage {
       }
       $result_row[] = array('field' => $fieldname, 'value' => $value);
     } // fields
+
+    if($updateOnly) {
+      $nummer = trim($fields['nummer'] ?? '');
+      $known = $nummer !== '' && $this->findImportArticleId($nummer) > 0;
+      $update_count += (int)$known;
+      $prepare_result[] = [
+        'row' => $rowcounter, 'nummer' => $nummer, 'action' => $known ? 'update' : 'skip',
+        'action_anzeige' => $known ? 'Artikelnr. gefunden' : $this->unknownImportArticle($nummer),
+        'values' => $result_row,
+      ];
+      return;
+    }
 
     switch($ziel)
     {
