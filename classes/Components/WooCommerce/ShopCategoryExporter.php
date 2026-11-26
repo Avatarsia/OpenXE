@@ -194,6 +194,9 @@ final class ShopCategoryExporter
             }
             $categories[] = $ids[$nodeId];
         }
+        if ($mode === 'replace' && $skipped !== []) {
+            return $skipped;
+        }
         if ($categories !== [] || $mode !== 'additive') {
             // Both category sources use the same WooCommerce assignment modes.
             (new CategorySynchronizer($this->client, 0))->assign($productId, $categories, $mode);

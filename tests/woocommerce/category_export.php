@@ -85,6 +85,19 @@ runTests([
             ['PUT', 'products/40', ['categories' => []]],
         ], $client->writes);
     },
+    'replace_keeps_existing_categories_if_any_desired_node_is_missing' => static function () {
+        $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
+        $resolved = $store->create('Parts');
+        $client = new CategoryExportClient([], [
+            ['id' => 40, 'categories' => [['id' => 55]]],
+        ]);
+        $exporter = new ShopCategoryExporter($client, $store);
+        $exporter->syncTree();
+        foreach ([[99], [$resolved, 99]] as $nodes) {
+            same([99], array_keys($exporter->assign(40, $nodes, 'replace')));
+        }
+        same([], array_values(array_filter($client->writes, static fn ($write) => $write[1] === 'products/40')));
+    },
     'importer_preserves_term_ids_and_slugs' => static function () {
         [$importer, $store, $client] = categoryImportFixture();
         $store->setOnRequest(9, true);
