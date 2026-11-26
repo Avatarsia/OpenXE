@@ -180,11 +180,30 @@ final class VisibilityQueue
     {
         $value = json_encode((object) $entries, self::JSON_FLAGS);
         if ($failedArticleId !== null && strlen($value) > self::MAX_BYTES) {
-            $entries[$failedArticleId]['lastError'] = '';
-            $value = json_encode((object) $entries, self::JSON_FLAGS);
-            if (strlen($value) > self::MAX_BYTES) {
-                unset($entries[$failedArticleId]['lastError']);
+            // Error texts are optional; retry metadata is reserved at enqueue. Drop the
+            // current entry's text first, then other entries' texts (oldest attempt first).
+            $order = array_keys($entries);
+            usort($order, static fn ($a, $b) => ($entries[$a]['lastAttemptAt'] ?? 0) <=> ($entries[$b]['lastAttemptAt'] ?? 0));
+            array_unshift($order, $failedArticleId);
+            foreach (array_unique($order) as $articleId) {
+                if (($entries[$articleId]['lastError'] ?? '') === '') {
+                    continue;
+                }
+                $entries[$articleId]['lastError'] = '';
                 $value = json_encode((object) $entries, self::JSON_FLAGS);
+                if (strlen($value) <= self::MAX_BYTES) {
+                    break;
+                }
+            }
+            // Still too large: drop the (now empty) lastError keys, current entry first.
+            foreach (array_unique($order) as $articleId) {
+                if (strlen($value) <= self::MAX_BYTES) {
+                    break;
+                }
+                if (array_key_exists('lastError', $entries[$articleId])) {
+                    unset($entries[$articleId]['lastError']);
+                    $value = json_encode((object) $entries, self::JSON_FLAGS);
+                }
             }
         }
         if (strlen($value) > self::MAX_BYTES) {

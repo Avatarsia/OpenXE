@@ -483,6 +483,28 @@ runTests([
             same([1, 22], array_keys($queue->pending()));
         }
     },
+    'failure_evicts_other_error_texts_instead_of_blocking' => static function () {
+        $db = new VisibilityDatabase();
+        $queue = new VisibilityQueue($db, 7);
+        $now = time();
+        $entries = [];
+        // Older failures hold long texts and use up the space reserved for metadata.
+        for ($id = 2; $id <= 40; $id++) {
+            $entries[$id] = ['sku' => 'OLD' . $id, 'attempts' => 1, 'lastError' => str_repeat('e', 1500),
+                'queuedAt' => $now, 'lastAttemptAt' => $now - $id, 'nextAttemptAt' => $now + 3600];
+        }
+        $entries[1] = ['sku' => 'A', 'attempts' => 0, 'lastError' => '', 'queuedAt' => $now, 'nextAttemptAt' => $now];
+        $json = json_encode((object) $entries);
+        $entries[2]['lastError'] .= str_repeat('e', 65000 - 10 - strlen($json));
+        $db->config['woocommerce_visibility_7'] = json_encode((object) $entries);
+        $queue->drain(static function (string $sku): void {
+            throw new RuntimeException('Shop nicht erreichbar');
+        });
+        $pending = $queue->pending();
+        same(1, $pending[1]['attempts']);
+        check(isset($pending[1]['lastAttemptAt']));
+        check(strlen($db->config['woocommerce_visibility_7']) <= 65000);
+    },
     'admin_visibility_is_read_only_and_escapes_pending_details' => static function () {
         $db = new VisibilityDatabase();
         $db->config['woocommerce_visibility_7'] = '{"41":{"sku":"<SKU>","attempts":2,"lastError":"<error>","queuedAt":1764072000}}';
