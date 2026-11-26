@@ -104,7 +104,7 @@ final class ShopCategoryStore
             $node = $state['nodes'][$id];
             if ($node['wcId'] > 0) {
                 // Keep the WooCommerce identity until the exporter confirms deletion.
-                $state['pendingDeletions'][$node['wcId']] = $node['slug'];
+                $this->queueTermDeletion($state, $node['wcId'], $node['slug']);
             }
             unset($state['nodes'][$id]);
         });
@@ -116,10 +116,30 @@ final class ShopCategoryStore
         return $this->readConfig($this->treeKey, self::EMPTY_TREE)['pendingDeletions'] ?? [];
     }
 
+    /** @return array<int,string> Last reason a pending deletion was deferred. */
+    public function pendingDeletionReasons(): array
+    {
+        return $this->readConfig($this->treeKey, self::EMPTY_TREE)['pendingDeletionReasons'] ?? [];
+    }
+
+    public function deferDeletion(int $wcId, string $reason): void
+    {
+        $this->mutateTree(static function (array &$state) use ($wcId, $reason): void {
+            if (isset($state['pendingDeletions'][$wcId])) {
+                $state['pendingDeletionReasons'][$wcId] = $reason;
+            }
+        });
+    }
+
+    private function queueTermDeletion(array &$state, int $wcId, string $slug): void
+    {
+        $state['pendingDeletions'][$wcId] = $slug;
+    }
+
     public function acknowledgeDeletion(int $wcId): void
     {
         $this->mutateTree(static function (array &$state) use ($wcId): void {
-            unset($state['pendingDeletions'][$wcId]);
+            unset($state['pendingDeletions'][$wcId], $state['pendingDeletionReasons'][$wcId]);
         });
     }
 
@@ -155,12 +175,18 @@ final class ShopCategoryStore
         });
     }
 
-    /** Store an existing WooCommerce term's identity, including its original slug. */
-    public function setWcId(int $id, int $wcId, string $slug): void
+    /** Bind the remote term or queue it for deletion if the local node disappeared. */
+    public function setWcId(int $id, int $wcId, string $slug): bool
     {
-        $this->mutateTree(function (array &$state) use ($id, $wcId, $slug): void {
+        return $this->mutateTree(function (array &$state) use ($id, $wcId, $slug): bool {
             $nodes = $state['nodes'];
-            $this->requireNode($nodes, $id);
+            if (!isset($nodes[$id])) {
+                // An initial import could have adopted the term since the export read the tree.
+                if (!in_array($wcId, array_column($nodes, 'wcId'), true)) {
+                    $this->queueTermDeletion($state, $wcId, $slug);
+                }
+                return false;
+            }
             // Once bound to a WooCommerce term, the slug is the category's permanent identity.
             if (!empty($nodes[$id]['wcId']) && $slug !== $nodes[$id]['slug']) {
                 throw new InvalidArgumentException('Der Slug einer bereits verknuepften Kategorie kann nicht geaendert werden.');
@@ -173,6 +199,7 @@ final class ShopCategoryStore
             }
             $state['nodes'][$id]['wcId'] = $wcId;
             $state['nodes'][$id]['slug'] = $slug;
+            return true;
         });
     }
 

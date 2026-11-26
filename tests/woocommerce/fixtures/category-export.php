@@ -9,6 +9,11 @@ final class CategoryExportClient
     public array $terms;
     public array $products;
     public array $writes = [];
+    public ?Closure $duringPost = null;
+    public ?string $failedLookup = null;
+    public bool $omitTotal = false;
+    public array $reads = [];
+    private ?int $total = null;
     private int $nextId = 1001;
 
     public function __construct(array $terms = [], array $products = [])
@@ -19,6 +24,8 @@ final class CategoryExportClient
 
     public function get(string $endpoint, array $params = []): object|array
     {
+        $this->reads[] = [$endpoint, $params];
+        $this->total = null;
         if (preg_match('#^products/categories/(\d+)$#', $endpoint, $matches)) {
             return (object) $this->terms[(int) $matches[1]];
         }
@@ -29,15 +36,42 @@ final class CategoryExportClient
             'products/categories' => $this->terms,
             'products' => $this->products,
         };
+        if ($params['per_page'] === 1 && $endpoint === $this->failedLookup) {
+            throw new RuntimeException('Lookup failed');
+        }
+        if (isset($params['category'])) {
+            $rows = array_filter($rows, static fn (array $row): bool =>
+                (($row['status'] ?? 'publish') === 'publish' || ($params['status'] ?? '') === 'any')
+                && in_array($params['category'], array_column($row['categories'], 'id'), true));
+        }
+        if (isset($params['parent'])) {
+            $rows = array_filter($rows, static fn (array $row): bool => $row['parent'] === $params['parent']);
+        }
+        $this->total = $this->omitTotal ? null : count($rows);
         return array_map(static fn (array $row): object => (object) $row,
-            array_slice($rows, ($params['page'] - 1) * $params['per_page'], $params['per_page']));
+            array_slice($rows, (($params['page'] ?? 1) - 1) * $params['per_page'], $params['per_page']));
+    }
+
+    public function getLastResponse(): object
+    {
+        return new class($this->total) {
+            public function __construct(private ?int $total) {}
+            public function getHeader(string $name): ?string
+            {
+                return $name === 'X-WP-Total' && $this->total !== null ? (string) $this->total : null;
+            }
+        };
     }
 
     public function post(string $endpoint, array $payload): object
     {
         $this->writes[] = ['POST', $endpoint, $payload];
         $id = $this->nextId++;
-        return (object) ($this->terms[$id] = ['id' => $id, 'count' => 0] + $payload);
+        $term = $this->terms[$id] = ['id' => $id, 'count' => 0] + $payload;
+        if ($this->duringPost !== null) {
+            ($this->duringPost)();
+        }
+        return (object) $term;
     }
 
     public function put(string $endpoint, array $payload): object

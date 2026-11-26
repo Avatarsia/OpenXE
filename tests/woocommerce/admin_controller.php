@@ -98,7 +98,15 @@ function adminFixture(array $post = [], array $get = [], $db = null, ?Session $s
     };
     $erp = new class {
         public $allowed = true;
-        public function RechteVorhanden($module, $action) { same('onlineshops', $module); same('edit', $action); return $this->allowed; }
+        public bool $articleAllowed = true;
+        public function RechteVorhanden($module, $action)
+        {
+            same('edit', $action);
+            return match ($module) {
+                'onlineshops' => $this->allowed,
+                'artikel' => $this->articleAllowed,
+            };
+        }
         public function UserProjektRecht($id) { return $id === 0; }
     };
     $container = new class($db, $session) {
@@ -160,6 +168,48 @@ runTests([
         same([], $client->writes);
         [$page] = adminFixture($post, $get, $db, $session);
         check(!str_contains($page->render(), 'Kategorien &uuml;bernommen'));
+    },
+    'category_preview_and_apply_require_both_shop_and_article_edit_rights' => static function () {
+        $db = new AdminDatabaseFake();
+        Shopimporter_Woocommerce::$fixtureClient = $client = categoryImportClient();
+        $get = ['view' => 'categories'];
+        $_SESSION = [];
+        $session = new Session();
+        [$page, , $erp] = adminFixture([], $get, $db, $session);
+        $erp->articleAllowed = false;
+        $html = $page->render();
+        check(str_contains($html, 'Keine Berechtigung zur Artikelbearbeitung'));
+        check(!str_contains($html, 'OpenXE-Artikel #9'));
+        same([], $client->reads);
+
+        $erp->articleAllowed = true;
+        $html = $page->render();
+        preg_match('/name="category_preview" value="([^"]+)"/', $html, $preview);
+        preg_match('/name="csrf_token" value="([^"]+)"/', $html, $token);
+        $post = ['wc_action' => 'apply_categories', 'csrf_token' => $token[1], 'category_preview' => $preview[1]];
+        $reads = $client->reads;
+        [$page, , $erp] = adminFixture($post, $get, $db, $session);
+        $erp->articleAllowed = false;
+        check(str_contains($page->render(), 'Keine Berechtigung zur Artikelbearbeitung'));
+        $erp->articleAllowed = true;
+        $erp->allowed = false;
+        check(str_contains($page->render(), 'Keine Berechtigung zur Shopverwaltung'));
+        same($reads, $client->reads);
+        same([], $db->writes);
+    },
+    'category_admin_shows_the_reason_for_a_pending_deletion' => static function () {
+        $db = new AdminDatabaseFake();
+        $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 7);
+        $id = $store->create('Parts');
+        $store->setWcId($id, 11, 'parts');
+        $store->delete($id);
+        $client = new CategoryExportClient([categoryTerm(11, 'Parts', 'parts', 0, 2)]);
+        (new \Xentral\Components\WooCommerce\ShopCategoryExporter($client, $store))->syncTree();
+        [$page] = adminFixture([], ['view' => 'categories'], $db);
+        $html = $page->render();
+        check(str_contains($html, '#11'));
+        check(str_contains($html, 'parts'));
+        check(str_contains($html, 'WooCommerce meldet die Kategorie nicht als leer.'));
     },
     'changed_category_assignment_requires_a_new_preview' => static function () {
         $db = new AdminDatabaseFake();

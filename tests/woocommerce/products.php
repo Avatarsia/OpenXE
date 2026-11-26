@@ -332,6 +332,8 @@ runTests([
         $article = ['nummer' => 'N', 'anzahl_lager' => 0];
         $options = ['extendedMapping' => true];
         $requested = $sync->map($article, ['onRequest' => true] + $options);
+        same(false, $requested['manage_stock']);
+        check(!array_key_exists('stock_quantity', $requested));
         same('notify', $requested['backorders']);
         same('onbackorder', $requested['stock_status']);
         same('1', array_column($requested['meta_data'] ?? [], 'value', 'key')['openxe_on_request'] ?? null);
@@ -361,7 +363,7 @@ runTests([
         (new ProductSynchronizer($api))->sync([
             'nummer' => 'P', 'ausverkauft' => '1', 'artikel_varianten' => [
                 ['artikel' => 8, 'nummer' => 'V1', 'lag' => 4, 'ausverkauft' => '1'],
-                ['artikel' => 9, 'nummer' => 'V2', 'lag' => 0, 'ausverkauft' => '0'],
+                ['artikel' => 9, 'nummer' => 'V2', 'lag' => 12, 'ausverkauft' => '0'],
             ],
         ], [], [
             'extendedMapping' => true, 'onRequest' => true,
@@ -374,6 +376,8 @@ runTests([
         same('no', $soldOut['backorders']);
         same(99, array_column($soldOut['meta_data'], 'value', 'key')['_lieferzeit']);
         $own = $api->writes[2][2];
+        same(false, $own['manage_stock']);
+        check(!array_key_exists('stock_quantity', $own));
         same('onbackorder', $own['stock_status']);
         same('notify', $own['backorders']);
         $meta = array_column($own['meta_data'], 'value', 'key');

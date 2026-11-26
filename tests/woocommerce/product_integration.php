@@ -184,8 +184,8 @@ runTests([
         $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 5);
         $store->setOnRequest(7, true);
         $store->setOnRequest(10, true);
-        $product = remoteMatrixProduct();
-        $product['artikel_varianten'][] = ['artikel' => 10, 'nummer' => 'BLUE', 'preis' => 12, 'lag' => '0'];
+        $product = remoteMatrixProduct(['anzahl_lager' => 15, 'pseudolager' => '']);
+        $product['artikel_varianten'][] = ['artikel' => 10, 'nummer' => 'BLUE', 'preis' => 12, 'lag' => '7'];
         $connector = productConnector([$product], ['extendedFieldMapping' => true]);
         configureProductDatabase($connector, $db);
         $connector->ImportSendList();
@@ -195,6 +195,15 @@ runTests([
             $metaBySku[$write['sku']] = array_column($write['meta_data'], 'value', 'key')['openxe_on_request'];
         }
         same(['PARENT' => '1', 'RED' => '0', 'BLUE' => '1'], $metaBySku);
+        $bySku = array_column($writes, null, 'sku');
+        foreach (['PARENT', 'BLUE'] as $sku) {
+            same(false, $bySku[$sku]['manage_stock']);
+            same('onbackorder', $bySku[$sku]['stock_status']);
+            same('notify', $bySku[$sku]['backorders']);
+            check(!array_key_exists('stock_quantity', $bySku[$sku]));
+        }
+        same(true, $bySku['RED']['manage_stock']);
+        same('outofstock', $bySku['RED']['stock_status']);
     },
     'real ImportSendList preserves mapped metadata prices stock dimensions EAN and result identity' => static function () {
         $connector = productConnector([remoteProduct(['lieferzeitmanuell' => 'ca. 3-4 Werktage'])], [

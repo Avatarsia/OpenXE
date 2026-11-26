@@ -67,7 +67,10 @@ class ProductSynchronizer
                 $attributes[] = ['name' => (string) $name, 'visible' => true, 'variation' => true, 'options' => array_values(array_unique($values))];
             }
             $mapped['attributes'] = $attributes;
-            unset($mapped['regular_price'], $mapped['sale_price'], $mapped['stock_quantity'], $mapped['stock_status']);
+            unset($mapped['regular_price'], $mapped['sale_price'], $mapped['stock_quantity']);
+            if (!$this->isOnRequest($article, $options)) {
+                unset($mapped['stock_status']);
+            }
             $mapped['manage_stock'] = false;
         }
         $existing = $this->client->get('products', ['sku' => $sku, 'per_page' => 100]);
@@ -184,14 +187,17 @@ class ProductSynchronizer
         }
         $soldOut = $this->flag($article['ausverkauft'] ?? false);
         $extendedMapping = $options['extendedMapping'] ?? false;
-        $onRequest = $extendedMapping && !$soldOut && ($options['onRequest'] ?? false);
+        $onRequest = $this->isOnRequest($article, $options);
         if ($onRequest) {
             $backorders = 'notify';
         } elseif ($soldOut || $this->flag($article['restmenge'] ?? false)) {
             $backorders = 'no';
         }
         $payload['backorders'] = $backorders;
-        if (array_key_exists('anzahl_lager', $article) || array_key_exists('lag', $article) || $soldOut) {
+        if ($onRequest) {
+            $payload['manage_stock'] = false;
+            $payload['stock_status'] = 'onbackorder';
+        } elseif (array_key_exists('anzahl_lager', $article) || array_key_exists('lag', $article) || $soldOut) {
             $stock = $article['anzahl_lager'] ?? $article['lag'] ?? 0;
             if (isset($article['pseudolager']) && is_numeric($article['pseudolager']) && (float) $article['pseudolager'] > 0) {
                 $stock = $article['pseudolager'];
@@ -206,9 +212,6 @@ class ProductSynchronizer
             } else {
                 $payload['stock_status'] = 'instock';
             }
-        }
-        if ($onRequest) {
-            $payload['stock_status'] = 'onbackorder';
         }
 
         $meta = [];
@@ -369,6 +372,12 @@ class ProductSynchronizer
     {
         $foreign = trim((string) ($article['artikelnummer_fremdnummern'][0]['nummer'] ?? ''));
         return $foreign !== '' ? $foreign : trim((string) ($article['nummer'] ?? ''));
+    }
+
+    private function isOnRequest(array $article, array $options): bool
+    {
+        return !empty($options['extendedMapping']) && !empty($options['onRequest'])
+            && !$this->flag($article['ausverkauft'] ?? false);
     }
 
     private function flag($value): bool

@@ -712,14 +712,24 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ctmp = (!empty($tmp) ? count($tmp) : 0);
     $this->logger->debug("WooCommerce ImportSendListLager ".$ctmp." entries");
 
+    $categoryStore = $this->extendedFieldMapping
+      ? new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid)
+      : null;
+
     // --- Step 1: Collect all SKUs and compute desired stock params ---
 
-    // $pendingUpdates: sku => ['lageranzahl' => int, 'status' => string]
+    // $pendingUpdates: sku => stock payload
     $pendingUpdates = [];
 
     for ($i = 0; $i < $ctmp; $i++) {
       $artikel = $tmp[$i]['artikel'];
       if ($artikel === 'ignore') {
+        continue;
+      }
+      $soldOut = !empty($tmp[$i]['ausverkauft']);
+      $onRequest = $categoryStore !== null && $categoryStore->isOnRequest((int) $artikel);
+      if ($onRequest && !$soldOut) {
+        $this->logger->debug('WooCommerce-Lagerexport fuer Artikel auf Anfrage uebersprungen.', ['article' => (int) $artikel]);
         continue;
       }
       $nummer = $tmp[$i]['nummer'];
@@ -734,7 +744,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       if ($pseudolager !== '') {
         $lageranzahl = $pseudolager;
       }
-      if ($tmp[$i]['ausverkauft']) {
+      if ($soldOut) {
         $lageranzahl = 0;
       }
       if ($inaktiv) {
@@ -742,9 +752,14 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       }
 
       $pendingUpdates[$nummer] = [
-        'lageranzahl' => $lageranzahl,
+        'manage_stock' => true,
+        'stock_quantity' => $lageranzahl,
         'status' => $status,
       ];
+      if ($onRequest) {
+        $pendingUpdates[$nummer]['backorders'] = 'no';
+        $pendingUpdates[$nummer]['stock_status'] = 'outofstock';
+      }
     }
 
     if (empty($pendingUpdates)) {
@@ -804,12 +819,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       }
 
       $info = $skuMap[$sku];
-      $item = [
-        'id' => $info['id'],
-        'manage_stock' => true,
-        'stock_quantity' => $params['lageranzahl'],
-        'status' => $params['status'],
-      ];
+      $item = ['id' => $info['id']] + $params;
 
       if ($info['isvariant']) {
         $variationItems[$info['parent']][] = $item;

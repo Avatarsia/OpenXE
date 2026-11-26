@@ -152,6 +152,9 @@ final class AdminPage
 
     private function renderCategories(Session $session, $action): string
     {
+        if (!$this->app->erp->RechteVorhanden('artikel', 'edit')) {
+            throw new RuntimeException('Keine Berechtigung zur Artikelbearbeitung.');
+        }
         $sessionKey = 'categories_' . $this->shopId;
         $store = new ShopCategoryStore($this->db, $this->shopId);
         $confirmation = null;
@@ -166,8 +169,10 @@ final class AdminPage
                 throw new RuntimeException('Vorschau erneut laden und Uebernahme bestaetigen.');
             }
         }
-        if ($store->tree() !== [] || $store->pendingDeletions() !== []) {
-            return AdminView::categoryNotice('Die Erst&uuml;bernahme erfordert einen leeren Shop-Kategorienbaum ohne offene L&ouml;schungen.');
+        $pending = $store->pendingDeletions();
+        if ($store->tree() !== [] || $pending !== []) {
+            return AdminView::categoryNotice('Die Erst&uuml;bernahme erfordert einen leeren Shop-Kategorienbaum ohne offene L&ouml;schungen.')
+                . AdminView::pendingCategoryDeletions($pending, $store->pendingDeletionReasons());
         }
 
         try {

@@ -8,6 +8,15 @@ use Xentral\Components\WooCommerce\CategoryImporter;
 use Xentral\Components\WooCommerce\ShopCategoryExporter;
 use Xentral\Components\WooCommerce\ShopCategoryStore;
 
+function pendingCategoryStore(): ShopCategoryStore
+{
+    $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
+    $id = $store->create('Parts');
+    $store->setWcId($id, 11, 'parts');
+    $store->delete($id);
+    return $store;
+}
+
 runTests([
     'sync_creates_missing_terms_with_stored_slug' => static function () {
         $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
@@ -103,10 +112,7 @@ runTests([
         same([], $client->writes);
     },
     'deleted_category_is_retried_until_woocommerce_count_is_zero' => static function () {
-        $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
-        $id = $store->create('Parts');
-        $store->setWcId($id, 11, 'parts');
-        $store->delete($id);
+        $store = pendingCategoryStore();
         $client = new CategoryExportClient([categoryTerm(11, 'Parts', 'parts', 0, 2)]);
         $exporter = new ShopCategoryExporter($client, $store);
         same([], $exporter->syncTree());
@@ -115,6 +121,76 @@ runTests([
         $client->terms[11]['count'] = 0;
         (new ShopCategoryExporter($client, $store))->syncTree();
         same([['DELETE', 'products/categories/11', ['force' => true]]], $client->writes);
+        same([
+            ['products', ['category' => 11, 'status' => 'any', 'per_page' => 1]],
+            ['products/categories', ['parent' => 11, 'per_page' => 1, 'hide_empty' => false]],
+        ], array_slice($client->reads, -2));
+        same([], $store->pendingDeletions());
+    },
+    'zero_count_does_not_hide_a_private_product_from_the_deletion_check' => static function () {
+        $store = pendingCategoryStore();
+        $client = new CategoryExportClient([categoryTerm(11, 'Parts', 'parts')], [
+            ['id' => 21, 'status' => 'private', 'categories' => [['id' => 11]]],
+        ]);
+        $exporter = new ShopCategoryExporter($client, $store);
+        $exporter->syncTree();
+        same([], $client->writes);
+        same([11 => 'parts'], $store->pendingDeletions());
+        check(str_contains($exporter->deferredDeletions()[11], 'Produkte'));
+    },
+    'zero_count_does_not_hide_a_remote_child_category_from_the_deletion_check' => static function () {
+        $store = pendingCategoryStore();
+        $client = new CategoryExportClient([
+            categoryTerm(11, 'Parts', 'parts'),
+            categoryTerm(12, 'Nozzles', 'nozzles', 11),
+        ]);
+        $exporter = new ShopCategoryExporter($client, $store);
+        $exporter->syncTree();
+        same([], $client->writes);
+        same([11 => 'parts'], $store->pendingDeletions());
+        check(str_contains($exporter->deferredDeletions()[11], 'Unterkategorien'));
+    },
+    'a_failed_or_unverifiable_lookup_defers_deletion' => static function () {
+        foreach (['products', 'products/categories', null] as $failedLookup) {
+            $store = pendingCategoryStore();
+            $client = new CategoryExportClient([categoryTerm(11, 'Parts', 'parts')]);
+            $client->failedLookup = $failedLookup;
+            $client->omitTotal = $failedLookup === null;
+            $exporter = new ShopCategoryExporter($client, $store);
+            $exporter->syncTree();
+            same([], $client->writes);
+            same([11 => 'parts'], $store->pendingDeletions());
+            same($exporter->deferredDeletions(), $store->pendingDeletionReasons());
+            check($store->pendingDeletionReasons()[11] !== '');
+        }
+    },
+    'a_node_deleted_during_remote_creation_queues_the_remote_term_for_the_next_sync' => static function () {
+        $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
+        $id = $store->create('Parts');
+        $client = new CategoryExportClient();
+        $client->duringPost = static fn () => $store->delete($id);
+        $exporter = new ShopCategoryExporter($client, $store);
+        same([], $exporter->syncTree());
+        same([1001 => 'parts'], $store->pendingDeletions());
+        same(['POST'], array_column($client->writes, 0));
+        same([], $exporter->syncTree());
+        same(['POST', 'DELETE'], array_column($client->writes, 0));
+        same([], $store->pendingDeletions());
+    },
+    'a_recreated_local_node_is_not_bound_to_the_term_queued_by_the_creation_race' => static function () {
+        $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
+        $id = $store->create('Parts');
+        $client = new CategoryExportClient();
+        $client->duringPost = static function () use ($store, $id): void {
+            $store->delete($id);
+            $store->create('Parts');
+        };
+        $exporter = new ShopCategoryExporter($client, $store);
+        same([], $exporter->syncTree());
+        same([1001 => 'parts'], $store->pendingDeletions());
+        $client->duringPost = null;
+        same([2 => 1002], $exporter->syncTree());
+        same(['POST', 'DELETE', 'POST'], array_column($client->writes, 0));
         same([], $store->pendingDeletions());
     },
     'import_pages_through_categories_and_product_assignments' => static function () {

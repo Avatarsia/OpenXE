@@ -86,6 +86,19 @@ final class AdminView
         return $html . '</nav>';
     }
 
+    public static function pendingCategoryDeletions(array $pending, array $reasons): string
+    {
+        if ($pending === []) {
+            return '';
+        }
+        $html = '<h2>Vorgemerkte WooCommerce-Kategoriel&ouml;schungen</h2><ul class="wc-admin-results">';
+        foreach ($pending as $termId => $slug) {
+            $html .= '<li>#' . (int) $termId . ' (' . self::e($slug) . ') &ndash; '
+                . self::e($reasons[$termId] ?? 'Wartet auf den naechsten Kategorieexport.') . '</li>';
+        }
+        return $html . '</ul>';
+    }
+
     public static function categories(int $shopId, string $token, string $nonce, array $preview): string
     {
         $html = '<h2>Shop-Kategorien &uuml;bernehmen</h2>'

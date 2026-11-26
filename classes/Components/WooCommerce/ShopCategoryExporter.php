@@ -48,7 +48,7 @@ final class ShopCategoryExporter
             }
         }
 
-        $ids = $this->syncBranch($tree, 0, $terms, $termsBySlug);
+        // Resolve queued terms before matching a local node by slug.
         foreach ($pending as $id => $slug) {
             try {
                 if (isset($terms[$id])) {
@@ -59,14 +59,36 @@ final class ShopCategoryExporter
                     if (($term['count'] ?? null) !== 0) {
                         throw new RuntimeException('WooCommerce meldet die Kategorie nicht als leer.');
                     }
+                    $this->requireEmptyCollection('products', ['category' => $id, 'status' => 'any', 'per_page' => 1], 'Produkte');
+                    $this->requireEmptyCollection('products/categories', ['parent' => $id, 'per_page' => 1, 'hide_empty' => false], 'Unterkategorien');
+                    // The WooCommerce term endpoint requires force for confirmed-empty categories.
                     $this->client->delete('products/categories/' . $id, ['force' => true]);
+                    unset($termsBySlug[$terms[$id]['slug']], $terms[$id]);
                 }
                 $this->store->acknowledgeDeletion($id);
             } catch (Throwable $error) {
-                $this->deferredDeletions[$id] = RefundStatusService::sanitizeError($error->getMessage());
+                $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'WooCommerce-Loeschung fehlgeschlagen.';
+                $this->deferredDeletions[$id] = $reason;
+                $this->store->deferDeletion($id, $reason);
             }
         }
-        return $this->termIds = $ids;
+        return $this->termIds = $this->syncBranch($tree, 0, $terms, $termsBySlug);
+    }
+
+    private function requireEmptyCollection(string $endpoint, array $query, string $label): void
+    {
+        try {
+            $rows = $this->client->get($endpoint, $query);
+            $total = $this->client->getLastResponse()?->getHeader('X-WP-Total');
+        } catch (Throwable $error) {
+            throw new RuntimeException('WooCommerce-Abfrage fehlgeschlagen (' . $label . '): ' . $error->getMessage(), 0, $error);
+        }
+        if ($total === null || !is_array($rows)) {
+            throw new RuntimeException('WooCommerce konnte die Kategorie nicht auf ' . $label . ' pruefen (ungueltige REST-Antwort).');
+        }
+        if (($total !== 0 && $total !== '0') || $rows !== []) {
+            throw new RuntimeException('WooCommerce meldet vorhandene ' . $label . '.');
+        }
     }
 
     /** @return array<int,string> WooCommerce term ID to reason for deferral */
@@ -123,8 +145,8 @@ final class ShopCategoryExporter
                 }
             }
 
-            if ($id !== $wcId) {
-                $this->store->setWcId($node['id'], $id, $slug);
+            if ($id !== $wcId && !$this->store->setWcId($node['id'], $id, $slug)) {
+                continue;
             }
             $ids[$node['id']] = $id;
             $ids += $this->syncBranch($node['children'], $id, $terms, $termsBySlug);
