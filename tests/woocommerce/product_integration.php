@@ -514,7 +514,7 @@ runTests([
         same('current-hash', $db->assignment['last_article_hash']);
         $entry = json_decode($db->config[$key], true, 512, JSON_THROW_ON_ERROR);
         $notBefore = $entry['articles'][9];
-        check($notBefore >= $started + 120 && $notBefore <= time() + 120);
+        check($notBefore >= $started + 1800 && $notBefore <= time() + 1800);
 
         $entry = renameUnassignedCategoryWithPendingRetry($db, $store, $notBefore, 'current-hash');
         unset($db->advisoryLocks[$lock]);

@@ -11,7 +11,8 @@ use Throwable;
 final class ShopCategoryStore
 {
     private const CONFIG_LIMIT = 65000;
-    private const ARTICLE_RETRY_DELAY = 120;
+    // Must exceed the longest article export batch, so the drain cannot run before the hash write.
+    private const ARTICLE_RETRY_DELAY = 1800;
     private const CONFIG_JSON_FLAGS = JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES;
     private const REASON_LENGTH_LIMIT = 200;
     private const REASON_ENTRY_LIMIT = 200;
