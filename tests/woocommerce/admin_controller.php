@@ -32,14 +32,13 @@ final class AdminDatabaseFake
     public $module = 'shopimporter_woocommerce';
     public $articleProject = 0;
     public $assigned = true;
-    public bool $activePriceGroup = false;
     private int $lastTemplateId = 0;
     public array $templates = [];
     private $transaction = false;
     public function fetchRow($sql, $params) {
-        check(str_contains($sql, 'g.id = s.preisgruppe AND g.aktiv = 1'));
+        check(!str_contains($sql, 'preisgruppe'));
         return ['id' => 7, 'modulename' => $this->module, 'projekt' => 0,
-            'einstellungen_json' => '{"felder":{"exportDownloads":1}}', 'active_price_group' => $this->activePriceGroup];
+            'einstellungen_json' => '{"felder":{"exportDownloads":1}}'];
     }
     public function fetchAll($sql, $params) {
         if (strpos($sql, 'FROM artikel') !== false) {
@@ -112,14 +111,13 @@ function bulkAdminPreview(BulkPullDatabase $db): array
 }
 
 runTests([
-    'authorized_admin_installs_templates_without_prices_for_active_price_group' => static function () {
+    'authorized_admin_installs_the_shared_templates_with_one_price_column' => static function () {
         $db = new AdminDatabaseFake();
-        $db->activePriceGroup = true;
         [$page] = adminFixture([], [], $db);
         $page->render();
         check(isset($db->templates['exportvorlage'], $db->templates['importvorlage']));
-        check(!str_contains($db->templates['exportvorlage']['fields'], 'standardpreis'));
-        check(!str_contains($db->templates['importvorlage']['fields'], 'verkaufspreis'));
+        check(str_contains($db->templates['exportvorlage']['fields'], ' AS standardpreisnetto'));
+        check(str_contains($db->templates['importvorlage']['fields'], ':woo_preis_netto;'));
         same('2', $db->values['importvorlage_update_only']);
     },
     'apply_requires_token' => static function () {

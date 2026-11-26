@@ -16,7 +16,7 @@ final class TemplateInstaller
     {
     }
 
-    public function ensure(bool $includePrice): array
+    public function ensure(): array
     {
         $lock = ['lock' => self::LOCK];
         if ((int) $this->database->fetchValue('SELECT GET_LOCK(:lock, 5)', $lock) !== 1) {
@@ -25,7 +25,7 @@ final class TemplateInstaller
         try {
             $this->database->beginTransaction();
             try {
-                $ids = $this->install($includePrice);
+                $ids = $this->install();
                 $this->registerUpdateOnly($ids['import']);
                 $this->database->commit();
                 return $ids;
@@ -43,13 +43,9 @@ final class TemplateInstaller
         return $id > 0 && in_array((string) $id, array_map('trim', explode(',', $registeredIds)), true);
     }
 
-    private function install(bool $includePrice): array
+    private function install(): array
     {
         $columns = ArticleFieldCatalog::csvColumns();
-        if (!$includePrice) {
-            $columns = array_values(array_filter($columns, static fn (array $column): bool =>
-                !in_array($column['import'], ['verkaufspreis1netto', 'verkaufspreis1menge'], true)));
-        }
         $importFields = '';
         foreach ($columns as $index => $column) {
             $importFields .= ($index + 1) . ':' . $column['import'] . ";\r\n";

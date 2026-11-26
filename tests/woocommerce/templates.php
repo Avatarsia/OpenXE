@@ -47,11 +47,11 @@ final class TemplateDatabaseFake
     public function rollBack(): void {}
 }
 
-function installedTemplates(bool $includePrice = true): array
+function installedTemplates(): array
 {
     check(class_exists(TemplateInstaller::class), 'TemplateInstaller fehlt');
     $db = new TemplateDatabaseFake();
-    $ids = (new TemplateInstaller($db))->ensure($includePrice);
+    $ids = (new TemplateInstaller($db))->ensure();
     return [$db, $db->templates['exportvorlage']['WooCommerce Artikeldaten'], $db->templates['importvorlage']['WooCommerce Artikeldaten'], $ids];
 }
 
@@ -66,6 +66,10 @@ final class CsvImportDatabaseFake
         11 => ['id' => 110, 'shop' => 11, 'pseudolager' => '5'],
     ];
     public array $audit = [];
+    public array $writes = [];
+    public array $lookups = [];
+    public array $activeShopIds = [7, 8];
+    public array $priceGroups = [];
     public array $prices = [['id' => 1, 'preis' => '35', 'active' => true]];
     private bool $transaction = false;
     public function __construct(public array $template) {}
@@ -84,6 +88,10 @@ final class CsvImportDatabaseFake
             $rows = array_filter($this->prices, static fn ($row) => $row['active']);
             return reset($rows)['preis'];
         }
+        if (str_contains($sql, 'SELECT id FROM adresse WHERE')) {
+            $this->lookups[] = $sql;
+            return 10;
+        }
         if (str_contains($sql, "WHERE id ='9'")) {
             return 9;
         }
@@ -91,9 +99,10 @@ final class CsvImportDatabaseFake
     }
     public function SelectArr($sql): array { return []; }
     public function real_escape_string($value): string { return addslashes($value); }
-    public function Delete($sql): void {}
+    public function Delete($sql): void { $this->writes[] = $sql; }
     public function Update($sql): void
     {
+        $this->writes[] = $sql;
         if (preg_match("/^UPDATE artikel SET (\\w+)='(.*)' WHERE id='9' LIMIT 1$/s", $sql, $match)) {
             $this->article[$match[1]] = stripslashes($match[2]);
         } elseif (str_contains($sql, 'UPDATE verkaufspreise SET gueltig_bis')) {
@@ -120,7 +129,16 @@ final class CsvImportDatabaseFake
     public function fetchAll(string $sql, array $params): array
     {
         if (str_contains($sql, 'FROM verkaufspreise')) {
-            return $this->prices;
+            check(str_contains($sql, 'LIMIT 2 FOR UPDATE'));
+            $active = array_values(array_filter($this->prices, static fn ($price) => $price['active']));
+            usort($active, static fn ($a, $b) => (float) $b['preis'] <=> (float) $a['preis']);
+            return array_slice($active, 0, 2);
+        }
+        if (str_contains($sql, 'FROM shopexport')) {
+            check(str_contains($sql, 'a.aktiv = 1') && !str_contains($sql, 'ausartikel'));
+            check(str_contains($sql, 'shopimporter_woocommerce') && str_contains($sql, 's.geloescht = 0'));
+            same(9, $params['article']);
+            return array_map(static fn ($id) => ['shop' => $id], $this->activeShopIds);
         }
         check(str_contains($sql, 'FROM artikel_onlineshops') && str_contains($sql, 'ausartikel = 0'));
         check(str_contains($sql, 'shopimporter_woocommerce') && str_contains($sql, 's.geloescht = 0'));
@@ -129,11 +147,25 @@ final class CsvImportDatabaseFake
     }
     public function fetchValue(string $sql, array $params)
     {
+        if (str_contains($sql, 'SELECT s.preisgruppe')) {
+            check(str_contains($sql, 'g.aktiv = 1') && str_contains($sql, 'FOR UPDATE'));
+            return $this->priceGroups[$params['shop']] ?? false;
+        }
         return $this->audit[$params['name'] ?? ''] ?? false;
     }
     public function perform(string $sql, array $params): void
     {
-        if (preg_match('/^UPDATE artikel SET .(\w+)./', $sql, $match)) {
+        $this->writes[] = $sql;
+        if (str_starts_with($sql, 'UPDATE verkaufspreise SET gueltig_bis')) {
+            foreach ($this->prices as &$price) {
+                if ($price['id'] === $params['id']) {
+                    $price['active'] = false;
+                }
+            }
+            unset($price);
+        } elseif (str_starts_with($sql, 'INSERT INTO verkaufspreise')) {
+            $this->prices[] = ['id' => count($this->prices) + 1, 'preis' => $params['value'], 'active' => true];
+        } elseif (preg_match('/^UPDATE artikel SET .(\w+)./', $sql, $match)) {
             $this->article[$match[1]] = $params['value'];
         } elseif (preg_match('/^UPDATE artikel_onlineshops SET .(\w+)./', $sql, $match)) {
             foreach ($this->overrides as &$override) {
@@ -162,9 +194,9 @@ function runCsvImport(CsvImportDatabaseFake $db, string $csv, int $id): array
         $app = (object) ['DB' => $db, 'Container' => new class($db) {
             public function __construct(private $db) {}
             public function get($name) { return $this->db; }
-        }, 'erp' => new class($db, $id) {
-            public function __construct(private $db, private int $id) {}
-            public function GetKonfiguration($name) { return '42,' . $this->id; }
+        }, 'erp' => new class($db) {
+            public function __construct(private $db) {}
+            public function GetKonfiguration($name) { return '42,12,2'; }
             public function RunHook(...$args): void {}
             public function ImportCreateArtikel(...$args): int { throw new LogicException('Artikel wurde angelegt'); }
             public function AddVerkaufspreis($id, $amount, $address, $price, ...$args): void
@@ -187,16 +219,19 @@ function runCsvImport(CsvImportDatabaseFake $db, string $csv, int $id): array
 
 function csvImportTemplate(string $fields): array
 {
+    $fields = implode(";\r\n", preg_split('/;\s*/', rtrim($fields, "; \r\n")));
     return ['fields' => $fields, 'importtrennzeichen' => 'semikolon', 'importerstezeilenummer' => 2,
         'importdatenmaskierung' => 'gaensefuesschen', 'importzeichensatz' => ''];
 }
 
 runTests([
     'csv_text_round_trips_with_reserved_characters' => static function () {
-        [$templates, $export, $import, $ids] = installedTemplates(false);
+        [$templates, $export, $import, $ids] = installedTemplates();
         $value = "D\u{00FC}se ae %title% | Partner 3D; \"Set\"\r\nZeile 2";
-        $row = array_fill_keys(array_column(ArticleFieldCatalog::csvColumns(), 'import'), '0');
-        unset($row['verkaufspreis1netto'], $row['verkaufspreis1menge']);
+        $headers = array_map(static fn ($field) => $field === 'woo_preis_netto' ? 'standardpreisnetto' : $field,
+            array_column(ArticleFieldCatalog::csvColumns(), 'import'));
+        $row = array_fill_keys($headers, '0');
+        $row['standardpreisnetto'] = '29.90';
         $row['nummer'] = 'A9';
         $row['metatitle_de'] = $value;
         $row['pseudolager'] = '';
@@ -229,6 +264,7 @@ runTests([
         $db = new CsvImportDatabaseFake(csvImportTemplate($import['fields']));
         $result = runCsvImport($db, $csv, $ids['import']);
         same('', $result['message']);
+        same(['29.9'], array_column(array_filter($db->prices, static fn ($price) => $price['active']), 'preis'));
         same($value, $db->article['metatitle_de']);
         same('3 Tage', $db->article['lieferzeitmanuell']);
         same('', $db->article['pseudolager']);
@@ -267,27 +303,93 @@ runTests([
         same('0', $db->article['pseudolager']);
         same('4', $db->overrides[8]['pseudolager']);
     },
-    'legacy_price_import_updates_single_standard_price_at_quantity_one' => static function () {
-        $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;\r\n2:verkaufspreis1netto;\r\n3:verkaufspreis1menge;\r\n"));
-        $result = runCsvImport($db, "nummer;preis;menge\nA9;29,90;1\n", 12);
-        same('', $result['message']);
-        $active = array_values(array_filter($db->prices, static fn ($price) => $price['active']));
-        same(['29.9'], array_column($active, 'preis'));
+    'ambiguous_price_is_reported_without_writes_even_when_it_matches_the_highest' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:woo_preis_netto"));
+        $db->prices[] = ['id' => 2, 'preis' => '34', 'active' => true];
+        $before = $db->prices;
+        $result = runCsvImport($db, "nummer;standardpreisnetto\nA9;35\n", 12);
+        check(str_contains($result['message'], 'Mehrere gueltige Preise ab Menge 1'));
+        check(str_contains($result['message'], 'Zeile: 1'));
+        same([], $db->writes);
+        same($before, $db->prices);
     },
-    'legacy_price_import_can_leave_two_export_candidates_with_history' => static function () {
-        $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;\r\n2:verkaufspreis1netto;\r\n3:verkaufspreis1menge;\r\n"));
-        array_unshift($db->prices, ['id' => 0, 'preis' => '40', 'active' => false]);
-        runCsvImport($db, "nummer;preis;menge\nA9;29,90;1\n", 12);
-        $active = array_values(array_filter($db->prices, static fn ($price) => $price['active']));
-        // The WooCommerce export picks the higher candidate, leaving the old value visible.
-        same(2, count($active));
-        same(35.0, max(array_map('floatval', array_column($active, 'preis'))));
+    'non_numeric_price_is_reported_without_writes' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:woo_preis_netto"));
+        $before = $db->prices;
+        $result = runCsvImport($db, "nummer;standardpreisnetto\nA9;n/a\n", 12);
+        check(str_contains($result['message'], 'Ungueltiger Zahlenwert'));
+        same([], $db->writes);
+        same($before, $db->prices);
+    },
+    'zero_price_updates_only_the_exported_row_once' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:woo_preis_netto"));
+        $db->prices[] = ['id' => 8, 'preis' => '40', 'active' => false];
+        $result = runCsvImport($db, "nummer;standardpreisnetto\nA9;0\n", 12);
+        same('', $result['message']);
+        $active = array_filter($db->prices, static fn ($price) => $price['active']);
+        same(['0'], array_column($active, 'preis'));
+        same(3, count($db->prices));
+        same(['id' => 8, 'preis' => '40', 'active' => false], $db->prices[1]);
+        same('csv_import', json_decode($db->audit['woocommerce_pull_log_7'], true)[0]['origin']);
+    },
+    'empty_price_is_ignored' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:woo_preis_netto"));
+        same('', runCsvImport($db, "nummer;standardpreisnetto\nA9;\n", 12)['message']);
+        same([], $db->writes);
+    },
+    'active_price_group_in_second_shop_prevents_shared_price_write' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:woo_preis_netto"));
+        $db->priceGroups[8] = 26;
+        $before = $db->prices;
+        $result = runCsvImport($db, "nummer;standardpreisnetto\nA9;29,90\n", 12);
+        check(str_contains($result['message'], 'Shop nutzt eine Preisgruppe'));
+        same([], $db->writes);
+        same($before, $db->prices);
+    },
+    'header_mismatch_aborts_before_any_write' => static function () {
+        foreach (['nummer;inaktiv;standardpreisnetto', 'nummer;standardpreisnetto;inaktiv;extra',
+                  'nummer;standardpreisnetto', 'nummer;woo_preis_netto;inaktiv', ''] as $header) {
+            $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:woo_preis_netto;3:inaktiv"));
+            $result = runCsvImport($db, $header . "\nA9;1;0\n", 12);
+            same(false, $result['success'], $header);
+            check(str_contains($result['message'], 'CSV-Kopfzeile'));
+            same([], $db->writes);
+        }
+    },
+    'legacy_template_keeps_unknown_fields_and_looks_up_zero_address_numbers' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate(
+            "1:nummer;2:ausverkauft;3:shop_name_de;4:lieferzeitmanuell;5:woo_preis_netto;"
+            . "6:kundennummer;7:lieferantennummer"
+        ));
+        $result = runCsvImport($db, "nummer;ausverkauft;shop_name_de;lieferzeitmanuell;preis;kunde;lieferant\n"
+            . "A9;1;Name;Sofort;29,90;0;0\n", 13);
+        foreach (['ausverkauft', 'shop_name_de', 'lieferzeitmanuell', 'woo_preis_netto'] as $field) {
+            check(str_contains($result['message'], 'Feld unbekannt: ' . $field));
+            check(!isset($db->article[$field]));
+        }
+        check(str_contains($db->lookups[0], "lieferantennummer='0'"));
+        check(str_contains($db->lookups[1], "kundennummer='0'"));
+        same(["DELETE FROM artikeleigenschaftenwerte WHERE wert = ''"], $db->writes);
+    },
+    'legacy_price_template_still_updates_its_standard_price' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate('1:nummer;2:verkaufspreis1netto;3:verkaufspreis1menge;'
+            . '4:verkaufspreis1gueltigab;5:verkaufspreis1gueltigbis;6:verkaufspreis1preisfuermenge;'
+            . '7:verkaufspreis1waehrung;8:verkaufspreis1internerkommentar'));
+        runCsvImport($db, "nummer;preis;menge;von;bis;divisor;waehrung;kommentar\nA9;29,90;1;;;;EUR;\n", 13);
+        same(['29.9'], array_column(array_filter($db->prices, static fn ($price) => $price['active']), 'preis'));
+        same([], $db->audit);
+    },
+    'registered_template_does_not_execute_legacy_price_fields' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:verkaufspreis1netto;3:verkaufspreis1menge"));
+        $result = runCsvImport($db, "nummer;verkaufspreis1netto;verkaufspreis1menge\nA9;29,90;1\n", 12);
+        check(str_contains($result['message'], 'woo_preis_netto'));
+        same([], $db->writes);
     },
 
     'ensure_is_idempotent' => static function () {
         [$db, $export, $import, $ids] = installedTemplates();
         $db->templates['exportvorlage']['WooCommerce Artikeldaten']['fields'] .= ';custom';
-        same($ids, (new TemplateInstaller($db))->ensure(false));
+        same($ids, (new TemplateInstaller($db))->ensure());
         same(2, $db->inserts);
         same($export['fields'] . ';custom', $db->templates['exportvorlage']['WooCommerce Artikeldaten']['fields']);
         same($import, $db->templates['importvorlage']['WooCommerce Artikeldaten']);
@@ -311,16 +413,24 @@ runTests([
             $import['ziel'], $import['trennzeichen'], $import['maskierung'], $import['erstezeile'], $import['charset'], $import['utf8decode'],
         ]);
     },
-    'price_columns_omitted_with_price_group' => static function () {
-        [, $export, $import] = installedTemplates(false);
-        check(!str_contains($export['fields'], 'standardpreis'));
-        check(!str_contains($import['fields'], 'verkaufspreis'));
-        same(count(ArticleFieldCatalog::csvColumns()) - 2, count(explode(";\r\n", $export['fields'])));
+    'ensure_recreates_each_missing_template_with_the_same_layout' => static function () {
+        [$db, $export, $import] = installedTemplates();
+        foreach (['export' => $export, 'import' => $import] as $side => $template) {
+            $table = $side . 'vorlage';
+            unset($db->templates[$table][TemplateInstaller::LABEL]);
+            $ids = (new TemplateInstaller($db))->ensure();
+            check($template['id'] !== $ids[$side]);
+            $recreated = $db->templates[$table][TemplateInstaller::LABEL];
+            same($template['fields'], $recreated['fields']);
+        }
+        same(4, $db->inserts);
+        check(str_contains($db->templates['exportvorlage'][TemplateInstaller::LABEL]['fields'], ' AS standardpreisnetto'));
+        check(str_contains($db->templates['importvorlage'][TemplateInstaller::LABEL]['fields'], ':woo_preis_netto;'));
     },
     'update_only_registered' => static function () {
         $db = new TemplateDatabaseFake();
         $db->config['importvorlage_update_only'] = '42,120';
-        $ids = (new TemplateInstaller($db))->ensure(true);
+        $ids = (new TemplateInstaller($db))->ensure();
         same('42,120,' . $ids['import'], $db->config['importvorlage_update_only']);
     },
     'mapped_fields_supported_by_article_import' => static function () {

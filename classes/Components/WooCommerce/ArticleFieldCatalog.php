@@ -7,6 +7,8 @@ use InvalidArgumentException;
 
 final class ArticleFieldCatalog
 {
+    public const CSV_PRICE_HEADER = 'standardpreisnetto';
+
     private const FIELDS = [
         'sku' => [
             'label' => 'Shop-SKU (Fremdnummer)', 'group' => 'Identitaet', 'storage' => 'foreign_number',
@@ -38,7 +40,7 @@ final class ArticleFieldCatalog
         ],
         'price_net' => [
             'label' => 'Verkaufspreis netto', 'group' => 'Preis', 'storage' => 'price',
-            'wc' => 'regular_price / sale_price', 'pull' => true, 'edit' => true, 'csv' => 'verkaufspreis1netto',
+            'wc' => 'regular_price / sale_price', 'pull' => true, 'edit' => true, 'csv' => 'woo_preis_netto',
         ],
         'pseudo_price' => [
             'label' => 'Streichpreis (Pseudopreis/UVP), netto', 'group' => 'Preis', 'storage' => 'shop:pseudopreis',
@@ -137,10 +139,9 @@ final class ArticleFieldCatalog
                         . " WHERE v.artikel = art.id AND v.ab_menge = 1 AND v.geloescht = 0 AND v.art != 'Gruppe'"
                         . " AND (v.objekt = 'Standard' OR v.objekt = '') AND (v.adresse = '0' OR v.adresse = '')"
                         . " AND (v.gueltig_bis >= NOW() OR v.gueltig_bis = '0000-00-00')"
-                        . ' ORDER BY v.preis DESC LIMIT 1) AS standardpreisnetto',
+                        . ' ORDER BY v.preis DESC LIMIT 1) AS ' . self::CSV_PRICE_HEADER,
                     'import' => $column,
                 ];
-                $columns[] = ['export' => '1 AS standardpreismenge', 'import' => 'verkaufspreis1menge'];
                 continue;
             }
             $columns[] = ['export' => $column, 'import' => $column];

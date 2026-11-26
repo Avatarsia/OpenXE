@@ -100,6 +100,42 @@ final class ArticleDataRepository
         }
     }
 
+    public static function applyCsvPrice($app, int $articleId, string $price): void
+    {
+        $database = $app->Container->get('Database');
+        $database->beginTransaction();
+        try {
+            $database->fetchValue('SELECT id FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
+            $shops = $database->fetchAll(
+                'SELECT s.id AS shop FROM shopexport AS s'
+                . ' INNER JOIN artikel AS art ON art.id = :article'
+                . ' LEFT JOIN artikel_onlineshops AS a ON a.artikel = art.id AND a.shop = s.id AND a.aktiv = 1'
+                . ' WHERE (a.id IS NOT NULL OR s.id IN (art.shop, art.shop2, art.shop3))'
+                . " AND s.geloescht = 0 AND s.modulename = 'shopimporter_woocommerce' ORDER BY s.id FOR UPDATE",
+                ['article' => $articleId]
+            );
+            if ($shops === []) {
+                throw new InvalidArgumentException('Keine aktive WooCommerce-Shopzuordnung vorhanden.');
+            }
+            $repositories = [];
+            foreach (array_unique(array_column($shops, 'shop')) as $shopId) {
+                $repository = new self($app, (int) $shopId);
+                // All assigned shops share the standard row. Check every price group before changing it.
+                if ($repository->priceGroup(true)) {
+                    throw new InvalidArgumentException(self::PRICE_GROUP);
+                }
+                $repositories[] = $repository;
+            }
+            foreach ($repositories as $repository) {
+                $repository->apply($articleId, ['price_net' => $price], 'csv_import');
+            }
+            $database->commit();
+        } catch (Throwable $error) {
+            $database->rollBack();
+            throw $error;
+        }
+    }
+
     public function apply(int $articleId, array $values, string $origin, ?int $overrideId = null): array
     {
         $updates = $this->prepareUpdates($values);
@@ -112,7 +148,7 @@ final class ArticleDataRepository
             $price = $state['fields']['price_net'];
             $reason = self::priceBlockReason($price['source']);
             if ($reason !== null && isset($updates['price_net'])
-                && !FieldDiff::equivalent('price_net', $price['value'], $updates['price_net'][0])) {
+                && ($origin === 'csv_import' || !FieldDiff::equivalent('price_net', $price['value'], $updates['price_net'][0]))) {
                 throw new InvalidArgumentException($reason);
             }
             $changes = [];
@@ -193,11 +229,7 @@ final class ArticleDataRepository
             $shopParams
         );
         $sku = trim($foreign === false || $foreign === null ? (string) $article['nummer'] : (string) $foreign);
-        $group = (int) $this->database->fetchValue(
-            'SELECT s.preisgruppe FROM shopexport s INNER JOIN gruppen g ON s.preisgruppe = g.id AND g.aktiv = 1'
-            . ' WHERE s.id = :shop LIMIT 1' . $lockSql,
-            ['shop' => $this->shopId]
-        );
+        $group = $this->priceGroup($lock);
         $candidates = $this->standardPriceCandidates($articleId, $lock);
         $priceValue = $candidates[0]['preis'] ?? '';
         $priceSource = 'price';
@@ -273,6 +305,15 @@ final class ArticleDataRepository
         if (in_array($key, self::TEXT_FIELDS, true) && strlen($value) > self::TEXT_BYTE_LIMIT) {
             throw new InvalidArgumentException('Wert fuer ' . $key . ' ist zu lang (max. ' . self::TEXT_BYTE_LIMIT . ' Bytes).');
         }
+    }
+
+    private function priceGroup(bool $lock): int
+    {
+        return (int) $this->database->fetchValue(
+            'SELECT s.preisgruppe FROM shopexport s INNER JOIN gruppen g ON s.preisgruppe = g.id AND g.aktiv = 1'
+            . ' WHERE s.id = :shop LIMIT 1' . ($lock ? ' FOR UPDATE' : ''),
+            ['shop' => $this->shopId]
+        );
     }
 
     private function standardPriceCandidates(int $articleId, bool $lock): array

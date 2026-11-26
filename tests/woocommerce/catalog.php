@@ -68,12 +68,10 @@ runTests([
             check(!array_key_exists($key, $exports), $key . ' is included in the CSV');
         }
 
-        $imports = array_column($columns, 'import');
-        $priceIndex = array_search('verkaufspreis1netto', $imports, true);
-        check($priceIndex !== false, 'Missing standard net price column');
-        same(['export' => '1 AS standardpreismenge', 'import' => 'verkaufspreis1menge'], $columns[$priceIndex + 1]);
+        same(['woo_preis_netto'], array_values(array_filter(array_keys($exports),
+            static fn ($column) => str_starts_with($column, 'verkaufspreis') || str_starts_with($column, 'woo_preis'))));
 
-        $price = $exports['verkaufspreis1netto'];
+        $price = $exports['woo_preis_netto'];
         foreach ([
             'FROM verkaufspreise AS v',
             'v.artikel = art.id',

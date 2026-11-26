@@ -40,6 +40,7 @@ class Importvorlage extends GenImportvorlage {
   protected $languageCodesForProperties;
 
   const MODULE_NAME = 'ImportMasterdata';
+  private const CSV_HEADER_MISMATCH = 'Die CSV-Kopfzeile stimmt nicht mit Spaltennamen und Reihenfolge der Importvorlage ueberein.';
 
   const FORMAT_CSV = 0;
   const FORMAT_CSV_ZIP = 1;
@@ -424,6 +425,11 @@ class Importvorlage extends GenImportvorlage {
       $colNames = explode(';',$fields);
       foreach ($colNames as $i => $c){
         $colNames[$i] = str_replace(':','',strstr(trim($c),':'));
+      }
+
+      if($this->isUpdateOnlyArticleImport((int)$patternId, 'artikel')) {
+        [$positions, $fields] = $this->getFields($this->cleanFields($fields), 2);
+        $colNames = $this->updateOnlyCsvHeader($positions, $fields);
       }
 
       $config = new CsvConfig(';', '"');
@@ -1128,6 +1134,20 @@ class Importvorlage extends GenImportvorlage {
                 $stueckliste_csv = $uploaded_file_name;
             break;
         }
+        if($updateOnly && !empty($stueckliste_csv)) {
+            [$positions, $columnNames] = $this->getFields($fields, $importerstezeilenummer);
+            $headerFile = fopen($stueckliste_csv, 'r');
+            $header = $headerFile ? fgetcsv($headerFile, 0, $importtrennzeichen, '"', '') : false;
+            if($headerFile) {
+                fclose($headerFile);
+            }
+            if($header !== $this->updateOnlyCsvHeader($positions, $columnNames)) {
+                $this->app->Tpl->AddMessage('error', self::CSV_HEADER_MISMATCH);
+                $stueckliste_csv = '';
+            }
+            $importerstezeilenummer = max(2, (int)$importerstezeilenummer);
+        }
+
         $global_data['additional_files'] = $additional_files;
         $this->app->User->SetParameter('importvorlage_stueckliste', $stueckliste_csv);
         $this->app->User->SetParameter('importvorlage_additional_files', serialize($additional_files));
@@ -1433,13 +1453,22 @@ class Importvorlage extends GenImportvorlage {
       $fieldstmp,
       $importerstezeilenummer,
       $importtrennzeichen,
-      $stueckliste_csv
+      $updateOnly ? '' : $stueckliste_csv
     );
 
     $number_of_fields = (!empty($csv_fields_keys)?count($csv_fields_keys):0);
     $lastColumn = $number_of_fields > 0 ? (int)max($csv_fields_keys) : 0;
     if (($handle = fopen($stueckliste_csv, 'r')) !== FALSE) {
       $rowcounter = 0;
+      if($updateOnly) {
+        $header = fgetcsv($handle, 0, $importtrennzeichen, '"', '');
+        if($header !== $this->updateOnlyCsvHeader($csv_fields_keys, $csv_fields_name)) {
+          fclose($handle);
+          throw new UnexpectedValueException(self::CSV_HEADER_MISMATCH);
+        }
+        $rowcounter = 1;
+        $importerstezeilenummer = max(2, (int)$importerstezeilenummer);
+      }
       $rowcounter_real = 0;
       while (($data = fgetcsv($handle, 0, $importtrennzeichen, '"', $updateOnly ? '' : "\\")) !== FALSE) {
         $rowcounter++;
@@ -1562,7 +1591,14 @@ class Importvorlage extends GenImportvorlage {
     }
 
     if($stueckliste_csv != '') {
-      $tmp = $this->ImportvorlageGetCSV($stueckliste_csv,$id,$charset, $parameter, $updateOnly);
+      try {
+        $tmp = $this->ImportvorlageGetCSV($stueckliste_csv,$id,$charset, $parameter, $updateOnly);
+      } catch (UnexpectedValueException $error) {
+        if(!$updateOnly) {
+          throw $error;
+        }
+        return ['success' => false, 'message' => $error->getMessage()];
+      }
     } else {
         return(array('success' => false, 'message' => 'Keine Datei angegeben.'));
     }
@@ -1612,12 +1648,12 @@ class Importvorlage extends GenImportvorlage {
       if(isset($tmp['lieferantennummer']) && isset($tmp['lieferantennummer'][$i])) {
         $tmp['lieferantennummer'][$i] = str_replace(' ','',trim($tmp['lieferantennummer'][$i]));
       }
-      if(!empty($tmp['lieferantennummer'][$i]) && ($tmp['kundennummer'][$i]!=='NEW' || $tmp['kundennummer'][$i]!=='NEU')) {
+      if(($tmp['lieferantennummer'][$i] ?? '')!='' && (($tmp['kundennummer'][$i] ?? '')!=='NEW' || ($tmp['kundennummer'][$i] ?? '')!=='NEU')) {
         $lieferantid = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='".$this->app->DB->real_escape_string($tmp['lieferantennummer'][$i])."'
             AND lieferantennummer!='' LIMIT 1");
       }
 
-      if(!empty($tmp['kundennummer'][$i]) && ($tmp['kundennummer'][$i]!=='NEW' || $tmp['kundennummer'][$i]!=='NEU')) {
+      if(($tmp['kundennummer'][$i] ?? '')!='' && ($tmp['kundennummer'][$i]!=='NEW' || $tmp['kundennummer'][$i]!=='NEU')) {
         $kundenid = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='".$this->app->DB->real_escape_string($tmp['kundennummer'][$i])."' AND kundennummer!='' LIMIT 1");
       }
 
@@ -1628,7 +1664,7 @@ class Importvorlage extends GenImportvorlage {
         $lieferantid=0;
       }
 
-      if($lieferantid<=0 && !empty($tmp['lieferantname'][$i])) {
+      if($lieferantid<=0 && ($tmp['lieferantname'][$i] ?? '')!='') {
         $lieferantid = $this->app->DB->Select("SELECT id FROM adresse WHERE name='".$this->app->DB->real_escape_string($tmp['lieferantname'][$i])."' LIMIT 1");
       }
 
@@ -1841,20 +1877,32 @@ class Importvorlage extends GenImportvorlage {
               }
               $this->app->erp->RunHook('importvorlage_artikel', 3, $artikelid, $tmp, $i);
 
-              if($updateOnly && isset($tmp['verkaufspreis1netto'][$i])) {
-                // The standard price import expects these optional values to be present.
-                foreach(['gueltigab', 'gueltigbis', 'preisfuermenge', 'waehrung', 'internerkommentar'] as $suffix) {
-                  $tmp['verkaufspreis1' . $suffix][$i] ??= '';
-                }
-              }
-
               foreach($fieldset as $key=>$val)
               {
                 $value = $val['field'];
-                switch($value)
+                $wooCommerceOnly = in_array($value, ['shop_name_de', 'ausverkauft', 'lieferzeitmanuell', 'woo_preis_netto'], true);
+                // Send WooCommerce-only fields to the existing unknown-field branch in other templates.
+                switch(!$updateOnly && $wooCommerceOnly ? '' : $value)
                 {
                   case "nummer":
-                  case "verkaufspreis1menge":
+                    break;
+                  case "woo_preis_netto":
+                    $price = trim($tmp[$value][$i]);
+                    if($price === '') {
+                      break;
+                    }
+                    try {
+                      ArticleDataRepository::applyCsvPrice($this->app, (int)$artikelid, $price);
+                    } catch (InvalidArgumentException $error) {
+                      $importvorlagedoresult['messages'][] = 'Preis abgelehnt, Zeile: ' . $i . ' - '
+                        . htmlspecialchars($error->getMessage(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+                    } catch (\Throwable $error) {
+                      $this->app->Container->get('Logger')->error('WooCommerce CSV price update failed', [
+                        'article' => (int)$artikelid,
+                        'exception' => $error,
+                      ]);
+                      $importvorlagedoresult['messages'][] = 'WooCommerce-Preis konnte nicht gespeichert werden, Zeile: ' . $i;
+                    }
                     break;
                   case "shop_name_de":
                   case "name_de":
@@ -2872,13 +2920,9 @@ class Importvorlage extends GenImportvorlage {
                   case  "verkaufspreis9netto":
                   case  "verkaufspreis10netto":
 
-                    if($updateOnly && $value === 'verkaufspreis1netto') {
-                      $amount = trim($tmp['verkaufspreis1menge'][$i] ?? '');
-                      if(!preg_match('/^1(?:\.0+)?$/D', $amount)) {
-                        $importvorlagedoresult['messages'][] = 'Standardpreismenge muss 1 sein, Zeile: ' . $i;
-                        break;
-                      }
-                      $tmp['verkaufspreis1menge'][$i] = '1';
+                    if($updateOnly) {
+                      $importvorlagedoresult['messages'][] = 'Fuer WooCommerce-Preise Feld woo_preis_netto verwenden, Zeile: ' . $i;
+                      break;
                     }
                     $verkaufspreisanzahl = str_replace(array('verkaufspreis','netto'),array('',''),$value);
 
@@ -5134,6 +5178,21 @@ class Importvorlage extends GenImportvorlage {
       $id,
       (string)$this->app->erp->GetKonfiguration(TemplateInstaller::UPDATE_ONLY)
     );
+  }
+
+  private function updateOnlyCsvHeader(array $positions, array $fields): array
+  {
+    if($positions === []) {
+      return [];
+    }
+    $columns = array_combine($positions, $fields);
+    ksort($columns, SORT_NUMERIC);
+    if(array_keys($columns) !== range(1, count($positions))) {
+      return [];
+    }
+
+    return array_values(array_map(static fn (string $field): string =>
+      $field === 'woo_preis_netto' ? ArticleFieldCatalog::CSV_PRICE_HEADER : $field, $columns));
   }
 
   private function findImportArticleId(string $number): int
