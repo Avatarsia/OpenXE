@@ -106,7 +106,7 @@ final class ArticleDataRepository
             $changes = [];
             foreach ($prepared as $key => [$new, $storage, $column]) {
                 $old = (string) ($article[$column] ?? '');
-                if ($storage === 'shop' && ($key === 'pseudo_price' ? !FieldDiff::equivalent($key, $old, $new) : $old !== $new)) {
+                if ($storage === 'shop' && self::normalizeStorageValue($key, $old) !== $new) {
                     $changes[$key] = $values[$key];
                 }
             }
@@ -344,14 +344,14 @@ final class ArticleDataRepository
             return $this->app->Secure->CleanString($input, 'nojs', 1);
         }
 
-        $value = FieldDiff::normalize($key, $input);
+        $value = self::normalizeStorageValue($key, $input);
         $numericLimits = [
             'price_net' => [10, 8], 'pseudo_price' => [8, 2],
             'length' => [8, 2], 'width' => [8, 2], 'height' => [8, 2],
             'weight' => [null, null], 'pseudo_stock' => [null, null],
         ];
         if (isset($numericLimits[$key])) {
-            if ($input === '' && in_array($key, ['weight', 'pseudo_stock'], true)) {
+            if ($value === '' && in_array($key, ['weight', 'pseudo_stock'], true)) {
                 return '';
             }
             if ($value === '' && $key === 'price_net') {
@@ -366,6 +366,13 @@ final class ArticleDataRepository
         }
 
         return $value;
+    }
+
+    private static function normalizeStorageValue(string $key, string $value): string
+    {
+        // Blank stock and weight are distinct from numeric zero in the stored fields.
+        return $value === '' && in_array($key, ['weight', 'pseudo_stock'], true)
+            ? '' : FieldDiff::normalize($key, $value);
     }
 
     private function validateTextLength(string $key, string $value): void

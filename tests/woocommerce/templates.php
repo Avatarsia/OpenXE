@@ -531,6 +531,28 @@ A9;0;Artikelwert
         same($before, $db->overrides);
         same([], $db->writes);
     },
+    'csv_normalizes_legacy_shop_values_before_detecting_changes' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate('1:nummer;2:pseudolager;3:lieferzeitmanuell;'
+            . '4:pseudopreis;5:restmenge;6:autolagerlampe'));
+        $db->article += ['lieferzeitmanuell' => '2 Tage ', 'pseudopreis' => '12.50', 'restmenge' => '1', 'autolagerlampe' => '0'];
+        $db->article['pseudolager'] = '4.00';
+        $db->overrides[7] += ['pseudopreis' => '9.00', 'restmenge' => '0', 'autolagerlampe' => '1'];
+        $before = $db->overrides;
+        $header = "nummer;pseudolager;lieferzeitmanuell;pseudopreis;restmenge;autolagerlampe\n";
+        $result = runCsvImport($db, $header . "A9;4.00;2 Tage;12.50;1;0\n", 12);
+        same(true, $result['success']);
+        same('4.00', $db->article['pseudolager']);
+        same($before, $db->overrides);
+        same([], $db->writes);
+
+        $result = runCsvImport($db, $header . "A9;7.00;2 Tage;12.50;1;0\n", 12);
+        same(true, $result['success']);
+        same('7', $db->article['pseudolager']);
+        foreach ([7, 71, 8] as $override) {
+            $before[$override]['pseudolager'] = '7';
+        }
+        same($before, $db->overrides);
+    },
     'empty_price_is_ignored' => static function () {
         $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:woo_preis_netto"));
         same('', runCsvImport($db, "nummer;standardpreisnetto\nA9;\n", 12)['message']);
