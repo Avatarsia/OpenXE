@@ -76,6 +76,8 @@ refactor/woocommerce-composer-sdk
 feature/woocommerce-functional-parity
 # Targeted digital order recovery and completed-status preservation; requires functional parity
 fix/woocommerce-digital-order-import
+# WooCommerce article data, shop category tree and assignment (requires digital order import)
+feature/woocommerce-artikeldaten
 
 # UI: Dark Theme (token-based CSS, per-user switch auto/light/dark).
 # Touches theme CSS, page templates and inline styles across www/pages --
