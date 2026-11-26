@@ -95,7 +95,11 @@ final class ArticleTabDatabase
             same($this->expiredPrice['id'], $params['id']);
             $this->price = array_replace($this->expiredPrice, ['id' => 7, 'preis' => $params['value']]);
         } elseif (str_starts_with($sql, 'INSERT INTO konfiguration')) {
-            $this->config[$params['name']] = $params['wert'] ?? ($this->config[$params['name']] ?? '[]');
+            if (str_contains($sql, 'ON DUPLICATE KEY UPDATE name = VALUES(name)')) {
+                $this->config[$params['name']] ??= $params['wert'] ?? '[]';
+                return;
+            }
+            $this->config[$params['name']] = $params['wert'];
         } else {
             throw new RuntimeException('Unexpected write: ' . $sql);
         }
@@ -427,7 +431,7 @@ runTests([
         [$tab, $db, $token] = articleTabFixture();
         foreach (['1', '0'] as $checked) {
             $tab->saveExtras(9, 5, ['woo_csrf_token' => $token, 'woo' => ['on_request' => $checked]]);
-            same(['onRequest' => $checked === '1'], json_decode($db->config['woocommerce_article_5_9'], true));
+            same(['categories' => [], 'onRequest' => $checked === '1'], json_decode($db->config['woocommerce_article_5_9'], true));
         }
     },
     'extras_callback_runs_after_successful_legacy_save_before_redirect' => static function () {

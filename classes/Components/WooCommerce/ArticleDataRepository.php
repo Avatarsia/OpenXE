@@ -32,10 +32,12 @@ final class ArticleDataRepository
     private const TEXT_BYTE_LIMIT = 65535;
 
     private $database;
+    private ShopCategoryStore $categoryStore;
 
     public function __construct(private $app, private int $shopId)
     {
         $this->database = $app->Container->get('Database');
+        $this->categoryStore = new ShopCategoryStore($this->database, $shopId);
     }
 
     public function load(int $articleId): array
@@ -144,7 +146,7 @@ final class ArticleDataRepository
             $this->database->beginTransaction();
         }
         try {
-            $state = $this->loadState($articleId, true, $overrideId);
+            $state = $this->loadState($articleId, true, $overrideId, isset($updates['on_request']));
             $price = $state['fields']['price_net'];
             $reason = self::priceBlockReason($price['source']);
             if ($reason !== null && isset($updates['price_net'])
@@ -170,10 +172,7 @@ final class ArticleDataRepository
                     $this->writePrice($articleId, $state['price'], $new);
                     $audit[] = ['field' => $key, 'target' => 'price', 'old' => $effective, 'new' => $new];
                 } elseif ($storage === 'onrequest') {
-                    $name = $this->articleConfigKey($articleId);
-                    $config = $this->lockConfig($name);
-                    $config['onRequest'] = $new === '1';
-                    $this->writeConfig($name, $this->encodeConfig($config));
+                    $this->categoryStore->setOnRequest($articleId, $new === '1');
                     $audit[] = ['field' => $key, 'target' => 'onrequest', 'old' => $effective, 'new' => $new];
                 } else {
                     if ($articleChanged) {
@@ -209,8 +208,12 @@ final class ArticleDataRepository
         }
     }
 
-    private function loadState(int $articleId, bool $lock, ?int $overrideId = null): array
-    {
+    private function loadState(
+        int $articleId,
+        bool $lock,
+        ?int $overrideId = null,
+        bool $lockOnRequest = false
+    ): array {
         $articleParams = ['article' => $articleId];
         $shopParams = $articleParams + ['shop' => $this->shopId];
         $lockSql = $lock ? ' FOR UPDATE' : '';
@@ -242,7 +245,7 @@ final class ArticleDataRepository
         } elseif (count($candidates) > 1) {
             $priceSource = 'price_ambiguous';
         }
-        $config = $this->readConfig($this->articleConfigKey($articleId));
+        $onRequest = $this->categoryStore->isOnRequest($articleId, $lockOnRequest);
 
         $fields = [];
         foreach (ArticleFieldCatalog::fields() as $field) {
@@ -250,7 +253,7 @@ final class ArticleDataRepository
             [$value, $source] = match ($storage) {
                 'price' => [$priceValue, $priceSource],
                 'foreign_number' => [$sku, 'foreign_number'],
-                'onrequest' => [($config['onRequest'] ?? false) === true ? '1' : '0', 'onrequest'],
+                'onrequest' => [$onRequest ? '1' : '0', 'onrequest'],
                 'shop' => $override ? [$override[$column] ?? '', 'shop'] : [$article[$column] ?? '', 'artikel'],
                 default => [$article[$column] ?? '', 'artikel'],
             };
@@ -360,20 +363,6 @@ final class ArticleDataRepository
         }
     }
 
-    private function articleConfigKey(int $articleId): string
-    {
-        return 'woocommerce_article_' . $this->shopId . '_' . $articleId;
-    }
-
-    private function readConfig(string $name, bool $lock = false): array
-    {
-        $json = $this->database->fetchValue(
-            'SELECT wert FROM konfiguration WHERE name = :name' . ($lock ? ' FOR UPDATE' : ''),
-            ['name' => $name]
-        );
-        return $json === false || $json === null ? [] : json_decode($json, true, 512, JSON_THROW_ON_ERROR);
-    }
-
     private function lockConfig(string $name): array
     {
         $this->database->perform(
@@ -381,7 +370,11 @@ final class ArticleDataRepository
             . ' ON DUPLICATE KEY UPDATE name = VALUES(name)',
             ['name' => $name]
         );
-        return $this->readConfig($name, true);
+        $json = $this->database->fetchValue(
+            'SELECT wert FROM konfiguration WHERE name = :name FOR UPDATE',
+            ['name' => $name]
+        );
+        return $json === false || $json === null ? [] : json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     }
 
     private function writeConfig(string $name, string $json): void

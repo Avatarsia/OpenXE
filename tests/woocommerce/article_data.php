@@ -5,6 +5,7 @@ require __DIR__ . '/bootstrap.php';
 use Xentral\Components\WooCommerce\ArticleDataRepository;
 use Xentral\Components\WooCommerce\DeliveryTimeMap;
 use Xentral\Components\WooCommerce\FieldDiff;
+use Xentral\Components\WooCommerce\ShopCategoryStore;
 use Xentral\Components\WooCommerce\WooProductReader;
 
 final class ArticleDataDatabase
@@ -114,7 +115,7 @@ final class ArticleDataDatabase
             }
         } elseif (str_starts_with($sql, 'INSERT INTO konfiguration')) {
             if (!str_contains($sql, 'wert = VALUES(wert)')) {
-                $this->config[$parameters['name']] ??= '[]';
+                $this->config[$parameters['name']] ??= $parameters['wert'] ?? '[]';
                 return;
             }
             if ($this->failLog && $parameters['name'] === 'woocommerce_pull_log_5') {
@@ -445,12 +446,28 @@ runTests([
     },
     'on_request_preserves_other_article_config' => static function () {
         $db = new ArticleDataDatabase();
-        $db->config['woocommerce_article_5_9'] = '{"categories":[2],"onRequest":false}';
+        $db->config['woocommerce_article_5_9'] = '{"onRequest":true}';
         $repo = articleRepository($db);
-        same(['value' => '0', 'source' => 'onrequest'], $repo->load(9)['on_request']);
-        $repo->apply(9, ['on_request' => '1'], 'tab');
-        same(['categories' => [2], 'onRequest' => true], json_decode($db->config['woocommerce_article_5_9'], true));
+        $store = new ShopCategoryStore($db, 5);
+        $category = $store->create('Category');
+        $store->assign(9, [$category]);
         same(['value' => '1', 'source' => 'onrequest'], $repo->load(9)['on_request']);
+        same(['on_request' => ['old' => '1', 'new' => '0']], $repo->apply(9, ['on_request' => '0'], 'tab'));
+        same([$category], $store->categoriesOf(9));
+        same(false, $store->isOnRequest(9));
+        $log = json_decode($db->config['woocommerce_pull_log_5'], true);
+        same(['user' => 42, 'article' => 9, 'field' => 'on_request', 'target' => 'onrequest',
+            'old' => '1', 'new' => '0', 'origin' => 'tab'], array_diff_key($log[0], ['time' => true]));
+
+        $db->failLog = true;
+        $before = $db->config;
+        try {
+            $repo->apply(9, ['on_request' => '1'], 'tab');
+            throw new LogicException('Log failure did not propagate.');
+        } catch (RuntimeException $error) {
+            same('Log write failed.', $error->getMessage());
+        }
+        same($before, $db->config);
     },
     'variation_sku_maps_to_variant_article' => static function () {
         $client = new class {
