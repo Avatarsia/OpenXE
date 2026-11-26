@@ -7816,12 +7816,10 @@ class Artikel extends GenArtikel {
 
   private function saveOnlineShopFields(int $articleId, int $assignmentId, int $shopId, array $fields): array
   {
-    $context = $this->wooDialogContext($articleId, $assignmentId, $shopId);
-    $shared = $this->onlineShopOverrideValues($shopId, $context);
+    $context = $this->wooDialogAssignmentContext($articleId, $assignmentId, $shopId);
+    $shared = $this->onlineShopOverrideValues($articleId, $shopId, $context['shops']);
     $db = $this->app->DB;
-    $isWooCommerce = in_array('pseudopreis', $fields, true) && $db->Select(
-      "SELECT id FROM shopexport WHERE id = '$shopId' AND modulename = 'shopimporter_woocommerce' LIMIT 1"
-    );
+    $isWooCommerce = ($context['shops'][$shopId]['modulename'] ?? '') === 'shopimporter_woocommerce';
     if ($shared === [] && empty($context['visibility'])) {
       $assignments = ["ao.shop = '$shopId'"];
       foreach ($fields as $field) {
@@ -7876,13 +7874,14 @@ class Artikel extends GenArtikel {
         );
         return $database->fetchRow('SELECT ' . implode(', ', array_keys($shared)) . ' FROM artikel WHERE id = :article',
           ['article' => $articleId]) ?: [];
-      }
+      },
+      $shared !== []
     );
   }
 
   private function deleteOnlineShopWithVisibility(int $articleId, int $assignmentId, int $shopId): bool
   {
-    $context = $this->wooDialogContext($articleId, $assignmentId, $shopId);
+    $context = $this->wooDialogAssignmentContext($articleId, $assignmentId, $shopId);
     if (empty($context['visibility'])) {
       return false;
     }
@@ -7905,8 +7904,9 @@ class Artikel extends GenArtikel {
     );
   }
 
-  private function mutateWooDialogAssignment(int $articleId, int $assignmentId, array $context, callable $mutate): mixed
-  {
+  private function mutateWooDialogAssignment(
+    int $articleId, int $assignmentId, array $context, callable $mutate, bool $mirrorsArticle = false
+  ): mixed {
     $database = $this->app->Container->get('Database');
     $database->beginTransaction();
     try {
@@ -7915,7 +7915,7 @@ class Artikel extends GenArtikel {
         'SELECT shop FROM artikel_onlineshops WHERE id = :assignment AND artikel = :article FOR UPDATE',
         ['assignment' => $assignmentId, 'article' => $articleId]
       );
-      if (!$article || !$this->app->erp->UserProjektRecht((int)($article['projekt'] ?? 0))
+      if (!$article || ($mirrorsArticle && !$this->app->erp->UserProjektRecht((int)$article['projekt']))
         || !$assignment || (int)($assignment['shop'] ?? 0) !== $context['oldShop']) {
         throw new RuntimeException('Die Shop-Zuordnung hat sich geaendert. Bitte neu laden.');
       }
@@ -7947,49 +7947,53 @@ class Artikel extends GenArtikel {
     }
   }
 
-  private function wooDialogContext(int $articleId, int $assignmentId, int $shopId): array
+  private function wooDialogAssignmentContext(int $articleId, int $assignmentId, int $shopId): array
   {
-    $token = $this->app->Secure->GetPOST('woo_dialog_token', '', '', 1);
-    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !is_string($token) || $token === ''
-        || !$this->app->erp->RechteVorhanden('onlineshops', 'edit')
-        || !$this->app->erp->RechteVorhanden('artikel', 'edit')
-        || !$this->app->Container->get('Session')->isCsrfTokenValid('woocommerce_admin', $token)) {
-      return [];
-    }
     $db = $this->app->DB;
-    $article = $db->SelectRow("SELECT projekt, variante, variante_von FROM artikel WHERE id = '$articleId' LIMIT 1");
-    if (!$article || ArticleFieldCatalog::isVariant($article)
-        || !$this->app->erp->UserProjektRecht((int)$article['projekt'])) {
-      return [];
-    }
     $oldShopId = (int)$db->Select("SELECT shop FROM artikel_onlineshops WHERE id = '$assignmentId'"
       . " AND artikel = '$articleId' LIMIT 1");
     $shopIds = array_unique(array_filter([$shopId, $oldShopId]));
     sort($shopIds, SORT_NUMERIC);
+    $shops = [];
     $visibility = [];
-    $wooTarget = false;
     foreach ($shopIds as $id) {
       $shop = $db->SelectRow("SELECT projekt, modulename, einstellungen_json, geloescht FROM shopexport WHERE id = '$id' LIMIT 1");
-      if (!$shop || !$this->app->erp->UserProjektRecht((int)$shop['projekt'])) {
-        return [];
-      }
-      if ($shop['modulename'] !== 'shopimporter_woocommerce' || !empty($shop['geloescht'])) {
+      $shops[$id] = $shop;
+      if (($shop['modulename'] ?? '') !== 'shopimporter_woocommerce' || !empty($shop['geloescht'])) {
         continue;
       }
-      $wooTarget = $wooTarget || $id === $shopId;
       $settings = json_decode((string)$shop['einstellungen_json'], true)['felder'] ?? [];
       if (!empty($settings['visibilitySync'])) {
         $visibility[] = $id;
       }
     }
-    return ['oldShop' => $oldShopId, 'wooTarget' => $wooTarget, 'visibility' => $visibility];
+    return ['oldShop' => $oldShopId, 'shops' => $shops, 'visibility' => $visibility];
   }
 
-  private function onlineShopOverrideValues(int $shopId, array $context): array
+  private function onlineShopOverrideValues(int $articleId, int $shopId, array $shops): array
   {
     $secure = $this->app->Secure;
-    if (empty($context['wooTarget']) || $secure->GetPOST('aktiv') !== '1' || $secure->GetPOST('ausartikel') !== '0') {
+    $target = $shops[$shopId] ?? [];
+    if (($target['modulename'] ?? '') !== 'shopimporter_woocommerce' || !empty($target['geloescht'])
+      || $secure->GetPOST('aktiv') !== '1' || $secure->GetPOST('ausartikel') !== '0') {
       return [];
+    }
+    $token = $secure->GetPOST('woo_dialog_token', '', '', 1);
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !is_string($token) || $token === ''
+      || !$this->app->erp->RechteVorhanden('onlineshops', 'edit')
+      || !$this->app->erp->RechteVorhanden('artikel', 'edit')
+      || !$this->app->Container->get('Session')->isCsrfTokenValid('woocommerce_admin', $token)) {
+      return [];
+    }
+    $article = $this->app->DB->SelectRow("SELECT projekt, variante, variante_von FROM artikel WHERE id = '$articleId' LIMIT 1");
+    if (!$article || ArticleFieldCatalog::isVariant($article)
+      || !$this->app->erp->UserProjektRecht((int)$article['projekt'])) {
+      return [];
+    }
+    foreach ($shops as $shop) {
+      if (!$shop || !$this->app->erp->UserProjektRecht((int)$shop['projekt'])) {
+        return [];
+      }
     }
     $values = [];
     foreach (ArticleFieldCatalog::fields() as $field) {

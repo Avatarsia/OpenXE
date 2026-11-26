@@ -165,7 +165,11 @@ function articleTabFixture(): array
                 return str_replace(',', '.', $value);
             }
             public bool $edit = true;
-            public function RechteVorhanden(string $module, string $action): bool { return $this->edit; }
+            public bool $shopEdit = true;
+            public function RechteVorhanden(string $module, string $action): bool
+            {
+                return $this->edit && ($module !== 'onlineshops' || $this->shopEdit);
+            }
             public function UserProjektRecht(int $project): bool { return $project === 0; }
             public function GetVerkaufspreisGruppe(int $article, int $quantity, int $group): string
             {
@@ -354,11 +358,17 @@ runTests([
         $method = $_SERVER['REQUEST_METHOD'] ?? null;
         $_SERVER['REQUEST_METHOD'] = 'POST';
         try {
-            foreach ([true, false] as $visibility) {
+            foreach ([
+                'without shop edit' => [true, false, true],
+                'without mirror token' => [true, true, false],
+                'with mirror permission' => [true, true, true],
+                'visibility disabled' => [false, false, true],
+            ] as $scenario => [$visibility, $shopEdit, $validToken]) {
                 [, $db, $token, $app] = articleTabFixture();
+                $app->erp->shopEdit = $shopEdit;
                 $db->override += ['shop' => 5, 'aktiv' => '1'];
                 $db->article['shop2'] = 5;
-                $app->Secure->POST = ['aktiv' => '0', 'ausartikel' => '1', 'woo_dialog_token' => $token];
+                $app->Secure->POST = ['aktiv' => '0', 'ausartikel' => '1', 'woo_dialog_token' => $validToken ? $token : ''];
                 $app->DB = new class ($visibility) {
                     public function __construct(private bool $visibility) {}
                     public function Select(string $sql): int { return 5; }
@@ -374,7 +384,7 @@ runTests([
                 $save = new ReflectionMethod($page, 'saveOnlineShopFields');
                 same([], $save->invoke($page, 9, 6, 5, ['aktiv', 'ausartikel']));
                 $queue = new \Xentral\Components\WooCommerce\VisibilityQueue($db, 5);
-                same($visibility ? ['LOCAL-9'] : [], array_column($queue->pending(), 'sku'));
+                same($visibility ? ['LOCAL-9'] : [], array_column($queue->pending(), 'sku'), $scenario);
                 if ($visibility) {
                     same(0, $db->article['shop2']);
                     same('0', $db->override['aktiv']);
