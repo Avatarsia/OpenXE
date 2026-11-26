@@ -288,7 +288,7 @@ runTests([
         check(str_contains($page->render(), 'Vorschau erneut laden'));
         same([], $db->writes);
     },
-    'bulk preview filters fields and POST applies only displayed selections using fresh data' => static function () {
+    'bulk preview filters fields and POST applies only displayed selections with confirmed values' => static function () {
         $db = new BulkPullDatabase();
         $client = Shopimporter_Woocommerce::$fixtureClient = new BulkPullClient();
         $client->pages[2] = $client->pages[1];
@@ -307,7 +307,7 @@ runTests([
         preg_match('/name="pull_preview" value="([^"]+)"/', $html, $preview);
         preg_match('/name="csrf_token" value="([^"]+)"/', $html, $token);
         $post = ['wc_action' => 'apply_pull', 'csrf_token' => $token[1], 'pull_preview' => $preview[1]];
-        $client->pages[2][0]['meta_data'][0]['value'] = 'SEO aktuell';
+        $client->pages[2][0]['name'] = 'New unselected name';
 
         [$page] = adminFixture($post + ['pull' => [9 => 'shop_name'], 'pull_count' => '1'], $get, $db, new Session($_SESSION));
         check(str_contains($page->render(), 'Feld war in der Vorschau nicht ausw'));
@@ -316,7 +316,7 @@ runTests([
         [$page] = adminFixture($post + ['pull' => [9 => 'seo_title'], 'pull_count' => '1', 'seo_title' => 'Gefaelschter Wert'],
             $get, $db, new Session($_SESSION));
         check(str_contains($page->render(), '1 Feld'));
-        same('SEO aktuell', $db->articles[9]['metatitle_de']);
+        same('SEO Vorschau', $db->articles[9]['metatitle_de']);
         same('Alter Name', $db->articles[9]['shop_name_de']);
         same([['products', 2, 100], ['products', 2, 100]], $client->requests);
     },
