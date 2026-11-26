@@ -771,6 +771,14 @@ runTests([
         same(['parts', 'tools'], array_column($connector->client->collections['products/categories'], 'slug'));
         check(in_array($reason, $connector->logger->warnings, true));
     },
+    'failed_availability_lookup_leaves_the_cron_export_hash_pending' => static function () {
+        [$db, , $connector, $remote, , $article] = categoryRetryFixture();
+        (new ReflectionProperty(Shopimporter_Woocommerce::class, 'extendedFieldMapping'))->setValue($connector, true);
+        $db->config['woocommerce_article_7_9'] = '{';
+        $result = $remote->export([$article]);
+        same(false, $result[0]->success);
+        same('previous-hash', $db->assignment['last_article_hash']);
+    },
     'availability_lookup_failure_skips_only_its_article_group_before_writes' => static function () {
         foreach (['parent_request', 'variant_request', 'variant_sold_out'] as $failure) {
             $db = new CategoryStoreDatabase();

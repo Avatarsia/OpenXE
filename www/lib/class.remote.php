@@ -2264,8 +2264,9 @@ class Remote
         if (!empty($result) && is_array($result)) {
             /** @var ArticleExportResult $articleResult */
             foreach ($result as $articleResult) {
-                if (!$articleResult instanceof ArticleExportResult)
+                if (!$articleResult instanceof ArticleExportResult || !$articleResult->success) {
                     continue;
+                }
                 /** @var Shopexport $objShopexport */
                 $objShopexport = $this->app->loadModule('shopexport');
                 $changedHash = $objShopexport->hasArticleHashChanged($articleResult->articleId, $shop_id);
