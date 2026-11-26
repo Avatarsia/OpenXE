@@ -4,10 +4,15 @@ require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/fixtures/category-store.php';
 require __DIR__ . '/fixtures/assignment.php';
 
+use Automattic\WooCommerce\HttpClient\HttpClientException;
+use Automattic\WooCommerce\HttpClient\Request;
+use Automattic\WooCommerce\HttpClient\Response;
+use Xentral\Components\Database\Exception\QueryFailureException;
 use Xentral\Components\WooCommerce\AssignmentPage;
 use Xentral\Components\WooCommerce\ClientWrapper;
 use Xentral\Components\WooCommerce\ShopCategoryStore;
 use Xentral\Components\WooCommerce\VisibilityQueue;
+require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require dirname(__DIR__, 2) . '/www/lib/class.remote.php';
 require dirname(__DIR__, 2) . '/www/lib/ShopimporterBase.php';
 require dirname(__DIR__, 2) . '/www/pages/shopimporter_woocommerce.php';
@@ -22,6 +27,7 @@ class IntegrationProductApi extends ClientWrapper
     public ?Closure $duringCategoryRead = null;
     public bool $failCategoryReads = false;
     public ?string $failCategoryAssignment = null;
+    public int $categoryAssignmentStatus = 503;
     public ?Closure $duringProductLookup = null;
     private int $total = 0;
     private $nextId = 100;
@@ -96,7 +102,8 @@ class IntegrationProductApi extends ClientWrapper
     public function put($endpoint, $payload)
     {
         if ($endpoint === $this->failCategoryAssignment && isset($payload['categories'])) {
-            throw new Error('Category assignment unavailable');
+            throw new HttpClientException('Category assignment unavailable', $this->categoryAssignmentStatus,
+                new Request(), new Response($this->categoryAssignmentStatus));
         }
         $this->writes[] = ['PUT', $endpoint, $payload];
         $parts = explode('/', $endpoint);
@@ -235,6 +242,88 @@ function configureProductDatabase(IntegrationProductConnector $connector, object
     (new ReflectionProperty(Shopimporter_Woocommerce::class, 'app'))->setValue($connector, (object) ['Container' => $container]);
 }
 
+function categoryRetryFixture(): array
+{
+    $db = new AssignmentFixtureDatabase();
+    $db->assignment = ['aktiv' => 1, 'last_article_hash' => 'previous-hash'];
+    $store = new ShopCategoryStore($db, 7);
+    $node = $store->create('Parts');
+    $store->assign(9, [$node]);
+    $db->beginTransaction();
+    $store->markTreeSyncPending();
+    $db->commit();
+    $article = remoteProduct(['artikel' => 9]);
+    $connector = productConnector([$article], ['shopCategoryTree' => true]);
+    $connector->shopid = 7;
+    $connector->lastImportTimestamp = '2025-01-01T00:00:00';
+    configureProductDatabase($connector, $db);
+    $legacyDb = new class($db) {
+        public ?Closure $beforeHashWrite = null;
+        public function __construct(private AssignmentFixtureDatabase $db) {}
+        public function Select(string $sql): int|string
+        {
+            return str_starts_with($sql, 'SELECT id FROM artikel_onlineshops') ? 10 : 'PARENT';
+        }
+        public function real_escape_string(?string $value): string { return $value ?? ''; }
+        public function Update(string $sql): void
+        {
+            check(str_contains($sql, "last_article_hash = 'current-hash'"));
+            check(str_contains($sql, 'WHERE artikel = 9 AND shop = 7'));
+            ($this->beforeHashWrite)?->__invoke();
+            $this->db->assignment['last_article_hash'] = 'current-hash';
+        }
+    };
+    $app = new class($legacyDb, assignmentFixtureApp($db)->Container) {
+        public ?Closure $beforeHashCheck = null;
+        public function __construct(public object $DB, public object $Container) {}
+        public function loadModule(string $name): object
+        {
+            same('shopexport', $name);
+            return $this;
+        }
+        public function hasArticleHashChanged(int $article, int $shop): array
+        {
+            same([9, 7], [$article, $shop]);
+            ($this->beforeHashCheck)?->__invoke();
+            return ['hash' => 'current-hash'];
+        }
+    };
+    $remote = new class($app, $connector) extends Remote {
+        public function __construct(object $app, private IntegrationProductConnector $connector)
+        {
+            $this->app = $app;
+            $this->logger = $connector->logger;
+        }
+        public function RemoteCommand($id, $action, $data = '')
+        {
+            same([7, 'sendlist'], [$id, $action]);
+            return $this->connector->ImportSendList();
+        }
+        public function export(array $articles): array
+        {
+            return $this->sendlist(7, $articles, true);
+        }
+    };
+
+    return [$db, $store, $connector, $remote, $app, $article, $node];
+}
+
+function renameUnassignedCategoryWithPendingRetry(AssignmentFixtureDatabase $db, ShopCategoryStore $store,
+    int $notBefore, string $expectedHash): array
+{
+    $other = $store->create('Unassigned category');
+    $page = new AssignmentPage(assignmentFixtureApp($db));
+    $edited = $page->handle('cat_rename', [
+        'shop' => 7, 'category' => $other, 'name' => 'Renamed', 'csrf_token' => 'assignment-token',
+    ]);
+    same(true, $edited['ok']);
+    same($expectedHash, $db->assignment['last_article_hash']);
+    $remaining = json_decode($db->config['woocommerce_category_export_invalidation_7'], true, 512, JSON_THROW_ON_ERROR);
+    same([9 => $notBefore], $remaining['articles']);
+    same([], $remaining['nodes'] ?? []);
+    return $remaining;
+}
+
 runTests([
     'guard_reads_current_assignment_after_sku_lookup_for_a_prequeued_export' => static function () {
         $db = new AssignmentFixtureDatabase();
@@ -353,7 +442,6 @@ runTests([
         }
     },
     'tree_sync_transport_caps_requests_independently_of_shop_timeout' => static function () {
-        require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
         $connector = productConnector([]);
         $app = (object) ['DB' => new class {
             public function Select(string $sql): string
@@ -406,99 +494,137 @@ runTests([
         same([], $db->advisoryLocks);
         same(null, $store->pendingTreeSync());
     },
-    'deferred_category_assignment_requeues_the_article_after_hash_storage' => static function () {
-        foreach ([true, false] as $lockBusy) {
-            $db = new AssignmentFixtureDatabase();
-            $db->assignment = ['aktiv' => 1, 'last_article_hash' => 'previous-hash'];
-            $store = new ShopCategoryStore($db, 7);
-            $node = $store->create('Parts');
-            $store->assign(9, [$node]);
-            $db->beginTransaction();
-            $store->markTreeSyncPending();
-            $db->commit();
-            $article = remoteProduct(['artikel' => 9]);
-            $connector = productConnector([$article], ['shopCategoryTree' => true]);
-            $connector->shopid = 7;
-            $connector->lastImportTimestamp = '2025-01-01T00:00:00';
-            configureProductDatabase($connector, $db);
-            $lock = 'openxe_wc_category_sync_7';
-            if ($lockBusy) {
-                $db->advisoryLocks[$lock] = true;
-            } else {
-                $connector->client->failCategoryAssignment = 'products/102';
-            }
+    'busy_tree_lock_persists_delayed_retry_before_hash_storage' => static function () {
+        [$db, $store, $connector, $remote, $app, $article] = categoryRetryFixture();
+        $lock = 'openxe_wc_category_sync_7';
+        $key = 'woocommerce_category_export_invalidation_7';
+        $db->advisoryLocks[$lock] = true;
+        $started = time();
 
-            $legacyDb = new class($db, $connector) {
-                public function __construct(
-                    private AssignmentFixtureDatabase $db,
-                    private IntegrationProductConnector $connector
-                ) {}
-                public function Select(string $sql): int|string
-                {
-                    return str_starts_with($sql, 'SELECT id FROM artikel_onlineshops') ? 10 : 'PARENT';
-                }
-                public function real_escape_string(?string $value): string { return $value ?? ''; }
-                public function Update(string $sql): void
-                {
-                    check(str_contains($sql, "last_article_hash = 'current-hash'"));
-                    check(str_contains($sql, 'WHERE artikel = 9 AND shop = 7'));
-                    // The order import can interleave with export result processing.
-                    same(0, $this->connector->ImportGetAuftraegeAnzahl());
-                    same('previous-hash', $this->db->assignment['last_article_hash']);
-                    $this->db->assignment['last_article_hash'] = 'current-hash';
-                }
-            };
-            $app = new class($legacyDb, assignmentFixtureApp($db)->Container) {
-                public function __construct(public object $DB, public object $Container) {}
-                public function loadModule(string $name): object
-                {
-                    same('shopexport', $name);
-                    return $this;
-                }
-                public function hasArticleHashChanged(int $article, int $shop): array
-                {
-                    same([9, 7], [$article, $shop]);
-                    return ['hash' => 'current-hash'];
-                }
-            };
-            $remote = new class($app, $connector) extends Remote {
-                public function __construct(object $app, private IntegrationProductConnector $connector)
-                {
-                    $this->app = $app;
-                    $this->logger = $connector->logger;
-                }
-                public function RemoteCommand($id, $action, $data = '')
-                {
-                    same([7, 'sendlist'], [$id, $action]);
-                    return $this->connector->ImportSendList();
-                }
-                public function export(array $articles): array
-                {
-                    return $this->sendlist(7, $articles, true);
-                }
-            };
+        $app->DB->beforeHashWrite = static function () use ($db, $connector, $key): void {
+            check(isset($db->config[$key]), 'The retry must be persisted before the result writes its hash.');
+            check(!$db->inTransaction(), 'The retry must already be committed.');
+            same(0, $connector->ImportGetAuftraegeAnzahl());
+            same('previous-hash', $db->assignment['last_article_hash']);
+        };
+        $result = $remote->export([$article])[0];
+        same(true, $result->success);
+        check(str_contains($result->message, 'bereits synchronisiert'));
+        same('PARENT', productWrite($connector->client, 'products')['sku']);
+        same('current-hash', $db->assignment['last_article_hash']);
+        $entry = json_decode($db->config[$key], true, 512, JSON_THROW_ON_ERROR);
+        $notBefore = $entry['articles'][9];
+        check($notBefore >= $started + 120 && $notBefore <= time() + 120);
 
+        $entry = renameUnassignedCategoryWithPendingRetry($db, $store, $notBefore, 'current-hash');
+        unset($db->advisoryLocks[$lock]);
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same('current-hash', $db->assignment['last_article_hash']);
+        same([], $connector->client->collections['products'][0]['categories']);
+        // Age the persisted deadline to simulate the next eligible order import.
+        $entry['articles'][9] = time() - 1;
+        $db->config[$key] = json_encode($entry, JSON_THROW_ON_ERROR);
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same('', $db->assignment['last_article_hash']);
+        same(false, $store->hasPendingExportInvalidations());
+
+        $app->DB->beforeHashWrite = null;
+        $retry = $remote->export([$article])[0];
+        same(true, $retry->success);
+        same(null, $retry->message);
+        $termId = $connector->client->collections['products/categories'][0]['id'];
+        same([['id' => $termId]], $connector->client->collections['products'][0]['categories']);
+        same('current-hash', $db->assignment['last_article_hash']);
+        same(false, $store->hasPendingExportInvalidations());
+    },
+    'assignment_page_drain_respects_article_deadlines' => static function () {
+        [$db, $store] = categoryRetryFixture();
+        $notBefore = time() + 120;
+        $db->config['woocommerce_category_export_invalidation_7'] =
+            json_encode(['articles' => [9 => $notBefore], 'revision' => 'pending'], JSON_THROW_ON_ERROR);
+        renameUnassignedCategoryWithPendingRetry($db, $store, $notBefore, 'previous-hash');
+    },
+    'stale_drain_does_not_clear_the_hash_before_a_renewed_deadline' => static function () {
+        [$db, , $connector] = categoryRetryFixture();
+        $key = 'woocommerce_category_export_invalidation_7';
+        $db->config[$key] = json_encode(['articles' => [9 => time() - 1], 'revision' => 'old'], JSON_THROW_ON_ERROR);
+        $renewed = json_encode(['articles' => [9 => time() + 120], 'revision' => 'new'], JSON_THROW_ON_ERROR);
+        $db->concurrentConfigWrite = static function () use ($db, $key, $renewed): void {
+            $db->config[$key] = $renewed;
+        };
+        same(0, $connector->ImportGetAuftraegeAnzahl());
+        same('previous-hash', $db->assignment['last_article_hash']);
+        same($renewed, $db->config[$key]);
+    },
+    'permanent_slug_conflict_keeps_its_admin_warning_without_requeueing' => static function () {
+        [$db, $store, $connector, $remote, , $article, $node] = categoryRetryFixture();
+        $connector->client->collections['products/categories'][] = [
+            'id' => 44, 'name' => 'Unrelated category', 'slug' => 'parts', 'parent' => 0, 'count' => 1,
+        ];
+        for ($attempt = 0; $attempt < 2; $attempt++) {
             $result = $remote->export([$article])[0];
             same(true, $result->success);
-            same(9, $result->articleId);
-            $warning = $lockBusy ? 'bereits synchronisiert' : 'Category assignment unavailable';
-            check(str_contains($result->message, $warning));
-            same('PARENT', productWrite($connector->client, 'products')['sku']);
-            same([], $connector->client->collections['products'][0]['categories'] ?? []);
-            same('current-hash', $db->assignment['last_article_hash']);
-            check($store->hasPendingExportInvalidations(), 'Deferred article must be queued after hash storage.');
-
-            unset($db->advisoryLocks[$lock]);
-            same(0, $connector->ImportGetAuftraegeAnzahl());
-            same('', $db->assignment['last_article_hash']);
+            check(str_contains($result->message, 'WooCommerce-Slug bereits belegt: parts'));
+            same([$node => 'WooCommerce-Slug bereits belegt: parts'], $store->skipReasons());
+            $page = new AssignmentPage(assignmentFixtureApp($db));
+            check(str_contains($page->render(), 'WooCommerce-Slug bereits belegt: parts'));
             same(false, $store->hasPendingExportInvalidations());
-
-            $connector->client->failCategoryAssignment = null;
-            $retry = $connector->ImportSendList()[0];
-            same(true, $retry->success);
-            same(null, $retry->message);
-            $termId = $connector->client->collections['products/categories'][0]['id'];
-            same([['id' => $termId]], $connector->client->collections['products'][0]['categories']);
+            same(0, $connector->ImportGetAuftraegeAnzahl());
+            same('current-hash', $db->assignment['last_article_hash']);
+        }
+    },
+    'permanent_rest_assignment_error_stays_out_of_retry_queue' => static function () {
+        [$db, $store, $connector, $remote, , $article] = categoryRetryFixture();
+        $connector->client->failCategoryAssignment = 'products/102';
+        $connector->client->categoryAssignmentStatus = 403;
+        $result = $remote->export([$article])[0];
+        same(true, $result->success);
+        check(str_contains($result->message, 'Category assignment unavailable'));
+        same(false, $store->hasPendingExportInvalidations());
+        same('current-hash', $db->assignment['last_article_hash']);
+    },
+    'transient_rest_assignment_error_requeues' => static function () {
+        [$db, $store, $connector, $remote, , $article] = categoryRetryFixture();
+        $connector->client->failCategoryAssignment = 'products/102';
+        $result = $remote->export([$article])[0];
+        same(true, $result->success);
+        check(str_contains($result->message, 'Category assignment unavailable'));
+        same(true, $store->hasPendingExportInvalidations());
+        same('current-hash', $db->assignment['last_article_hash']);
+    },
+    'transient_category_node_failures_requeue_affected_articles' => static function () {
+        foreach ([
+            new HttpClientException('Category creation unavailable', 503, new Request(), new Response(503)),
+            new QueryFailureException('Category write deadlock', 1213),
+        ] as $error) {
+            [, $store, $connector, $remote, , $article] = categoryRetryFixture();
+            $connector->client->duringCategoryPost = static function () use ($error): void { throw $error; };
+            $result = $remote->export([$article])[0];
+            same(true, $result->success);
+            check(str_contains($result->message, $error->getMessage()));
+            same(true, $store->hasPendingExportInvalidations());
+            same([], $store->skipReasons(), 'Transient failures must not become permanent node skips.');
+        }
+    },
+    'interruption_before_retry_recording_or_hash_write_leaves_the_old_hash' => static function () {
+        foreach ([false, true] as $afterQueueCommit) {
+            [$db, $store, $connector, $remote, $app, $article] = categoryRetryFixture();
+            $db->advisoryLocks['openxe_wc_category_sync_7'] = true;
+            $interrupt = static function (): never { throw new RuntimeException('Simulated interruption'); };
+            if ($afterQueueCommit) {
+                $app->DB->beforeHashWrite = $interrupt;
+            } else {
+                $app->beforeHashCheck = $interrupt;
+            }
+            try {
+                $remote->export([$article]);
+                throw new LogicException('Expected interruption.');
+            } catch (RuntimeException $error) {
+                same('Simulated interruption', $error->getMessage());
+            }
+            same('PARENT', productWrite($connector->client, 'products')['sku']);
+            same('previous-hash', $db->assignment['last_article_hash']);
+            same($afterQueueCommit, $store->hasPendingExportInvalidations());
         }
     },
     'three_consecutive_category_budget_exhaustions_warn_until_success' => static function () {

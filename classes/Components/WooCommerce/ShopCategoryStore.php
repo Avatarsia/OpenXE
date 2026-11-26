@@ -11,6 +11,7 @@ use Throwable;
 final class ShopCategoryStore
 {
     private const CONFIG_LIMIT = 65000;
+    private const ARTICLE_RETRY_DELAY = 120;
     private const CONFIG_JSON_FLAGS = JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES;
     private const REASON_LENGTH_LIMIT = 200;
     private const REASON_ENTRY_LIMIT = 200;
@@ -71,15 +72,25 @@ final class ShopCategoryStore
     /** Enqueue in the same transaction as the tree edit. */
     public function markExportInvalidationPending(int $nodeId): void
     {
-        $this->markInvalidationPending('nodes', $nodeId);
+        $state = $this->lockConfig($this->exportInvalidationKey, '{}');
+        if (!in_array($nodeId, $state['nodes'] ?? [], true)) {
+            $state['nodes'][] = $nodeId;
+        }
+        $state['revision'] = bin2hex(random_bytes(16));
+        $this->writeConfig($this->exportInvalidationKey, $state);
     }
 
-    /** Called after the export result handler has stored the article hash. */
+    /** Commit the delayed invalidation before the export result writes the new hash. */
     public function markArticleExportInvalidationPending(int $articleId): void
     {
         $this->database->beginTransaction();
         try {
-            $this->markInvalidationPending('articles', $articleId);
+            $state = $this->lockConfig($this->exportInvalidationKey, '{}');
+            $deadlines = $this->articleRetryDeadlines($state);
+            $deadlines[$articleId] = time() + self::ARTICLE_RETRY_DELAY;
+            $state['articles'] = $deadlines;
+            $state['revision'] = bin2hex(random_bytes(16));
+            $this->writeConfig($this->exportInvalidationKey, $state);
             $this->database->commit();
         } catch (Throwable $error) {
             if ($this->database->inTransaction()) {
@@ -89,14 +100,11 @@ final class ShopCategoryStore
         }
     }
 
-    private function markInvalidationPending(string $type, int $id): void
+    private function articleRetryDeadlines(array $state): array
     {
-        $state = $this->lockConfig($this->exportInvalidationKey, '{}');
-        if (!in_array($id, $state[$type] ?? [], true)) {
-            $state[$type][] = $id;
-        }
-        $state['revision'] = bin2hex(random_bytes(16));
-        $this->writeConfig($this->exportInvalidationKey, $state);
+        $articles = $state['articles'] ?? [];
+        // Older entries were queued after the hash write and can be drained immediately.
+        return array_is_list($articles) ? array_fill_keys($articles, 0) : $articles;
     }
 
     public function hasPendingExportInvalidations(): bool
@@ -109,7 +117,10 @@ final class ShopCategoryStore
     {
         $state = $this->readConfig($this->exportInvalidationKey, '{}');
         $nodeIds = $state['nodes'] ?? [];
-        $articleIds = $state['articles'] ?? [];
+        $deadlines = $this->articleRetryDeadlines($state);
+        $now = time();
+        $waiting = array_filter($deadlines, static fn (int $notBefore): bool => $notBefore > $now);
+        $articleIds = array_keys(array_diff_key($deadlines, $waiting));
         if ($nodeIds === [] && $articleIds === []) {
             return;
         }
@@ -122,7 +133,19 @@ final class ShopCategoryStore
             foreach ($articleIds as $articleId) {
                 $this->invalidateArticleExport($articleId);
             }
-            $this->acknowledgeConfig($this->exportInvalidationKey, $state);
+            // Lock the current queue after the assignment rows. Roll back stale invalidations
+            // if a concurrent export has already replaced their deadlines.
+            if ($this->readConfig($this->exportInvalidationKey, '{}', true) !== $state) {
+                $this->database->rollBack();
+                return;
+            }
+            if ($waiting === []) {
+                $this->acknowledgeConfig($this->exportInvalidationKey, $state);
+            } else {
+                unset($state['nodes']);
+                $state['articles'] = $waiting;
+                $this->writeConfig($this->exportInvalidationKey, $state);
+            }
             $this->database->commit();
         } catch (Throwable $error) {
             if ($this->database->inTransaction()) {

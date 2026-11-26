@@ -24,6 +24,7 @@ final class AssignmentFixtureDatabase
     public array $batchArticleIds = [];
     public bool $rejectAssignmentWritesAfterTreeLock = false;
     public bool $failAssignmentWrites = false;
+    public ?Closure $concurrentConfigWrite = null;
     public array $advisoryLocks = [];
     private bool $treeLocked = false;
     public ?array $assignment = null;
@@ -167,6 +168,11 @@ final class AssignmentFixtureDatabase
             }
             $this->assignment = ['aktiv' => $params['enabled'], 'pseudolager' => '', 'lieferzeitmanuell' => '', 'last_article_hash' => ''];
         } elseif (str_starts_with($sql, 'UPDATE artikel_onlineshops')) {
+            if ($this->concurrentConfigWrite !== null) {
+                ($this->concurrentConfigWrite)();
+                // A committed write on a second connection survives our transaction rollback.
+                $this->snapshot[0] = $this->config;
+            }
             if ($this->failAssignmentWrites) {
                 throw new RuntimeException('Assignment writes unavailable.');
             }

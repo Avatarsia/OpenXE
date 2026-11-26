@@ -3,8 +3,11 @@
 
 namespace Xentral\Components\WooCommerce;
 
+use Automattic\WooCommerce\HttpClient\HttpClientException;
+use mysqli_sql_exception;
 use RuntimeException;
 use Throwable;
+use Xentral\Components\Database\Exception\DatabaseExceptionInterface;
 
 final class ShopCategoryExporter
 {
@@ -13,6 +16,7 @@ final class ShopCategoryExporter
     private ?array $termIds = null;
     private array $deferredDeletions = [];
     private array $skippedNodes = [];
+    private array $transientNodes = [];
     private bool $budgetExhausted = false;
 
     public function __construct(
@@ -44,12 +48,34 @@ final class ShopCategoryExporter
         return $this->budgetExhausted;
     }
 
+    public static function isTransientFailure(Throwable $error): bool
+    {
+        for ($cause = $error; $cause !== null; $cause = $cause->getPrevious()) {
+            $code = (int) $cause->getCode();
+            if ($cause instanceof HttpClientException && in_array($code, [0, 408, 429, 500, 502, 503, 504], true)) {
+                return true;
+            }
+            // MySQL connection failures, lock timeouts and deadlocks.
+            if (($cause instanceof mysqli_sql_exception || $cause instanceof DatabaseExceptionInterface)
+                && in_array($code, [1040, 1053, 1205, 1213, 2002, 2003, 2006, 2013, 2055], true)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public function hasTransientSkips(array $nodeIds): bool
+    {
+        return array_intersect_key($this->transientNodes, array_flip($nodeIds)) !== [];
+    }
+
     /** @return array<int,int> OpenXE node ID to WooCommerce term ID */
     public function syncTree(): array
     {
         $this->termIds = null;
         $this->deferredDeletions = [];
         $this->skippedNodes = [];
+        $this->transientNodes = [];
         $this->budgetExhausted = false;
         $tree = $this->store->tree();
         $pending = $this->store->pendingDeletions();
@@ -104,9 +130,10 @@ final class ShopCategoryExporter
                 }
                 $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'WooCommerce-Loeschung fehlgeschlagen.';
                 $this->deferredDeletions[$id] = $reason;
-                $blockedSlugs[$slug] = $id;
+                $blocked = ['term' => $id, 'transient' => self::isTransientFailure($error), 'reason' => $reason];
+                $blockedSlugs[$slug] = $blocked;
                 if (isset($terms[$id])) {
-                    $blockedSlugs[$terms[$id]['slug']] = $id;
+                    $blockedSlugs[$terms[$id]['slug']] = $blocked;
                     unset($terms[$id]);
                 }
                 $this->warn('Vorgemerkte WooCommerce-Kategorie wurde nicht geloescht.', ['term' => $id, 'reason' => $reason]);
@@ -124,7 +151,7 @@ final class ShopCategoryExporter
         $termsBySlug = array_column($terms, null, 'slug');
         $this->termIds = $this->syncBranch($tree, 0, $terms, $termsBySlug, $blockedSlugs);
         try {
-            $this->store->updateSkipReasons($this->skippedNodes, $this->termIds);
+            $this->store->updateSkipReasons(array_diff_key($this->skippedNodes, $this->transientNodes), $this->termIds);
         } catch (Throwable $error) {
             $this->warn('Gruende fuer uebersprungene WooCommerce-Kategorien konnten nicht gespeichert werden.', [
                 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
@@ -186,9 +213,11 @@ final class ShopCategoryExporter
             $nodeId = $node['id'];
             $wcId = $node['wcId'];
             $slug = $node['slug'];
-            $context = ['category' => $nodeId, 'term' => $blockedSlugs[$slug] ?? $wcId];
-            if (isset($blockedSlugs[$slug])) {
-                $this->skipNode($node, self::blockedSlugReason($slug), $context);
+            $blocked = $blockedSlugs[$slug] ?? null;
+            $context = ['category' => $nodeId, 'term' => $blocked['term'] ?? $wcId];
+            if ($blocked !== null) {
+                $reason = $blocked['transient'] ? $blocked['reason'] : self::blockedSlugReason($slug);
+                $this->skipNode($node, $reason, $context, $blocked['transient']);
                 continue;
             }
 
@@ -203,7 +232,8 @@ final class ShopCategoryExporter
                 if ($this->budgetExhausted) {
                     throw $error;
                 }
-                $this->skipNode($node, RefundStatusService::sanitizeError($error->getMessage()), $context);
+                $this->skipNode($node, RefundStatusService::sanitizeError($error->getMessage()), $context,
+                    self::isTransientFailure($error));
                 continue;
             }
             $ids[$nodeId] = $id;
@@ -243,19 +273,21 @@ final class ShopCategoryExporter
         return $id;
     }
 
-    private function skipNode(array $node, string $reason, array $context): void
+    private function skipNode(array $node, string $reason, array $context, bool $transient = false): void
     {
         $reason = $reason ?: 'Kategorie konnte nicht synchronisiert werden.';
-        $this->skippedNodes[$node['id']] = $reason;
-        $this->skipDescendants($node['children']);
+        $this->recordSkippedSubtree($node, $reason, $transient);
         $this->warn($reason, $context);
     }
 
-    private function skipDescendants(array $nodes): void
+    private function recordSkippedSubtree(array $node, string $reason, bool $transient): void
     {
-        foreach ($nodes as $node) {
-            $this->skippedNodes[$node['id']] = self::UNSYNCED_REASON;
-            $this->skipDescendants($node['children']);
+        $this->skippedNodes[$node['id']] = $reason;
+        if ($transient) {
+            $this->transientNodes[$node['id']] = true;
+        }
+        foreach ($node['children'] as $child) {
+            $this->recordSkippedSubtree($child, self::UNSYNCED_REASON, $transient);
         }
     }
 

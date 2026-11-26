@@ -2288,6 +2288,20 @@ class Remote
                         )
                     );
                 }
+                if ($articleResult->categoryAssignmentDeferred) {
+                    try {
+                        $store = new ShopCategoryStore($this->app->Container->get('Database'), $shop_id);
+                        $store->markArticleExportInvalidationPending($articleResult->articleId);
+                    } catch (\Throwable $error) {
+                        // Leave the article eligible if the retry could not be recorded.
+                        $hash = '';
+                        $this->logger->warning('WooCommerce category retry could not be queued; export hash cleared.', [
+                            'shop' => $shop_id,
+                            'article' => $articleResult->articleId,
+                        ]);
+                    }
+                }
+
                 $this->app->DB->Update(
                     sprintf(
                         "UPDATE artikel_onlineshops
@@ -2298,25 +2312,6 @@ class Remote
                         $shop_id
                     )
                 );
-
-                if ($articleResult->categoryAssignmentDeferred) {
-                    try {
-                        // Publish only after the hash write so a concurrent drain cannot clear it too early.
-                        $store = new ShopCategoryStore($this->app->Container->get('Database'), $shop_id);
-                        $store->markArticleExportInvalidationPending($articleResult->articleId);
-                    } catch (\Throwable $error) {
-                        // Keep the article eligible for export if the pending queue cannot be written.
-                        $this->app->DB->Update(sprintf(
-                            "UPDATE artikel_onlineshops SET last_article_hash = '' WHERE artikel = %d AND shop = %d",
-                            $articleResult->articleId,
-                            $shop_id
-                        ));
-                        $this->logger->warning('WooCommerce category retry could not be queued; export hash cleared.', [
-                            'shop' => $shop_id,
-                            'article' => $articleResult->articleId,
-                        ]);
-                    }
-                }
 
                 $artikelnummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id = '$articleResult->articleId' LIMIT 1");
                 $artikelfremdnummer = $this->app->DB->Select("SELECT nummer

@@ -978,11 +978,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       : null;
     $categoryExporter = null;
     $categoryTreeError = null;
+    $categoryTreeBusy = false;
     if ($this->shopCategoryTree) {
       try {
         $categoryStore ??= new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid);
         $categoryExporter = $this->syncCategoryTree($categoryStore, false);
         if ($categoryExporter === null) {
+          $categoryTreeBusy = true;
           throw new RuntimeException('WooCommerce-Kategorien werden bereits synchronisiert.');
         }
       } catch (Throwable $error) {
@@ -1256,6 +1258,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
             if ($categoryTreeError !== null) {
               throw $categoryTreeError;
             }
+            $return[$i]->categoryAssignmentDeferred = $categoryExporter->hasTransientSkips($categoryIds);
             $skipped = $categoryExporter->assign($product_id, $categoryIds, $this->categorySyncMode);
           } else {
             $categories = $tmp[$i]['kategorien'] ?? [];
@@ -1270,12 +1273,10 @@ class Shopimporter_Woocommerce extends ShopimporterBase
             }
           }
         } catch (Throwable $error) {
-          $return[$i]->categoryAssignmentDeferred = true;
+          $return[$i]->categoryAssignmentDeferred = $return[$i]->categoryAssignmentDeferred
+            || $categoryTreeBusy || ShopCategoryExporter::isTransientFailure($error);
           $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'Unbekannter Kategoriefehler.';
           $this->logCategoryExportWarning($return[$i], $categoryIds, $reason);
-        }
-        if ($skipped !== []) {
-          $return[$i]->categoryAssignmentDeferred = true;
         }
         foreach ($skipped as $nodeId => $reason) {
           $this->logCategoryExportWarning($return[$i], [$nodeId], $reason);
@@ -1548,7 +1549,11 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $database = $this->app->Container->get('Database');
     $shopId = (int) $this->shopid;
     $lock = ['name' => 'openxe_wc_category_sync_' . $shopId];
-    if ((int) $database->fetchValue('SELECT GET_LOCK(:name, 0)', $lock) !== 1) {
+    $locked = $database->fetchValue('SELECT GET_LOCK(:name, 0)', $lock);
+    if ($locked === null || $locked === false) {
+      throw new RuntimeException('WooCommerce-Kategorie-Sperre konnte nicht abgefragt werden.');
+    }
+    if ((int) $locked !== 1) {
       return null;
     }
     try {
