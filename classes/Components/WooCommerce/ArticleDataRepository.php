@@ -9,6 +9,11 @@ use Throwable;
 
 final class ArticleDataRepository
 {
+    // Match the active shop foreign number selected for the export payload.
+    public const SHOP_SKU_SQL = "COALESCE(NULLIF(TRIM((SELECT fn.nummer FROM artikelnummer_fremdnummern AS fn "
+        . "WHERE fn.artikel = a.id AND fn.shopid = :shop AND fn.aktiv = 1 AND fn.nummer <> '' "
+        . "ORDER BY fn.bezeichnung = 'SHOPID' DESC LIMIT 1)), ''), TRIM(a.nummer))";
+
     private const PRICE_GROUP = 'Shop nutzt eine Preisgruppe - Preis bitte unter Verkaufspreise pflegen';
     private const PRICE_AMBIGUOUS = 'Mehrere gueltige Preise ab Menge 1 - bitte unter Verkaufspreise pflegen';
 

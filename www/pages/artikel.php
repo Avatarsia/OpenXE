@@ -24,9 +24,11 @@
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
+use Xentral\Components\Http\JsonResponse;
 use Xentral\Components\Http\Session\SessionHandler;
 use Xentral\Components\WooCommerce\AdminView;
 use Xentral\Components\WooCommerce\ArticleTab;
+use Xentral\Components\WooCommerce\AssignmentPage;
 use Xentral\Components\WooCommerce\RefundStatusService;
 use Xentral\Modules\Onlineshop\Data\ArticleExportResult;
 use Xentral\Widgets\SuperSearch\Result\ResultGroup;
@@ -40,7 +42,10 @@ class Artikel extends GenArtikel {
   const MODULE_NAME = 'Article';
 
   public $stylesheet = ['./classes/Modules/Onlineshop/www/css/woocommerce-admin.css'];
-  public $javascript = ['./classes/Modules/Onlineshop/www/js/woocommerce-article-tab.js'];
+  public $javascript = [
+    './classes/Modules/Onlineshop/www/js/woocommerce-article-tab.js',
+    './classes/Modules/Onlineshop/www/js/woocommerce-assignment.js',
+  ];
 
   protected \Xentral\Modules\Article\Service\ArticleService $service;
 
@@ -1920,6 +1925,7 @@ class Artikel extends GenArtikel {
     $this->app->ActionHandler("demo","ArtikelDemo");
     $this->app->ActionHandler("edit","ArtikelEdit");
     $this->app->ActionHandler("list","ArtikelList");
+    $this->app->ActionHandler("woocommerce","ArtikelWoocommerce");
     $this->app->ActionHandler("newlist","ArtikelNewList");
     $this->app->ActionHandler("stueckliste","ArtikelStueckliste");
     $this->app->ActionHandler("stuecklisteimport","ArtikelStuecklisteImport");
@@ -6883,6 +6889,9 @@ class Artikel extends GenArtikel {
   function ArtikelListMenu()
   {
     $this->app->erp->MenuEintrag('index.php?module=artikel&action=list','&Uuml;bersicht');
+    if ($this->app->erp->RechteVorhanden('artikel', 'edit') && $this->app->erp->RechteVorhanden('onlineshops', 'edit')) {
+      $this->app->erp->MenuEintrag('index.php?module=artikel&action=woocommerce','WooCommerce');
+    }
     $this->app->erp->MenuEintrag('index.php?module=artikel&action=create','Neuen Artikel anlegen');
   }
 
@@ -6898,6 +6907,32 @@ class Artikel extends GenArtikel {
     }
 
     return array_unique($articleListStr);
+  }
+
+  public function ArtikelWoocommerce()
+  {
+    $secure = $this->app->Secure;
+    $page = new AssignmentPage($this->app);
+    $cmd = $secure->GetGET('cmd', '', '', 1);
+    if ($cmd !== '') {
+      if (!is_string($cmd)) {
+        return new JsonResponse(['ok' => false, 'error' => 'Unbekannte Aktion.']);
+      }
+      if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        return new JsonResponse(['ok' => false, 'error' => 'Diese Aktion erfordert POST.']);
+      }
+      $post = [];
+      foreach (['csrf_token', 'shop', 'article', 'category', 'enabled', 'name', 'parent', 'sort', 'number'] as $key) {
+        $post[$key] = $secure->GetPOST($key, '', '', 1);
+      }
+      return new JsonResponse($page->handle($cmd, $post));
+    }
+
+    $this->ArtikelListMenu();
+    $this->app->Tpl->Set('UEBERSCHRIFT', 'Artikel: WooCommerce');
+    $this->app->YUI->AutoComplete('wc-assignment-article', 'artikelnummer', 1);
+    $this->app->Tpl->Set('WOOCOMMERCECONTENT', $page->render());
+    $this->app->Tpl->Parse('PAGE', 'onlineshops_woocommerce.tpl');
   }
 
   public function ArtikelList()

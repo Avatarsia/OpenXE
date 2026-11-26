@@ -41,3 +41,21 @@
 .wc-article-tab [data-woo-results] { margin-bottom: 1rem; }
 .wc-article-tab [data-woo-results] table { min-width: 34rem; }
 .wc-article-tab [data-woo-results] td { max-width: 24rem; white-space: pre-wrap; }
+
+.wc-admin .wc-assignment-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+    gap: 1.5rem;
+}
+.wc-admin .wc-assignment-layout > section { min-width: 0; }
+.wc-admin .wc-assignment-tree { padding-inline-start: 1.25rem; margin-block: .35rem; }
+.wc-admin.wc-assignment [aria-current="page"] { font-weight: bold; text-decoration: underline; }
+.wc-admin .wc-assignment-controls { display: grid; justify-items: start; gap: .5rem; margin-top: 1rem; }
+.wc-admin .wc-assignment-fields { display: grid; justify-items: start; gap: .35rem; margin-block: .5rem; }
+.wc-admin .wc-assignment-fields input, .wc-admin .wc-assignment-fields select { box-sizing: border-box; max-width: 100%; }
+.wc-admin .wc-assignment-layout a, .wc-admin .wc-assignment-layout td { overflow-wrap: anywhere; }
+.wc-admin .wc-assignment-layout .wc-admin-actions + form { margin-top: .5rem; }
+.wc-admin .wc-assignment-table { min-width: 560px; }
+@media (max-width: 760px) {
+    .wc-admin .wc-assignment-layout { grid-template-columns: minmax(0, 1fr); }
+}

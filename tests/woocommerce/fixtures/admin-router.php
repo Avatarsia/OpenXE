@@ -9,7 +9,7 @@ if (!in_array($path, ['/index.php', '/tests/woocommerce/fixtures/admin-router.ph
 require_once $root . '/classes/Components/WooCommerce/AdminView.php';
 require_once $root . '/classes/Components/WooCommerce/BulkPull.php';
 use Xentral\Components\WooCommerce\AdminView;
-$view = $_GET['view'] ?? 'downloads';
+$view = ($_GET['action'] ?? '') === 'woocommerce' ? 'assignment' : ($_GET['view'] ?? 'downloads');
 $html = $view === 'downloads'
     ? AdminView::downloads(7, 'synthetic-csrf', ['id' => 9, 'nummer' => 'DIG-100', 'name_de' => 'Montageanleitung'],
         ['downloadable' => true, 'virtual' => true, 'downloads' => [['name' => 'Montageanleitung Deutsch', 'file' => 'https://example.org/montageanleitung.pdf']]], [], '', true)
@@ -40,6 +40,23 @@ if ($view === 'categories') {
         'unmatched' => [['id' => 41, 'name' => 'Kein passender Artikel', 'sku' => 'UNKNOWN', 'reason' => 'kein eindeutiger OpenXE-Artikel']],
     ]);
 }
+if ($view === 'assignment') {
+    require_once __DIR__ . '/assignment.php';
+    $db = new AssignmentFixtureDatabase();
+    $db->assignment = ['aktiv' => 1];
+    $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 7);
+    $parent = $store->create('Ersatzteile');
+    $category = $store->create('Hotends', $parent);
+    $store->create('Zubehoer');
+    $store->assign(9, [$category]);
+    $page = new \Xentral\Components\WooCommerce\AssignmentPage(assignmentFixtureApp($db, $_GET + ['category' => $category]));
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($page->handle((string) ($_GET['cmd'] ?? ''), $_POST), JSON_THROW_ON_ERROR);
+        return;
+    }
+    $html = $page->render();
+}
 ?><!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WooCommerce UI-Prüfung</title>
 <link rel="stylesheet" href="/www/themes/new/css/normalize.min.css">
@@ -48,4 +65,8 @@ if ($view === 'categories') {
 <link rel="stylesheet" href="/www/css/bootstrap.min.css">
 <link rel="stylesheet" href="/classes/Modules/Onlineshop/www/css/woocommerce-admin.css">
 <script src="/classes/Modules/Onlineshop/www/js/woocommerce-admin.js" defer></script>
-</head><body><main class="inside_white"><p>Lokale UI-Prüfung · synthetische Daten</p><div class="wc-admin"><nav class="wc-admin-nav"><a href="?view=downloads">Downloads</a><a href="?view=refunds">Refund-Status</a><a href="?view=pull">Artikeldaten abgleichen</a><a href="?view=categories">Shop-Kategorien</a></nav><?= $html ?></div></main></body></html>
+<?php if ($view === 'assignment'): ?>
+<script src="/www/js/jquery/jquery-3.5.0.min.js" defer></script>
+<script src="/classes/Modules/Onlineshop/www/js/woocommerce-assignment.js" defer></script>
+<?php endif; ?>
+</head><body><main class="inside_white"><p>Lokale UI-Prüfung · synthetische Daten</p><div class="wc-admin"><nav class="wc-admin-nav"><a href="?view=downloads">Downloads</a><a href="?view=refunds">Refund-Status</a><a href="?view=pull">Artikeldaten abgleichen</a><a href="?view=categories">Shop-Kategorien</a><a href="?view=assignment">Shop-Zuordnung</a></nav><?php if ($view === 'assignment'): ?></div><?= $html ?><?php else: ?><?= $html ?></div><?php endif; ?></main></body></html>

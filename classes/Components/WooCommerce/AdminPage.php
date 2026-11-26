@@ -367,9 +367,7 @@ final class AdminPage
             'SELECT a.id, a.nummer, a.name_de, a.projekt FROM artikel AS a WHERE a.geloescht = 0 '
             . 'AND EXISTS (SELECT 1 FROM artikel_onlineshops AS ao WHERE ao.artikel = a.id '
             . 'AND ao.shop = :assigned_shop AND ao.aktiv = 1) '
-            . 'AND CAST(TRIM(COALESCE((SELECT fn.nummer FROM artikelnummer_fremdnummern AS fn '
-            . 'WHERE fn.artikel = a.id AND fn.shopid = :shop AND fn.aktiv = 1 AND fn.nummer <> \'\' '
-            . "ORDER BY fn.bezeichnung = 'SHOPID' DESC LIMIT 1), a.nummer)) AS BINARY) = CAST(:sku AS BINARY) LIMIT 2",
+            . 'AND CAST(' . ArticleDataRepository::SHOP_SKU_SQL . ' AS BINARY) = CAST(:sku AS BINARY) LIMIT 2',
             ['assigned_shop' => $this->shopId, 'shop' => $this->shopId, 'sku' => $sku]
         );
         if (count($rows) !== 1 || !$this->app->erp->UserProjektRecht((int) $rows[0]['projekt'])) {
