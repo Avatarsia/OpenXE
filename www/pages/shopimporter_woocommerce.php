@@ -1429,11 +1429,14 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $queue = new VisibilityQueue($database, (int) $this->shopid);
       // Visibility uses the product identity only, so no WordPress term lookup is needed.
       $reader = new WooProductReader($this->client, new DeliveryTimeMap(static fn () => [], ''));
-      $result = $queue->drain(function (string $sku) use ($reader): void {
-        $product = $reader->resolveSku($sku);
+      $result = $queue->drain(function (string $sku, callable $mayStartRequest) use ($reader): bool {
+        $product = $reader->resolveSku($sku, $mayStartRequest);
+        if ($product['status'] === 'deferred') {
+          return false;
+        }
         if ($product['status'] === 'not_found') {
           $this->logVisibility('debug', 'WooCommerce visibility SKU not found', ['shop' => $this->shopid, 'sku' => $sku]);
-          return;
+          return true;
         }
         if (!empty($product['manualAction'])) {
           throw new VisibilityManualActionRequired($product['reason']);
@@ -1446,10 +1449,14 @@ class Shopimporter_Woocommerce extends ShopimporterBase
           ? 'products/' . $product['parent_id'] . '/variations/' . $product['id']
           : 'products/' . $product['id'];
         // The WooCommerce REST v3 variations controller accepts the private post status.
+        if (!$mayStartRequest()) {
+          return false;
+        }
         $response = $this->client->put($endpoint, ['status' => 'private']);
         if (($response->status ?? null) !== 'private') {
           throw new \RuntimeException('WooCommerce hat den Status private nicht bestaetigt.');
         }
+        return true;
       });
       foreach ($result['failed'] as $articleId => $message) {
         $this->logVisibility('error', 'WooCommerce visibility update deferred', [

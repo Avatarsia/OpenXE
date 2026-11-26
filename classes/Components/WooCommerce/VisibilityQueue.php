@@ -17,6 +17,7 @@ final class VisibilityQueue
     private const DRAIN_LIMIT = 20;
     private const DRAIN_SECONDS = 20;
     private const MAX_RETRY_DELAY = 86400;
+    private const MAX_ERROR_CHARS = 200;
     private const JSON_FLAGS = JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES;
     private const FALLBACK_ERROR = 'Ausblenden fehlgeschlagen.';
 
@@ -46,7 +47,7 @@ final class VisibilityQueue
             $entries[$articleId] = [
                 'sku' => $sku, 'attempts' => 0, 'lastError' => '', 'queuedAt' => $now, 'nextAttemptAt' => $now,
             ];
-            if (count($entries) > self::MAX_ENTRIES || !$this->fits($entries)) {
+            if (count($entries) > self::MAX_ENTRIES || !$this->fitsWithRetryReserve($entries)) {
                 throw new LengthException('WooCommerce-Sichtbarkeitsqueue ist voll (maximal 2000 Eintraege und 65000 Bytes).');
             }
             $this->save($entries);
@@ -64,10 +65,14 @@ final class VisibilityQueue
         });
     }
 
-    /** @return array{processed: list<int>, failed: array<int, string>} */
+    /**
+     * @param callable(string, callable(): bool): mixed $hide Returns false when the deadline prevents a request.
+     * @return array{processed: list<int>, failed: array<int, string>}
+     */
     public function drain(callable $hide): array
     {
         $deadline = ($this->monotonicClock)() + self::DRAIN_SECONDS;
+        $mayStartRequest = fn (): bool => ($this->monotonicClock)() < $deadline;
         $now = time();
         $due = array_filter($this->pending(), static fn (array $entry): bool =>
             empty($entry['manualAction']) && ($entry['nextAttemptAt'] ?? 0) <= $now);
@@ -76,10 +81,10 @@ final class VisibilityQueue
 
         $result = ['processed' => [], 'failed' => []];
         foreach (array_slice($due, 0, self::DRAIN_LIMIT, true) as $articleId => $snapshot) {
-            if (($this->monotonicClock)() >= $deadline) {
+            if (!$mayStartRequest()) {
                 break;
             }
-            $this->transactional(function () use ($articleId, $snapshot, $hide, &$result): void {
+            $this->transactional(function () use ($articleId, $snapshot, $hide, $mayStartRequest, &$result): void {
                 // Lock in assignment-then-queue order, as when editing a shop assignment.
                 $assigned = $this->database->fetchValue(
                     'SELECT id FROM artikel_onlineshops WHERE artikel = :article AND shop = :shop AND aktiv = 1 LIMIT 1 FOR UPDATE',
@@ -91,15 +96,18 @@ final class VisibilityQueue
                 }
                 if (!$assigned) {
                     try {
-                        $hide($snapshot['sku']);
+                        if ($hide($snapshot['sku'], $mayStartRequest) === false) {
+                            return;
+                        }
                     } catch (Throwable $error) {
                         $reason = RefundStatusService::sanitizeError($error->getMessage());
-                        preg_match('/^.{0,200}/us', $reason, $match);
+                        preg_match('/^.{0,' . self::MAX_ERROR_CHARS . '}/us', $reason, $match);
                         $attempts = $snapshot['attempts'] < PHP_INT_MAX ? $snapshot['attempts'] + 1 : PHP_INT_MAX;
                         $now = time();
                         $entries[$articleId]['attempts'] = $attempts;
                         $entries[$articleId]['lastAttemptAt'] = $now;
-                        $entries[$articleId]['lastError'] = ($match[0] ?? '') ?: self::FALLBACK_ERROR;
+                        $reason = ($match[0] ?? '') ?: self::FALLBACK_ERROR;
+                        $entries[$articleId]['lastError'] = $reason;
                         if ($error instanceof VisibilityManualActionRequired) {
                             $entries[$articleId]['manualAction'] = true;
                             $entries[$articleId]['nextAttemptAt'] = null;
@@ -107,11 +115,8 @@ final class VisibilityQueue
                             $delay = min(self::MAX_RETRY_DELAY, 60 * (1 << min($attempts - 1, 11)));
                             $entries[$articleId]['nextAttemptAt'] = $now + $delay;
                         }
-                        if (empty($entries[$articleId]['manualAction']) && !$this->fits($entries)) {
-                            $entries[$articleId]['lastError'] = self::FALLBACK_ERROR;
-                        }
-                        $this->save($entries);
-                        $result['failed'][$articleId] = $entries[$articleId]['lastError'];
+                        $this->save($entries, $articleId);
+                        $result['failed'][$articleId] = $reason;
                         return;
                     }
                 }
@@ -156,29 +161,31 @@ final class VisibilityQueue
         return $entries;
     }
 
-    private function fits(array $entries): bool
+    private function fitsWithRetryReserve(array $entries): bool
     {
-        // Even a full queue must be able to record a failed attempt for every entry.
-        $latestAttempt = time() + self::MAX_RETRY_DELAY;
+        // Supplementary characters use two six-byte JSON escapes per character.
+        $reservedError = str_repeat("\u{10000}", self::MAX_ERROR_CHARS);
         foreach ($entries as &$entry) {
             $entry['attempts'] = PHP_INT_MAX;
-            $entry['lastAttemptAt'] = $latestAttempt;
-            $entry['nextAttemptAt'] = $latestAttempt;
-            $reservedError = self::FALLBACK_ERROR;
-            if ($entry['sku'] === '0') {
-                $entry['manualAction'] = true;
-                $reservedError = WooProductReader::SKU_ZERO_REASON;
-            }
-            if (strlen($entry['lastError']) < strlen($reservedError)) {
-                $entry['lastError'] = $reservedError;
-            }
+            $entry['lastAttemptAt'] = PHP_INT_MAX;
+            $entry['nextAttemptAt'] = PHP_INT_MAX;
+            $entry['manualAction'] = true;
+            $entry['lastError'] = $reservedError;
         }
         return strlen(json_encode((object) $entries, self::JSON_FLAGS)) <= self::MAX_BYTES;
     }
 
-    private function save(array $entries): void
+    private function save(array $entries, ?int $failedArticleId = null): void
     {
         $value = json_encode((object) $entries, self::JSON_FLAGS);
+        if ($failedArticleId !== null && strlen($value) > self::MAX_BYTES) {
+            $entries[$failedArticleId]['lastError'] = '';
+            $value = json_encode((object) $entries, self::JSON_FLAGS);
+            if (strlen($value) > self::MAX_BYTES) {
+                unset($entries[$failedArticleId]['lastError']);
+                $value = json_encode((object) $entries, self::JSON_FLAGS);
+            }
+        }
         if (strlen($value) > self::MAX_BYTES) {
             throw new LengthException('WooCommerce-Sichtbarkeitsqueue ueberschreitet 65000 Bytes.');
         }

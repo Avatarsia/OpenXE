@@ -100,7 +100,7 @@ final class AdminView
             $nextAttempt = !empty($entry['manualAction']) ? 'Manuell ausblenden'
                 : self::time($entry['nextAttemptAt'] ?? null);
             $html .= '<tr><td>' . self::e($entry['sku']) . '</td><td>' . self::e($entry['attempts'])
-                . '</td><td>' . self::e($entry['lastError']) . '</td><td>' . self::time($entry['queuedAt'])
+                . '</td><td>' . self::e($entry['lastError'] ?? '') . '</td><td>' . self::time($entry['queuedAt'])
                 . '</td><td>' . $nextAttempt . '</td></tr>';
         }
         return $html . '</tbody></table></div>';

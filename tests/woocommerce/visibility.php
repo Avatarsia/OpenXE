@@ -1,6 +1,15 @@
 <?php
 // SPDX-License-Identifier: AGPL-3.0-only
 
+namespace Xentral\Components\WooCommerce {
+    function hrtime(bool $asNumber = false): array|int|float
+    {
+        return $GLOBALS['visibilityTestNanoseconds'] ?? \hrtime($asNumber);
+    }
+}
+
+namespace {
+
 require __DIR__ . '/bootstrap.php';
 require_once dirname(__DIR__, 2) . '/www/lib/ShopimporterBase.php';
 require_once dirname(__DIR__, 2) . '/www/pages/shopimporter_woocommerce.php';
@@ -74,6 +83,7 @@ final class VisibilityApi
     public array $failures = [];
     public int $orderCount = 0;
     public bool $missingTotals = false;
+    public ?Closure $afterLookup = null;
     private int $total = 0;
     private int $pages = 0;
 
@@ -91,6 +101,7 @@ final class VisibilityApi
         $matches = $this->products[$query['sku']] ?? [];
         $this->total = count($matches);
         $this->pages = (int) ceil($this->total / $query['per_page']);
+        $this->afterLookup?->__invoke();
         return array_slice($matches, ($query['page'] - 1) * $query['per_page'], $query['per_page']);
     }
 
@@ -229,24 +240,24 @@ runTests([
         $queue = new VisibilityQueue($db, 7);
         $connector = visibilityConnector($db);
         $connector->client->orderCount = 3;
-        foreach (range(1, 50) as $id) {
+        foreach (range(1, 25) as $id) {
             $sku = 'SKU-' . $id;
             $queue->enqueue($id, $sku);
             $connector->client->products[$sku] = [(object) ['id' => $id, 'parent_id' => 0, 'sku' => $sku]];
         }
-        $connector->client->failures = array_map(static fn (int $id): string => 'SKU-' . $id, range(1, 10));
-        foreach ([10, 30, 40] as $run => $hidden) {
+        $connector->client->failures = array_map(static fn (int $id): string => 'SKU-' . $id, range(1, 20));
+        foreach ([[0, 20], [5, 35], [5, 55]] as $run => [$hidden, $attempts]) {
             same(3, $connector->ImportGetAuftraegeAnzahl());
             same(($run + 1) * 20, $connector->client->lookups);
             same($hidden, count($connector->client->updates));
             $pending = $queue->pending();
-            foreach (range(1, 10) as $id) {
-                same($run === 2 ? 2 : 1, $pending[$id]['attempts']);
+            same($attempts, array_sum(array_column($pending, 'attempts')));
+            foreach (range(1, 20) as $id) {
                 $pending[$id]['nextAttemptAt'] = time() - 1;
             }
             $db->config['woocommerce_visibility_7'] = json_encode($pending);
         }
-        same(range(1, 10), array_keys($queue->pending()));
+        same(range(1, 20), array_keys($queue->pending()));
     },
     'drain_tries_oldest_due_attempt_before_newer_due_attempt' => static function () {
         $db = new VisibilityDatabase();
@@ -266,6 +277,35 @@ runTests([
         $result = $queue->drain(static function () use (&$seconds): void { $seconds += 20; });
         same([1], $result['processed']);
         same([2], array_keys($queue->pending()));
+    },
+    'drain_stops_before_the_next_lookup_page_or_put_at_the_deadline' => static function () {
+        foreach ([101, 1] as $total) {
+            $db = new VisibilityDatabase();
+            $queue = new VisibilityQueue($db, 7);
+            $queue->enqueue(1, 'A');
+            $queue->enqueue(2, 'B');
+            $before = $db->config;
+            $connector = visibilityConnector($db);
+            $connector->client->orderCount = 3;
+            $connector->client->products['A'] = [(object) ['id' => 1, 'parent_id' => 0, 'sku' => 'A']];
+            for ($id = 2; $id <= $total; $id++) {
+                $connector->client->products['A'][] = (object) ['id' => $id, 'parent_id' => 0, 'sku' => 'OTHER'];
+            }
+            $connector->client->afterLookup = static function (): void {
+                $GLOBALS['visibilityTestNanoseconds'] = 21_000_000_000;
+            };
+            $GLOBALS['visibilityTestNanoseconds'] = 0;
+            try {
+                same(3, $connector->ImportGetAuftraegeAnzahl());
+            } finally {
+                unset($GLOBALS['visibilityTestNanoseconds']);
+            }
+            same(1, $connector->client->lookups, 'Lookup pages with ' . $total . ' results:');
+            same([], $connector->client->updates, 'PUTs with ' . $total . ' results:');
+            same($before, $db->config);
+            same([], $connector->logger->errors);
+            check(!$db->inTransaction());
+        }
     },
     'drain_skipped_when_setting_off' => static function () {
         $db = new VisibilityDatabase();
@@ -385,6 +425,63 @@ runTests([
         same($before, $db->config);
         check(!$db->inTransaction());
     },
+    'enqueue_reserves_the_encoded_size_of_worst_case_errors' => static function () {
+        $db = new VisibilityDatabase();
+        $queue = new VisibilityQueue($db, 7);
+        $queue->enqueue(1, str_repeat('A', 59800));
+        $queue->enqueue(2, '0');
+        $before = $db->config;
+        try {
+            $queue->enqueue(3, 'B');
+            throw new RuntimeException('Expected LengthException for insufficient retry reserve');
+        } catch (LengthException $error) {
+            check(str_contains($error->getMessage(), '65000'));
+        }
+        same($before, $db->config);
+
+        $reason = str_repeat("\u{10000}", 200);
+        $queue->drain(static function (string $sku) use ($reason): void {
+            if ($sku === '0') {
+                throw new \Xentral\Components\WooCommerce\VisibilityManualActionRequired($reason);
+            }
+            throw new RuntimeException($reason);
+        });
+        $entries = $queue->pending();
+        same([1, 1], array_column($entries, 'attempts'));
+        same([$reason, $reason], array_column($entries, 'lastError'));
+        check($entries[2]['manualAction']);
+        check(strlen($db->config['woocommerce_visibility_7']) <= 65000);
+    },
+    'near_full_queue_records_failure_and_reaches_later_success_across_drains' => static function () {
+        foreach ([30 => '', 18 => null] as $freeBytes => $storedError) {
+            $db = new VisibilityDatabase();
+            $queue = new VisibilityQueue($db, 7);
+            $now = time();
+            $entry = ['sku' => 'A', 'attempts' => 0, 'lastError' => '', 'queuedAt' => $now, 'nextAttemptAt' => $now];
+            $entries = array_fill(1, 21, $entry);
+            $entries[21]['sku'] = 'B';
+            $entries[22] = ['sku' => '', 'nextAttemptAt' => $now + 3600] + $entry;
+            $entries[22]['sku'] = str_repeat('F', 65000 - $freeBytes - strlen(json_encode((object) $entries)));
+            $db->config['woocommerce_visibility_7'] = json_encode((object) $entries);
+            // The 19 active assignments consume the remaining slots in the first drain.
+            $db->assigned[7] = array_fill(2, 19, true);
+            $hide = static function (string $sku): void {
+                if ($sku === 'A') {
+                    throw new RuntimeException('Details ' . str_repeat("\u{10000}", 190));
+                }
+                same('B', $sku);
+            };
+            same(range(2, 20), $queue->drain($hide)['processed']);
+            $failed = $queue->pending()[1];
+            same(1, $failed['attempts']);
+            same(60, $failed['nextAttemptAt'] - $failed['lastAttemptAt']);
+            same($storedError !== null, array_key_exists('lastError', $failed));
+            same($storedError, $failed['lastError'] ?? null);
+            check(str_contains(AdminView::visibility([1 => $failed]), '>1</td>'));
+            same([21], $queue->drain($hide)['processed']);
+            same([1, 22], array_keys($queue->pending()));
+        }
+    },
     'admin_visibility_is_read_only_and_escapes_pending_details' => static function () {
         $db = new VisibilityDatabase();
         $db->config['woocommerce_visibility_7'] = '{"41":{"sku":"<SKU>","attempts":2,"lastError":"<error>","queuedAt":1764072000}}';
@@ -410,3 +507,4 @@ runTests([
         same($before, $db->config);
     },
 ]);
+}

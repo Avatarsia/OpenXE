@@ -56,8 +56,8 @@ final class WooProductReader
         return $match;
     }
 
-    /** @return array{status: 'unique', id: int, parent_id: int}|array{status: 'multiple'|'not_found'}|array{status: 'failed', reason: string, manualAction?: bool} */
-    public function resolveSku(string $sku): array
+    /** @return array{status: 'unique', id: int, parent_id: int}|array{status: 'multiple'|'not_found'|'deferred'}|array{status: 'failed', reason: string, manualAction?: bool} */
+    public function resolveSku(string $sku, ?callable $mayStartRequest = null): array
     {
         $failed = ['status' => 'failed', 'reason' => self::SKU_LOOKUP_FAILED];
         if ($sku === '') {
@@ -75,6 +75,9 @@ final class WooProductReader
         try {
             // The wc/v3 SKU filter includes variations and also searches comma-separated terms.
             do {
+                if ($mayStartRequest !== null && !$mayStartRequest()) {
+                    return ['status' => 'deferred'];
+                }
                 $rows = $this->client->get('products', [
                     'sku' => $sku, 'status' => 'any', 'context' => 'edit', 'page' => $page,
                     'per_page' => self::PAGE_SIZE, '_fields' => 'id,parent_id,sku',
