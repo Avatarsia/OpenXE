@@ -88,8 +88,20 @@ final class ArticleDataRepository
         $database = $app->Container->get('Database');
         $database->beginTransaction();
         try {
-            // Lock the article before discovering and locking its overrides.
-            $database->fetchValue('SELECT id FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
+            // Compare every override against the same pre-import article snapshot.
+            $article = $database->fetchRow('SELECT * FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
+            $prepared = (new self($app, 0))->prepareUpdates($values);
+            $changes = [];
+            foreach ($prepared as $key => [$new, $storage, $column]) {
+                $old = (string) ($article[$column] ?? '');
+                if ($storage === 'shop' && ($key === 'pseudo_price' ? !FieldDiff::equivalent($key, $old, $new) : $old !== $new)) {
+                    $changes[$key] = $values[$key];
+                }
+            }
+            if ($changes === []) {
+                $database->commit();
+                return;
+            }
             $overrides = $database->fetchAll(
                 'SELECT a.id, a.shop, s.projekt FROM artikel_onlineshops AS a'
                 . ' INNER JOIN shopexport AS s ON s.id = a.shop'
@@ -101,7 +113,7 @@ final class ArticleDataRepository
                 $app->erp->RechteVorhanden('onlineshops', 'edit') && $app->erp->UserProjektRecht((int) $shop['projekt'])));
             // With no accessible override, there is only the article value to update.
             foreach ($overrides ?: [['shop' => 0, 'id' => 0]] as $override) {
-                (new self($app, (int) $override['shop']))->apply($articleId, $values, 'csv_import', (int) $override['id']);
+                (new self($app, (int) $override['shop']))->apply($articleId, $changes, 'csv_import', (int) $override['id']);
             }
             $database->commit();
         } catch (Throwable $error) {

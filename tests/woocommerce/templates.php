@@ -444,6 +444,17 @@ A9;7;25
         same(['id' => 8, 'preis' => '40', 'active' => false], $db->prices[1]);
         same('csv_import', json_decode($db->audit['woocommerce_pull_log_7'], true)[0]['origin']);
     },
+    'unchanged_csv_values_preserve_different_effective_shop_overrides' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate('1:nummer;2:pseudolager;3:lieferzeitmanuell'));
+        $db->article['lieferzeitmanuell'] = 'Artikelwert';
+        $before = $db->overrides;
+        $result = runCsvImport($db, "nummer;pseudolager;lieferzeitmanuell
+A9;0;Artikelwert
+", 12);
+        same(true, $result['success']);
+        same($before, $db->overrides);
+        same([], $db->writes);
+    },
     'empty_price_is_ignored' => static function () {
         $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:woo_preis_netto"));
         same('', runCsvImport($db, "nummer;standardpreisnetto\nA9;\n", 12)['message']);
