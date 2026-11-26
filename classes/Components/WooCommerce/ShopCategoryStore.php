@@ -71,15 +71,32 @@ final class ShopCategoryStore
     /** Enqueue in the same transaction as the tree edit. */
     public function markExportInvalidationPending(int $nodeId): void
     {
-        $state = $this->lockConfig($this->exportInvalidationKey, '{}');
-        $nodeIds = $state['nodes'] ?? [];
-        if (!in_array($nodeId, $nodeIds, true)) {
-            $nodeIds[] = $nodeId;
+        $this->markInvalidationPending('nodes', $nodeId);
+    }
+
+    /** Called after the export result handler has stored the article hash. */
+    public function markArticleExportInvalidationPending(int $articleId): void
+    {
+        $this->database->beginTransaction();
+        try {
+            $this->markInvalidationPending('articles', $articleId);
+            $this->database->commit();
+        } catch (Throwable $error) {
+            if ($this->database->inTransaction()) {
+                $this->database->rollBack();
+            }
+            throw $error;
         }
-        $this->writeConfig($this->exportInvalidationKey, [
-            'nodes' => $nodeIds,
-            'revision' => bin2hex(random_bytes(16)),
-        ]);
+    }
+
+    private function markInvalidationPending(string $type, int $id): void
+    {
+        $state = $this->lockConfig($this->exportInvalidationKey, '{}');
+        if (!in_array($id, $state[$type] ?? [], true)) {
+            $state[$type][] = $id;
+        }
+        $state['revision'] = bin2hex(random_bytes(16));
+        $this->writeConfig($this->exportInvalidationKey, $state);
     }
 
     public function hasPendingExportInvalidations(): bool
@@ -91,12 +108,18 @@ final class ShopCategoryStore
     public function drainExportInvalidations(): void
     {
         $state = $this->readConfig($this->exportInvalidationKey, '{}');
-        if (empty($state['nodes'])) {
+        $nodeIds = $state['nodes'] ?? [];
+        $articleIds = $state['articles'] ?? [];
+        if ($nodeIds === [] && $articleIds === []) {
             return;
         }
         $this->database->beginTransaction();
         try {
-            foreach ($this->assignedArticlesMatching($state['nodes']) as $articleId) {
+            if ($nodeIds !== []) {
+                $articleIds = array_unique(array_merge($articleIds, $this->assignedArticlesMatching($nodeIds)));
+            }
+            sort($articleIds, SORT_NUMERIC);
+            foreach ($articleIds as $articleId) {
                 $this->invalidateArticleExport($articleId);
             }
             $this->acknowledgeConfig($this->exportInvalidationKey, $state);

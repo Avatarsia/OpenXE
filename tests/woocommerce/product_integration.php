@@ -8,6 +8,7 @@ use Xentral\Components\WooCommerce\AssignmentPage;
 use Xentral\Components\WooCommerce\ClientWrapper;
 use Xentral\Components\WooCommerce\ShopCategoryStore;
 use Xentral\Components\WooCommerce\VisibilityQueue;
+require dirname(__DIR__, 2) . '/www/lib/class.remote.php';
 require dirname(__DIR__, 2) . '/www/lib/ShopimporterBase.php';
 require dirname(__DIR__, 2) . '/www/pages/shopimporter_woocommerce.php';
 
@@ -404,6 +405,101 @@ runTests([
         $connector->ImportSendList();
         same([], $db->advisoryLocks);
         same(null, $store->pendingTreeSync());
+    },
+    'deferred_category_assignment_requeues_the_article_after_hash_storage' => static function () {
+        foreach ([true, false] as $lockBusy) {
+            $db = new AssignmentFixtureDatabase();
+            $db->assignment = ['aktiv' => 1, 'last_article_hash' => 'previous-hash'];
+            $store = new ShopCategoryStore($db, 7);
+            $node = $store->create('Parts');
+            $store->assign(9, [$node]);
+            $db->beginTransaction();
+            $store->markTreeSyncPending();
+            $db->commit();
+            $article = remoteProduct(['artikel' => 9]);
+            $connector = productConnector([$article], ['shopCategoryTree' => true]);
+            $connector->shopid = 7;
+            $connector->lastImportTimestamp = '2025-01-01T00:00:00';
+            configureProductDatabase($connector, $db);
+            $lock = 'openxe_wc_category_sync_7';
+            if ($lockBusy) {
+                $db->advisoryLocks[$lock] = true;
+            } else {
+                $connector->client->failCategoryAssignment = 'products/102';
+            }
+
+            $legacyDb = new class($db, $connector) {
+                public function __construct(
+                    private AssignmentFixtureDatabase $db,
+                    private IntegrationProductConnector $connector
+                ) {}
+                public function Select(string $sql): int|string
+                {
+                    return str_starts_with($sql, 'SELECT id FROM artikel_onlineshops') ? 10 : 'PARENT';
+                }
+                public function real_escape_string(?string $value): string { return $value ?? ''; }
+                public function Update(string $sql): void
+                {
+                    check(str_contains($sql, "last_article_hash = 'current-hash'"));
+                    check(str_contains($sql, 'WHERE artikel = 9 AND shop = 7'));
+                    // The order import can interleave with export result processing.
+                    same(0, $this->connector->ImportGetAuftraegeAnzahl());
+                    same('previous-hash', $this->db->assignment['last_article_hash']);
+                    $this->db->assignment['last_article_hash'] = 'current-hash';
+                }
+            };
+            $app = new class($legacyDb, assignmentFixtureApp($db)->Container) {
+                public function __construct(public object $DB, public object $Container) {}
+                public function loadModule(string $name): object
+                {
+                    same('shopexport', $name);
+                    return $this;
+                }
+                public function hasArticleHashChanged(int $article, int $shop): array
+                {
+                    same([9, 7], [$article, $shop]);
+                    return ['hash' => 'current-hash'];
+                }
+            };
+            $remote = new class($app, $connector) extends Remote {
+                public function __construct(object $app, private IntegrationProductConnector $connector)
+                {
+                    $this->app = $app;
+                    $this->logger = $connector->logger;
+                }
+                public function RemoteCommand($id, $action, $data = '')
+                {
+                    same([7, 'sendlist'], [$id, $action]);
+                    return $this->connector->ImportSendList();
+                }
+                public function export(array $articles): array
+                {
+                    return $this->sendlist(7, $articles, true);
+                }
+            };
+
+            $result = $remote->export([$article])[0];
+            same(true, $result->success);
+            same(9, $result->articleId);
+            $warning = $lockBusy ? 'bereits synchronisiert' : 'Category assignment unavailable';
+            check(str_contains($result->message, $warning));
+            same('PARENT', productWrite($connector->client, 'products')['sku']);
+            same([], $connector->client->collections['products'][0]['categories'] ?? []);
+            same('current-hash', $db->assignment['last_article_hash']);
+            check($store->hasPendingExportInvalidations(), 'Deferred article must be queued after hash storage.');
+
+            unset($db->advisoryLocks[$lock]);
+            same(0, $connector->ImportGetAuftraegeAnzahl());
+            same('', $db->assignment['last_article_hash']);
+            same(false, $store->hasPendingExportInvalidations());
+
+            $connector->client->failCategoryAssignment = null;
+            $retry = $connector->ImportSendList()[0];
+            same(true, $retry->success);
+            same(null, $retry->message);
+            $termId = $connector->client->collections['products/categories'][0]['id'];
+            same([['id' => $termId]], $connector->client->collections['products'][0]['categories']);
+        }
     },
     'three_consecutive_category_budget_exhaustions_warn_until_success' => static function () {
         $db = new AssignmentFixtureDatabase();

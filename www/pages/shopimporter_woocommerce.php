@@ -1270,8 +1270,12 @@ class Shopimporter_Woocommerce extends ShopimporterBase
             }
           }
         } catch (Throwable $error) {
+          $return[$i]->categoryAssignmentDeferred = true;
           $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'Unbekannter Kategoriefehler.';
           $this->logCategoryExportWarning($return[$i], $categoryIds, $reason);
+        }
+        if ($skipped !== []) {
+          $return[$i]->categoryAssignmentDeferred = true;
         }
         foreach ($skipped as $nodeId => $reason) {
           $this->logCategoryExportWarning($return[$i], [$nodeId], $reason);
