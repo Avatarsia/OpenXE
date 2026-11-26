@@ -42,7 +42,7 @@ final class ArticleFieldCatalog
 
     private const FIELDS = [
         'sku' => [
-            'label' => 'Shop-SKU (Fremdnummer)', 'group' => 'Identitaet', 'storage' => 'foreign_number',
+            'label' => 'Shop-SKU (Fremdnummer)', 'group' => 'Identität', 'storage' => 'foreign_number',
             'wc' => 'sku', 'pull' => false, 'edit' => false, 'csv' => null,
         ],
         'shop_name' => [
@@ -110,7 +110,7 @@ final class ArticleFieldCatalog
             'wc' => 'weight', 'pull' => true, 'edit' => true, 'csv' => 'gewicht',
         ],
         'length' => [
-            'label' => 'Laenge', 'group' => 'Logistik', 'storage' => 'artikel:laenge',
+            'label' => 'Länge', 'group' => 'Logistik', 'storage' => 'artikel:laenge',
             'wc' => 'dimensions.length', 'pull' => true, 'edit' => true, 'csv' => 'laenge',
         ],
         'width' => [
@@ -118,7 +118,7 @@ final class ArticleFieldCatalog
             'wc' => 'dimensions.width', 'pull' => true, 'edit' => true, 'csv' => 'breite',
         ],
         'height' => [
-            'label' => 'Hoehe', 'group' => 'Logistik', 'storage' => 'artikel:hoehe',
+            'label' => 'Höhe', 'group' => 'Logistik', 'storage' => 'artikel:hoehe',
             'wc' => 'dimensions.height', 'pull' => true, 'edit' => true, 'csv' => 'hoehe',
         ],
         'ean' => [

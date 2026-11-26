@@ -549,6 +549,9 @@ runTests([
         check(preg_match('/<input [^>]*name="woo\[sku\]"[^>]* readonly/', $html) === 1);
         check(str_contains($html, 'wird auch in der Shop-Zuordnung gesetzt'));
         check(preg_match('/<input [^>]*name="woo\[pseudo_price\]"[^>]*value="15\.00"/', $html) === 1);
+        check(str_contains($html, '<legend>Identität</legend>'));
+        check(str_contains($html, 'class="wc-article-field wc-article-field--checkbox"'));
+        check(str_contains($html, 'class="wc-article-checkbox-row"'));
     },
     'mirror_attributes_only_for_form_fields' => static function () {
         [$tab] = articleTabFixture();

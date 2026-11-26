@@ -68,11 +68,11 @@ final class AssignmentPage
                 . AdminView::e($option['bezeichnung']) . '</option>';
         }
         $shopPicker = count($shops) > 1
-            ? '<form class="wc-admin-search" method="get" action="index.php"><input type="hidden" name="module" value="artikel">'
+            ? '<form class="wc-admin-search wc-assignment-shop-form" method="get" action="index.php"><input type="hidden" name="module" value="artikel">'
                 . '<input type="hidden" name="action" value="woocommerce"><label for="wc-assignment-shop">Shop</label>'
                 . '<select id="wc-assignment-shop" name="shop">' . $shopOptions . '</select>'
-                . '<button type="submit">Anzeigen</button></form>'
-            : '<p>Shop: ' . AdminView::e($shop['bezeichnung']) . '</p>';
+                . '<button type="submit" class="wc-btn wc-btn-secondary">Anzeigen</button></form>'
+            : '<p class="wc-assignment-shop-label">Shop: <strong>' . AdminView::e($shop['bezeichnung']) . '</strong></p>';
         $categoryNotice = empty($this->settings($shop)['shopCategoryTree'])
             ? '<p class="info">Der Export des Shop-Kategorienbaums ist in den Shop-Einstellungen deaktiviert.</p>' : '';
 
@@ -80,29 +80,37 @@ final class AssignmentPage
             : 'Artikel in &bdquo;' . AdminView::e(ltrim($categories[$category]['label'])) . '&ldquo;';
         $treeUrl = $url . ($onlyUnassigned ? '&unassigned=1' : '');
         $errors = $this->categoryErrors($store);
-        $filter = '<a href="' . AdminView::e($categoryUrl . ($onlyUnassigned ? '' : '&unassigned=1')) . '">'
+        $filter = '<a class="wc-btn wc-btn-secondary wc-assignment-filter' . ($onlyUnassigned ? ' is-active' : '') . '" href="'
+            . AdminView::e($categoryUrl . ($onlyUnassigned ? '' : '&unassigned=1')) . '">'
             . ($onlyUnassigned ? 'Alle Artikel anzeigen' : 'Nur Artikel anzeigen, die nicht im Shop sind') . '</a>';
         $pagination = '';
         if ($lastPage > 1) {
             $pagination = '<nav class="wc-admin-pages" aria-label="Artikelseiten">'
-                . ($page > 1 ? '<a href="' . AdminView::e($viewUrl . '&page=' . ($page - 1)) . '">Zur&uuml;ck</a>' : '')
+                . ($page > 1 ? '<a class="wc-btn wc-btn-secondary" href="' . AdminView::e($viewUrl . '&page=' . ($page - 1)) . '">Zur&uuml;ck</a>' : '')
                 . '<span>Seite ' . $page . ' von ' . $lastPage . '</span>'
-                . ($page < $lastPage ? '<a href="' . AdminView::e($viewUrl . '&page=' . ($page + 1)) . '">Weiter</a>' : '')
+                . ($page < $lastPage ? '<a class="wc-btn wc-btn-secondary" href="' . AdminView::e($viewUrl . '&page=' . ($page + 1)) . '">Weiter</a>' : '')
                 . '</nav>';
         }
 
         return '<div class="wc-admin wc-assignment" data-shop="' . $shopId . '" data-category="' . $category . '" data-url="'
             . AdminView::e($url) . '" data-unassigned="' . (int) $onlyUnassigned . '" data-token="' . AdminView::e($token) . '">'
-            . $shopPicker . $categoryNotice . '<p class="error" role="alert" data-wc-assignment-error hidden></p>'
+            . '<div class="wc-assignment-header">' . $shopPicker . '</div>'
+            . $categoryNotice . '<p class="error" role="alert" data-wc-assignment-error hidden></p>'
             . '<p class="info" role="status" data-wc-assignment-status hidden></p>'
-            . '<div class="wc-assignment-layout"><section><h2>Shop-Kategorien</h2>'
-            . $this->treeLink($treeUrl, 0, $category, 'ohne Kategorie') . $this->treeLinks($tree, $treeUrl, $category)
+            . '<div class="wc-assignment-layout">'
+            . '<section class="wc-assignment-sidebar"><h2>Shop-Kategorien</h2>'
+            . '<nav class="wc-assignment-tree-nav" aria-label="Shop-Kategorien">'
+            . '<div class="wc-assignment-tree-root">' . $this->treeLink($treeUrl, 0, $category, 'ohne Kategorie') . '</div>'
+            . $this->treeLinks($tree, $treeUrl, $category)
+            . '</nav>'
             . $this->categoryControls($categories, $category) . $errors . '</section>'
-            . '<section><h2>' . $categoryLabel . '</h2><div class="wc-admin-actions">' . $filter . '</div>'
-            . ($category === 0 ? '' : '<form class="wc-admin-search" data-command="cat_assign">'
-                . '<label for="wc-assignment-article">Artikelnr.</label><input id="wc-assignment-article" name="number" required>'
-                . '<button type="submit">+ Artikel zuordnen</button></form>')
-            . $this->articleTable($store, $rows, $category) . $pagination . '</section></div></div>';
+            . '<section class="wc-assignment-main">'
+            . '<div class="wc-assignment-toolbar"><h2>' . $categoryLabel . '</h2>'
+            . '<div class="wc-admin-actions">' . $filter . '</div></div>'
+            . ($category === 0 ? '' : '<form class="wc-admin-search wc-assignment-assign-form" data-command="cat_assign">'
+                . '<label for="wc-assignment-article">Artikelnr.</label><input id="wc-assignment-article" name="number" placeholder="Artikelnummer eingeben" required>'
+                . '<button type="submit" class="wc-btn wc-btn-primary">+ Artikel zuordnen</button></form>')
+            . $this->articleTable($store, $rows, $category, $categories) . $pagination . '</section></div></div>';
     }
 
     private function categoryOptions(array $nodes, int $depth = 0): array
@@ -153,23 +161,25 @@ final class AssignmentPage
             return $html . '</select>';
         };
 
-        $create = '<details><summary>Neu</summary><form class="wc-assignment-fields" data-command="cat_create">'
+        $create = '<details class="wc-assignment-panel"' . ($categories === [] ? ' open' : '') . '>'
+            . '<summary class="wc-assignment-summary wc-assignment-summary--primary">+ Neue Kategorie</summary>'
+            . '<form class="wc-assignment-fields" data-command="cat_create">'
             . $nameField('wc-assignment-create-name', '') . $parentField('wc-assignment-create-parent', $selected, 0)
-            . '<button type="submit">Kategorie anlegen</button></form></details>';
+            . '<button type="submit" class="wc-btn wc-btn-primary">Kategorie anlegen</button></form></details>';
         if ($selected === 0) {
-            return $create;
+            return '<div class="wc-assignment-controls">' . $create . '</div>';
         }
         $node = $categories[$selected];
         return '<div class="wc-assignment-controls">' . $create
-            . '<details><summary>Umbenennen</summary><form class="wc-assignment-fields" data-command="cat_rename">'
+            . '<details class="wc-assignment-panel"><summary class="wc-assignment-summary">Umbenennen</summary><form class="wc-assignment-fields" data-command="cat_rename">'
             . $nameField('wc-assignment-rename-name', $node['name'])
-            . '<button type="submit">Namen speichern</button></form></details>'
-            . '<details><summary>Verschieben</summary><form class="wc-assignment-fields" data-command="cat_move">'
+            . '<button type="submit" class="wc-btn wc-btn-secondary">Namen speichern</button></form></details>'
+            . '<details class="wc-assignment-panel"><summary class="wc-assignment-summary">Verschieben</summary><form class="wc-assignment-fields" data-command="cat_move">'
             . $parentField('wc-assignment-move-parent', $node['parent'], $selected)
             . '<label for="wc-assignment-sort">Sortierwert (aufsteigend)</label>'
             . '<input id="wc-assignment-sort" type="number" name="sort" min="0" required value="' . $node['sort'] . '">'
-            . '<button type="submit">Kategorie verschieben</button></form></details>'
-            . '<button type="button" data-command="cat_delete">L&ouml;schen</button></div>';
+            . '<button type="submit" class="wc-btn wc-btn-secondary">Kategorie verschieben</button></form></details>'
+            . '<button type="button" class="wc-btn wc-btn-danger" data-command="cat_delete">Kategorie l&ouml;schen</button></div>';
     }
 
     private function categoryErrors(ShopCategoryStore $store): string
@@ -231,7 +241,7 @@ final class AssignmentPage
         return [$rows, $page, $lastPage];
     }
 
-    private function articleTable(ShopCategoryStore $store, array $rows, int $category): string
+    private function articleTable(ShopCategoryStore $store, array $rows, int $category, array $categories = []): string
     {
         if ($rows === []) {
             return '<p class="info">Keine Artikel in dieser Auswahl.</p>';
@@ -241,12 +251,25 @@ final class AssignmentPage
             'toggle_soldout' => 'nicht mehr lieferbar',
             'toggle_onrequest' => 'auf Nachfrage lieferbar',
         ];
-        $html = '<div class="wc-admin-scroll" role="region" aria-label="Shop-Artikel" tabindex="0">'
-            . '<table class="wc-assignment-table"><thead><tr><th scope="col">Nr.</th><th scope="col">Name</th>';
-        foreach ($columns as $label) {
-            $html .= '<th scope="col">' . $label . '</th>';
+        $showAssignSelect = $category === 0 && $categories !== [];
+        $categoryOptionsHtml = '';
+        if ($showAssignSelect) {
+            foreach ($categories as $catId => $node) {
+                $categoryOptionsHtml .= '<option value="' . $catId . '">'
+                    . str_replace('  ', '&nbsp;&nbsp;', AdminView::e($node['label'])) . '</option>';
+            }
         }
-        $html .= $category === 0 ? '</tr></thead><tbody>' : '<th scope="col">Kategorie</th></tr></thead><tbody>';
+        $html = '<div class="wc-admin-scroll" role="region" aria-label="Shop-Artikel" tabindex="0">'
+            . '<table class="wc-assignment-table"><thead><tr><th scope="col" class="wc-col-number">Nr.</th><th scope="col" class="wc-col-name">Name</th>';
+        foreach ($columns as $label) {
+            $html .= '<th scope="col" class="wc-col-flag">' . $label . '</th>';
+        }
+        if ($category !== 0) {
+            $html .= '<th scope="col" class="wc-col-category">Kategorie</th>';
+        } elseif ($showAssignSelect) {
+            $html .= '<th scope="col" class="wc-col-category">Kategorie zuordnen</th>';
+        }
+        $html .= '</tr></thead><tbody>';
         $states = $store->articleStates(array_map('intval', array_column($rows, 'id')));
         foreach ($rows as $row) {
             $id = (int) $row['id'];
@@ -256,20 +279,23 @@ final class AssignmentPage
                 'toggle_onrequest' => $states[$id]['onRequest'],
             ];
             $number = AdminView::e($row['nummer']);
-            $html .= '<tr data-article="' . $id . '"><th scope="row">' . $number . '</th><td>' . AdminView::e($row['name_de']) . '</td>';
+            $html .= '<tr data-article="' . $id . '"><th scope="row" class="wc-col-number">' . $number . '</th><td class="wc-col-name">' . AdminView::e($row['name_de']) . '</td>';
             foreach ($columns as $cmd => $label) {
                 if ($cmd === 'toggle_shop' && ArticleFieldCatalog::isVariant($row)) {
-                    $html .= '<td>folgt Hauptartikel</td>';
+                    $html .= '<td class="wc-col-flag wc-flag-variant">folgt Hauptartikel</td>';
                     continue;
                 }
-                $html .= '<td><input type="checkbox" data-command="' . $cmd . '" aria-label="' . $label . ' (' . $number . ')"'
+                $html .= '<td class="wc-col-flag"><input type="checkbox" data-command="' . $cmd . '" aria-label="' . $label . ' (' . $number . ')"'
                     . ($checked[$cmd] ? ' checked' : '') . '>'
-                    . ($cmd === 'toggle_shop' && !empty($row['legacy_only']) ? ' <small>ueber Artikelstamm zugeordnet</small>' : '')
+                    . ($cmd === 'toggle_shop' && !empty($row['legacy_only']) ? ' <small class="wc-flag-note">ueber Artikelstamm zugeordnet</small>' : '')
                     . '</td>';
             }
             if ($category !== 0) {
-                $html .= '<td><button type="button" data-command="cat_unassign" aria-label="Kategoriezuordnung f&uuml;r '
+                $html .= '<td class="wc-col-category"><button type="button" class="wc-btn wc-btn-danger wc-btn-sm" data-command="cat_unassign" aria-label="Kategoriezuordnung f&uuml;r '
                     . $number . ' entfernen">Entfernen</button></td>';
+            } elseif ($showAssignSelect) {
+                $html .= '<td class="wc-col-category"><select class="wc-assignment-category-select" data-command="cat_assign" aria-label="Kategorie f&uuml;r '
+                    . $number . ' zuordnen"><option value="">Kategorie w&auml;hlen &hellip;</option>' . $categoryOptionsHtml . '</select></td>';
             }
             $html .= '</tr>';
         }

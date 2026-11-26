@@ -177,6 +177,21 @@ $tests = [
         }
         expect([$second], $store->categoriesOf(9));
     },
+    'empty_tree_opens_category_creator_and_populated_tree_adds_row_assign_select' => function (): void {
+        [$page, , $store] = assignmentSetup();
+        $emptyHtml = $page->render();
+        expect(true, str_contains($emptyHtml, '<details class="wc-assignment-panel" open>'));
+        expect(true, str_contains($emptyHtml, '+ Neue Kategorie'));
+        expect(false, str_contains($emptyHtml, 'class="wc-assignment-category-select"'));
+
+        $parent = $store->create('Ersatzteile');
+        $child = $store->create('Hotends', $parent);
+        $populatedHtml = $page->render();
+        expect(false, str_contains($populatedHtml, '<details class="wc-assignment-panel" open>'));
+        expect(true, str_contains($populatedHtml, 'Kategorie zuordnen'));
+        expect(true, str_contains($populatedHtml, 'class="wc-assignment-category-select" data-command="cat_assign"'));
+        expect(true, str_contains($populatedHtml, '<option value="' . $child . '">&nbsp;&nbsp;Hotends</option>'));
+    },
 ];
 
 function expect(mixed $expected, mixed $actual): void

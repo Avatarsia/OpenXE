@@ -61,10 +61,12 @@ final class ArticleTab
         $html = '<div class="wc-admin wc-article-tab" data-compare-url="' . AdminView::e($compareUrl) . '">'
             . '<input type="hidden" name="woo_shop" value="' . $shopId . '">'
             . '<input type="hidden" name="woo_csrf_token" value="' . AdminView::e($token) . '">'
+            . '<div class="wc-article-header">'
             . $shopPicker
-            . '<div class="wc-admin-actions"><button type="submit" name="speichern" value="Speichern">Speichern</button>'
-            . '<button type="button" data-woo-compare>Mit WooCommerce vergleichen</button></div>'
-            . '<p>&Uuml;bernommene Werte werden erst mit Speichern gesichert.</p>'
+            . '<div class="wc-admin-actions"><button type="submit" class="wc-btn wc-btn-primary" name="speichern" value="Speichern">Speichern</button>'
+            . '<button type="button" class="wc-btn wc-btn-secondary" data-woo-compare>Mit WooCommerce vergleichen</button></div>'
+            . '<p class="wc-article-hint">&Uuml;bernommene Werte werden erst mit Speichern gesichert.</p>'
+            . '</div>'
             . '<p role="status" data-woo-status hidden></p><div data-woo-results hidden></div>'
             . '<div class="wc-article-fields">';
 
@@ -222,8 +224,15 @@ final class ArticleTab
             $input = ($key === 'on_request' ? '<input type="hidden" name="woo[on_request]" value="0">' : '')
                 . '<input type="checkbox"' . $attributes . ' value="1"'
                 . (FieldDiff::normalize($key, $value) === '1' ? ' checked' : '') . '>';
-        } elseif (in_array($key, self::TEXTAREAS, true)) {
-            $input = '<textarea' . $attributes . ' rows="3">' . AdminView::e($value) . '</textarea>';
+            return '<div class="wc-article-field wc-article-field--checkbox">'
+                . '<div class="wc-article-checkbox-row">' . $input . '<label for="' . $id . '">' . AdminView::e($field['label']) . '</label></div>'
+                . '<code>' . AdminView::e($field['wc']) . '</code>'
+                . ($override ? '<small>wird auch in der Shop-Zuordnung gesetzt</small>' : '')
+                . ($fieldBlockReason !== null ? '<small>' . AdminView::e($fieldBlockReason) . '</small>' : '') . '</div>';
+        }
+        if (in_array($key, self::TEXTAREAS, true)) {
+            $rows = $key === 'description' ? '5' : '3';
+            $input = '<textarea' . $attributes . ' rows="' . $rows . '">' . AdminView::e($value) . '</textarea>';
         } else {
             $input = '<input type="text"' . $attributes . ' value="' . AdminView::e($value) . '">';
         }

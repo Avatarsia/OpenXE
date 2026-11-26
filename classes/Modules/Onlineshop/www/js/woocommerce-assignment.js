@@ -19,9 +19,12 @@
             function save($control, data) {
                 var cmd = $control.attr('data-command');
                 var checkbox = $control.is(':checkbox');
+                var select = $control.is('select');
                 if (busy) {
                     if (checkbox) {
                         $control.prop('checked', !$control.prop('checked'));
+                    } else if (select) {
+                        $control.val('');
                     }
                     return;
                 }
@@ -36,6 +39,8 @@
                 function failed(message) {
                     if (checkbox) {
                         $control.prop('checked', !$control.prop('checked'));
+                    } else if (select) {
+                        $control.val('');
                     }
                     showError(message || 'Die \u00c4nderung konnte nicht gespeichert werden.');
                 }
@@ -52,6 +57,18 @@
                 }).done(function (response) {
                     if (!response || response.ok !== true) {
                         failed(response && response.error);
+                    } else if (select && category === '0') {
+                        var $row = $control.closest('tr');
+                        var articleNumber = $.trim($row.find('th').first().text());
+                        var targetLabel = $.trim($control.find('option:selected').text());
+                        $row.remove();
+                        if ($page.find('.wc-assignment-table tbody tr').length === 0) {
+                            navigating = true;
+                            window.location.href = url + '&category=0'
+                                + (onlyUnassigned ? '&unassigned=1' : '');
+                        } else {
+                            $status.text('Artikel ' + articleNumber + ' der Kategorie \u201e' + targetLabel + '\u201c zugeordnet.').prop('hidden', false);
+                        }
                     } else if (!checkbox || (cmd === 'toggle_shop' && onlyUnassigned)) {
                         var next = response.category === undefined ? category : response.category;
                         navigating = true;
@@ -66,7 +83,7 @@
                     if (!navigating) {
                         busy = false;
                         $enabledControls.prop('disabled', false);
-                        if ($error.prop('hidden') && $active.is(':input')) {
+                        if ($error.prop('hidden') && $active.is(':input') && $.contains(document, $active[0])) {
                             $active.trigger('focus');
                         }
                     }
@@ -88,6 +105,18 @@
                 save($checkbox, {
                     article: $checkbox.closest('[data-article]').attr('data-article'),
                     enabled: $checkbox.prop('checked') ? '1' : '0'
+                });
+            });
+
+            $page.on('change', 'select[data-command]', function () {
+                var $select = $(this);
+                var targetCategory = $select.val();
+                if (!targetCategory) {
+                    return;
+                }
+                save($select, {
+                    article: $select.closest('[data-article]').attr('data-article'),
+                    category: targetCategory
                 });
             });
 
