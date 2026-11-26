@@ -20,6 +20,7 @@ use Xentral\Components\Exporter\Csv\CsvExporter;
 use Xentral\Components\Exporter\Json\JsonExporter;
 use Xentral\Components\Exporter\Json\JsonConfig;
 use Xentral\Components\Util\StringUtil;
+use Xentral\Components\Http\Session\SessionHandler;
 use Xentral\Components\WooCommerce\ArticleDataRepository;
 use Xentral\Components\WooCommerce\ArticleFieldCatalog;
 use Xentral\Components\WooCommerce\TemplateInstaller;
@@ -266,6 +267,10 @@ class Importvorlage extends GenImportvorlage {
     $this->app->erp->CheckProzessstarter('Importvorlage', 'periodisch', '5', '2017-01-01 00:00:00', 'cronjob', 'importvorlage', 1);
   }
 
+  private const WOO_CSV_CONFIRM = 'woocommerce_csv_confirm';
+  private const WOO_CSV_QUEUE_PREFIX = 'woocommerce_confirmed:';
+  private ?array $wooCsvAuthorization = null;
+
   public function doCronjob()
   {
 
@@ -323,7 +328,15 @@ class Importvorlage extends GenImportvorlage {
       $parameter['is_cronjob'] = true;
       $parameter['importmasterdata_id'] = $job['id'];
 
-      $result = $this->ImportvorlageDo($parameter['charset'], $parameter); // global_data missing here...
+      $wooTemplate = $this->isUpdateOnlyArticleImport((int)$job['template_id'], (string)$parameter['ziel']);
+      if($wooTemplate || str_starts_with((string)$job['message'], self::WOO_CSV_QUEUE_PREFIX)) {
+        $result = $this->runConfirmedWooCsvJob($job, $parameter, $wooTemplate);
+        if(($result['claimed'] ?? true) === false) {
+          continue;
+        }
+      } else {
+        $result = $this->ImportvorlageDo($parameter['charset'], $parameter); // global_data missing here...
+      }
 
         if ($result['success']) {
             $status = 'done';
@@ -333,8 +346,8 @@ class Importvorlage extends GenImportvorlage {
 
       $this->app->DB->Update(
         sprintf(
-          "UPDATE `importmasterdata` SET `status` = '".$status."', `message` = '".$result['message']."' WHERE `id` = %d ",
-          $job['id']
+          "UPDATE `importmasterdata` SET `status` = '%s', `message` = '%s' WHERE `id` = %d ",
+          $status, $this->app->DB->real_escape_string((string)$result['message']), $job['id']
         )
       );
     }
@@ -648,6 +661,9 @@ class Importvorlage extends GenImportvorlage {
     $job = $this->getJobById($jobId);
     if(empty($job)) {
       return $ret;
+    }
+    if($this->isRegisteredWooCsvTemplate((int)$job['template_id'])) {
+      return $ret + ['error' => 'WooCommerce-Import muss ueber die Dateivorschau bestaetigt werden.'];
     }
     if($this->isValidJobFile($job['filename'])) {
       $this->app->DB->Update(
@@ -1023,6 +1039,9 @@ class Importvorlage extends GenImportvorlage {
 
     set_time_limit (0);
     $upload = $this->app->Secure->GetPOST('upload');
+    $import = $this->app->Secure->GetPOST('import');
+    $stueckliste_csv = '';
+    $jobId = 0;
     $selcharsets = array('UTF8'=>'UTF-8','ISO-8859-1'=>'ISO-8859-1','CP850'=>'CP850');
     $sel = '<select id="selcharset">';
     $charset = $this->app->DB->Select("SELECT charset from importvorlage where id = '$id'");
@@ -1056,6 +1075,9 @@ class Importvorlage extends GenImportvorlage {
     $fields = $this->cleanFields($importVorlageRow['fields']);
     $ziel = $importVorlageRow['ziel'];
     $updateOnly = $this->isUpdateOnlyArticleImport((int)$id, (string)$ziel);
+    if($updateOnly) {
+      $charset = 'UTF8';
+    }
     $format = $importVorlageRow['format'] ?? self::FORMAT_CSV;
     $utf8decode = 0;//$this->app->DB->Select("SELECT utf8decode FROM importvorlage WHERE id='$id' LIMIT 1");
 
@@ -1070,11 +1092,12 @@ class Importvorlage extends GenImportvorlage {
     $global_data['dateitypen_artikel'] = $this->app->erp->getDateiTypen('artikel');
     $global_data['dateiobjekte'] = $this->app->erp->GetAllowedDateiObjekte();
 
-    if($upload!='') {
+    if($upload!='' && (!$updateOnly || $import === '')) {
       $isCronjobActive = $this->app->DB->Select(
         "SELECT `id` FROM `prozessstarter` WHERE `aktiv` = 1 AND `parameter` = 'importvorlage' LIMIT 1"
       );
-      $uploaded_file_name = $this->app->erp->GetTMP().'importvorlage'.$this->app->User->GetID();
+      $uploaded_file_name = $this->app->erp->GetTMP().'importvorlage'.$this->app->User->GetID()
+        . ($updateOnly ? '_' . bin2hex(random_bytes(16)) : '');
       $uploaded_file_original_name = $_FILES['userfile']['name'];
 
       if (!move_uploaded_file($_FILES['userfile']['tmp_name'], $uploaded_file_name)) {
@@ -1231,10 +1254,21 @@ class Importvorlage extends GenImportvorlage {
                     $limit_text = 'Vorschau: Es werden aktuell nur 50 von <b>'
                     . $rowcounter_real . '</b> Datens&auml;tzen angezeigt. Importiert werden aber alle ';
                 }
+                $wooConfirmInput = '';
+                if($updateOnly) {
+                    $file = $isCronjobActive ? (string)($this->getJobById($jobId)['filename'] ?? '') : $stueckliste_csv;
+                    if($file === '') {
+                        $this->app->Tpl->AddMessage('error', 'WooCommerce-Importauftrag konnte nicht erstellt werden.');
+                    } else {
+                        $token = $this->prepareWooCsvConfirmation((int)$id, $jobId, $file);
+                        $wooConfirmInput = '<input type="hidden" name="woo_csv_token" value="' . $token . '">';
+                    }
+                }
                 $this->app->Tpl->Add(
                     'IMPORTBUTTON',
-                    '<div class="info"><input type="submit" name="import" value="importieren">'
-                    . $limit_text
+                    '<div class="info"><input type="submit" name="import" value="importieren"'
+                    . ($updateOnly && $wooConfirmInput === '' ? ' disabled' : '') . '>'
+                    . $wooConfirmInput . $limit_text
                     . $rowcounter_real . ' Datens&auml;tze, davon '.$create_count.' neu, '.$update_count.' ge&auml;ndert'
                     . ($skip_count ? ', '.$skip_count.' uebersprungen' : '') . '.<input type="hidden" name="importdateiname" value="'
                     . $stueckliste_csv . '"><input type="hidden" name="jobid" value="'.$jobId.'" />'
@@ -1254,14 +1288,33 @@ class Importvorlage extends GenImportvorlage {
       );
     }
     $jobId = (int)$this->app->Secure->GetPOST('jobid');
-    if($jobId > 0 && !empty($import)) {
-      $this->app->DB->Update(
-        sprintf(
-          "UPDATE `importmasterdata` SET `status` = 'in_queue' WHERE `id` = %d",
-          $jobId
-        )
-      );
-      $this->app->Tpl->Set('MESSAGE', '<div class="info">Import an Prozessstarter &uuml;bergeben.</div>');
+    if($updateOnly && $import !== '') {
+      try {
+        $confirmation = $this->takeWooCsvConfirmation((int)$id, $jobId);
+        if($jobId > 0) {
+          $this->queueConfirmedWooCsv($confirmation);
+          $this->app->Tpl->Set('MESSAGE', '<div class="info">Import an Prozessstarter &uuml;bergeben.</div>');
+        } else {
+          $result = $this->executeConfirmedWooCsv($confirmation, [], $global_data);
+          unlink($confirmation['file']);
+          $this->showImportResult($result);
+        }
+      } catch (\Throwable $error) {
+        $this->app->Container->get('Logger')->error('WooCommerce CSV confirmation failed', ['exception' => $error]);
+        $this->app->Tpl->AddMessage('error', 'WooCommerce-Import konnte nicht bestaetigt werden. Bitte Vorschau neu laden.');
+      }
+    }
+    elseif($jobId > 0 && !empty($import)) {
+      $job = $this->getJobById($jobId);
+      if(!$this->isRegisteredWooCsvTemplate((int)($job['template_id'] ?? 0))) {
+        $this->app->DB->Update(
+          sprintf(
+            "UPDATE `importmasterdata` SET `status` = 'in_queue' WHERE `id` = %d",
+            $jobId
+          )
+        );
+        $this->app->Tpl->Set('MESSAGE', '<div class="info">Import an Prozessstarter &uuml;bergeben.</div>');
+      }
     }
     elseif($import!='') {
       $result = $this->ImportvorlageDo($charset, array('stueckliste_csv' => $stueckliste_csv), global_data: $global_data);
@@ -1269,14 +1322,7 @@ class Importvorlage extends GenImportvorlage {
         unlink($stueckliste_csv);
       }
 
-      if ($result['success']) {
-        $this->app->Tpl->AddMessage('success',"Import durchgef&uuml;hrt: ".$result['rows']." Zeilen.");
-        if (!empty($result['message'])) {
-            $this->app->Tpl->AddMessage('info',$result['message'], html: true);
-        }
-      } else {
-        $this->app->Tpl->AddMessage('error',"Import fehlerhaft: ".$result['message']."", html: true);
-      }
+      $this->showImportResult($result);
     }
 
     if(!$_id) {
@@ -1286,6 +1332,133 @@ class Importvorlage extends GenImportvorlage {
       $this->app->Tpl->Set('TABTEXT2', 'Warteschlange');
       $this->app->YUI->TableSearch('TAB2', 'importvorlage_list', 'show','','',basename(__FILE__), __CLASS__);
       $this->app->Tpl->Parse('PAGE','tabview2.tpl');
+    }
+  }
+
+  private function showImportResult(array $result): void
+  {
+    if ($result['success']) {
+      $this->app->Tpl->AddMessage('success', "Import durchgef&uuml;hrt: ".$result['rows']." Zeilen.");
+      if (!empty($result['message'])) {
+        $this->app->Tpl->AddMessage('info', $result['message'], html: true);
+      }
+    } else {
+      $this->app->Tpl->AddMessage('error', 'Import fehlerhaft: '.$result['message'], html: true);
+    }
+  }
+
+  private function prepareWooCsvConfirmation(int $template, int $job, string $file): string
+  {
+    $user = (int)$this->app->User->GetID();
+    if($user <= 0 || !$this->isValidJobFile($file)) {
+      throw new RuntimeException('WooCommerce-Dateivorschau ist nicht mehr verfuegbar.');
+    }
+    $hash = hash_file('sha256', $file);
+    if($hash === false) {
+      throw new RuntimeException('WooCommerce-Dateivorschau konnte nicht gelesen werden.');
+    }
+    $session = $this->app->Container->get('Session');
+    $session->setValue('woocommerce_admin', self::WOO_CSV_CONFIRM, compact('user', 'template', 'job', 'file', 'hash'));
+    $token = $session->createCsrfToken(self::WOO_CSV_CONFIRM);
+    SessionHandler::commitSession($session);
+    return $token;
+  }
+
+  private function takeWooCsvConfirmation(int $template, int $job): array
+  {
+    $session = $this->app->Container->get('Session');
+    $token = $this->app->Secure->GetPOST('woo_csv_token', '', '', 1);
+    $confirmation = $session->getValue('woocommerce_admin', self::WOO_CSV_CONFIRM);
+    if(($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !is_string($token)
+      || !$session->isCsrfTokenValid(self::WOO_CSV_CONFIRM, $token) || !is_array($confirmation)
+      || $confirmation['user'] !== (int)$this->app->User->GetID()
+      || $confirmation['template'] !== $template || $confirmation['job'] !== $job
+      || !$this->isValidJobFile($confirmation['file'])
+      || hash_file('sha256', $confirmation['file']) !== $confirmation['hash']) {
+      throw new RuntimeException('WooCommerce-Dateivorschau stimmt nicht mit der Bestaetigung ueberein.');
+    }
+    $session->removeValue('woocommerce_admin', self::WOO_CSV_CONFIRM);
+    SessionHandler::commitSession($session);
+    return $confirmation;
+  }
+
+  private function wooCsvJobMarker(array $confirmation): string
+  {
+    return self::WOO_CSV_QUEUE_PREFIX . hash('sha256', serialize([
+      $confirmation['user'], $confirmation['template'], $confirmation['job'],
+      $confirmation['file'], $confirmation['hash'],
+    ]));
+  }
+
+  private function queueConfirmedWooCsv(array $confirmation): void
+  {
+    $db = $this->app->DB;
+    $db->Update(sprintf(
+      "UPDATE importmasterdata SET status = 'in_queue', message = '%s'"
+      . " WHERE id = %d AND user_id = %d AND template_id = %d AND filename = '%s' AND status = 'created'",
+      $this->wooCsvJobMarker($confirmation), $confirmation['job'], $confirmation['user'], $confirmation['template'],
+      $db->real_escape_string($confirmation['file'])
+    ));
+    if($db->affected_rows() !== 1) {
+      throw new RuntimeException('WooCommerce-Importauftrag passt nicht zur Bestaetigung.');
+    }
+  }
+
+  private function runConfirmedWooCsvJob(array $job, array $parameter, bool $wooTemplate): array
+  {
+    $db = $this->app->DB;
+    $file = (string)$job['filename'];
+    $confirmation = ['user' => (int)$job['user_id'], 'template' => (int)$job['template_id'],
+      'job' => (int)$job['id'], 'file' => $file,
+      'hash' => $wooTemplate && $this->isValidJobFile($file) ? hash_file('sha256', $file) : false];
+    $marker = $this->wooCsvJobMarker($confirmation);
+    if(!$confirmation['hash'] || $job['message'] !== $marker) {
+      return ['success' => false, 'message' => 'WooCommerce-Importauftrag wurde nicht bestaetigt oder hat sich geaendert.'];
+    }
+    $user = $db->SelectRow(sprintf(
+      'SELECT id, type, adresse FROM user WHERE id = %d AND activ = 1 LIMIT 1', $confirmation['user']
+    ));
+    if(!$user) {
+      return ['success' => false, 'message' => 'Benutzer des WooCommerce-Importauftrags ist nicht aktiv.'];
+    }
+    $db->Update(sprintf(
+      "UPDATE importmasterdata SET status = 'in_progress' WHERE id = %d AND status = 'in_queue' AND message = '%s'",
+      $confirmation['job'], $marker
+    ));
+    if($db->affected_rows() !== 1) {
+      // The other worker owns the job and its final status.
+      return ['claimed' => false];
+    }
+
+    $previousUser = $this->app->User;
+    $this->app->User = new class($this->app, $user) extends \User {
+      public function __construct($app, private array $identity) { parent::__construct($app); }
+      public function GetID(): int { return (int)$this->identity['id']; }
+      public function GetType(): string { return $this->identity['type']; }
+      public function GetAdresse() { return (int)$this->identity['adresse']; }
+    };
+    try {
+      if(!$this->app->erp->RechteVorhanden('importvorlage', 'import')) {
+        return ['success' => false, 'message' => 'Benutzer darf den WooCommerce-Import nicht ausfuehren.'];
+      }
+      return $this->executeConfirmedWooCsv($confirmation, $parameter);
+    } catch (\Throwable $error) {
+      $this->app->Container->get('Logger')->error('WooCommerce CSV job failed', ['exception' => $error]);
+      return ['success' => false, 'message' => 'WooCommerce-Importauftrag konnte nicht ausgefuehrt werden.'];
+    } finally {
+      $this->app->User = $previousUser;
+    }
+  }
+
+  private function executeConfirmedWooCsv(array $confirmation, array $parameter, array $globalData = []): array
+  {
+    $this->wooCsvAuthorization = $confirmation;
+    try {
+      return $this->ImportvorlageDo('UTF8', [
+        'id' => $confirmation['template'], 'stueckliste_csv' => $confirmation['file'], 'row' => [],
+      ] + $parameter, $globalData);
+    } finally {
+      $this->wooCsvAuthorization = null;
     }
   }
 
@@ -1565,6 +1738,12 @@ class Importvorlage extends GenImportvorlage {
     $updateOnly = $this->isUpdateOnlyArticleImport((int)$id, (string)$ziel);
     $wooCommerceShopFields = [];
     if($updateOnly) {
+      $confirmed = $this->wooCsvAuthorization;
+      if($confirmed === null || $confirmed['template'] !== (int)$id
+        || $confirmed['user'] !== (int)$this->app->User->GetID()
+        || $confirmed['file'] !== ($parameter['stueckliste_csv'] ?? null)) {
+        return ['success' => false, 'message' => 'WooCommerce-Import muss ueber die Dateivorschau bestaetigt werden.'];
+      }
       foreach(ArticleFieldCatalog::fields() as $field) {
         if(str_starts_with($field['storage'], 'shop:')) {
           $wooCommerceShopFields[substr($field['storage'], 5)] = $field['key'];
@@ -1790,6 +1969,15 @@ class Importvorlage extends GenImportvorlage {
           if($updateOnly && empty($artikelid)) {
             $importvorlagedoresult['messages'][] = $this->unknownImportArticle($tmp['nummer'][$i] ?? '');
             break;
+          }
+          if($updateOnly) {
+            $article = $this->app->Container->get('Database')->fetchRow(
+              'SELECT projekt FROM artikel WHERE id = :article', ['article' => (int)$artikelid]
+            );
+            if(!$article || !$this->app->erp->UserProjektRecht((int)$article['projekt'])) {
+              $importvorlagedoresult['messages'][] = 'Kein Projektzugriff, Zeile: ' . $i . ' uebersprungen';
+              break;
+            }
           }
           // START NEW CODE CREATE ARTIKEL
           if(empty($artikelid) && $tmp['cmd'][$i] == 'create')
@@ -5174,9 +5362,13 @@ class Importvorlage extends GenImportvorlage {
    */
   private function isUpdateOnlyArticleImport(int $id, string $target): bool
   {
-    return $id > 0 && in_array($target, ['artikel', 'einkauf'], true) && TemplateInstaller::isUpdateOnly(
-      $id,
-      (string)$this->app->erp->GetKonfiguration(TemplateInstaller::UPDATE_ONLY)
+    return in_array($target, ['artikel', 'einkauf'], true) && $this->isRegisteredWooCsvTemplate($id);
+  }
+
+  private function isRegisteredWooCsvTemplate(int $id): bool
+  {
+    return $id > 0 && TemplateInstaller::isUpdateOnly(
+      $id, (string)$this->app->erp->GetKonfiguration(TemplateInstaller::UPDATE_ONLY)
     );
   }
 

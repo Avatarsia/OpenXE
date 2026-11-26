@@ -91,13 +91,15 @@ final class ArticleDataRepository
             // Lock the article before discovering and locking its overrides.
             $database->fetchValue('SELECT id FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
             $overrides = $database->fetchAll(
-                'SELECT a.id, a.shop FROM artikel_onlineshops AS a'
+                'SELECT a.id, a.shop, s.projekt FROM artikel_onlineshops AS a'
                 . ' INNER JOIN shopexport AS s ON s.id = a.shop'
                 . ' WHERE a.artikel = :article AND a.aktiv = 1 AND a.ausartikel = 0'
                 . " AND s.geloescht = 0 AND s.modulename = 'shopimporter_woocommerce' ORDER BY a.shop, a.id FOR UPDATE",
                 ['article' => $articleId]
             );
-            // With no override, there is only the article value to update.
+            $overrides = array_values(array_filter($overrides, static fn (array $shop): bool =>
+                $app->erp->RechteVorhanden('onlineshops', 'edit') && $app->erp->UserProjektRecht((int) $shop['projekt'])));
+            // With no accessible override, there is only the article value to update.
             foreach ($overrides ?: [['shop' => 0, 'id' => 0]] as $override) {
                 (new self($app, (int) $override['shop']))->apply($articleId, $values, 'csv_import', (int) $override['id']);
             }
@@ -115,7 +117,7 @@ final class ArticleDataRepository
         try {
             $database->fetchValue('SELECT id FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
             $shops = $database->fetchAll(
-                'SELECT s.id AS shop FROM shopexport AS s'
+                'SELECT s.id AS shop, s.projekt FROM shopexport AS s'
                 . ' INNER JOIN artikel AS art ON art.id = :article'
                 . ' LEFT JOIN artikel_onlineshops AS a ON a.artikel = art.id AND a.shop = s.id AND a.aktiv = 1'
                 . ' WHERE (a.id IS NOT NULL OR s.id IN (art.shop, art.shop2, art.shop3))'
@@ -126,7 +128,11 @@ final class ArticleDataRepository
                 throw new InvalidArgumentException('Keine aktive WooCommerce-Shopzuordnung vorhanden.');
             }
             $repositories = [];
-            foreach (array_unique(array_column($shops, 'shop')) as $shopId) {
+            foreach (array_column($shops, 'projekt', 'shop') as $shopId => $projectId) {
+                // The underlying standard price is shared by all assigned shops.
+                if (!$app->erp->RechteVorhanden('onlineshops', 'edit') || !$app->erp->UserProjektRecht((int) $projectId)) {
+                    throw new InvalidArgumentException('Kein Shopzugriff fuer den gemeinsamen Standardpreis.');
+                }
                 $repository = new self($app, (int) $shopId);
                 // All assigned shops share the standard row. Check every price group before changing it.
                 if ($repository->priceGroup(true)) {

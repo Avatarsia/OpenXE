@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 require __DIR__ . '/bootstrap.php';
 
+use Xentral\Components\Http\Session\Session;
 use Xentral\Components\WooCommerce\ArticleFieldCatalog;
 use Xentral\Components\WooCommerce\TemplateInstaller;
 
@@ -58,7 +59,9 @@ function installedTemplates(): array
 
 final class CsvImportDatabaseFake
 {
-    public array $article = ['id' => 9, 'nummer' => 'A9', 'pseudolager' => '0'];
+    public array $article = ['id' => 9, 'nummer' => 'A9', 'projekt' => 0, 'pseudolager' => '0'];
+    public array $shopProjects = [];
+    public bool $shopEdit = true;
     public array $overrides = [
         7 => ['id' => 70, 'shop' => 7, 'pseudolager' => '0', 'lieferzeitmanuell' => 'alt'],
         71 => ['id' => 71, 'shop' => 7, 'pseudolager' => '1', 'lieferzeitmanuell' => 'weiterer Wert'],
@@ -139,12 +142,13 @@ final class CsvImportDatabaseFake
             check(str_contains($sql, 'shopimporter_woocommerce') && str_contains($sql, 's.geloescht = 0'));
             check(str_contains($sql, 's.aktiv = 1'), 'price import must ignore deactivated shops');
             same(9, $params['article']);
-            return array_map(static fn ($id) => ['shop' => $id], $this->activeShopIds);
+            return array_map(fn ($id) => ['shop' => $id, 'projekt' => $this->shopProjects[$id] ?? 0], $this->activeShopIds);
         }
         check(str_contains($sql, 'FROM artikel_onlineshops') && str_contains($sql, 'ausartikel = 0'));
         check(str_contains($sql, 'shopimporter_woocommerce') && str_contains($sql, 's.geloescht = 0'));
         same(9, $params['article']);
-        return [$this->overrides[7], $this->overrides[71], $this->overrides[8]];
+        return array_map(fn ($override) => $override + ['projekt' => $this->shopProjects[$override['shop']] ?? 0],
+            [$this->overrides[7], $this->overrides[71], $this->overrides[8]]);
     }
     public function fetchValue(string $sql, array $params)
     {
@@ -187,7 +191,7 @@ final class CsvImportDatabaseFake
     public function rollBack(): void { $this->transaction = false; }
 }
 
-function runCsvImport(CsvImportDatabaseFake $db, string $csv, int $id): array
+function runCsvImport(CsvImportDatabaseFake $db, string $csv, int $id, bool $confirm = true): array
 {
     $path = tmpfile();
     fwrite($path, $csv);
@@ -195,10 +199,14 @@ function runCsvImport(CsvImportDatabaseFake $db, string $csv, int $id): array
         $app = (object) ['DB' => $db, 'Container' => new class($db) {
             public function __construct(private $db) {}
             public function get($name) { return $this->db; }
+        }, 'User' => new class {
+            public function GetID(): int { return 42; }
         }, 'erp' => new class($db) {
             public function __construct(private $db) {}
             public function GetKonfiguration($name) { return '42,12,2'; }
             public function RunHook(...$args): void {}
+            public function UserProjektRecht(int $project): bool { return $project === 0; }
+            public function RechteVorhanden(string $module, string $action): bool { return $this->db->shopEdit; }
             public function ImportCreateArtikel(...$args): int { throw new LogicException('Artikel wurde angelegt'); }
             public function AddVerkaufspreis($id, $amount, $address, $price, ...$args): void
             {
@@ -208,9 +216,13 @@ function runCsvImport(CsvImportDatabaseFake $db, string $csv, int $id): array
                 $this->db->prices[] = ['id' => count($this->db->prices) + 1, 'preis' => (string) $price, 'active' => true];
             }
         }];
-        return (new Importvorlage($app, true))->ImportvorlageDo('utf8', [
-            'id' => $id, 'row' => [], 'stueckliste_csv' => stream_get_meta_data($path)['uri'],
-        ]);
+        $importer = new Importvorlage($app, true);
+        $file = stream_get_meta_data($path)['uri'];
+        if ($confirm && TemplateInstaller::isUpdateOnly($id, $app->erp->GetKonfiguration(TemplateInstaller::UPDATE_ONLY))) {
+            return (new ReflectionMethod($importer, 'executeConfirmedWooCsv'))
+                ->invoke($importer, ['user' => 42, 'template' => $id, 'file' => $file], []);
+        }
+        return $importer->ImportvorlageDo('utf8', ['id' => $id, 'row' => [], 'stueckliste_csv' => $file]);
     } catch (ErrorException $error) {
         throw new RuntimeException($error->getMessage() . " in " . $error->getFile() . ":" . $error->getLine());
     } finally {
@@ -303,6 +315,105 @@ runTests([
         same(false, $result['success']);
         same('0', $db->article['pseudolager']);
         same('4', $db->overrides[8]['pseudolager']);
+    },
+    'csv_confirmation_is_bound_to_the_preview_and_is_single_use' => static function () {
+        $file = tmpfile();
+        fwrite($file, "nummer;pseudolager
+A9;3
+");
+        $path = stream_get_meta_data($file)['uri'];
+        $session = new Session();
+        $app = (object) [
+            'Container' => new class ($session) {
+                public function __construct(private Session $session) {}
+                public function get($name): Session { return $this->session; }
+            },
+            'Secure' => new class {
+                public string $token = '';
+                public function GetPOST(...$args): string { return $this->token; }
+            },
+            'User' => new class {
+                public int $id = 42;
+                public function GetID(): int { return $this->id; }
+            },
+            'erp' => new class (dirname($path) . DIRECTORY_SEPARATOR) {
+                public function __construct(private string $dir) {}
+                public function GetTMP(): string { return $this->dir; }
+            },
+        ];
+        $importer = new Importvorlage($app, true);
+        $preview = new ReflectionMethod($importer, 'prepareWooCsvConfirmation');
+        $confirm = new ReflectionMethod($importer, 'takeWooCsvConfirmation');
+        $assertDenied = static function (int $template, int $job) use ($confirm, $importer): void {
+            try {
+                $confirm->invoke($importer, $template, $job);
+                throw new LogicException('CSV confirmation unexpectedly accepted.');
+            } catch (RuntimeException $error) {
+                check(str_contains($error->getMessage(), 'Dateivorschau'));
+            }
+        };
+        $method = $_SERVER['REQUEST_METHOD'] ?? null;
+        try {
+            $token = $preview->invoke($importer, 12, 4, $path);
+            $_SERVER['REQUEST_METHOD'] = 'POST';
+            $assertDenied(12, 4);
+            $app->Secure->token = $token;
+            $_SERVER['REQUEST_METHOD'] = 'GET';
+            $assertDenied(12, 4);
+            $_SERVER['REQUEST_METHOD'] = 'POST';
+            $assertDenied(12, 5);
+            $assertDenied(13, 4);
+            $app->User->id = 43;
+            $assertDenied(12, 4);
+            $app->User->id = 42;
+            same($path, $confirm->invoke($importer, 12, 4)['file']);
+            $assertDenied(12, 4);
+            $app->Secure->token = $preview->invoke($importer, 12, 4, $path);
+            fwrite($file, "A9;4
+");
+            $assertDenied(12, 4);
+        } finally {
+            fclose($file);
+            if ($method === null) {
+                unset($_SERVER['REQUEST_METHOD']);
+            } else {
+                $_SERVER['REQUEST_METHOD'] = $method;
+            }
+        }
+    },
+    'registered_csv_execution_requires_an_authorized_preview' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate('1:nummer;2:pseudolager'));
+        $result = runCsvImport($db, "nummer;pseudolager
+A9;7
+", 12, false);
+        same(false, $result['success']);
+        check(str_contains($result['message'], 'Dateivorschau'));
+        same([], $db->writes);
+    },
+    'registered_csv_skips_articles_outside_the_users_projects' => static function () {
+        $db = new CsvImportDatabaseFake(csvImportTemplate('1:nummer;2:shop_name_de;3:woo_preis_netto'));
+        $db->article['projekt'] = 12;
+        $result = runCsvImport($db, "nummer;shop_name_de;standardpreisnetto
+A9;Neuer Name;25
+", 12);
+        check(str_contains($result['message'], 'Projektzugriff'));
+        same([], $db->writes);
+    },
+    'registered_csv_only_mirrors_fields_to_authorized_shops' => static function () {
+        foreach ([true, false] as $shopEdit) {
+            $db = new CsvImportDatabaseFake(csvImportTemplate('1:nummer;2:pseudolager;3:woo_preis_netto'));
+            $db->shopProjects[8] = 12;
+            $db->shopEdit = $shopEdit;
+            $prices = $db->prices;
+            $result = runCsvImport($db, "nummer;pseudolager;standardpreisnetto
+A9;7;25
+", 12);
+            same('7', $db->article['pseudolager']);
+            same($shopEdit ? '7' : '0', $db->overrides[7]['pseudolager']);
+            same('4', $db->overrides[8]['pseudolager']);
+            same($prices, $db->prices);
+            check(str_contains($result['message'], 'Shopzugriff'));
+        }
     },
     'ambiguous_price_is_reported_without_writes_even_when_it_matches_the_highest' => static function () {
         $db = new CsvImportDatabaseFake(csvImportTemplate("1:nummer;2:woo_preis_netto"));
