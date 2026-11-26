@@ -365,6 +365,7 @@ runTests([
             ],
         ], [], [
             'extendedMapping' => true, 'onRequest' => true,
+            'onRequestForVariant' => static fn (int $id): bool => in_array($id, [8, 9], true),
             'deliveryTimeIds' => static fn(string $text): ?int => $text === 'derzeit nicht lieferbar' ? 99 : null,
         ]);
         $soldOut = $api->writes[1][2];

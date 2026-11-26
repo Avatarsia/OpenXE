@@ -32,6 +32,14 @@ if ($view === 'pull') {
     ], ['Texte', 'SEO', 'Preis', 'Status', 'Lieferung', 'Logistik', 'Zoll', 'Hersteller'],
         ['Texte', 'SEO', 'Preis', 'Status', 'Lieferung', 'Logistik', 'Zoll', 'Hersteller']);
 }
+if ($view === 'categories') {
+    require_once __DIR__ . '/category-export.php';
+    $html = AdminView::categories(7, 'synthetic-csrf', 'synthetic-preview', [
+        'nodes' => categoryImportClient()->terms,
+        'assignments' => [9 => [6, 10]],
+        'unmatched' => [['id' => 41, 'name' => 'Kein passender Artikel', 'sku' => 'UNKNOWN', 'reason' => 'kein eindeutiger OpenXE-Artikel']],
+    ]);
+}
 ?><!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WooCommerce UI-Prüfung</title>
 <link rel="stylesheet" href="/www/themes/new/css/normalize.min.css">
@@ -40,4 +48,4 @@ if ($view === 'pull') {
 <link rel="stylesheet" href="/www/css/bootstrap.min.css">
 <link rel="stylesheet" href="/classes/Modules/Onlineshop/www/css/woocommerce-admin.css">
 <script src="/classes/Modules/Onlineshop/www/js/woocommerce-admin.js" defer></script>
-</head><body><main class="inside_white"><p>Lokale UI-Prüfung · synthetische Daten</p><div class="wc-admin"><nav class="wc-admin-nav"><a href="?view=downloads">Downloads</a><a href="?view=refunds">Refund-Status</a><a href="?view=pull">Artikeldaten abgleichen</a></nav><?= $html ?></div></main></body></html>
+</head><body><main class="inside_white"><p>Lokale UI-Prüfung · synthetische Daten</p><div class="wc-admin"><nav class="wc-admin-nav"><a href="?view=downloads">Downloads</a><a href="?view=refunds">Refund-Status</a><a href="?view=pull">Artikeldaten abgleichen</a><a href="?view=categories">Shop-Kategorien</a></nav><?= $html ?></div></main></body></html>

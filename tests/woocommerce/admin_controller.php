@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 require __DIR__ . '/bootstrap.php';
 require __DIR__ . '/fixtures/bulk-pull.php';
+require __DIR__ . '/fixtures/category-export.php';
 
 use Xentral\Components\Http\Session\Session;
 use Xentral\Components\WooCommerce\AdminPage;
@@ -9,7 +10,7 @@ use Xentral\Components\WooCommerce\DeliveryTimeMap;
 
 final class Shopimporter_Woocommerce
 {
-    public static BulkPullClient $fixtureClient;
+    public static BulkPullClient|CategoryExportClient $fixtureClient;
     public $client;
 
     public static function clientForShop($app, int $shopId): self
@@ -41,6 +42,10 @@ final class AdminDatabaseFake
             'einstellungen_json' => '{"felder":{"exportDownloads":1}}'];
     }
     public function fetchAll($sql, $params) {
+        if (isset($params['sku'])) {
+            return $this->assigned && $params['sku'] === 'SHOP-9'
+                ? [['id' => 9, 'nummer' => 'A9', 'name_de' => 'Artikel', 'projekt' => $this->articleProject]] : [];
+        }
         if (strpos($sql, 'FROM artikel') !== false) {
             check(isset($params['shop'], $params['shop2'], $params['shop3'], $params['assigned_shop']));
             return $this->assigned ? [['id' => 9, 'nummer' => 'A9', 'name_de' => 'Artikel', 'projekt' => $this->articleProject]] : [];
@@ -61,7 +66,13 @@ final class AdminDatabaseFake
             return;
         }
         $this->writes[] = [$sql, $params];
-        if (isset($params['name'])) $this->values[$params['name']] = $params['wert'] ?? $params['value'] ?? '';
+        if (isset($params['name'])) {
+            if (str_contains($sql, 'ON DUPLICATE KEY UPDATE name = VALUES(name)')) {
+                $this->values[$params['name']] ??= $params['wert'];
+            } else {
+                $this->values[$params['name']] = $params['wert'] ?? $params['value'] ?? '';
+            }
+        }
     }
     public function lastInsertId(): int { return $this->lastTemplateId; }
     public function inTransaction() { return $this->transaction; }
@@ -93,7 +104,16 @@ function adminFixture(array $post = [], array $get = [], $db = null, ?Session $s
     $container = new class($db, $session) {
         private $db; private $session;
         public function __construct($db, $session) { $this->db = $db; $this->session = $session; }
-        public function get($key) { return $key === 'Database' ? $this->db : $this->session; }
+        public function get($key) {
+            return match ($key) {
+                'Database' => $this->db,
+                'Session' => $this->session,
+                'Logger' => new class {
+                    public function info(...$args): void {}
+                    public function error(...$args): void {}
+                },
+            };
+        }
     };
     $app = (object) ['Container' => $container, 'Secure' => $secure, 'erp' => $erp];
     return [new AdminPage($app, 7), $db, $erp];
@@ -111,6 +131,52 @@ function bulkAdminPreview(BulkPullDatabase $db): array
 }
 
 runTests([
+    'category_preview_requires_confirm_and_uses_the_existing_sku_resolver' => static function () {
+        $db = new AdminDatabaseFake();
+        Shopimporter_Woocommerce::$fixtureClient = $client = categoryImportClient();
+        $_SESSION = [];
+        $session = new Session();
+        $get = ['view' => 'categories'];
+        [$page] = adminFixture([], $get, $db, $session);
+        $html = $page->render();
+        check(str_contains($html, 'V6 Nozzles'));
+        check(str_contains($html, '&lt;Unknown&gt;'));
+        check(str_contains($html, 'OpenXE-Artikel #9'));
+        same([], $db->writes);
+        preg_match('/name="category_preview" value="([^"]+)"/', $html, $preview);
+        preg_match('/name="csrf_token" value="([^"]+)"/', $html, $token);
+        $post = ['wc_action' => 'apply_categories', 'csrf_token' => $token[1], 'category_preview' => $preview[1]];
+        [$page] = adminFixture(array_replace($post, ['csrf_token' => 'wrong']), $get, $db, $session);
+        check(str_contains($page->render(), 'Formular abgelaufen'));
+        same([], $db->writes);
+        [$page] = adminFixture(array_replace($post, ['category_preview' => 'wrong']), $get, $db, $session);
+        check(str_contains($page->render(), 'Vorschau erneut laden'));
+        same([], $db->writes);
+        [$page] = adminFixture($post, $get, $db, $session);
+        check(str_contains($page->render(), 'Kategorien &uuml;bernommen'));
+        $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 7);
+        same(5, count($store->tree()));
+        same(2, count($store->categoriesOf(9)));
+        same([], $client->writes);
+        [$page] = adminFixture($post, $get, $db, $session);
+        check(!str_contains($page->render(), 'Kategorien &uuml;bernommen'));
+    },
+    'changed_category_assignment_requires_a_new_preview' => static function () {
+        $db = new AdminDatabaseFake();
+        Shopimporter_Woocommerce::$fixtureClient = $client = categoryImportClient();
+        $_SESSION = [];
+        $session = new Session();
+        $get = ['view' => 'categories'];
+        [$page] = adminFixture([], $get, $db, $session);
+        $html = $page->render();
+        preg_match('/name="category_preview" value="([^"]+)"/', $html, $preview);
+        preg_match('/name="csrf_token" value="([^"]+)"/', $html, $token);
+        $client->products[40]['categories'] = [['id' => 11]];
+        [$page] = adminFixture(['wc_action' => 'apply_categories', 'csrf_token' => $token[1],
+            'category_preview' => $preview[1]], $get, $db, $session);
+        check(str_contains($page->render(), 'Vorschau erneut laden'));
+        same([], $db->writes);
+    },
     'authorized_admin_installs_the_shared_templates_with_one_price_column' => static function () {
         $db = new AdminDatabaseFake();
         [$page] = adminFixture([], [], $db);

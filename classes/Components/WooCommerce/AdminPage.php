@@ -50,9 +50,13 @@ final class AdminPage
         $view = match ($this->app->Secure->GetGET('view')) {
             'refunds' => 'refunds',
             'pull' => 'pull',
+            'categories' => 'categories',
             default => 'downloads',
         };
         $action = $this->app->Secure->GetPOST('wc_action');
+        if ($view === 'categories') {
+            return $this->navigation($view) . $this->renderCategories($session, $action) . '</div>';
+        }
         if (!$action) {
             (new TemplateInstaller($this->db))->ensure();
         }
@@ -134,7 +138,8 @@ final class AdminPage
             . '<a' . ($view === 'downloads' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'downloads')) . '">Downloads</a> '
             . '<a href="index.php?module=shopimport&amp;action=einzelimport&amp;id=' . $this->shopId . '">Auftrag nachholen</a> '
             . '<a' . ($view === 'refunds' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'refunds')) . '">Refund-Status</a> '
-            . '<a' . ($view === 'pull' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'pull')) . '">Artikeldaten abgleichen</a></nav>';
+            . '<a' . ($view === 'pull' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'pull')) . '">Artikeldaten abgleichen</a> '
+            . '<a' . ($view === 'categories' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'categories')) . '">Shop-Kategorien</a></nav>';
     }
 
     private function requireToken(Session $session): void
@@ -143,6 +148,70 @@ final class AdminPage
         if (!is_string($token) || !$session->isCsrfTokenValid('woocommerce_admin', $token)) {
             throw new RuntimeException('Formular abgelaufen. Seite neu laden und erneut speichern.');
         }
+    }
+
+    private function renderCategories(Session $session, $action): string
+    {
+        $sessionKey = 'categories_' . $this->shopId;
+        $store = new ShopCategoryStore($this->db, $this->shopId);
+        $confirmation = null;
+        if ($action || ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
+            $this->requireToken($session);
+            if ($action !== 'apply_categories' || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+                throw new RuntimeException('Aktion nicht verfuegbar.');
+            }
+            $nonce = $this->app->Secure->GetPOST('category_preview', '', '', 1);
+            $confirmation = $session->getValue('woocommerce_admin', $sessionKey);
+            if (!is_string($nonce) || !isset($confirmation['nonce']) || !hash_equals($confirmation['nonce'], $nonce)) {
+                throw new RuntimeException('Vorschau erneut laden und Uebernahme bestaetigen.');
+            }
+        }
+        if ($store->tree() !== [] || $store->pendingDeletions() !== []) {
+            return AdminView::categoryNotice('Die Erst&uuml;bernahme erfordert einen leeren Shop-Kategorienbaum ohne offene L&ouml;schungen.');
+        }
+
+        try {
+            $importer = new CategoryImporter($this->connector()->client, $store, $this->articleForSku(...));
+            $preview = $importer->preview();
+        } catch (Throwable $error) {
+            $this->logCategoryError($error);
+            throw new RuntimeException('Die WooCommerce-Kategorien konnten nicht geladen werden.');
+        }
+        $fingerprint = hash('sha256', serialize($preview));
+        if ($confirmation !== null) {
+            $session->removeValue('woocommerce_admin', $sessionKey);
+            SessionHandler::commitSession($session);
+            if (!hash_equals($confirmation['fingerprint'], $fingerprint) || $preview['nodes'] === []) {
+                throw new RuntimeException('WooCommerce-Daten haben sich geaendert. Vorschau erneut laden.');
+            }
+
+            try {
+                $importer->apply($preview);
+            } catch (Throwable $error) {
+                $this->logCategoryError($error);
+                throw new RuntimeException('Die WooCommerce-Kategorien konnten nicht uebernommen werden: '
+                    . RefundStatusService::sanitizeError($error->getMessage()));
+            }
+            $this->app->Container->get('Logger')->info('WooCommerce-Kategorien uebernommen', [
+                'shop' => $this->shopId,
+                'old' => ['nodes' => [], 'assignments' => []],
+                'new' => ['nodes' => $preview['nodes'], 'assignments' => $preview['assignments']],
+            ]);
+            return AdminView::categoryNotice('Kategorien &uuml;bernommen. Pr&uuml;fen Sie den Shop-Kategorienbaum vor dem Einschalten des Kategorieexports.');
+        }
+
+        $nonce = bin2hex(random_bytes(16));
+        $session->setValue('woocommerce_admin', $sessionKey, ['nonce' => $nonce, 'fingerprint' => $fingerprint]);
+        $token = $session->createCsrfToken('woocommerce_admin');
+        SessionHandler::commitSession($session);
+        return AdminView::categories($this->shopId, $token, $nonce, $preview);
+    }
+
+    private function logCategoryError(Throwable $error): void
+    {
+        $this->app->Container->get('Logger')->error('WooCommerce-Kategorieimport fehlgeschlagen', [
+            'shop' => $this->shopId, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
+        ]);
     }
 
     private function renderPull(Session $session, $action): string
@@ -262,12 +331,17 @@ final class AdminPage
         return $selection;
     }
 
-    private function bulkPull(): BulkPull
+    private function connector(): Shopimporter_Woocommerce
     {
         if (!class_exists(Shopimporter_Woocommerce::class, false)) {
             require_once dirname(__DIR__, 3) . '/www/pages/shopimporter_woocommerce.php';
         }
-        $connector = Shopimporter_Woocommerce::clientForShop($this->app, $this->shopId);
+        return Shopimporter_Woocommerce::clientForShop($this->app, $this->shopId);
+    }
+
+    private function bulkPull(): BulkPull
+    {
+        $connector = $this->connector();
         return new BulkPull(
             new ArticleDataRepository($this->app, $this->shopId),
             new WooProductReader($connector->client, $connector->deliveryTimeMap()),

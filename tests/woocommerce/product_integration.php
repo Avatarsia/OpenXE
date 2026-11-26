@@ -1,6 +1,7 @@
 <?php
 // SPDX-License-Identifier: AGPL-3.0-only
 require __DIR__ . '/bootstrap.php';
+require __DIR__ . '/fixtures/category-store.php';
 require dirname(__DIR__, 2) . '/www/lib/ShopimporterBase.php';
 require dirname(__DIR__, 2) . '/www/pages/shopimporter_woocommerce.php';
 
@@ -112,6 +113,9 @@ function productConnector(array $articles, array $settings = []): IntegrationPro
             $connector->$key = $value;
         }
     }
+    if (!empty($settings['extendedFieldMapping'])) {
+        configureProductDatabase($connector, new CategoryStoreDatabase());
+    }
     return $connector;
 }
 
@@ -153,7 +157,45 @@ function productWrite(IntegrationProductApi $api, string $endpoint): array
     throw new RuntimeException('Missing product write ' . $endpoint);
 }
 
+function configureProductDatabase(IntegrationProductConnector $connector, CategoryStoreDatabase $db): void
+{
+    $container = new class($db) {
+        public function __construct(private CategoryStoreDatabase $db) {}
+        public function get(string $name): CategoryStoreDatabase { same('Database', $name); return $this->db; }
+    };
+    (new ReflectionProperty(Shopimporter_Woocommerce::class, 'app'))->setValue($connector, (object) ['Container' => $container]);
+}
+
 runTests([
+    'shop_category_tree_replaces_the_legacy_source_and_assigns_the_product' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 5);
+        $node = $store->create('Shop category');
+        $store->assign(7, [$node]);
+        $connector = productConnector([remoteProduct(['kategorien' => [['id' => 33, 'name' => 'ERP category']]])],
+            ['shopCategoryTree' => true]);
+        configureProductDatabase($connector, $db);
+        $connector->ImportSendList();
+        same(['shop-category'], array_column($connector->client->collections['products/categories'], 'slug'));
+        same([['id' => 101]], $connector->client->collections['products'][0]['categories']);
+    },
+    'on_request_export_uses_each_variants_local_article_id' => static function () {
+        $db = new CategoryStoreDatabase();
+        $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 5);
+        $store->setOnRequest(7, true);
+        $store->setOnRequest(10, true);
+        $product = remoteMatrixProduct();
+        $product['artikel_varianten'][] = ['artikel' => 10, 'nummer' => 'BLUE', 'preis' => 12, 'lag' => '0'];
+        $connector = productConnector([$product], ['extendedFieldMapping' => true]);
+        configureProductDatabase($connector, $db);
+        $connector->ImportSendList();
+        $writes = array_column($connector->client->writes, 2);
+        $metaBySku = [];
+        foreach ($writes as $write) {
+            $metaBySku[$write['sku']] = array_column($write['meta_data'], 'value', 'key')['openxe_on_request'];
+        }
+        same(['PARENT' => '1', 'RED' => '0', 'BLUE' => '1'], $metaBySku);
+    },
     'real ImportSendList preserves mapped metadata prices stock dimensions EAN and result identity' => static function () {
         $connector = productConnector([remoteProduct(['lieferzeitmanuell' => 'ca. 3-4 Werktage'])], [
             'ImportWordpressUserName' => 'user', 'ImportWordpressApplicationPassword' => 'fixture',
@@ -264,7 +306,8 @@ runTests([
                 public function __construct($directory) { $this->directory = $directory; }
                 public function GetTMP() { return $this->directory; }
             }];
-            (new ReflectionProperty(Shopimporter_Woocommerce::class, 'app'))->setValue($connector, $app);
+            $appProperty = new ReflectionProperty(Shopimporter_Woocommerce::class, 'app');
+            $appProperty->getValue($connector)->erp = $app->erp;
             $connector->client->collections['products'] = [['id' => 80, 'sku' => 'PARENT', 'parent_id' => 0]];
             same(true, $connector->ImportSendList()[0]->success);
             same(['PUT', 'products/80'], array_slice($connector->client->writes[0], 0, 2));

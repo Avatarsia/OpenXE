@@ -19,7 +19,8 @@ class ProductSynchronizer
      * $payload contains already prepared fields (e.g. uploaded images/attachment metadata).
      * Options: backorders (no/notify/yes or 0/1/2), metadataprefix, priceType (net/gross),
      * yoastMeta and extendedMapping default to false. Extended mapping uses onRequest,
-     * a deliveryTimeIds callable and an optional logger. variationPayloads are keyed by source article ID.
+     * a deliveryTimeIds callable and an optional logger. variationPayloads and onRequestForVariant
+     * use the source article ID.
      * Source properties use local WC attributes.
      * @return array{id:int,variations:array}
      */
@@ -112,7 +113,10 @@ class ProductSynchronizer
         foreach ($variants as $sourceId => $variant) {
             $source = $variant['source'];
             $variationSku = $this->sku($source);
-            $variation = $this->map($source, $options);
+            $variantOptions = $options;
+            $variantOptions['onRequest'] = isset($options['onRequestForVariant'])
+                && $options['onRequestForVariant']((int) $sourceId);
+            $variation = $this->map($source, $variantOptions);
             $override = $options['variationPayloads'][$sourceId] ?? [];
             if (isset($override['meta_data'])) {
                 $overrideMeta = $this->filterYoastMeta($override['meta_data'], $options);

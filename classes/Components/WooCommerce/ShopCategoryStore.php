@@ -63,7 +63,7 @@ final class ShopCategoryStore
                 'parent' => $parent,
                 'sort' => $sort < PHP_INT_MAX ? $sort + 1 : $sort,
                 'wcId' => 0,
-                'slug' => $this->uniqueSlug($name, $nodes),
+                'slug' => $this->uniqueSlug($name, $nodes, $state['pendingDeletions'] ?? []),
             ];
             return $id;
         });
@@ -101,7 +101,57 @@ final class ShopCategoryStore
                 || $this->assignedArticles($id, true) !== []) {
                 throw new RuntimeException("Kategorie ist nicht leer.");
             }
+            $node = $state['nodes'][$id];
+            if ($node['wcId'] > 0) {
+                // Keep the WooCommerce identity until the exporter confirms deletion.
+                $state['pendingDeletions'][$node['wcId']] = $node['slug'];
+            }
             unset($state['nodes'][$id]);
+        });
+    }
+
+    /** @return array<int,string> WooCommerce term IDs and slugs awaiting deletion */
+    public function pendingDeletions(): array
+    {
+        return $this->readConfig($this->treeKey, self::EMPTY_TREE)['pendingDeletions'] ?? [];
+    }
+
+    public function acknowledgeDeletion(int $wcId): void
+    {
+        $this->mutateTree(static function (array &$state) use ($wcId): void {
+            unset($state['pendingDeletions'][$wcId]);
+        });
+    }
+
+    /** Import the remote hierarchy and article assignments together under the tree lock. */
+    public function importCategories(array $terms, array $assignments): void
+    {
+        $this->mutateTree(function (array &$state) use ($terms, $assignments): void {
+            if ($state['nodes'] !== [] || !empty($state['pendingDeletions'])) {
+                throw new RuntimeException('Die Erstuebernahme erfordert einen leeren Shop-Kategorienbaum ohne offene Loeschungen.');
+            }
+            $ids = [0 => 0];
+            $slugs = [];
+            foreach ($terms as $termId => $term) {
+                if ($termId <= 0 || !isset($ids[$term['parent']]) || $term['slug'] === '' || isset($slugs[$term['slug']])) {
+                    throw new InvalidArgumentException('Ungueltige Import-Kategorie ' . $termId . '.');
+                }
+                $id = $state['nextId']++;
+                $ids[$termId] = $id;
+                $slugs[$term['slug']] = true;
+                $state['nodes'][$id] = ['name' => $term['name'], 'parent' => $ids[$term['parent']],
+                    'sort' => $term['sort'], 'wcId' => $termId, 'slug' => $term['slug']];
+            }
+            foreach ($assignments as $articleId => $termIds) {
+                $localIds = [];
+                foreach ($termIds as $termId) {
+                    if (empty($ids[$termId])) {
+                        throw new InvalidArgumentException('Ungueltige Kategorie ' . $termId . ' in der Import-Zuordnung.');
+                    }
+                    $localIds[$ids[$termId]] = $ids[$termId];
+                }
+                $this->writeArticleField($articleId, 'categories', array_values($localIds));
+            }
         });
     }
 
@@ -116,7 +166,9 @@ final class ShopCategoryStore
                 throw new InvalidArgumentException('Der Slug einer bereits verknuepften Kategorie kann nicht geaendert werden.');
             }
             unset($nodes[$id]);
-            if ($slug === '' || in_array($slug, array_column($nodes, 'slug'), true)) {
+            $pending = $state['pendingDeletions'] ?? [];
+            if ($slug === '' || isset($pending[$wcId]) || in_array($slug, $pending, true)
+                || in_array($slug, array_column($nodes, 'slug'), true)) {
                 throw new InvalidArgumentException('Der Kategorie-Slug muss im Shop eindeutig und darf nicht leer sein.');
             }
             $state['nodes'][$id]['wcId'] = $wcId;
@@ -187,7 +239,7 @@ final class ShopCategoryStore
         }
     }
 
-    private function uniqueSlug(string $name, array $nodes): string
+    private function uniqueSlug(string $name, array $nodes, array $pending): string
     {
         $ascii = strtr($name, [
             "\u{00c4}" => 'ae', "\u{00e4}" => 'ae', "\u{00d6}" => 'oe', "\u{00f6}" => 'oe',
@@ -195,7 +247,7 @@ final class ShopCategoryStore
         ]);
         $base = trim(preg_replace('/[^a-z0-9]+/', '-', strtolower($ascii)), '-');
         $base = $base === '' ? 'kategorie' : $base;
-        $taken = array_fill_keys(array_column($nodes, 'slug'), true);
+        $taken = array_fill_keys(array_merge(array_column($nodes, 'slug'), $pending), true);
         $slug = $base;
         for ($suffix = 2; isset($taken[$slug]); $suffix++) {
             $slug = $base . '-' . $suffix;

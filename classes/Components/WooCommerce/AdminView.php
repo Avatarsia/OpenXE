@@ -86,6 +86,59 @@ final class AdminView
         return $html . '</nav>';
     }
 
+    public static function categories(int $shopId, string $token, string $nonce, array $preview): string
+    {
+        $html = '<h2>Shop-Kategorien &uuml;bernehmen</h2>'
+            . '<p>Pr&uuml;fen Sie die WooCommerce-Kategorien und Artikelzuordnungen vor der Erst&uuml;bernahme in OpenXE.</p>';
+        if ($preview['nodes'] === []) {
+            $html .= '<p>WooCommerce enth&auml;lt keine Kategorien zur &Uuml;bernahme.</p>';
+        } else {
+            $html .= '<h3>Kategorien (' . count($preview['nodes']) . ')</h3>'
+                . '<div class="wc-admin-scroll" tabindex="0" role="region" aria-label="WooCommerce-Kategorien">'
+                . '<table><thead><tr><th scope="col">Kategorie</th><th scope="col">WooCommerce-ID</th>'
+                . '<th scope="col">Slug</th><th scope="col">Oberkategorie</th></tr></thead><tbody>';
+            foreach ($preview['nodes'] as $termId => $term) {
+                $parent = $preview['nodes'][$term['parent']]['name'] ?? '';
+                $html .= '<tr><th scope="row">' . self::e($term['name']) . '</th><td>' . (int) $termId
+                    . '</td><td>' . self::e($term['slug']) . '</td><td>' . self::e($parent) . '</td></tr>';
+            }
+            $html .= '</tbody></table></div>';
+        }
+
+        $html .= '<h3>Artikelzuordnungen (' . count($preview['assignments']) . ')</h3>';
+        if ($preview['assignments'] !== []) {
+            $html .= '<ul class="wc-admin-results">';
+            foreach ($preview['assignments'] as $articleId => $termIds) {
+                $names = array_map(static fn (int $id): string => $preview['nodes'][$id]['name'], $termIds);
+                $html .= '<li>OpenXE-Artikel #' . (int) $articleId . ' &ndash; ' . self::e(implode(', ', $names)) . '</li>';
+            }
+            $html .= '</ul>';
+        }
+        $html .= '<h3>Nicht zugeordnete WooCommerce-Produkte (' . count($preview['unmatched']) . ')</h3>';
+        if ($preview['unmatched'] !== []) {
+            $html .= '<ul class="wc-admin-results">';
+            foreach ($preview['unmatched'] as $row) {
+                $sku = $row['sku'] === '' ? '' : ' (' . $row['sku'] . ')';
+                $html .= '<li>' . self::e('#' . $row['id'] . ' ' . $row['name'] . $sku)
+                    . ' &ndash; ' . self::e($row['reason']) . '</li>';
+            }
+            $html .= '</ul>';
+        }
+
+        if ($preview['nodes'] !== []) {
+            $html .= '<form method="post" action="' . self::e(self::url($shopId, 'categories')) . '">'
+                . self::hidden('csrf_token', $token) . self::hidden('category_preview', $nonce)
+                . '<p><button class="btnBlueNew" type="submit" name="wc_action" value="apply_categories">'
+                . 'Kategorien und Zuordnungen &uuml;bernehmen</button></p></form>';
+        }
+        return $html;
+    }
+
+    public static function categoryNotice(string $message): string
+    {
+        return '<h2>Shop-Kategorien &uuml;bernehmen</h2><p role="status">' . $message . '</p>';
+    }
+
     public static function pull(int $shopId, string $token, string $preview, int $page, array $data, array $groups, array $selectedGroups): string
     {
         $extra = ['page' => $page, 'filter' => '1', 'groups' => $selectedGroups];

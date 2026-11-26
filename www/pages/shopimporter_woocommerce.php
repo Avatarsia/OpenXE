@@ -27,6 +27,8 @@ use Xentral\Components\WooCommerce\RefundPreflight;
 use Xentral\Components\WooCommerce\RefundRetryQueue;
 use Xentral\Components\WooCommerce\ProductSynchronizer;
 use Xentral\Components\WooCommerce\CategorySynchronizer;
+use Xentral\Components\WooCommerce\ShopCategoryExporter;
+use Xentral\Components\WooCommerce\ShopCategoryStore;
 use Xentral\Components\WooCommerce\VariationMedia;
 use Xentral\Components\WooCommerce\DownloadSettings;
 use Xentral\Components\WooCommerce\DeliveryTimeMap;
@@ -926,6 +928,18 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ctmp = (!empty($tmp) ? count($tmp) : 0);
     $this->logger->debug("WooCommerce ImportSendList ".$ctmp." entries");
 
+    $categoryStore = $this->shopCategoryTree || $this->extendedFieldMapping
+      ? new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid)
+      : null;
+    $categoryExporter = null;
+    if ($this->shopCategoryTree) {
+      $categoryExporter = new ShopCategoryExporter($this->client, $categoryStore);
+      $categoryExporter->syncTree();
+      foreach ($categoryExporter->deferredDeletions() as $termId => $reason) {
+        $this->logger->warning("WooCommerce-Kategorie $termId bleibt bestehen: $reason");
+      }
+    }
+
     // Prepare files
     $alle_dateien = array(); // pfad, dateiname
     if ($this->dateienuebertragen) {
@@ -1103,10 +1117,11 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         'backorders' => $this->backorders,
         'extendedMapping' => $this->extendedFieldMapping,
         'yoastMeta' => $this->yoastMeta,
-        'onRequest' => false,
+        'onRequest' => $this->extendedFieldMapping && $categoryStore->isOnRequest((int) $artikel),
       ];
       if ($this->extendedFieldMapping) {
         $productOptions['deliveryTimeIds'] = [$this->deliveryTimeMap(), 'idFor'];
+        $productOptions['onRequestForVariant'] = $categoryStore->isOnRequest(...);
       }
       $productData = $tmp[$i];
       if (!$this->extendedFieldMapping) {
@@ -1175,7 +1190,9 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $product_id = $productResult['id'];
       $this->logger->info("WooCommerce Artikel synchronisiert: $nummer / $product_id");
 
-      if ($this->kategorienuebertragen && !$isVariant) {
+      if ($categoryExporter !== null && !$isVariant) {
+        $categoryExporter->assign($product_id, (int) $artikel, $this->categorySyncMode);
+      } elseif ($this->kategorienuebertragen && !$isVariant) {
         $categories = $tmp[$i]['kategorien'] ?? [];
         if ($this->categorySyncMode !== 'replace' && empty($categories) && !empty($tmp[$i]['kategoriename'])) {
           $categories = [['name' => $tmp[$i]['kategoriename']]];
