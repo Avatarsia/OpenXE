@@ -1,0 +1,58 @@
+<html>
+<body>
+<h2>Neue Reparaturanfrage</h2>
+<table>
+<tr><td>Vorgangsnummer:</td><td>202604050001</td></tr>
+<tr><td>Service-Typ:</td><td>Reparatur</td></tr>
+<tr><td>Kunde:</td><td>Max Mustermann</td></tr>
+<tr><td>E-Mail:</td><td>max@example.com</td></tr>
+<tr><td>Hersteller:</td><td>Bambu Lab</td></tr>
+<tr><td>Modell:</td><td>X1 Carbon</td></tr>
+<tr><td>Seriennummer:</td><td>BL-2024-123456</td></tr>
+<tr><td>Fehlerkategorie:</td><td>print_quality</td></tr>
+<tr><td>Beschreibung:</td><td>Druckqualitaet hat sich nach 500h verschlechtert, Layer-Shifting bei hohen Geschwindigkeiten</td></tr>
+<tr><td>Garantie:</td><td>Nein</td></tr>
+<tr><td>Kostenrahmen:</td><td>200</td></tr>
+<tr><td>Express:</td><td>Nein</td></tr>
+</table>
+
+<!--REPAIR_DATA_START
+{
+  "request_number": "202604050001",
+  "service_type": "reparatur",
+  "service_delivery_type": "einsendung",
+  "customer": {
+    "name": "Max Mustermann",
+    "email": "max@example.com",
+    "phone": "+49 471 12345678",
+    "company": null,
+    "vat_id": null,
+    "address": {
+      "street": "Rudloffstr.",
+      "house_number": "111",
+      "postal_code": "27568",
+      "city": "Bremerhaven",
+      "country": "DE"
+    }
+  },
+  "device": {
+    "manufacturer": "Bambu Lab",
+    "model": "X1 Carbon",
+    "serial_number": "BL-2024-123456",
+    "mods_present": false,
+    "mods_text": null
+  },
+  "service_details": {
+    "issue_category": "print_quality",
+    "issue_description": "Druckqualitaet hat sich nach 500h verschlechtert, Layer-Shifting bei hohen Geschwindigkeiten",
+    "warranty_status": "no",
+    "cost_limit": "200",
+    "is_express": false,
+    "express_price": 0,
+    "wartung_paket": null,
+    "wartung_notes": null
+  }
+}
+REPAIR_DATA_END-->
+</body>
+</html>

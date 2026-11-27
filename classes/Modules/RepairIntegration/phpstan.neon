@@ -1,0 +1,11 @@
+parameters:
+    level: 6
+    paths:
+        - .
+    excludePaths:
+        - Migration/sql/
+        - www/
+    ignoreErrors:
+        - '#Call to an undefined method ApplicationCore::#'
+        - '#Access to an undefined property ApplicationCore::#'
+    treatPhpDocTypesAsCertain: false

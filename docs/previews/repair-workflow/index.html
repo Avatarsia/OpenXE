@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="de" data-color-scheme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reparaturen · OpenXE Vorschau</title>
+  <style>
+/* Scoped standalone preview of OpenXE's native page.tpl / ticket_edit.tpl.
+   Visual references: themes/new/css/styles.css, dark-overrides.css,
+   bootstrap 14-column grid, repair_detail_tab.tpl. No production theme edits. */
+:root{color-scheme:dark;--body-background:#191b24;--surface:#20222e;--surface-muted:#292c3b;--textfield-background:#272a39;--textfield-border:#333748;--text-body:#c7cddb;--text-strong:#e0e5ee;--text-muted:#a7b2c9;--border:#343849;--link:#90b3ff;--button-primary-background:#23cb83;--button-primary-color:#103a29}
+*{box-sizing:border-box}body{margin:0;background:var(--body-background);font:12px/1.4 Inter,Arial,Helvetica,sans-serif;color:var(--text-body)}button,input,select,textarea{font:inherit}button{cursor:pointer}button:disabled{cursor:not-allowed;opacity:.55}input,select,textarea{background:var(--textfield-background);border:1px solid var(--textfield-border);color:var(--text-strong);border-radius:3px;padding:4px 6px;min-width:0}select,input{min-height:27px}textarea{width:100%;resize:vertical;line-height:1.4;display:block}input::placeholder,textarea::placeholder{color:var(--text-muted)}input:focus-visible,textarea:focus-visible,select:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid #94bfff;outline-offset:2px}button[disabled]:focus{outline:none}[hidden]{display:none!important}svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}.svg-defs{position:absolute;width:0;height:0;overflow:hidden}.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}p{margin:0}h1,h2,h3,h4{margin:0;font-size:inherit}strong{font-weight:600}.link-color,.text-button{color:var(--link)}
+#sidebar{width:150px;position:fixed;inset:0 auto 0 0;background:#1d202b;border-right:1px solid #2d3040;padding:14px 5px;z-index:5}.brand{display:flex;gap:5px;align-items:center;color:white;font-size:19px;font-weight:600;margin:0 6px 23px}.brand svg{width:24px;height:24px}.brand>span>span{font-weight:400}.side-link{display:flex;align-items:center;gap:9px;color:var(--text-muted);padding:8px 5px;font-size:11px;min-height:30px}.side-link.active{background:#292d3b;color:var(--text-strong);border-radius:3px}.side-separator{height:1px;background:var(--border);margin:16px 0}.side-link:not(:has(svg)){padding-left:29px}#main{padding-left:150px;width:100%;min-height:100vh}#header{height:49px;display:flex;align-items:center;gap:22px;padding:0 14px;background:#1e202b}.search-bar{height:27px;display:flex;align-items:center;gap:8px;background:#262936;border:1px solid #333646;border-radius:3px;color:var(--text-muted);flex:1;padding:0 9px;font-size:11px}.search-bar svg{width:12px;height:12px}.header-user{display:flex;align-items:center;gap:12px;font-size:11px;white-space:nowrap}.avatar{display:grid;place-items:center;width:25px;height:25px;background:#2b7663;border-radius:50%;font-size:10px;color:#e0fff5}#page_container{padding:0 10px 24px}.module-title{font-size:11px;font-weight:600;text-transform:uppercase;margin:14px 0 8px}.secnav{display:flex;flex-wrap:wrap;gap:3px;padding-left:2px;min-height:29px}.secnav .tab{background:none;border:0;color:var(--text-muted);padding:7px 10px;border-radius:3px 3px 0 0;font-size:11px}.secnav .tab.active{color:var(--text-strong);background:var(--surface-muted)}.secnav .tab:hover:not(:disabled){background:#2b3040}.secnav .tab:disabled{opacity:.6}.preview-notice{font-size:10px;color:var(--text-muted);padding:6px 8px;background:var(--surface);border-top:1px solid var(--border);margin-bottom:5px}.ui-tabs{width:100%}.ui-tabs-nav{background:var(--surface-muted);min-height:28px;display:flex;align-items:center;gap:25px;padding:5px 9px;font-size:11px;font-weight:600}.ui-tabs-nav .inactive{font-weight:400;color:var(--text-muted)}.ui-tabs-panel{padding:8px 0}.row{margin:0 -4px}.row-height{display:flex;flex-wrap:wrap;align-items:stretch}.col-xs-14{width:100%;min-width:0}.col-md-6{width:50%;min-width:0}.col-md-8{width:66.6667%;min-width:0}.col-md-4{width:33.3333%;min-width:0}.inside{padding:0 4px 8px;height:100%}
+/* Existing OpenXE fieldset/legend structure with the dark theme's surfaces. */
+fieldset{position:relative;margin:0;min-width:0;border:0;border-radius:4px;background:var(--surface);padding:7px 10px 11px;height:100%}legend{font-weight:normal;color:var(--text-strong);text-transform:none;font-size:11pt;margin:0 0 2px;padding:7px 0 3px;float:left;width:100%}legend+*{clear:both}.mkTableFormular{width:100%;border-collapse:collapse;font-size:12px}.mkTableFormular td{vertical-align:top;padding:4px 5px 4px 0}.mkTableFormular td:first-child{width:145px;font-weight:600}.mkTableFormular td+td{font-weight:normal}.mkTableFormular td input:not([type=checkbox]),.mkTableFormular td select{max-width:100%}.mkTableFormular td textarea{min-width:0}.mkTableFormular input:not(.amount){width:100%}.mkTableFormular select{width:100%}.mkTableFormular label{font-weight:600}.mkTableFormular td:first-child label{display:block;padding-top:4px}.facts-table td{padding-top:2px;padding-bottom:2px}.facts-table td:first-child{width:145px}.facts-table td+td{overflow-wrap:anywhere}.help{font-size:10px;color:var(--text-muted);line-height:1.5;margin-top:5px}.amount{width:95px;font-variant-numeric:tabular-nums}.button{cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 12px;margin:3px 3px 3px 0;font-weight:normal;line-height:1.15em;text-decoration:none;color:var(--button-primary-color);background:var(--button-primary-background);border:1px solid var(--button-primary-background);border-radius:3px;font-size:12px;min-height:27px}.button svg{width:12px;height:12px}.button.button-secondary,.row-open{background:#2b2e3d;border:1px solid #414658;color:var(--text-body)}.button:hover:not(:disabled){filter:brightness(1.12)}.text-button{border:0;background:none;padding:0;font-size:11px;text-decoration:underline}.back-link{display:inline-flex;align-items:center;gap:4px;border:1px solid #414658;background:transparent;color:var(--text-muted);padding:3px;border-radius:3px;font-size:11px}.ticket-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:1px 4px 9px;font-size:11px}.ticket-heading>strong{font-size:13px}.ticket-heading>span{color:var(--text-muted)}.ticket-heading .badge-group{margin-left:auto;display:flex;gap:5px}.badge{display:inline-block;font-size:10px;padding:2px 5px;border-radius:3px;white-space:nowrap}.badge.blue{background:#283f5a;color:#c6dcf8}.badge.amber{background:#4b3b22;color:#f6d596}.badge.green{background:#214537;color:#adebcf}.badge.neutral{background:#353a4c;color:#d6ddea}.badge.express{background:#50372d;color:#f8d0b5}.form-price{clear:both;padding:8px 0 5px;border-top:1px solid var(--border);margin-top:7px}.form-price-line{display:flex;align-items:baseline;gap:14px;font-size:11px}.form-price-line>span{width:145px;flex-shrink:0;font-weight:600}.form-price .help{font-size:10px}.customer-description{padding-top:9px}.customer-description>strong{font-size:11px}.customer-description p{font-size:12px;white-space:pre-wrap;margin-top:5px;line-height:1.5;overflow-wrap:anywhere}.filter{padding-top:5px}.filter legend{font-size:12px;padding-top:2px}.filterbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;clear:both}.filterbar label{display:flex;align-items:center;gap:6px;font-size:11px}.filterbar input[type=checkbox]{width:13px;min-height:13px;height:13px;accent-color:#26ba85;margin:0}.filterbar select{min-width:120px;font-size:11px}.dataTables-toolbar{display:flex;align-items:center;justify-content:space-between;padding:16px 0 10px;font-size:11px}.dataTables-toolbar label{display:flex;align-items:center;gap:7px}.dataTables-toolbar input{min-height:25px;width:170px}.table-container{overflow-x:auto;position:relative;clear:both}.mkTable{width:100%;border-collapse:collapse;text-align:left}.mkTable th{font-weight:600;background:#303445;font-size:11px}.mkTable th,.mkTable td{border:1px solid #393e50;padding:5px 6px;vertical-align:top}.mkTable tr:nth-child(odd) td{background:#262937}.mkTable tr:nth-child(even) td{background:#20232f}.jobs-table{min-width:735px;font-size:11px}.jobs-table td{vertical-align:middle;padding:7px}.job-button{border:0;background:transparent;color:var(--link);font-weight:600;padding:0;text-align:left;font-size:11px}.job-customer,.job-manufacturer{display:block;color:var(--text-muted);margin-top:2px;font-size:10px}.row-open{display:grid;place-items:center;width:23px;height:23px;border-radius:3px;cursor:pointer}.row-open svg{width:12px;height:12px}.table-foot{font-size:10px;color:var(--text-muted);margin-top:9px}.empty-state{text-align:center;padding:25px;background:var(--surface)}.empty-state p{margin-bottom:8px}.completed-row{color:var(--text-muted)}.position-actions{clear:both;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:9px}.product-paper{display:grid;grid-template-columns:62px minmax(0,1fr);gap:14px;padding:18px 14px;background:#fff;color:#111;font:12px/1.2 Arial,Helvetica,sans-serif;border-radius:0;clear:both;overflow-wrap:anywhere;min-height:330px}.product-paper strong{font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:bold;line-height:1.12;display:block}.product-paper p{font-size:11px;line-height:1.27;white-space:pre-wrap;margin:0}.product-paper .paper-article-number{font-size:11px;line-height:1.3;padding-top:1px}.manual-editor{margin-top:10px;font-size:11px}.manual-editor summary{color:var(--link);cursor:pointer;padding:4px 0}.manual-editor textarea{margin-top:6px;font-size:11px}.prepare-footer{padding-top:10px;margin-top:7px;border-top:1px solid var(--border);display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}.prepare-footer p{margin:0;flex:1;font-size:10px}.validation{color:#ffd28b;font-size:11px;line-height:1.5;margin-top:7px;overflow-wrap:anywhere}.linked-empty{font-size:11px;color:var(--text-muted);clear:both}.linked-row{display:flex;gap:10px;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px}.linked-row:last-child{border:0}.linked-name{flex:1}.linked-name strong,.linked-name small{display:block}.linked-name small{color:var(--text-muted);font-size:10px}.linked-price{white-space:nowrap}.settings-article-fields td:nth-child(3){width:100px;padding-left:18px;font-weight:600}.settings-article-fields td:nth-child(2){width:160px}.settings-article-fields td:first-child{width:145px}.settings-article-fields+p{clear:both;padding-top:4px;margin-bottom:2px}.ui-tabs-panel>fieldset{margin-bottom:8px;height:auto}.variable-buttons{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.variable-buttons button{background:#292f41;color:#c9dcff;border:1px solid #414b63;border-radius:3px;padding:3px 5px;font-size:10px}.settings-actions{margin-top:10px}.totals{margin:15px 0 0 auto;width:270px;max-width:100%;font-size:11px}.totals>div{display:flex;justify-content:space-between;gap:10px;margin-top:5px}.totals dd{margin:0;font-variant-numeric:tabular-nums;white-space:nowrap}.total-gross{border-top:1px solid var(--border);padding-top:6px;font-weight:600;font-size:12px}.document-position{margin-top:12px}.document-position table{min-width:530px}.document-position th:first-child{width:70px}.document-position th:nth-child(3){width:40px}.document-position th:last-child{width:110px}.document-position input:not(.amount){width:100%;font-weight:600;margin-bottom:5px}.document-position textarea{font-size:11px}.document-paper-wrapper{margin-top:12px}.document-paper-wrapper .product-paper{min-height:0}.toast{position:fixed;right:20px;bottom:20px;background:#d7f5e7;color:#193b2b;border:1px solid #9fc6b2;border-radius:4px;padding:9px 13px;max-width:420px;font-size:11px;z-index:15}.ui-tabs-panel .inside fieldset>p:first-of-type{clear:both}#view-document .col-md-4 fieldset>p{margin-bottom:9px;line-height:1.5;font-size:11px}#document-article-number{font-size:11px}#settings-preview{margin:0}
+@media(min-width:1600px){#sidebar{width:160px}#main{padding-left:160px}.mkTableFormular td:first-child{width:160px}.product-paper{padding:22px 18px;grid-template-columns:70px minmax(0,1fr)}}
+@media(max-width:1100px){.mkTableFormular td:first-child{width:120px}.form-price-line>span{width:120px}.product-paper{grid-template-columns:48px minmax(0,1fr);gap:9px;padding:13px 10px}.settings-article-fields td:nth-child(3){width:85px;padding-left:8px}.header-user{font-size:10px}.col-md-8{width:75%}.col-md-4{width:25%}}
+@media(max-width:850px){#sidebar{width:45px}.brand{margin:0 5px 20px}.brand>span,.side-link:not(.active),.side-separator{display:none}.side-link.active{font-size:0;gap:0;padding:10px}.side-link.active svg{width:17px;height:17px}#main{padding-left:45px}#header{height:45px}.col-md-6{width:100%}.col-md-8{width:100%}.col-md-4{width:100%}.row-height{display:block}.mkTableFormular td:first-child{width:145px}.form-price-line>span{width:145px}.product-paper{padding:18px 14px;grid-template-columns:62px minmax(0,1fr);gap:14px;min-height:0}.settings-article-fields td{display:block;width:100%!important;padding-left:0!important}.settings-article-fields td:nth-child(3){padding-top:8px}.settings-article-fields input{max-width:600px!important}.toast{max-width:calc(100vw - 30px)}}
+@media(max-width:540px){#sidebar{display:none}#main{padding-left:0}#header{padding:0 8px;gap:12px}#page_container{padding:0 6px 20px}.module-title{margin-top:10px}.secnav .tab{font-size:10px;padding:6px}.secnav{gap:0}.secnav .tab:disabled{display:none}.preview-notice{font-size:10px}.ui-tabs-nav{font-size:11px}.mkTableFormular td:first-child{width:105px;min-width:105px;font-size:11px}.mkTableFormular td{font-size:11px}.form-price-line>span{width:105px}.form-price-line{gap:4px;font-size:11px}.filterbar{gap:9px}.filterbar label:first-child,.filterbar label:nth-child(2){flex:1 1 calc(50% - 10px);display:block}.filterbar select{display:block;width:100%;min-width:0;margin-top:3px}.filterbar label:last-child{margin-top:5px}.dataTables-toolbar input{width:130px}.dataTables-toolbar{font-size:10px;gap:9px}.ticket-heading>span{font-size:10px}.ticket-heading .badge-group{margin-left:0}.ticket-heading{gap:7px}.mkTableFormular textarea{font-size:11px}fieldset{padding:6px 8px 9px}legend{font-size:13px}.product-paper{grid-template-columns:45px minmax(0,1fr);padding:14px 9px;gap:8px}.product-paper p{font-size:11px}.product-paper strong{font-size:11px}.product-paper .paper-article-number{font-size:10px}.prepare-footer .button{width:100%;margin:0}.prepare-footer p{flex-basis:100%}.position-actions{flex-wrap:wrap}.button{font-size:11px}.settings-actions{display:flex;flex-wrap:wrap;gap:5px}.linked-row{flex-wrap:wrap}.linked-price{margin-left:auto}.toast{left:10px;right:10px;bottom:10px;max-width:none}}
+.product-paper>div{max-width:340px}
+
+</style>
+
+</head>
+<body data-module="repairintegration" data-action="list">
+  <svg class="svg-defs" aria-hidden="true"><defs>
+    <symbol id="i-box" viewBox="0 0 24 24"><path d="m12 3 9 5v8l-9 5-9-5V8l9-5Z M3 8l9 5 9-5 M12 13v8 M7.5 5.5l9 5"/></symbol>
+    <symbol id="i-tools" viewBox="0 0 24 24"><path d="m14.5 6.5 3 3 M8 14l-5 5 2 2 5-5 M14 3a6 6 0 0 0-5 8L3 5l2-2 6 6a6 6 0 0 0 8 8l-4-4 3-3 4 4A6 6 0 0 0 14 3Z"/></symbol>
+    <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H5v18h14V8l-5-5Z M14 3v5h5 M8 12h8 M8 16h6"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14 M13 6l6 6-6 6"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="M19 12H5 M11 6l-6 6 6 6"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+  </defs></svg>
+  <aside id="sidebar" aria-label="OpenXE Navigation">
+    <div class="brand"><svg><use href="#i-box"/></svg><span>Open<span>XE</span></span></div>
+    <span class="side-link"><svg><use href="#i-file"/></svg>Tickets</span>
+    <span class="side-link"><svg><use href="#i-check"/></svg>Aufgaben</span>
+    <span class="side-link">Wiedervorlage</span><span class="side-link">Kalender</span>
+    <div class="side-separator"></div>
+    <span class="side-link"><svg><use href="#i-box"/></svg>Stammdaten</span>
+    <span class="side-link"><svg><use href="#i-file"/></svg>Verkauf</span>
+    <span class="side-link active"><svg><use href="#i-tools"/></svg>Reparaturen</span>
+  </aside>
+  <div id="main">
+    <header id="header"><div class="search-bar"><svg><use href="#i-search"/></svg><span>Suchen</span></div><span class="header-user">3D Partner <span class="avatar">3D</span></span></header>
+    <div id="page_container">
+      <h1 class="module-title">Reparaturen</h1>
+      <nav class="tabs secnav" aria-label="Reparaturansichten">
+        <button type="button" data-view="list" class="tab active" aria-current="page">Übersicht</button>
+        <button type="button" class="tab" disabled title="In dieser Vorschau nicht enthalten">Tickets mergen</button>
+        <button type="button" class="tab" disabled title="In dieser Vorschau nicht enthalten">Sync-Status</button>
+        <button type="button" data-view="settings" class="tab">Einstellungen</button>
+        <button type="button" data-view="detail" class="tab">Reparatur-Details</button>
+      </nav>
+      <div class="preview-notice">Layoutvorschau · Beispieldaten · keine Änderungen in OpenXE oder WordPress</div>
+
+      <section id="view-list" aria-label="Reparaturübersicht">
+        <div class="ui-tabs"><div class="ui-tabs-nav"><span>Reparaturen</span></div><div class="ui-tabs-panel">
+          <fieldset class="filter"><legend>Filter</legend><div class="filterbar">
+            <label>Service: <select id="filter-service"><option value="">Alle Services</option><option value="reparatur">Reparatur</option><option value="wartung">Wartung</option><option value="reverse_engineering">Reverse Engineering</option><option value="individualisierung">Individualisierung</option></select></label>
+            <label>Status: <select id="filter-status"><option value="">Alle Status</option></select></label>
+            <label><input id="show-completed" type="checkbox"> Erledigte anzeigen</label>
+          </div></fieldset>
+          <div class="dataTables-toolbar"><span>Einträge pro Seite: 25</span><label>Suche: <input id="search" type="search" aria-label="Vorgänge durchsuchen"></label></div>
+          <div class="table-container"><table class="jobs-table mkTable"><thead><tr><th>Vorgang / Kunde</th><th>Gerät</th><th>Service</th><th>Status</th><th>Eingang</th><th>Aktion</th></tr></thead><tbody id="jobs"></tbody></table></div>
+          <div id="list-empty" class="empty-state" hidden><p>Keine passenden Vorgänge.</p><button id="reset-filters" type="button" class="button button-secondary">Filter zurücksetzen</button></div>
+          <p id="list-count" class="table-foot" aria-live="polite"></p>
+        </div></div>
+      </section>
+
+      <section id="view-detail" aria-label="Reparatur-Details" hidden>
+        <div class="ui-tabs"><div class="ui-tabs-nav"><span>Ticket / Reparatur</span></div><div class="ui-tabs-panel">
+          <div class="ticket-heading"><button type="button" class="back-link" data-view="list" aria-label="Zur Übersicht"><svg><use href="#i-back"/></svg></button><strong id="detail-title"></strong><span id="detail-subtitle"></span><div id="detail-badges" class="badge-group"></div></div>
+          <div class="row"><div class="row-height">
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Reparatur-Details · Formularangaben</legend>
+              <table class="mkTableFormular facts-table"><tbody id="intake-facts"></tbody></table>
+              <div id="form-price" class="form-price"></div>
+              <div class="customer-description"><strong id="customer-description-label"></strong><p id="customer-description"></p></div>
+            </fieldset></div></div>
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Bearbeitung (intern)</legend>
+              <table class="mkTableFormular"><tbody>
+                <tr><td><label for="diagnosis">Diagnose-Notiz:</label></td><td><textarea id="diagnosis" rows="3"></textarea></td></tr>
+                <tr><td><label for="internal-notes">Interne Notizen:</label></td><td><textarea id="internal-notes" rows="3"></textarea></td></tr>
+                <tr><td>Kundenkonto:</td><td><strong id="customer-account" class="link-color"></strong></td></tr>
+              </tbody></table><p class="help">Interne Notizen werden nicht in den Produkttext übernommen.</p>
+            </fieldset></div></div>
+          </div></div>
+          <div class="row"><div class="row-height">
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Leistungsdaten für den Produkttext</legend>
+              <table class="mkTableFormular"><tbody>
+                <tr><td><label for="billing-mode">Abrechnung:</label></td><td><select id="billing-mode"><option value="service">Reparatur durchführen</option><option value="fee">Keine Reparatur · nur KVA abrechnen</option></select><p id="mode-hint" class="help"></p></td></tr>
+                <tr id="intake-diagnosis-row"><td><label for="public-diagnosis">Eingangsdiagnose:</label></td><td><textarea id="public-diagnosis" rows="6" placeholder="Diagnose für den Kundenbeleg"></textarea></td></tr>
+                <tr id="scope-label"><td><label for="service-scope">Reparatur- /<br>Wartungsarbeiten:</label></td><td><textarea id="service-scope" rows="4" placeholder="Leistungen für diesen Vorgang"></textarea></td></tr>
+                <tr id="final-check-row"><td><label for="public-final-check">Endkontrolle:</label></td><td><textarea id="public-final-check" rows="6" placeholder="Prüfungen für diesen Vorgang"></textarea></td></tr>
+                <tr><td><label for="position-price">Preis, brutto (€):</label></td><td><input class="amount" type="text" inputmode="decimal" id="position-price" autocomplete="off"> <button type="button" id="use-form-price" class="button button-secondary" hidden>Formularpreis übernehmen</button><p id="price-hint" class="help"></p><p id="price-error" class="validation" role="alert" hidden></p></td></tr>
+              </tbody></table>
+            </fieldset></div></div>
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Belegposition · Produkttext</legend>
+              <div class="position-actions"><button type="button" class="text-button" data-view="settings">Artikel / Textvorlagen</button><button type="button" id="regenerate-text" class="button button-secondary">Aus Vorlage einsetzen</button></div>
+              <div class="product-paper"><span class="paper-article-number article-number"></span><div><strong class="article-name"></strong><p id="position-paper-text"></p></div></div>
+              <details class="manual-editor"><summary>Produkttext manuell bearbeiten</summary><label class="visually-hidden" for="position-text">Positionsbeschreibung im Beleg</label><textarea id="position-text" rows="15"></textarea></details>
+              <p id="template-warning" class="validation" role="status" hidden></p>
+              <div class="prepare-footer"><p id="create-hint" class="help"></p><button type="button" id="create-document" class="button button-primary">Angebot vorbereiten</button></div>
+            </fieldset></div></div>
+          </div></div>
+          <div class="row"><div class="col-xs-14"><div class="inside"><fieldset><legend>Verknüpfte Belege</legend><div id="linked-documents"></div></fieldset></div></div></div>
+        </div></div>
+      </section>
+
+      <section id="view-settings" aria-label="Artikel und Textvorlagen" hidden>
+        <div class="ui-tabs"><div class="ui-tabs-nav"><span>Artikel &amp; Textvorlagen</span><span class="inactive">WordPress-Verbindung</span></div><div class="ui-tabs-panel">
+          <fieldset><legend>Artikelzuordnung</legend><table class="mkTableFormular settings-article-fields"><tbody>
+            <tr><td><label for="article-number">Artikelnummer:</label></td><td><input id="article-number" type="text" value="100003" maxlength="80"></td><td><label for="article-name">Bezeichnung:</label></td><td><input id="article-name" type="text" value="3D-Drucker Reparaturservice &amp; Wartung (nach Aufwand)" maxlength="160"></td></tr>
+          </tbody></table><p class="help">Vorbelegung aus deinem Beispiel. Die echte Artikelzuordnung wird später im ERP geprüft.</p></fieldset>
+          <div class="row"><div class="row-height">
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Textvorlage</legend><table class="mkTableFormular"><tbody>
+              <tr><td><label for="template-type">Verwendung:</label></td><td><select id="template-type"><option value="reparatur">Reparatur · Angebot / Auftrag</option><option value="reparatur_rechnung">Reparatur · Rechnung / Leistungsnachweis</option><option value="fee">Keine Reparatur · KVA-Abrechnung</option><option value="wartung">Wartung</option><option value="reverse_engineering">Reverse Engineering</option><option value="individualisierung">Individualisierung</option></select></td></tr>
+              <tr><td><label for="template-text">Produkttext:</label></td><td><textarea id="template-text" rows="16"></textarea></td></tr>
+            </tbody></table><p class="help">Platzhalter an der Cursorposition einsetzen:</p><div id="variable-buttons" class="variable-buttons"></div><p id="settings-validation" class="validation" role="status" hidden></p><div class="settings-actions"><button type="button" class="button button-primary" id="apply-settings">In der Vorschau anwenden</button><button type="button" class="button button-secondary" id="reset-template">Standardvorlage</button></div></fieldset></div></div>
+            <div class="col-xs-14 col-md-6 col-md-height"><div class="inside inside-full-height"><fieldset><legend>Druckvorschau der Belegposition</legend><table class="mkTableFormular"><tbody><tr><td><label for="preview-job">Vorgang:</label></td><td><select id="preview-job"></select></td></tr></tbody></table>
+              <div class="product-paper"><span class="paper-article-number" id="settings-paper-number">100003</span><div><strong class="article-name"></strong><p id="settings-preview"></p></div></div><p id="preview-missing" class="validation" role="status" hidden></p><p class="help">Gerät / Fehlerbild aus dem Formular; Diagnose, Arbeiten und Endkontrolle aus den Leistungsdaten.</p>
+            </fieldset></div></div>
+          </div></div>
+        </div></div>
+      </section>
+
+      <section id="view-document" aria-label="Belegvorschau" hidden>
+        <div class="ui-tabs"><div class="ui-tabs-nav"><span>Belegentwurf</span></div><div class="ui-tabs-panel">
+          <div class="ticket-heading"><button type="button" class="back-link" data-view="detail"><svg><use href="#i-back"/></svg>Zum Vorgang</button><strong id="document-title"></strong><span id="document-subtitle"></span></div>
+          <div class="row"><div class="row-height">
+            <div class="col-xs-14 col-md-8 col-md-height"><div class="inside"><fieldset><legend id="document-type-title">Beleg</legend>
+              <table class="mkTableFormular"><tbody><tr><td>Kunde:</td><td id="document-customer"></td><td>Vorgang:</td><td id="document-reference"></td></tr></tbody></table>
+              <div class="table-container document-position"><table class="mkTable"><thead><tr><th>Artikelnr.</th><th>Bezeichnung / Beschreibung</th><th>Menge</th><th>Preis, brutto</th></tr></thead><tbody><tr><td><span id="document-article-number"></span></td><td><label class="visually-hidden" for="document-position-name">Artikelbezeichnung</label><input id="document-position-name" type="text"><label class="visually-hidden" for="document-position-description">Produkttext im Beleg</label><textarea id="document-position-description" rows="18"></textarea></td><td>1</td><td><label class="visually-hidden" for="document-price">Bruttopreis in Euro</label><input id="document-price" type="text" inputmode="decimal" class="amount"></td></tr></tbody></table></div>
+              <p id="document-error" class="validation" role="alert" hidden></p>
+              <div class="document-paper-wrapper"><div class="product-paper"><span class="paper-article-number" id="document-paper-number"></span><div><strong id="document-paper-name"></strong><p id="document-paper-text"></p></div></div></div>
+              <dl class="totals"><div><dt>Netto</dt><dd id="document-net"></dd></div><div><dt>Umsatzsteuer 19 % (Beispiel)</dt><dd id="document-vat"></dd></div><div class="total-gross"><dt>Gesamt, brutto</dt><dd id="document-total"></dd></div></dl>
+            </fieldset></div></div>
+            <div class="col-xs-14 col-md-4 col-md-height"><div class="inside"><fieldset><legend id="document-next-title">Aktionen</legend><p id="document-flow-hint"></p><button type="button" class="button button-primary" id="continue-document"></button><button type="button" class="button button-secondary" id="use-invoice-template" hidden>Leistungsnachweis einsetzen</button><p class="help" id="invoice-template-hint" hidden>Setzt die Rechnungsvorlage mit den aktuellen Leistungsdaten ein. Durchgeführte Arbeiten und Endkontrolle vor Freigabe prüfen.</p><p id="document-fee-hint" class="help"></p><p class="help">Beispielentwurf · keine Freigabe oder Versendung</p></fieldset></div></div>
+          </div></div>
+        </div></div>
+      </section>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+  </div>
+<script>
+'use strict';
+
+// Standalone design preview: invented records, no network or ERP writes.
+const $ = id => document.getElementById(id);
+const services = {reparatur: 'Reparatur', wartung: 'Wartung', reverse_engineering: 'Reverse Engineering', individualisierung: 'Individualisierung'};
+const jobs = [
+  {id: 'REP-2026-0108', customer: 'Beispielkunde A', customerNo: 'DEMO-1001', service: 'reparatur', manufacturer: 'Bambu Lab', model: 'X1C', serial: 'BEISPIEL-X1C-108', status: 'Repariert', tone: 'green', date: '19.10.2026', express: true, fee: 4900, issue: 'Fehlerhafte Kommunikation zum TH Board', limit: 'Vor jeder Reparatur Rücksprache', warranty: '', diagnosis: 'TH Board und Verkabelung geprüft.', notes: 'Kunde möchte vor Auftragserteilung telefonisch informiert werden.', scope: '- Fehlerbehebung TH Board\n- Wechsel Messer', price: 18900,
+    publicDiagnosis: '- Sichtprüfung auf mechanische Beschädigungen und Verschleiß\n- Prüfung von Verkabelung, Steckverbindungen und Elektronik\n- Kontrolle von Hotend, Extruder und Filamentführung\n- Prüfung von Achsen, Führungen und Riemenspannung\n- Kontrolle von Firmware und Druckereinstellungen',
+    finalCheck: '- Reinigung und Schmierung der Achsen und Führungen\n- Kalibrierung\n- Funktionstest aller Komponenten\n- Qualitätskontrolle mit Testdruck\n- Endreinigung des Geräts'},
+  {id: 'REP-2026-0107', customer: 'Beispielfirma B', customerNo: 'DEMO-1002', service: 'wartung', manufacturer: 'Bambu Lab', model: 'P1S', serial: '', status: 'Wartung geplant', tone: 'blue', date: '18.10.2026', express: false, package: 'Vollwartung', packagePrice: 12900, issue: 'Bitte auf das Schleifgeräusch der Y-Achse achten. Der Drucker wird täglich genutzt.', diagnosis: '', notes: '', scope: 'Vollwartung mit Reinigung, Schmierung und Kontrolle der Mechanik. Riemenspannung prüfen und Testdruck durchführen.', price: 12900},
+  {id: 'REP-2026-0106', customer: 'Beispielkunde C', customerNo: 'DEMO-1003', service: 'reparatur', manufacturer: 'Prusa', model: 'MK4', serial: 'BEISPIEL-MK4-106', status: 'Angebot gesendet', tone: 'amber', date: '17.10.2026', express: false, fee: 4900, issue: 'Die erste Schicht haftet nicht zuverlässig. Druckplatte wurde gereinigt. Bitte den Sensor und die Kalibrierung prüfen.', limit: 'Rücksprache bei Überschreitung des Kostenrahmens', warranty: 'Nein', diagnosis: 'Sensorprüfung und Kalibrierung erforderlich.', notes: '', scope: 'Sensor und Druckbett prüfen. Kalibrierung und Testdruck durchführen.', price: 9900},
+  {id: 'REP-2026-0105', customer: 'Beispielkunde D', customerNo: 'DEMO-1004', service: 'reparatur', manufacturer: 'Creality', model: 'K1', serial: 'BEISPIEL-K1-105', status: 'Versendet', tone: 'neutral', date: '15.10.2026', express: false, fee: 3900, issue: 'Hotend heizt nicht mehr auf. Fehlermeldung erscheint beim Start.', limit: 'Vor jeder Reparatur Rücksprache', warranty: '', diagnosis: 'Heizpatrone defekt; nach Austausch erfolgreich geprüft.', notes: '', scope: 'Heizpatrone ersetzt, Verkabelung geprüft und Funktionstest durchgeführt.', price: 11900},
+  {id: 'REP-2026-0104', customer: 'Beispielkunde E', customerNo: 'DEMO-1005', service: 'wartung', manufacturer: 'Prusa', model: 'MK3S+', serial: 'BEISPIEL-MK3S-104', status: 'Abgeschlossen', tone: 'neutral', complete: true, date: '12.10.2026', express: false, package: 'Basiswartung', packagePrice: 7900, issue: 'Regelmäßige Wartung nach längerer Nutzung.', diagnosis: 'Wartung abgeschlossen.', notes: '', scope: 'Basiswartung mit Reinigung, Schmierung und Funktionstest durchgeführt.', price: 7900},
+  {id: 'REP-2026-0103', customer: 'Beispielfirma F', customerNo: 'DEMO-1006', service: 'reparatur', manufacturer: 'Bambu Lab', model: 'X1 Carbon', serial: 'BEISPIEL-X1C-103', status: 'Abgeschlossen', tone: 'neutral', complete: true, date: '10.10.2026', express: false, fee: null, issue: 'Unregelmäßige Extrusion bei längeren Druckaufträgen.', limit: 'Vor jeder Reparatur Rücksprache', warranty: '', diagnosis: 'Antrieb gereinigt und geprüft.', notes: '', scope: 'Filamentantrieb gereinigt und Testdruck durchgeführt.', price: 14900}
+];
+const defaults = {
+  reparatur: 'Gerät: {hersteller} {modell}\nFehlerbild: {fehlerbeschreibung}\n\nEingangsdiagnose:\n{eingangsdiagnose}\n\nGeplante Reparatur- und Wartungsarbeiten:\n{reparaturarbeiten}\n\nVorgesehene Endkontrolle:\n{endkontrolle}',
+  reparatur_rechnung: 'Gerät: {hersteller} {modell}\nFehlerbild: {fehlerbeschreibung}\n\nEingangsdiagnose:\n{eingangsdiagnose}\n\nDurchgeführte Reparatur- und Wartungsarbeiten:\n{reparaturarbeiten}\n\nEndkontrolle:\n{endkontrolle}',
+  fee: 'Gerät: {hersteller} {modell}\nFehlerbild: {fehlerbeschreibung}\n\nEingangsdiagnose:\n{eingangsdiagnose}\n\nDiagnose und Erstellung des Kostenvoranschlags. Keine Reparatur durchgeführt. Abrechnung der im Formular vereinbarten KVA-Gebühr.',
+  wartung: 'Wartung: {hersteller} {modell}\nWartungspaket: {wartungspaket}\n\nKundenhinweise: {kundenhinweise}\n\nLeistungsumfang: {leistungsbeschreibung}\n\nVorgang: {vorgangsnummer}',
+  reverse_engineering: 'Reverse Engineering: {hersteller} {modell}\nAnforderung: {fehlerbeschreibung}\n\nLeistungsumfang: {leistungsbeschreibung}\n\nVorgang: {vorgangsnummer}',
+  individualisierung: 'Individualisierung: {hersteller} {modell}\nAnforderung: {fehlerbeschreibung}\n\nLeistungsumfang: {leistungsbeschreibung}\n\nVorgang: {vorgangsnummer}'
+};
+const variableLabels = {
+  hersteller: 'Hersteller', modell: 'Modell', seriennummer: 'Seriennummer', fehlerbeschreibung: 'Fehlerbeschreibung / Anforderung', eingangsdiagnose: 'Eingangsdiagnose für den Kunden', reparaturarbeiten: 'Reparatur- und Wartungsarbeiten', endkontrolle: 'Endkontrolle für den Kunden', kundenhinweise: 'Kundenhinweise aus Formular', wartungspaket: 'Wartungspaket', leistungsbeschreibung: 'Leistungsbeschreibung für Kunden', vorgangsnummer: 'Vorgangsnummer', kva_preis: 'KVA-Preis aus Formular', paketpreis: 'Paketpreis aus Formular', service: 'Service'
+};
+const settings = {articleNumber: '100003', articleName: '3D-Drucker Reparaturservice & Wartung (nach Aufwand)', templates: {...defaults}};
+let templateDrafts = {...defaults};
+let selectedTemplate = 'reparatur';
+let currentId = jobs[0].id;
+let currentMode = 'service';
+let currentView = 'list';
+let currentDocument = null;
+let documentSequence = 0;
+let toastTimer;
+const drafts = new Map();
+const documents = [];
+
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+function icon(name) {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+  use.setAttribute('href', '#i-' + name);
+  svg.setAttribute('aria-hidden', 'true');
+  svg.append(use);
+  return svg;
+}
+const money = cents => cents === null || cents === undefined ? 'Nicht übermittelt' : new Intl.NumberFormat('de-DE', {style: 'currency', currency: 'EUR'}).format(cents / 100);
+const priceInput = cents => cents === null ? '' : (cents / 100).toFixed(2).replace('.', ',');
+function parsePrice(value) {
+  let text = value.trim().replace(/\s/g, '');
+  if (text.includes(',')) {
+    if (!/^(?:\d+|\d{1,3}(?:\.\d{3})+),\d{1,2}$/.test(text)) return null;
+    text = text.replaceAll('.', '').replace(',', '.');
+  }
+  if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return null;
+  const [whole, fraction = ''] = text.split('.');
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, '0'));
+  return Number.isSafeInteger(cents) && cents <= 9999999999 ? cents : null;
+}
+function selectedJob() { return jobs.find(job => job.id === currentId); }
+function draftKey(job, mode) { return job.id + ':' + mode; }
+function activeTemplate(job, mode) { return mode === 'fee' ? 'fee' : job.service; }
+function variables(job, scope, content = {}) {
+  return {hersteller: job.manufacturer, modell: job.model, seriennummer: job.serial,
+    fehlerbeschreibung: job.service === 'wartung' ? '' : job.issue,
+    kundenhinweise: job.issue, wartungspaket: job.package || '', leistungsbeschreibung: scope,
+    eingangsdiagnose: content.intake ?? job.publicDiagnosis ?? '', reparaturarbeiten: scope,
+    endkontrolle: content.finalCheck ?? job.finalCheck ?? '',
+    vorgangsnummer: job.id, kva_preis: job.fee == null ? '' : money(job.fee),
+    paketpreis: job.packagePrice == null ? '' : money(job.packagePrice), service: services[job.service]};
+}
+function resolveTemplate(template, job, scope, content = {}) {
+  const values = variables(job, scope, content);
+  const missing = new Set();
+  const unknown = new Set();
+  const text = template.replace(/\{([^{}\r\n]*)\}/g, (match, name) => {
+    if (!Object.hasOwn(values, name)) { unknown.add(name); return match; }
+    const value = values[name];
+    if (value === '' || value === null || value === undefined) {
+      missing.add(variableLabels[name]);
+      return '[nicht übermittelt]';
+    }
+    return String(value);
+  });
+  return {text, missing: [...missing], unknown: [...unknown]};
+}
+function getDraft(job, mode) {
+  const key = draftKey(job, mode);
+  if (!drafts.has(key)) {
+    const draft = {scope: job.scope, intake: job.publicDiagnosis ?? '', finalCheck: job.finalCheck ?? '', price: mode === 'fee' ? job.fee ?? null : job.price, text: '', textDirty: false};
+    draft.text = resolveTemplate(settings.templates[activeTemplate(job, mode)], job, draft.scope, draft).text;
+    drafts.set(key, draft);
+  }
+  return drafts.get(key);
+}
+function toast(message) {
+  clearTimeout(toastTimer);
+  $('toast').textContent = message;
+  $('toast').hidden = false;
+  toastTimer = setTimeout(() => { $('toast').hidden = true; }, 4500);
+}
+function showView(view) {
+  currentView = view;
+  document.body.dataset.action = view === 'list' ? 'list' : view === 'settings' ? 'einstellungen' : 'edit';
+  ['list', 'detail', 'settings', 'document'].forEach(name => { $('view-' + name).hidden = name !== view; });
+  document.querySelectorAll('.tabs button').forEach(button => {
+    const active = button.dataset.view === view || (view === 'document' && button.dataset.view === 'detail');
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+  });
+  if (view === 'list') renderList();
+  if (view === 'detail') renderDetail();
+  if (view === 'settings') renderSettings();
+  if (view === 'document') renderDocument();
+}
+function renderList() {
+  const search = $('search').value.trim().toLocaleLowerCase('de');
+  const includeCompleted = $('show-completed').checked;
+  const matching = jobs.filter(job => (includeCompleted || !job.complete)
+    && (!$('filter-service').value || job.service === $('filter-service').value)
+    && (!$('filter-status').value || job.status === $('filter-status').value)
+    && [job.id, job.customer, job.manufacturer, job.model, services[job.service], job.serial].join(' ').toLocaleLowerCase('de').includes(search));
+  $('jobs').replaceChildren();
+  for (const job of matching) {
+    const row = element('tr', job.complete ? 'completed-row' : '');
+    const reference = element('td');
+    const link = element('button', 'job-button', job.id);
+    link.type = 'button';
+    link.addEventListener('click', () => openJob(job.id));
+    reference.append(link, element('span', 'job-customer', job.customer));
+    const device = element('td');
+    device.append(element('strong', '', job.model), element('span', 'job-manufacturer', job.manufacturer));
+    const service = element('td', '', services[job.service]);
+    if (job.express) { service.append(document.createTextNode(' '), element('span', 'badge express', 'Express')); }
+    const status = element('td');
+    status.append(element('span', 'badge ' + job.tone, job.status));
+    const action = element('td');
+    const open = element('button', 'row-open');
+    open.type = 'button';
+    open.setAttribute('aria-label', job.id + ' öffnen');
+    open.append(icon('arrow'));
+    open.addEventListener('click', () => openJob(job.id));
+    action.append(open);
+    row.append(reference, device, service, status, element('td', '', job.date), action);
+    $('jobs').append(row);
+  }
+  $('list-empty').hidden = matching.length > 0;
+  $('list-count').textContent = matching.length + ' von ' + jobs.length + ' Vorgängen' + (includeCompleted ? ' · inklusive abgeschlossener Vorgänge' : ' · 2 abgeschlossene Vorgänge ausgeblendet');
+}
+function openJob(id) {
+  currentId = id;
+  currentMode = 'service';
+  showView('detail');
+  window.scrollTo({top: 0});
+}
+function addFact(label, value) {
+  if (!value) return;
+  const pair = element('tr');
+  pair.append(element('td', '', label + ':'), element('td', '', value));
+  $('intake-facts').append(pair);
+}
+function priceLine(label, value) {
+  const line = element('div', 'form-price-line');
+  line.append(element('span', '', label), element('strong', '', money(value)));
+  return line;
+}
+function renderArticle() {
+  document.querySelectorAll('.article-name').forEach(node => { node.textContent = settings.articleName; });
+  document.querySelectorAll('.article-number').forEach(node => { node.textContent = settings.articleNumber; });
+}
+function renderDetail() {
+  const job = selectedJob();
+  $('detail-title').textContent = job.manufacturer + ' ' + job.model;
+  $('detail-subtitle').textContent = job.id + ' · ' + job.customer + ' · Eingang ' + job.date;
+  $('detail-badges').replaceChildren(element('span', 'badge ' + job.tone, job.status));
+  if (job.express) $('detail-badges').append(element('span', 'badge express', 'Express'));
+  $('intake-facts').replaceChildren();
+  addFact('Service', services[job.service]);
+  addFact('Hersteller', job.manufacturer);
+  addFact('Modell', job.model);
+  addFact('Seriennummer', job.serial);
+  if (job.service === 'reparatur') {
+    addFact('Kostenfreigabe', job.limit);
+    addFact('Garantie laut Formular', job.warranty);
+  }
+  if (job.service === 'wartung') addFact('Wartungspaket', job.package);
+  addFact('Express', job.express ? 'Ja' : 'Nein');
+  $('form-price').replaceChildren();
+  if (job.service === 'reparatur') {
+    $('form-price').append(priceLine('KVA-Preis laut Formular', job.fee));
+    $('form-price').append(element('p', 'help', job.fee == null ? 'Kein ursprünglicher Preis übermittelt. Nicht aus heutigen Preisen ergänzen.' : 'Ursprünglicher Formularpreis. Wird bei Reparatur verrechnet und nicht zusätzlich berechnet.'));
+  } else if (job.service === 'wartung') {
+    $('form-price').append(priceLine('Paketpreis laut Formular', job.packagePrice));
+    $('form-price').append(element('p', 'help', 'Ursprünglicher Preis zum Zeitpunkt der Anfrage.'));
+  }
+  if (job.express) $('form-price').append(element('p', 'help', 'Express beauftragt · Zuschlag in diesem Beispiel nicht übermittelt.'));
+  $('customer-description-label').textContent = job.service === 'wartung' ? 'Zusätzliche Anmerkungen des Kunden' : 'Fehlerbeschreibung des Kunden';
+  $('customer-description').textContent = job.issue || 'Nicht übermittelt';
+  $('diagnosis').value = job.diagnosis;
+  $('internal-notes').value = job.notes;
+  $('customer-account').textContent = job.customer + ' (' + job.customerNo + ')';
+  const serviceOption = $('billing-mode').options[0];
+  serviceOption.textContent = job.service === 'reparatur' ? 'Reparatur durchführen' : services[job.service] + ' durchführen';
+  $('billing-mode').options[1].hidden = job.service !== 'reparatur';
+  $('billing-mode').options[1].disabled = job.service !== 'reparatur';
+  if (job.service !== 'reparatur') currentMode = 'service';
+  $('billing-mode').value = currentMode;
+  renderArticle();
+  renderPreparation();
+  renderLinkedDocuments();
+}
+function renderPreparation() {
+  const job = selectedJob();
+  const feeOnly = currentMode === 'fee';
+  const draft = getDraft(job, currentMode);
+  $('mode-hint').textContent = feeOnly ? 'Nur Diagnose und KVA-Erstellung abrechnen. Derselbe Artikel, angepasster Text; keine Reparaturleistung.' : job.service === 'reparatur' ? 'Der KVA wird als Angebot angelegt. Der Gesamtpreis enthält die verrechnete KVA-Gebühr.' : 'Leistung als Angebot vorbereiten und anschließend in Auftrag und Rechnung übernehmen.';
+  $('scope-label').hidden = feeOnly;
+  $('final-check-row').hidden = feeOnly;
+  $('public-diagnosis').value = draft.intake;
+  $('public-final-check').value = draft.finalCheck;
+  $('service-scope').value = draft.scope;
+  $('position-price').value = priceInput(draft.price);
+  $('position-text').value = draft.text;
+  $('use-form-price').hidden = !feeOnly;
+  $('use-form-price').disabled = job.fee == null;
+  $('price-hint').textContent = feeOnly ? job.fee == null ? 'Kein Formular-KVA-Preis vorhanden. Betrag manuell prüfen und eintragen.' : 'KVA-Preis aus dem Formular: ' + money(job.fee) + '. Übernehmen oder bewusst anpassen.' : job.service === 'wartung' ? 'Paketpreis als Vorschlag übernommen; vor dem Angebot anpassen.' : 'Gesamtpreis der angebotenen Leistung. Kein zusätzlicher KVA-Kostenpunkt.';
+  $('price-error').hidden = true;
+  updatePreparationState();
+}
+function updatePreparationState() {
+  const job = selectedJob();
+  const draft = getDraft(job, currentMode);
+  $('position-paper-text').textContent = draft.text;
+  const remaining = [...draft.text.matchAll(/\{([^{}\r\n]*)\}/g)].map(match => match[0]);
+  const missing = draft.text.includes('[nicht übermittelt]');
+  $('template-warning').hidden = !remaining.length && !missing;
+  $('template-warning').textContent = remaining.length ? 'Nicht ausgefüllte Platzhalter: ' + [...new Set(remaining)].join(', ') + '. Bitte vor der Übernahme ersetzen.' : 'Die Beschreibung enthält fehlende Angaben. Bitte ergänzen oder die betreffende Zeile entfernen.';
+  const existing = documents.find(doc => doc.jobId === job.id && doc.mode === currentMode && doc.type === (currentMode === 'fee' ? 'rechnung' : 'angebot'));
+  $('create-document').disabled = !existing && (draft.price === null || !draft.text.trim() || remaining.length > 0 || missing);
+  $('create-document').replaceChildren(document.createTextNode(existing ? 'Entwurf öffnen' : currentMode === 'fee' ? 'Rechnung vorbereiten' : 'Angebot vorbereiten'), icon('arrow'));
+  $('create-hint').textContent = existing ? 'Vorhandenen Beispielentwurf öffnen.' : 'Eine Position · Menge 1 · Text und Preis im Beleg bearbeitbar';
+}
+function renderLinkedDocuments() {
+  const linked = documents.filter(doc => doc.jobId === currentId);
+  $('linked-documents').replaceChildren();
+  if (!linked.length) { $('linked-documents').append(element('p', 'linked-empty', 'Noch keine Belegentwürfe in dieser Vorschau.')); return; }
+  for (const doc of linked) {
+    const row = element('div', 'linked-row');
+    const label = element('div', 'linked-name');
+    label.append(element('strong', '', documentLabel(doc.type) + ' · ' + doc.id), element('small', '', doc.mode === 'fee' ? 'Nur KVA-Abrechnung · Beispielentwurf' : 'Reparatur / Service · Beispielentwurf'));
+    const open = element('button', 'button button-secondary', 'Öffnen');
+    open.type = 'button';
+    open.addEventListener('click', () => { currentDocument = doc; showView('document'); });
+    row.append(icon('file'), label, element('span', 'linked-price', money(doc.price)), open);
+    $('linked-documents').append(row);
+  }
+}
+function documentLabel(type) { return {angebot: 'Angebot', auftrag: 'Auftrag', rechnung: 'Rechnung'}[type]; }
+function newDocument(type, source) {
+  const job = selectedJob();
+  const draft = getDraft(job, currentMode);
+  const doc = {id: 'VORSCHAU-' + {angebot: 'ANG', auftrag: 'AUF', rechnung: 'RE'}[type] + '-' + String(++documentSequence).padStart(2, '0'), jobId: job.id,
+    mode: source ? source.mode : currentMode, type, name: source ? source.name : settings.articleName,
+    article: source ? source.article : settings.articleNumber, text: source ? source.text : draft.text,
+    price: source ? source.price : draft.price, parent: source ? source.id : null};
+  documents.push(doc);
+  return doc;
+}
+function renderDocument() {
+  if (!currentDocument) { showView('detail'); return; }
+  const doc = currentDocument;
+  const job = jobs.find(item => item.id === doc.jobId);
+  $('document-title').textContent = documentLabel(doc.type) + ' · ' + doc.id;
+  $('document-subtitle').textContent = doc.parent ? 'Übernommen aus ' + doc.parent : 'Vorbereitet aus ' + job.id;
+  $('document-customer').textContent = job.customer;
+  $('document-reference').textContent = job.id;
+  $('document-type-title').textContent = doc.type === 'angebot' ? 'Kostenvoranschlag / Angebot' : documentLabel(doc.type);
+  $('document-position-name').value = doc.name;
+  $('document-position-description').value = doc.text;
+  $('document-price').value = priceInput(doc.price);
+  $('document-article-number').textContent = doc.article;
+  refreshDocumentPaper();
+  $('document-error').hidden = true;
+  const canUseInvoiceTemplate = doc.type === 'rechnung' && doc.mode !== 'fee' && job.service === 'reparatur';
+  $('use-invoice-template').hidden = !canUseInvoiceTemplate;
+  $('invoice-template-hint').hidden = !canUseInvoiceTemplate;
+  const nextType = doc.type === 'angebot' ? 'auftrag' : 'rechnung';
+  const existing = documents.find(item => item.parent === doc.id && item.type === nextType);
+  $('continue-document').hidden = doc.type === 'rechnung';
+  $('continue-document').textContent = existing ? documentLabel(nextType) + ' öffnen' : 'Als ' + documentLabel(nextType) + ' übernehmen';
+  $('document-next-title').textContent = doc.type === 'rechnung' ? 'Rechnung vorbereitet' : 'Nächster Schritt';
+  $('document-flow-hint').textContent = doc.type === 'rechnung' ? 'In der echten Anwendung wird der Beleg nach deiner Prüfung freigegeben. Diese Vorschau erstellt und versendet keine echten Rechnungen.' : doc.type === 'angebot' ? 'Nach der Kundenfreigabe wird das Angebot als Auftrag weitergeführt.' : 'Nach Abschluss der Arbeiten wird der Auftrag in eine Rechnung übernommen.';
+  $('document-fee-hint').textContent = doc.mode === 'fee' ? 'Keine Reparatur: ausschließlich die vereinbarte KVA-Leistung. Kein zusätzlicher Reparaturbetrag.' : job.service === 'reparatur' ? 'Die KVA-Gebühr ist im vereinbarten Reparaturpreis berücksichtigt. Es wird kein zusätzlicher KVA-Kostenpunkt angelegt.' : 'Abgerechnet wird die angebotene Serviceleistung. Der übernommene Positionstext beschreibt den vereinbarten Leistungsumfang.';
+  updateDocumentTotals();
+}
+function updateDocumentTotals() {
+  const gross = currentDocument.price;
+  const net = Math.round(gross / 1.19);
+  $('document-net').textContent = money(net);
+  $('document-vat').textContent = money(gross - net);
+  $('document-total').textContent = money(gross);
+}
+function refreshDocumentPaper() {
+  $('document-paper-number').textContent = currentDocument.article;
+  $('document-paper-name').textContent = $('document-position-name').value;
+  $('document-paper-text').textContent = $('document-position-description').value;
+}
+function validateDocument() {
+  refreshDocumentPaper();
+  const price = parsePrice($('document-price').value);
+  const text = $('document-position-description').value.trim();
+  const unresolved = /\{[^{}\r\n]*\}|\[nicht übermittelt\]/.test(text);
+  const valid = price !== null && text !== '' && $('document-position-name').value.trim() !== '' && !unresolved;
+  $('document-error').hidden = valid;
+  $('document-error').textContent = 'Bitte einen gültigen Preis sowie Artikelbezeichnung und vollständige Beschreibung eintragen.';
+  $('continue-document').disabled = !valid;
+  if (valid) {
+    currentDocument.price = price;
+    currentDocument.name = $('document-position-name').value.trim();
+    currentDocument.text = $('document-position-description').value;
+    updateDocumentTotals();
+  }
+  return valid;
+}
+function renderSettings() {
+  $('article-name').value = settings.articleName;
+  $('article-number').value = settings.articleNumber;
+  $('template-type').value = selectedTemplate;
+  $('template-text').value = templateDrafts[selectedTemplate];
+  $('preview-job').replaceChildren();
+  for (const job of jobs) {
+    const option = element('option', '', job.id + ' · ' + services[job.service] + ' · ' + job.model);
+    option.value = job.id;
+    $('preview-job').append(option);
+  }
+  choosePreviewJob();
+  renderArticle();
+  renderSettingsPreview();
+}
+function choosePreviewJob() {
+  const desired = selectedTemplate === 'fee' || selectedTemplate === 'reparatur_rechnung' ? 'reparatur' : selectedTemplate;
+  const example = jobs.find(job => job.service === desired);
+  $('preview-job').value = (example || selectedJob()).id;
+}
+function renderSettingsPreview() {
+  const job = jobs.find(item => item.id === $('preview-job').value) || selectedJob();
+  const draft = getDraft(job, 'service');
+  const resolved = resolveTemplate($('template-text').value, job, draft.scope, draft);
+  $('settings-preview').textContent = resolved.text;
+  $('view-settings').querySelector('.product-paper .article-name').textContent = $('article-name').value || 'Artikelbezeichnung fehlt';
+  $('settings-paper-number').textContent = $('article-number').value;
+  $('preview-missing').hidden = !resolved.missing.length;
+  $('preview-missing').textContent = 'In diesem Beispiel nicht vorhanden: ' + resolved.missing.join(', ') + '. Vor der Belegerstellung ergänzen oder aus dem Text entfernen.';
+  $('settings-validation').hidden = !resolved.unknown.length;
+  $('settings-validation').textContent = 'Unbekannte Platzhalter: ' + resolved.unknown.map(name => '{' + name + '}').join(', ') + '. Bitte einen verfügbaren Platzhalter wählen.';
+  $('apply-settings').disabled = resolved.unknown.length > 0 || !$('template-text').value.trim() || !$('article-name').value.trim() || !$('article-number').value.trim();
+}
+
+document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => {
+  if (currentView === 'document' && !validateDocument()) return;
+  showView(button.dataset.view);
+}));
+for (const status of [...new Set(jobs.map(job => job.status))]) {
+  const option = element('option', '', status); option.value = status; $('filter-status').append(option);
+}
+['search', 'filter-service', 'filter-status', 'show-completed'].forEach(id => $(id).addEventListener(id === 'search' ? 'input' : 'change', renderList));
+$('reset-filters').addEventListener('click', () => {
+  $('search').value = ''; $('filter-service').value = ''; $('filter-status').value = ''; $('show-completed').checked = false; renderList();
+});
+$('diagnosis').addEventListener('input', () => { selectedJob().diagnosis = $('diagnosis').value; });
+$('internal-notes').addEventListener('input', () => { selectedJob().notes = $('internal-notes').value; });
+$('billing-mode').addEventListener('change', () => { currentMode = $('billing-mode').value; renderPreparation(); });
+for (const [id, field, jobField] of [['service-scope', 'scope', 'scope'], ['public-diagnosis', 'intake', 'publicDiagnosis'], ['public-final-check', 'finalCheck', 'finalCheck']]) {
+  $(id).addEventListener('input', () => {
+    const job = selectedJob();
+    job[jobField] = $(id).value;
+    // Leistungsdaten gehoeren zum Vorgang, auch beim Wechsel der Abrechnung.
+    for (const mode of ['service', 'fee']) {
+      const draft = drafts.get(draftKey(job, mode));
+      if (!draft) continue;
+      draft[field] = $(id).value;
+      if (!draft.textDirty) {
+        draft.text = resolveTemplate(settings.templates[activeTemplate(job, mode)], job, draft.scope, draft).text;
+      }
+    }
+    $('position-text').value = getDraft(job, currentMode).text;
+    updatePreparationState();
+  });
+}
+$('position-text').addEventListener('input', () => {
+  const draft = getDraft(selectedJob(), currentMode); draft.text = $('position-text').value; draft.textDirty = true; updatePreparationState();
+});
+$('position-price').addEventListener('input', () => {
+  const draft = getDraft(selectedJob(), currentMode); draft.price = parsePrice($('position-price').value);
+  $('price-error').hidden = draft.price !== null || $('position-price').value === '';
+  $('price-error').textContent = 'Bitte einen positiven Betrag oder 0,00 mit höchstens zwei Nachkommastellen eingeben, z. B. 149,90.';
+  updatePreparationState();
+});
+$('use-form-price').addEventListener('click', () => {
+  const job = selectedJob(); if (job.fee == null || currentMode !== 'fee') return;
+  const draft = getDraft(job, currentMode); draft.price = job.fee; $('position-price').value = priceInput(job.fee); $('price-error').hidden = true; updatePreparationState(); toast('Ursprünglichen KVA-Preis aus dem Formular übernommen.');
+});
+$('regenerate-text').addEventListener('click', () => {
+  const job = selectedJob(); const draft = getDraft(job, currentMode);
+  draft.text = resolveTemplate(settings.templates[activeTemplate(job, currentMode)], job, draft.scope, draft).text;
+  draft.textDirty = false; $('position-text').value = draft.text; updatePreparationState(); toast('Positionsbeschreibung aus der aktuellen Vorlage eingesetzt.');
+});
+$('create-document').addEventListener('click', () => {
+  if ($('create-document').disabled) return;
+  const type = currentMode === 'fee' ? 'rechnung' : 'angebot';
+  currentDocument = documents.find(doc => doc.jobId === currentId && doc.mode === currentMode && doc.type === type) || newDocument(type);
+  showView('document'); window.scrollTo({top: 0});
+});
+['document-price', 'document-position-name', 'document-position-description'].forEach(id => $(id).addEventListener('input', validateDocument));
+$('continue-document').addEventListener('click', () => {
+  if (!validateDocument() || currentDocument.type === 'rechnung') return;
+  const type = currentDocument.type === 'angebot' ? 'auftrag' : 'rechnung';
+  currentDocument = documents.find(doc => doc.parent === currentDocument.id && doc.type === type) || newDocument(type, currentDocument);
+  renderDocument(); toast('Beispielentwurf geöffnet. Text und Preis wurden übernommen.');
+});
+$('use-invoice-template').addEventListener('click', () => {
+  if (!currentDocument || currentDocument.type !== 'rechnung' || currentDocument.mode === 'fee') return;
+  const job = jobs.find(item => item.id === currentDocument.jobId);
+  const draft = getDraft(job, 'service');
+  currentDocument.text = resolveTemplate(settings.templates.reparatur_rechnung, job, draft.scope, draft).text;
+  renderDocument();
+  validateDocument();
+  toast('Rechnungstext aus den Leistungsdaten eingesetzt. Durchgeführte Arbeiten und Endkontrolle prüfen.');
+});
+for (const [name, label] of Object.entries(variableLabels)) {
+  const button = element('button', '', '{' + name + '}'); button.type = 'button'; button.title = label;
+  button.addEventListener('click', () => {
+    const input = $('template-text'); const start = input.selectionStart; const end = input.selectionEnd;
+    input.setRangeText('{' + name + '}', start, end, 'end'); templateDrafts[selectedTemplate] = input.value; input.focus(); renderSettingsPreview();
+  });
+  $('variable-buttons').append(button);
+}
+$('template-type').addEventListener('change', () => {
+  templateDrafts[selectedTemplate] = $('template-text').value;
+  selectedTemplate = $('template-type').value;
+  $('template-text').value = templateDrafts[selectedTemplate]; choosePreviewJob(); renderSettingsPreview();
+});
+$('template-text').addEventListener('input', () => { templateDrafts[selectedTemplate] = $('template-text').value; renderSettingsPreview(); });
+$('preview-job').addEventListener('change', renderSettingsPreview);
+['article-name', 'article-number'].forEach(id => $(id).addEventListener('input', renderSettingsPreview));
+$('reset-template').addEventListener('click', () => {
+  templateDrafts[selectedTemplate] = defaults[selectedTemplate]; $('template-text').value = defaults[selectedTemplate]; renderSettingsPreview();
+});
+$('apply-settings').addEventListener('click', () => {
+  if ($('apply-settings').disabled) return;
+  settings.articleName = $('article-name').value.trim(); settings.articleNumber = $('article-number').value.trim();
+  // Apply only the selected template, so an invalid draft in another tab cannot leak.
+  settings.templates[selectedTemplate] = $('template-text').value;
+  for (const job of jobs) for (const mode of ['service', 'fee']) {
+    const draft = drafts.get(draftKey(job, mode));
+    if (draft && !draft.textDirty && activeTemplate(job, mode) === selectedTemplate) {
+      draft.text = resolveTemplate(settings.templates[selectedTemplate], job, draft.scope, draft).text;
+    }
+  }
+  renderArticle(); toast('Artikelzuordnung und ausgewählte Vorlage in der Vorschau angewendet. Bestehende Belege bleiben unverändert.');
+});
+renderArticle();
+showView('list');
+openJob(jobs[0].id);
+
+</script>
+</body>
+</html>
