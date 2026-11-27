@@ -368,6 +368,10 @@ final class AssignmentPage
             if ($shop === null) {
                 throw new DomainException('WooCommerce-Shop nicht vorhanden oder nicht freigegeben.');
             }
+            if ($cmd === 'stock_set') {
+                // Stock bookings run on the legacy connection; never wrap them in a Database transaction.
+                return ['ok' => true, 'error' => null] + $this->setStock($post);
+            }
 
             $store = new ShopCategoryStore($this->db, $shopId);
             $result = $this->transactional(fn (): array => match ($cmd) {
@@ -396,6 +400,44 @@ final class AssignmentPage
         } catch (Throwable $error) {
             return ['ok' => false, 'error' => $this->errorMessage($error)];
         }
+    }
+
+    private function setStock(array $post): array
+    {
+        if (!$this->canBookStock()) {
+            throw new DomainException('Keine Berechtigung fuer Lagerbuchungen.');
+        }
+        $id = $this->integer($post['article'] ?? null, 1);
+        $counts = $this->parseCounts($post['counts'] ?? null);
+        $row = $this->db->fetchRow(
+            'SELECT id, nummer, projekt, lagerartikel, chargenverwaltung, mindesthaltbarkeitsdatum, seriennummern'
+            . ' FROM artikel WHERE id = :article AND geloescht = 0',
+            ['article' => $id]
+        );
+        if (!$row || !$this->app->erp->UserProjektRecht((int) $row['projekt'])) {
+            throw new DomainException('Artikel nicht vorhanden oder nicht freigegeben.');
+        }
+        $result = (new StockCorrection($this->db, $this->app->erp))->correct($id, $counts);
+        return ['article' => $id, 'cell' => $this->stockCell($row, $result['places'], true)];
+    }
+
+    /**
+     * @return list<array{place:int, expected:string, target:string}>
+     */
+    private function parseCounts(mixed $raw): array
+    {
+        $entries = is_string($raw) && $raw !== '' ? explode(';', $raw) : [];
+        if ($entries === [] || count($entries) > 50) {
+            throw new DomainException('Ungueltige Eingabe.');
+        }
+        $counts = [];
+        foreach ($entries as $entry) {
+            if (!preg_match('/^(\d+):(-?\d+(?:\.\d+)?):([0-9]+(?:[.,][0-9]+)?)$/D', $entry, $match)) {
+                throw new DomainException('Ungueltige Eingabe.');
+            }
+            $counts[] = ['place' => (int) $match[1], 'expected' => $match[2], 'target' => $match[3]];
+        }
+        return $counts;
     }
 
     private function transactional(callable $write): mixed

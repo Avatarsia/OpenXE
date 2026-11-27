@@ -6927,7 +6927,7 @@ class Artikel extends GenArtikel {
         return new JsonResponse(['ok' => false, 'error' => 'Diese Aktion erfordert POST.']);
       }
       $post = [];
-      foreach (['csrf_token', 'shop', 'article', 'category', 'enabled', 'name', 'parent', 'sort', 'number'] as $key) {
+      foreach (['csrf_token', 'shop', 'article', 'category', 'enabled', 'name', 'parent', 'sort', 'number', 'counts'] as $key) {
         $post[$key] = $secure->GetPOST($key, '', '', 1);
       }
       return new JsonResponse($page->handle($cmd, $post));

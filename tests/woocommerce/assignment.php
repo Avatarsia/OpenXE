@@ -3,6 +3,7 @@
 
 use Xentral\Components\WooCommerce\AssignmentPage;
 use Xentral\Components\WooCommerce\ShopCategoryStore;
+use Xentral\Components\WooCommerce\StockCorrection;
 use Xentral\Components\WooCommerce\VisibilityQueue;
 
 require_once __DIR__ . '/fixtures/assignment.php';
@@ -243,6 +244,60 @@ $tests = [
         $html = $page->render();
         expect(1, $db->stockQueries);
         expect(3, substr_count($html, 'class="wc-col-stock"><form'));
+    },
+    'stock_set_books_difference_and_returns_new_cell' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '7.0000');
+        $result = assignmentCommand($page, 'stock_set', ['counts' => '1:7.0000:5']);
+        expect(true, $result['ok']);
+        expect(9, $result['article']);
+        expect([['aus', 9, 1, 2.0, 4, StockCorrection::REASON]], $app->erp->bookings);
+        expect(true, str_starts_with($result['cell'], '<td class="wc-col-stock">'));
+        expect(true, str_contains($result['cell'], 'data-place="1" data-expected="5.0000" value="5"'));
+    },
+    'stock_set_requires_token_and_lager_rights' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '7.0000');
+        expect(false, assignmentCommand($page, 'stock_set', ['counts' => '1:7.0000:5', 'csrf_token' => 'wrong'])['ok']);
+        $app->erp->rights = ['artikel', 'onlineshops', 'lager/buchenauslagern'];
+        $result = assignmentCommand($page, 'stock_set', ['counts' => '1:7.0000:5']);
+        expect(false, $result['ok']);
+        expect('Keine Berechtigung fuer Lagerbuchungen.', $result['error']);
+        expect([], $app->erp->bookings);
+    },
+    'stock_set_respects_article_project_right' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '7.0000');
+        $app->erp->projects = [3];
+        $result = assignmentCommand($page, 'stock_set', ['counts' => '1:7.0000:5']);
+        expect(false, $result['ok']);
+        expect('Artikel nicht vorhanden oder nicht freigegeben.', $result['error']);
+        expect([], $app->erp->bookings);
+    },
+    'stock_set_rejects_malformed_counts' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '7.0000');
+        foreach (['1:7:abc', '', '1:7', '1:7:5;;2:1:1', str_repeat('1:7:5;', 50) . '1:7:5'] as $counts) {
+            $result = assignmentCommand($page, 'stock_set', ['counts' => $counts]);
+            expect(false, $result['ok']);
+            expect('Ungueltige Eingabe.', $result['error']);
+        }
+        expect([], $app->erp->bookings);
+    },
+    'stock_set_does_not_open_a_database_transaction' => function (): void {
+        [$page, $db] = assignmentSetup();
+        $db->addStock(9, 1, '7.0000');
+        expect(true, assignmentCommand($page, 'stock_set', ['counts' => '1:7.0000:6,5'])['ok']);
+        expect(0, $db->transactions);
+    },
+    'stock_set_reports_partial_failure_text' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '5.0000');
+        $db->addStock(9, 2, '3.0000');
+        $app->erp->failAt = 2;
+        $result = assignmentCommand($page, 'stock_set', ['counts' => '1:5.0000:4;2:3.0000:1']);
+        expect(false, $result['ok']);
+        expect(true, str_starts_with($result['error'], 'Teilweise gebucht (A-01). Fehler bei B-01:'));
     },
 ];
 
