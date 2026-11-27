@@ -1,141 +1,128 @@
+<link rel="stylesheet" type="text/css" href="./css/upgrade.css">
+
 <div id="tabs">
     <ul>
-        <li><a href="#tabs-1"></a></li>
+        <li><a href="#tabs-1">{|Upgrader|}</a></li>
     </ul>
-    <!-- Example for multiple tabs
-    <ul hidden">
-        <li><a href="#tabs-1">First Tab</a></li>
-        <li><a href="#tabs-2">Second Tab</a></li>
-    </ul>
-    -->
     <div id="tabs-1">
         [MESSAGE]
-        <div class="row">
-        	<div class="row-height">
-        		<div class="col-xs-14 col-md-12 col-md-height">
-        			<div class="inside inside-full-height">
-        				<fieldset>
-                            <legend>{|OpenXE Upgrade-System|}</legend>
-Das Upgrade funktioniert in 2 Schritten: Dateien aktualisieren, Datenbank auffrischen. Wenn das Upgrade lange l&auml;uft, kann der Fortschritt in einem neuen Fenster mit "Anzeige auffrischen" angezeigt werden.<br><br>
-Falls nach einem Abbruch oder schwerwiegenden Fehler kein Upgrade möglich ist, im Hauptordner den Ordner ".git" l&ouml;schen und das Upgrade in der Konsole erneut durchf&uuml;hren.
-Dazu im Unterordner "upgrade" diesen Befehl starten: <pre>./upgrade.sh -do</pre>
-                        </fieldset>
-        				<fieldset>
-                            <legend>{|Zweigauswahl|}</legend>
-Ab der Version 1.13 werden mehrere Zweige unterstützt. Beim Wechsel des Zweigs, i.d.R. auf eine höhere Version, wird eine Kompatibilitätsprüfung durchgeführt, bei Erfolg eine Migration, dann das eigentlich Upgrade. Zweige sind untereinander nicht kompatibel, ein Wechsel auf einen alten Zweig ist in der Regel nicht möglich.<br><br>
-Über die Konsole kann alternativ der Zweigwechsel im Unterordner "upgrade" mit diesen Befehl gestartet werde: <pre>./upgrade.sh -do -m BRANCHNAME</pre>
-<br>
-<font color="red">Vor dem Zweigwechsel IMMER ein Backup erstellen!</font>
-                        </fieldset>
+        <form action="" method="post">
+            <input type="hidden" name="csrf_token" value="[CSRF_TOKEN]">
+
+            <!-- 1. Kompaktes Cockpit: Status + Version + Aktionen -->
+            <section class="card cockpit-card cockpit-[STATUS_LEVEL]" role="status">
+                <div class="cockpit-top">
+                    <div class="cockpit-status">
+                        <div class="cockpit-headline">
+                            <span>[STATUS_HEADLINE]</span>
+                            <span class="pill pill-warning" [LOCAL_BRANCH_VISIBLE]>[LOCAL_BRANCH]</span>
+                        </div>
+                        <div class="cockpit-sub">[STATUS_MESSAGE]</div>
+                        <div class="cockpit-guidance"><strong>[GUIDANCE_TITLE]:</strong> [GUIDANCE_MESSAGE]</div>
                     </div>
-           		</div>
-       		</div>
-   		</div>
-        <form action="" method="post">
-            [FORMHANDLEREVENT]
-            <div class="row">
-	        	<div class="row-height">
-	        		<div class="col-xs-14 col-md-12 col-md-height">
-	        			<div class="inside inside-full-height">
-                            <div class="row">
-	                        	<div class="row-height">
-	                        		<div class="col-xs-14 col-md-12 col-md-height">
-	                        			<div class="inside inside-full-height">
-	                        				<fieldset>
-                                                <legend>{|Aktueller Zweig|}</legend>
-                                                <table width="100%" border="0" class="mkTableFormular">
-                                                    <b>OpenXE [CURRENTBRANCH]</b>
-                                                </table>
-                                            </fieldset>
-                                        </div>
-                               		</div>
-                           		</div>
-                       		</div>
-                            <div class="row">
-	                        	<div class="row-height">
-	                        		<div class="col-xs-14 col-md-12 col-md-height">
-	                        			<div class="inside inside-full-height">
-	                        				<fieldset>
-                                                <legend>{|Aktuelle Version|}</legend>
-                                                <table width="100%" border="0" class="mkTableFormular">
-                                                    <b>OpenXE [CURRENT]</b>
-                                                </table>
-                                            </fieldset>
-                                        </div>
-                               		</div>
-                           		</div>
-                       		</div>
-                            <div class="row">
-	                        	<div class="row-height">
-	                        		<div class="col-xs-14 col-md-12 col-md-height">
-	                        			<div class="inside inside-full-height">
-	                        				<fieldset>
-                                                <legend>{|Verf&uuml;gbare Zweige|}</legend>
-                                                [BRANCHES]
-                                            </fieldset>
-                                        </div>
-                               		</div>
-                           		</div>
-                       		</div>
-                            <div class="row">
-	                        	<div class="row-height">
-	                        		<div class="col-xs-14 col-md-12 col-md-height">
-	                        			<div class="inside inside-full-height">
-	                        				<fieldset>
-                                                <legend>{|Ausgabe|}</legend>
-                                                <table width="100%" border="0" class="mkTableFormular">
-[OUTPUT_FROM_CLI]
-                                                </table>
-                                            </fieldset>
-                                        </div>
-                               		</div>
-                           		</div>
-                       		</div>
-                   		</div>
-               		</div>               	
-	            	<div class="col-xs-14 col-md-2 col-md-height">
-            			<div class="inside inside-full-height">
-            				<fieldset>
-                                <legend>{|Aktionen|}</legend>
-                                <table width="100%" border="0" class="mkTableFormular">
-                                    <tr><td colspan=2><button name="submit" value="refresh" class="ui-button-icon" style="width:100%;">Anzeige auffrischen</button></td></tr>
-                                    <tr><td colspan=2><button name="submit" value="check_upgrade" class="ui-button-icon" style="width:100%;">Upgrades pr&uuml;fen</button></td></tr>
-                                    <tr><td style="width:100%;">{|Upgrade-Details anzeigen|}:</td><td><input type="checkbox" name="details_anzeigen" value=1 [DETAILS_ANZEIGEN] size="20"></td></tr>
-                                    <tr [UPGRADE_VISIBLE]><td colspan=2><button name="submit" formtarget="_blank" value="do_upgrade" class="ui-button-icon" style="width:100%;">UPGRADE</button></td></tr>
-                                    <tr [UPGRADE_VISIBLE]><td style="width:100%;">{|Erzwingen (-f)|}:</td><td><input type="checkbox" name="erzwingen" value=1 [ERZWINGEN] size="20"></td></tr>
-                                    <tr><td colspan=2><button name="submit" value="check_db" class="ui-button-icon" style="width:100%;">Datenbank pr&uuml;fen</button></td></tr>
-                                    <tr><td style="width:100%;">{|Datenbank-Details anzeigen|}:</td><td><input type="checkbox" name="db_details_anzeigen" value=1 [DB_DETAILS_ANZEIGEN] size="20"></td></tr>
-                                    <tr [UPGRADE_DB_VISIBLE]><td colspan=2><button name="submit" formtarget="_blank" value="do_db_upgrade" class="ui-button-icon" style="width:100%;">Datenbank UPGRADE</button></td></tr>
-                                </table>
-                            </fieldset>
+                    <div class="cockpit-meta">
+                        <div class="ver-strip" title="[REMOTE_HOST]">
+                            <span class="ver-muted">[APP_VERSION]</span>
+                            <span class="mono">[LOCAL_HASH_SHORT]</span>
+                            <span class="ver-arrow">&rarr;</span>
+                            <strong>[REMOTE_BRANCH]</strong>
+                            <span class="pill [STEP_FILES_PILL_CLASS]">[STEP_FILES_PILL_TEXT]</span>
                         </div>
-               		</div>
-               	</div>	
-            </div>
-         </form>
-    </div>
-    <!-- Example for 2nd tab
-    <div id="tabs-2">
-        [MESSAGE]
-        <form action="" method="post">
-            [FORMHANDLEREVENT]
-            <div class="row">
-            	<div class="row-height">
-            		<div class="col-xs-12 col-md-12 col-md-height">
-            			<div class="inside inside-full-height">
-            				<fieldset>
-                                <legend>{|...|}</legend>
-                                <table width="100%" border="0" class="mkTableFormular">
-                                    ...
-                                </table>
-                            </fieldset>
+                        <button type="button" id="refresh-btn" class="cockpit-icon-btn" title="{|Anzeige neu laden|}" aria-label="{|Anzeige neu laden|}">&#x21bb;</button>
+                    </div>
+                </div>
+
+                <div class="cockpit-actions">
+                    <button name="submit" value="[UPGRADE_BUTTON_ACTION]" class="step-btn btn-upgrade-primary">[UPGRADE_BUTTON_LABEL]</button>
+                    <button name="submit" value="[UPGRADE_DB_BUTTON_ACTION]" class="step-btn btn-upgrade-secondary">[UPGRADE_DB_BUTTON_LABEL]</button>
+                    <span class="db-status-inline">DB: <span class="pill [STEP_DB_PILL_CLASS]">[STEP_DB_PILL_TEXT]</span></span>
+                    <div id="force-wrap" class="force-wrap [FORCE_HIGHLIGHT_CLASS]" [UPGRADE_FORCE_VISIBLE]><label>[FORCE_CHECKBOX] {|Erzwingen (-f)|}</label></div>
+                    <label class="details-toggle" title="{|Ausführliche Ausgabe im Protokoll aktivieren|}">
+                        <input type="checkbox" name="details_anzeigen" value="1" [DETAILS_ANZEIGEN]> {|Details|}
+                    </label>
+                </div>
+            </section>
+
+            <!-- 2. Ein-Seiten-Arbeitsfläche: Links Diagnose + Protokoll, Rechts Quelle + Rollback + Hilfe -->
+            <div class="cockpit-grid">
+                <div class="cockpit-main">
+                    <!-- Diagnose: Fehler, Restdifferenzen, geänderte Dateien (nur sichtbar wenn relevant) -->
+                    <section class="card diagnostics-card" [DIAGNOSTICS_VISIBLE] aria-labelledby="diagnostics-title">
+                        <h3 class="card-title" id="diagnostics-title">{|Diagnose &amp; Details|}</h3>
+                        <div class="card-body">[DIAGNOSTICS_HTML]</div>
+                    </section>
+
+                    <!-- Protokoll -->
+                    <section class="card log-card" aria-labelledby="log-title">
+                        <div class="log-head-row">
+                            <div class="log-head-left">
+                                <span class="card-title-inline" id="log-title">{|Protokoll|}</span>
+                                <span class="log-meta">[LAST_ACTION] &middot; [LAST_RUN]</span>
+                            </div>
+                            <div class="log-head-actions">
+                                <button type="button" id="log-copy-btn" class="log-tool-btn" title="{|Vollständiges Protokoll kopieren|}">{|Kopieren|}</button>
+                                <button type="button" id="log-expand-btn" class="log-tool-btn">{|Erweitern|}</button>
+                                <a href="?module=upgrade&action=list&ajax=download_log" class="log-download" download>&#128229; {|Download|}</a>
+                            </div>
                         </div>
-               		</div>
-               	</div>	
+                        <div class="log-toolbar">
+                            <div class="log-filters" role="group" aria-label="{|Log-Filter|}">
+                                <button type="button" class="log-filter-btn is-active" data-log-filter="all">{|Alle|}</button>
+                                <button type="button" class="log-filter-btn" data-log-filter="errors">{|Fehler &amp; Warnungen|}</button>
+                                <button type="button" class="log-filter-btn" data-log-filter="diffs">{|DB-Differenzen|}</button>
+                            </div>
+                            <input type="text" id="log-search" class="log-search" placeholder="{|Log durchsuchen|}…" aria-label="{|Log durchsuchen|}">
+                        </div>
+                        <div class="log-box" id="log-box">[OUTPUT_FROM_CLI]</div>
+                    </section>
+                </div>
+
+                <aside class="cockpit-side">
+                    <!-- Quelle & Zweig -->
+                    <section class="card side-card" aria-labelledby="source-title">
+                        <div class="side-card-head">
+                            <h3 class="card-title-inline" id="source-title">{|Quelle &amp; Zweig|}</h3>
+                            <span class="pill pill-info">[CURRENTBRANCH]</span>
+                        </div>
+                        <dl class="kv-grid kv-compact">
+                            <dt>{|Repo|}</dt><dd title="[REMOTE_HOST]"><span class="mono">[REMOTE_HOST_SHORT]</span></dd>
+                            <dt>{|Lokal|}</dt><dd><span class="mono">[LOCAL_HASH_SHORT]</span> <span class="kv-muted">&middot; [LOCAL_COMMIT]</span></dd>
+                            <dt>Remote</dt><dd><span class="mono">[REMOTE_HASH_SHORT]</span> <span class="kv-muted">([REMOTE_BRANCH])</span></dd>
+                        </dl>
+                        <div class="branch-switch-wrap" [BRANCH_SWITCH_VISIBLE]>
+                            <p class="branch-switch-warn">{|Vor Zweigwechsel Backup erstellen!|}</p>
+                            <div class="branch-list">[BRANCHES]</div>
+                        </div>
+                    </section>
+
+                    <!-- Rollback -->
+                    <section class="card side-card rollback-card" [ROLLBACK_VISIBLE] aria-labelledby="rollback-title">
+                        <div class="side-card-head">
+                            <h3 class="card-title-inline" id="rollback-title">{|Rollback|}</h3>
+                            <span class="pill pill-warning">{|Nur Code|}</span>
+                        </div>
+                        <div class="tag-select-wrap">[ROLLBACK_TAGS_SELECT]</div>
+                        <button name="submit" value="rollback_to_tag" class="action-btn btn-rollback btn-full">&#128281; {|Rollback durchführen|}</button>
+                        <p class="side-note">{|DB-Änderungen werden nicht rückgängig gemacht.|}</p>
+                    </section>
+
+                    <!-- Hilfe & CLI (standardmäßig eingeklappt) -->
+                    <section class="card help-card" aria-labelledby="help-title">
+                        <details>
+                            <summary id="help-title">{|Hilfe &amp; CLI-Befehle|}</summary>
+                            <div class="help-body">
+                                <strong>{|Komplett-Upgrade|}</strong> {|aktualisiert Dateien (Git) und Datenbank gemeinsam.|}
+                                <strong>{|Nur Datenbank|}</strong> {|prüft oder repariert ausschließlich das Schema.|}
+                                <br><br>
+                                {|Konsole im Ordner|} <code>upgrade</code>:<br>
+                                <code>./upgrade.sh -do</code> &middot; <code>./upgrade.sh -db -do</code>
+                            </div>
+                        </details>
+                    </section>
+                </aside>
             </div>
-            <input type="submit" name="submit" value="Speichern" style="float:right"/>
         </form>
     </div>
-    -->
 </div>
 
+<script src="./js/upgrade.js"></script>

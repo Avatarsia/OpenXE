@@ -45,7 +45,7 @@ function git(string $command, &$output, bool $show_command, bool $show_output, s
     if ($show_command) {
         echo_out("git ".$command."\n");
     }
-    exec("git ".$command,$output,$retval);
+    exec("git ".$command." 2>&1",$output,$retval);
     if (!empty($output)) {
         if ($show_output || $retval != 0) {
             echo_output($output);
@@ -181,6 +181,13 @@ if (php_sapi_name() == "cli") {
 
 function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do_git, bool $export_db, bool $check_db, bool $strict_db, bool $do_db, bool $force, bool $connection, bool $origin, bool $drop_keys, bool $do_migrate, string $upgrade_branch = null) {
 
+    GLOBAL $upgrade_echo_out_file_name, $mustal_replacers;
+
+    // Collected across the whole run to determine the return code:
+    // $errors -> return -1, $warnings -> return 1, otherwise return 0
+    $errors = false;
+    $warnings = false;
+
     $mainfolder = dirname($directory);
     $datafolder = $directory."/data";
     $lockfile_name = $datafolder."/.in_progress.flag";
@@ -204,30 +211,55 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 return(-1);
             }
             $remotes = json_decode($remote_info_contents, true);
-            $config = file_get_contents($mainfolder."/conf/user.inc.php");
-            preg_match("/WFuserdata='(?<path>.*?)';/", $config, $matches);
-            $uhash = file_get_contents($matches['path']."/uhash.txt");
-            $ch = curl_init('https://upgrade.openxe-dev.org/remotes.php');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, array('uhash'=>$uhash));
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            $response = curl_exec($ch);
-            if (!$response) {
-                $error_msg = "Fetch additional remotes failed.";
-                if (!empty(curl_error($ch))) {
-                    $error_msg .= " ".curl_error($ch);
+            if (!is_array($remotes)) {
+                abort("Invalid remote list in $remote_file_name");
+                return(-1);
+            }
+            $has_upstream_remote = false;
+            foreach ($remotes as $r) {
+                if (is_array($r) && stripos((string)($r['host'] ?? ''), 'openxe-org') !== false) {
+                    $has_upstream_remote = true;
+                    break;
                 }
-                if (!empty(curl_getinfo($ch)['http_code'])) {
-                    $error_msg .= " (HTTP ".curl_getinfo($ch)['http_code'].")";
-                }
-                echo_out($error_msg."\n");
+            }
+            if (!$has_upstream_remote) {
+                echo_out("Skipping external openxe-dev.org remote lookup (custom upgrade source).\n");
             } else {
-                $additional_remotes = json_decode($response, true);
-                if (!empty($additional_remotes['success'])) {
-                    $remotes = array_merge($remotes, $additional_remotes['remotes']);
-                    echo_out("Fetched additional remotes.\n");
+                $uhash = '';
+                $user_config_file = $mainfolder."/conf/user.inc.php";
+                $config = is_readable($user_config_file) ? @file_get_contents($user_config_file) : false;
+                if ($config !== false && preg_match("/WFuserdata='(?<path>.*?)';/", $config, $matches) && !empty($matches['path'])) {
+                    $uhash_file = $matches['path']."/uhash.txt";
+                    if (is_readable($uhash_file)) {
+                        $uhash_contents = @file_get_contents($uhash_file);
+                        if ($uhash_contents !== false) {
+                            $uhash = $uhash_contents;
+                        }
+                    }
+                }
+                $ch = curl_init('https://upgrade.openxe-dev.org/remotes.php');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, array('uhash'=>$uhash));
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+                $response = curl_exec($ch);
+                if (!$response) {
+                    $error_msg = "Fetch additional remotes failed.";
+                    if (!empty(curl_error($ch))) {
+                        $error_msg .= " ".curl_error($ch);
+                    }
+                    if (!empty(curl_getinfo($ch)['http_code'])) {
+                        $error_msg .= " (HTTP ".curl_getinfo($ch)['http_code'].")";
+                    }
+                    echo_out($error_msg."\n");
                 } else {
-                    echo_out("No additional remotes.\n".$additional_remotes['message']."\n");
+                    $additional_remotes = json_decode($response, true);
+                    if (!empty($additional_remotes['success']) && !empty($additional_remotes['remotes']) && is_array($additional_remotes['remotes'])) {
+                        $remotes = array_merge($remotes, $additional_remotes['remotes']);
+                        echo_out("Fetched additional remotes.\n");
+                    } else {
+                        echo_out("No additional remotes.\n".($additional_remotes['message'] ?? '')."\n");
+                    }
                 }
             }
             $remotes = array_values(array_map("unserialize", array_unique(array_map("serialize", $remotes))));
@@ -265,8 +297,9 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
         echo_out("--------------- Checking git ---------------\n");
         $retval = git("log HEAD --", $output,$verbose,false,"");
-        // Not a git repository -> Create it and then go ahead
-        if ($retval == 128) {
+        // Not a git repository (no .git in the main folder) -> Create it and then go ahead.
+        // A retval 128 with an existing .git means a real git error (e.g. dubious ownership, corrupt repo)
+        if ($retval == 128 && !file_exists($mainfolder."/.git")) {
             if (!$do_git) {
                 abort("Git not initialized, use -do to initialize.");
                 return(-1);
@@ -311,14 +344,16 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
         if ($verbose) {
             echo_out("--------------- Upgrade history ---------------\n");
-            $retval = git("log --date=short-local --pretty=\"%cd (%h): %s\" HEAD --not HEAD~5 --",$output,$verbose,$verbose,"Error while showing history!");
+            // Quoting noetig: unquotete Klammern in (%h) sind in der Shell
+            // ein Syntax-Fehler (exec laeuft ueber /bin/sh).
+            $retval = git("log --date=short-local --pretty=\"%cd%x20(%h):%x20%s\" HEAD --not HEAD~5 --",$output,$verbose,$verbose,"Error while showing history!");
             if ($retval != 0) {
                 abort("");
                 return(-1);
             }
         } else {
             echo_out("--------------- Current version ---------------\n");
-            $retval = git("log -1 --date=short-local --pretty=\"%cd (%h): %s\" HEAD --",$output,$verbose,true,"Error while showing history!");
+            $retval = git("log -1 --date=short-local --pretty=\"%cd%x20(%h):%x20%s\" HEAD --",$output,$verbose,true,"Error while showing history!");
             if ($retval != 0) {
                 return(-1);
             }
@@ -390,7 +425,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 $migration_result = upgrade_migrate();
                 if ($migration_result['result'] != 0) {
                     echo_out("--------------- Migration failed ---------------\n");
-                    abort($migration_check_result['message'], $verbose?$migration_check_result['dump']:false);
+                    abort($migration_result['message'] ?? 'Migration failed', $verbose ? ($migration_result['dump'] ?? null) : false);
                     return(-1);
                 }
             }
@@ -411,7 +446,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 return(-1);
             }
 
-            echo_out("--------------- Pulling files... ---------------\n");
+            echo_out("--------------- Fetching files... ---------------\n");
 
             if ($force) {
                 $retval = git("reset --hard",$output,$verbose,$verbose,"Error while resetting modified files!");
@@ -421,16 +456,55 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 }
             }
 
-            $retval = git("pull ".$remote_info['host']." ".$remote_info['branch'],$output,$verbose,$verbose,"Error while pulling files!");
+            // Fetch + reset --hard FETCH_HEAD instead of pull/merge so the
+            // upgrade still works when the remote branch was force-pushed
+            // (e.g. CI-built integration branches with rewritten history).
+            // Local edits are already guarded above by the modified-files check.
+            $retval = git("fetch ".$remote_info['host']." ".$remote_info['branch'],$output,$verbose,$verbose,"Error while fetching files!");
             if ($retval != 0) {
                 abort("");
                 return(-1);
             }
 
-            $retval = git("reset --hard",$output,$verbose,$verbose,"Error while applying files!");
+            // Skip the reset when the fetched head matches the current head (nothing to do)
+            $retval = git("rev-parse HEAD",$head_output,$verbose,false,"Error while checking files!");
             if ($retval != 0) {
                 abort("");
                 return(-1);
+            }
+            $retval = git("rev-parse FETCH_HEAD",$fetch_head_output,$verbose,false,"Error while checking files!");
+            if ($retval != 0) {
+                 abort("");
+                return(-1);
+            }
+
+            $is_detached_head = false;
+            $target_branch = trim((string)($remote_info['branch'] ?? ''));
+            if ($target_branch !== '') {
+                $retval = git("rev-parse --abbrev-ref HEAD", $branch_output, $verbose, false, "Error while checking git branch!");
+                if ($retval == 0 && isset($branch_output[0]) && trim($branch_output[0]) === 'HEAD') {
+                    $is_detached_head = true;
+                }
+            }
+
+            if ($is_detached_head) {
+                echo_out("Detached HEAD detected, re-attaching to branch '".$target_branch."'...\n");
+                $retval = git("checkout -B ".escapeshellarg($target_branch)." FETCH_HEAD", $output, $verbose, $verbose, "Error while re-attaching git branch!");
+                if ($retval != 0) {
+                    abort("");
+                    return(-1);
+                }
+                if ($head_output === $fetch_head_output) {
+                    echo_out("Already up to date.\n");
+                }
+            } elseif ($head_output === $fetch_head_output) {
+                echo_out("Already up to date.\n");
+            } else {
+                $retval = git("reset --hard FETCH_HEAD",$output,$verbose,$verbose,"Error while applying files!");
+                if ($retval != 0) {
+                     abort("");
+                    return(-1);
+                }
             }
 
             echo_out("--------------- Files upgrade completed ---------------\n");
@@ -443,9 +517,14 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
             // Remove files cache
             echo_out("--------------- Cleaning Filescache ---------------\n");
-            class UserdataInfo {
-                function __construct($dir) {
-                    require($dir."/../conf/user.inc.php");
+            if (!class_exists('UserdataInfo')) {
+                // conf/user.inc.php setzt $this->WF* per require im Konstruktor
+                // -> ab PHP 8.2 "Creation of dynamic property"-Deprecations.
+                #[\AllowDynamicProperties]
+                class UserdataInfo {
+                    function __construct($dir) {
+                        require($dir."/../conf/user.inc.php");
+                    }
                 }
             }
 
@@ -457,6 +536,9 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
             foreach ($cache_files as $cache_file) {
                 $filename = $udi->WFuserdata."/tmp/".$udi->WFdbname."/".$cache_file;
+                if (!file_exists($filename)) {
+                    continue;
+                }
                 $delete_cache_file_result = @unlink($filename);
                 if (!$delete_cache_file_result) {
                     echo_out("Failed to delete ".$filename."! Please delete manually...\n");
@@ -483,7 +565,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
             echo_out("--------------- Pending upgrades: ---------------\n");
 
-            $retval = git("log --date=short-local --pretty=\"%cd (%h): %s\" FETCH_HEAD --not HEAD",$output,$verbose,true,"Error while fetching files!");
+            $retval = git("log --date=short-local --pretty=\"%cd%x20(%h):%x20%s\" FETCH_HEAD --not HEAD",$output,$verbose,true,"Error while fetching files!");
             if (empty($output)) {
                 echo_out("No upgrades pending.\n");
             }
@@ -512,9 +594,14 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
         } else {
 
-            class DatabaseConnectionInfo {
-                function __construct($dir) {
-                    require($dir."/../conf/user.inc.php");
+            if (!class_exists('DatabaseConnectionInfo')) {
+                // conf/user.inc.php setzt $this->WF* per require im Konstruktor
+                // -> ab PHP 8.2 "Creation of dynamic property"-Deprecations.
+                #[\AllowDynamicProperties]
+                class DatabaseConnectionInfo {
+                    function __construct($dir) {
+                        require($dir."/../conf/user.inc.php");
+                    }
                 }
             }
 
@@ -529,11 +616,17 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
         require_once($directory.'/../vendor/mustal/mustal_mysql_upgrade_tool.php');
 
         echo_out("--------------- Loading from database '$schema@$host'... ---------------\n");
-        $db_def = mustal_load_tables_from_db($host, $schema, $user, $passwd, $mustal_replacers);
+        try {
+            $db_def = mustal_load_tables_from_db($host, $schema, $user, $passwd, $mustal_replacers);
+        }
+        catch (Throwable $e) {
+            abort("Could not load from $schema@$host: ".$e->getMessage());
+            return(-1);
+        }
 
         if (empty($db_def)) {
-            echo_out("Could not load from $schema@$host\n");
-            exit;
+            abort("Could not load from $schema@$host");
+            return(-1);
         }
 
         if ($export_db) {
@@ -562,13 +655,18 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
             foreach ($compare_differences as $compare_difference) {
                 $comma = "";
                 foreach ($compare_difference as $key => $value) {
+                    if (is_array($value)) {
+                        $value = implode(',',$value);
+                    } elseif ($value === null) {
+                        $value = 'NULL';
+                    }
                     echo_out($comma."$key => [$value]");
                     $comma = ", ";
                 }
                 echo_out("\n");
             }
         }
-        echo_out((empty($compare_differences)?0:count($compare_differences))." differences.\n");
+        echo_out((empty($compare_differences)?0:count($compare_differences))." differences (in DB not in JSON).\n");
 
         echo_out("--------------- Comparing database '$schema@$host' vs. JSON '".$compare_def['database']."@".$compare_def['host']."' ---------------\n");
 
@@ -579,6 +677,8 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 foreach ($compare_difference as $key => $value) {
                     if (is_array($value)) {
                         $value = implode(',',$value);
+                    } elseif ($value === null) {
+                        $value = 'NULL';
                     }
                     echo_out($comma."$key => [$value]");
                     $comma = ", ";
@@ -586,7 +686,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 echo_out("\n");
             }
         }
-        echo_out((empty($compare_differences)?0:count($compare_differences))." differences.\n");
+        echo_out((empty($compare_differences)?0:count($compare_differences))." differences (in JSON not in DB).\n");
 
         echo_out("--------------- Calculating database upgrade for '$schema@$host'... ---------------\n");
 
@@ -614,54 +714,107 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
         if ($do_db) {
             echo_out("--------------- Executing database upgrade for '$schema@$host' database... ---------------\n");
              // First get the contents of the database table structure
-            $mysqli = mysqli_connect($host, $user, $passwd, $schema);
+            $connect_error = "";
+            try {
+                $mysqli = mysqli_connect($host, $user, $passwd, $schema);
+            }
+            catch (Throwable $e) {
+                $mysqli = false;
+                $connect_error = " ".$e->getMessage();
+            }
 
             /* Check if the connection succeeded */
             if (!$mysqli) {
-                echo ("Failed to connect!\n");
+                echo_out("Failed to connect!".$connect_error."\n");
+                $errors = true;
             } else  {
 
                 $counter = 0;
                 $error_counter = 0;
                 $number_of_statements = count($upgrade_sql);
+                // When writing to a log file, avoid \r progress spam:
+                // one status line every 10 steps, errors always as their own line
+                $progress_to_file = ($upgrade_echo_out_file_name != "");
 
                 foreach ($upgrade_sql as $sql) {
                     $counter++;
-                    echo_out("\rUpgrade step $counter of $number_of_statements... ");
+                    if ($progress_to_file) {
+                        if ($counter % 10 == 0 || $counter == $number_of_statements) {
+                            echo_out("Upgrade step $counter of $number_of_statements...\n");
+                        }
+                    } else {
+                        echo_out("\rUpgrade step $counter of $number_of_statements... ");
+                    }
                     if ($verbose) {
                         echo_out("\n".$sql."\n");
                     }
                     try {
                         $query_result = mysqli_query($mysqli, $sql);
                         if (!$query_result) {
-                            $error = " not ok: ". mysqli_error($mysqli);
-                            echo_out($error);
-                            echo_out("\n");
+                            if ($progress_to_file) {
+                                echo_out("Upgrade step $counter of $number_of_statements not ok: ". mysqli_error($mysqli)."\n");
+                            } else {
+                                echo_out(" not ok: ". mysqli_error($mysqli)."\n");
+                            }
+                            echo_out("Failed SQL: " . preg_replace('/\s+/', ' ', trim($sql)) . "\n");
                             $error_counter++;
-                        } else {
+                        } else if (!$progress_to_file) {
                             echo_out("ok.\r");
                         }
                     }
-                    catch (Exception $e) {
-                        $error = " not ok: ". mysqli_error($mysqli);
-                        echo_out($error);
-                        echo_out("\n");
+                    catch (Throwable $e) {
+                        if ($progress_to_file) {
+                            echo_out("Upgrade step $counter of $number_of_statements not ok: ". $e->getMessage()."\n");
+                        } else {
+                            echo_out(" not ok: ". $e->getMessage()."\n");
+                        }
+                        echo_out("Failed SQL: " . preg_replace('/\s+/', ' ', trim($sql)) . "\n");
                         $error_counter++;
                     }
                 }
 
                 echo_out("\n");
                 echo_out("$error_counter errors.\n");
+                echo_out("Database upgrade errors: $error_counter\n");
                 if ($error_counter > 0) {
+                    $warnings = true;
 //                    echo_out("See 'errors.txt'\n");
                 }
 
                 echo_out("--------------- Checking database upgrade for '$schema@$host'... ---------------\n");
-                $db_def = mustal_load_tables_from_db($host, $schema, $user, $passwd, $mustal_replacers);
+                try {
+                    $db_def = mustal_load_tables_from_db($host, $schema, $user, $passwd, $mustal_replacers);
+                }
+                catch (Throwable $e) {
+                    echo_out("Could not load from $schema@$host: ".$e->getMessage()."\n");
+                    $db_def = array();
+                }
 
                 echo_out("--------------- Comparing database '$schema@$host' vs. JSON '".$compare_def['database']."@".$compare_def['host']."' ---------------\n");
-                $compare_differences = mustal_compare_table_array($compare_def,"in JSON",$db_def,"in DB",true,true);
-                echo_out((empty($compare_differences)?0:count($compare_differences))." differences.\n");
+                if (empty($db_def)) {
+                    $warnings = true;
+                } else {
+                    $compare_differences = mustal_compare_table_array($compare_def,"in JSON",$db_def,"in DB",true,true);
+                    $remaining_differences = (empty($compare_differences)?0:count($compare_differences));
+                    if ($remaining_differences > 0) {
+                        echo_out("--------------- Remaining differences after upgrade ---------------\n");
+                        foreach ($compare_differences as $compare_difference) {
+                            $comma = "";
+                            foreach ($compare_difference as $key => $value) {
+                                if (is_array($value)) {
+                                    $value = implode(',',$value);
+                                } elseif ($value === null) {
+                                    $value = 'NULL';
+                                }
+                                echo_out($comma."$key => [$value]");
+                                $comma = ", ";
+                            }
+                            echo_out("\n");
+                        }
+                        $warnings = true;
+                    }
+                    echo_out($remaining_differences." differences remaining after upgrade.\n");
+                }
             }
         } // $do_db
     } // $check_db
@@ -680,6 +833,12 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
     echo_out("--------------- Done! ---------------\n");
     echo_out("--------------- ".date("Y-m-d H:i:s")." ---------------\n");
+    if ($errors) {
+        return(-1);
+    }
+    if ($warnings) {
+        return(1);
+    }
     return(0);
 }
 
