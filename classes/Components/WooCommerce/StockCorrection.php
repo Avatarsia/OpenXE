@@ -14,6 +14,7 @@ final class StockCorrection
 {
     public const REASON = 'Inventur-Korrektur (WooCommerce-Uebersicht)';
     private const STALE = 'Bestand wurde zwischenzeitlich geaendert. Seite neu laden.';
+    private const INVALID_TARGET = 'Bitte eine Menge >= 0 mit hoechstens 4 Nachkommastellen eingeben.';
     private const EPSILON = 0.00005;
 
     public function __construct(private object $db, private object $erp)
@@ -110,8 +111,9 @@ final class StockCorrection
                 throw new DomainException('Ungueltige Eingabe.');
             }
             $seen[$placeId] = true;
-            if (!preg_match('/^\d+(?:[.,]\d{1,4})?$/D', $target)) {
-                throw new DomainException('Bitte eine Menge >= 0 mit hoechstens 4 Nachkommastellen eingeben.');
+            // A negative target is only accepted unchanged (dialog rows of places with negative stock).
+            if (!preg_match('/^-?\d+(?:[.,]\d{1,4})?$/D', $target)) {
+                throw new DomainException(self::INVALID_TARGET);
             }
             if ($placeId === 0) {
                 if ($current !== [] || abs((float) $expected) >= self::EPSILON) {
@@ -130,8 +132,15 @@ final class StockCorrection
             }
             $diff = round((float) str_replace(',', '.', $target) - $stock, 4);
             if (abs($diff) >= self::EPSILON) {
+                if (str_starts_with($target, '-')) {
+                    throw new DomainException(self::INVALID_TARGET);
+                }
                 $bookings[] = ['place' => $place, 'diff' => $diff];
             }
+        }
+        // Every currently stocked place must have been shown; a new place means the page is stale.
+        if (!isset($seen[0]) && array_diff(array_keys($current), array_keys($seen)) !== []) {
+            throw new DomainException(self::STALE);
         }
 
         $booked = [];

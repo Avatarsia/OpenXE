@@ -290,6 +290,14 @@ $tests = [
         expect(true, assignmentCommand($page, 'stock_set', ['counts' => '1:7.0000:6,5'])['ok']);
         expect(0, $db->transactions);
     },
+    'stock_set_accepts_unchanged_negative_place_from_dialog' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '5.0000');
+        $db->addStock(9, 2, '-2.0000');
+        $result = assignmentCommand($page, 'stock_set', ['counts' => '1:5.0000:4;2:-2.0000:-2']);
+        expect(true, $result['ok']);
+        expect([['aus', 9, 1, 1.0, 4, StockCorrection::REASON]], $app->erp->bookings);
+    },
     'stock_set_reports_partial_failure_text' => function (): void {
         [$page, $db, , $app] = assignmentSetup();
         $db->addStock(9, 1, '5.0000');

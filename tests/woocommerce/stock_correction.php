@@ -149,6 +149,19 @@ $tests = [
             fn () => $stock->correct(9, [count_(1, '5.0000', '4'), count_(2, '2.0000', '1')]));
         expect([], $erp->bookings);
     },
+    'unlisted_new_place_is_detected_as_stale' => function (): void {
+        [$stock, , $erp] = stockSetup([[9, 1, '5.0000'], [9, 2, '3.0000']]);
+        expectDomainError('Bestand wurde zwischenzeitlich geaendert. Seite neu laden.',
+            fn () => $stock->correct(9, [count_(1, '5.0000', '2')]));
+        expect([], $erp->bookings);
+    },
+    'unchanged_negative_place_is_accepted' => function (): void {
+        [$stock, , $erp] = stockSetup([[9, 1, '5.0000'], [9, 2, '-2.0000']]);
+        $stock->correct(9, [count_(1, '5.0000', '4'), count_(2, '-2.0000', '-2')]);
+        expect([['aus', 9, 1, 1.0, 4, StockCorrection::REASON]], $erp->bookings);
+        expectDomainError('Bitte eine Menge >= 0 mit hoechstens 4 Nachkommastellen eingeben.',
+            fn () => $stock->correct(9, [count_(1, '4.0000', '4'), count_(2, '-2.0000', '-1')]));
+    },
     'unknown_place_and_place_zero_with_places_are_rejected' => function (): void {
         [$stock, $db, $erp] = stockSetup([[9, 1, '5.0000']]);
         $db->article['lager_platz'] = '3';

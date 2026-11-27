@@ -432,7 +432,7 @@ final class AssignmentPage
         }
         $counts = [];
         foreach ($entries as $entry) {
-            if (!preg_match('/^(\d+):(-?\d+(?:\.\d+)?):([0-9]+(?:[.,][0-9]+)?)$/D', $entry, $match)) {
+            if (!preg_match('/^(\d+):(-?\d+(?:\.\d+)?):(-?[0-9]+(?:[.,][0-9]+)?)$/D', $entry, $match)) {
                 throw new DomainException('Ungueltige Eingabe.');
             }
             $counts[] = ['place' => (int) $match[1], 'expected' => $match[2], 'target' => $match[3]];
