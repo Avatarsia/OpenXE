@@ -80,7 +80,7 @@ final class Bootstrap
         );
     }
 
-    public function onInitBackupTask(ContainerInterface $container)
+    public static function onInitBackupTask(ContainerInterface $container)
     {
         /** @var ApplicationCore $app */
         $app = $container->get('LegacyApplication');
