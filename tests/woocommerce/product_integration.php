@@ -930,6 +930,37 @@ runTests([
             rmdir($directory);
         }
     },
+    'compact product Smarty JSON renders nested metadata' => static function () {
+        require_once dirname(__DIR__, 2) . '/vendor/smarty/smarty/libs/Smarty.class.php';
+        $directory = sys_get_temp_dir() . '/openxe-smarty-' . bin2hex(random_bytes(5));
+        mkdir($directory . '/smarty/templates', 0777, true);
+        try {
+            $article = remoteProduct();
+            $connector = productConnector([$article]);
+            $app = (object) ['erp' => new class($directory) {
+                private $directory;
+                public function __construct($directory) { $this->directory = $directory; }
+                public function GetTMP() { return $this->directory; }
+            }];
+            (new ReflectionProperty(Shopimporter_Woocommerce::class, 'app'))->setValue($connector, $app);
+
+            $render = new ReflectionMethod(Shopimporter_Woocommerce::class, 'renderArticleJson');
+            $result = $render->invoke(
+                $connector,
+                '{"meta_data":[{"key":"test_key","value":"Smarty {$artikel->nummer}"}]}',
+                $article,
+                'Artikel'
+            );
+            same(['meta_data' => [['key' => 'test_key', 'value' => 'Smarty PARENT']]], $result);
+        } finally {
+            foreach (glob($directory . '/smarty/templates/*') as $path) {
+                unlink($path);
+            }
+            rmdir($directory . '/smarty/templates');
+            rmdir($directory . '/smarty');
+            rmdir($directory);
+        }
+    },
     'actual remote source without optional Smarty meta_data exports successfully' => static function () {
         $article = remoteProduct();
         unset($article['meta_data']);

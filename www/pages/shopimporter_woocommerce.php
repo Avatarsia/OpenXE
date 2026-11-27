@@ -65,6 +65,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public $statusCompleted;
   public $priceType;
   public $feeArticleNumber = '';
+  public $filenamesmarty;
+  public $productsmarty;
+  public $metadatasmarty;
+  public $fileunique;
+  public $kategorienuebertragen;
+  public $timeout;
+  public $backorders;
   private $refundSync = false;
   private $categorySyncMode = 'additive';
   private $exportDownloads = false;
@@ -1238,9 +1245,15 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if ($template === null || $template === '') {
       return [];
     }
-    if (!is_array(json_decode($template, true))) {
+    $decoded = json_decode($template);
+    if (!is_array($decoded) && !is_object($decoded)) {
       throw new RuntimeException($name . '-Smarty-Template ist kein JSON-Array oder -Objekt.');
     }
+    // Whitespace after JSON object braces keeps them literal for Smarty.
+    $template = json_encode(
+      $decoded,
+      JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR
+    );
     $smarty = new Smarty;
     $smarty->setCompileDir($this->app->erp->GetTMP() . '/smarty/templates');
     $smarty->assign('artikel', (object) $article);
@@ -1983,7 +1996,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     }, $this->deliveryTimeMapping);
   }
 
-  function wordpress_request(string $endpoint, $postdata = null, $method = null, $getdata = null, string $content_disposition = null, string $content_type = null, $debug = false, $debugurl = null, bool $ssl_ignore = false, int $timeout_seconds = 30) {
+  function wordpress_request(string $endpoint, $postdata = null, $method = null, $getdata = null, ?string $content_disposition = null, ?string $content_type = null, $debug = false, $debugurl = null, bool $ssl_ignore = false, int $timeout_seconds = 30) {
     $baseUrl = rtrim((string) ($debugurl ?: $this->url), '/');
     $query = !empty($getdata) ? '?' . http_build_query($getdata, '', '&', PHP_QUERY_RFC3986) : '';
     $ch = curl_init($baseUrl . '/' . $this->wordpress_api_path . ltrim($endpoint, '/') . $query);
@@ -2009,7 +2022,6 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $raw = curl_exec($ch);
     $error = curl_error($ch);
     $information = curl_getinfo($ch);
-    curl_close($ch);
     $response = $raw === false ? null : json_decode($raw, true);
     $result = [
       'status' => $error === '' && $information['http_code'] >= 200 && $information['http_code'] <= 299 && is_array($response),
