@@ -1068,7 +1068,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     for ($i = 0; $i < $ctmp; $i++) {
       $return[$i] = new ArticleExportResult();
       $return[$i]->requiresActiveAssignment = $this->visibilitySync;
-      $artikel = $tmp[$i]['artikel'];
+      $artikel = self::resolveArticleId($tmp[$i]);
 
         if (!empty($this->productsmarty)) {
             $smarty = new Smarty;
@@ -1083,7 +1083,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
             $tmp[$i] = array_merge((array) $tmp[$i], $transformed);
         }
 
-      $return[$i]->articleId = intval($artikel);
+      $return[$i]->articleId = $artikel;
       try {
         if ($this->extendedFieldMapping) {
           $categoryStore ??= $this->newCategoryStore();
@@ -1257,14 +1257,27 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $commonProductAtts['meta_data'] = array_values(array_column($commonMetaData, null, 'key'));
       // sync() maps the article again and also maps variations. Log unknown terms only there.
       $productOptions['logger'] = $this->logger;
-      $productOptions['variationPayloads'] = (new VariationMedia())->upload(
-        $productData,
-        array_values(array_filter($this->dateienuebertragen)),
-        function ($files) { return $this->uploadFiles($files); }
-      );
-      $productResult = $productSync->sync($productData, $commonProductAtts, $productOptions);
-      $product_id = $productResult['id'];
-      $this->logger->info("WooCommerce Artikel synchronisiert: $nummer / $product_id");
+      try {
+        $productOptions['variationPayloads'] = (new VariationMedia())->upload(
+          $productData,
+          array_values(array_filter($this->dateienuebertragen)),
+          function ($files) { return $this->uploadFiles($files); }
+        );
+        $productResult = $productSync->sync($productData, $commonProductAtts, $productOptions);
+        $product_id = $productResult['id'];
+        $this->logger->info("WooCommerce Artikel synchronisiert: $nummer / $product_id");
+      } catch (Throwable $error) {
+        $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'Unbekannter Artikelexport-Fehler.';
+        $return[$i]->success = false;
+        $return[$i]->retryExport = true;
+        $return[$i]->message = trim(($return[$i]->message ?? '') . "\nWooCommerce-Artikelexport ($nummer): " . $reason);
+        $this->logger->error("WooCommerce Artikel-Export fehlgeschlagen: $nummer (#$artikel): $reason", [
+          'shop' => (int) $this->shopid,
+          'article' => $artikel,
+          'sku' => $nummer,
+        ]);
+        continue;
+      }
 
       if (!$isVariant && ($this->shopCategoryTree || $this->kategorienuebertragen)) {
         $categoryIds = [];
@@ -1309,9 +1322,19 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     return new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid);
   }
 
+  private static function resolveArticleId(array $article): int
+  {
+    $raw = $article['artikel'] ?? null;
+    if (is_numeric($raw) && (int) $raw > 0) {
+      return (int) $raw;
+    }
+    $fallback = $article['artikelid'] ?? null;
+    return is_numeric($fallback) && (int) $fallback > 0 ? (int) $fallback : 0;
+  }
+
   private function loadExportAvailability(array $article, ?ShopCategoryStore $store): array
   {
-    $onRequest = $store !== null && $store->isOnRequest((int) $article['artikel']);
+    $onRequest = $store !== null && $store->isOnRequest(self::resolveArticleId($article));
     $variants = array_unique(array_merge(
       array_column($article['artikel_varianten'] ?? [], 'artikel'),
       array_keys($article['matrix_varianten']['artikel'] ?? [])

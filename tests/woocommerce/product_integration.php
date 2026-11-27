@@ -1107,4 +1107,45 @@ runTests([
             }
         }
     },
+    'ignore marker on missing price preserves numeric articleId and shop categories' => static function () {
+        $db = new AssignmentFixtureDatabase();
+        $store = new ShopCategoryStore($db, 7);
+        $catId = $store->create('Ersatzteile');
+        $store->assign(313, [$catId]);
+        $article = remoteProduct(['artikel' => 'ignore', 'artikelid' => 313, 'nummer' => '1000001', 'preis' => '']);
+        $connector = productConnector([$article], ['shopCategoryTree' => true, 'categorySyncMode' => 'replace']);
+        $connector->shopid = 7;
+        configureProductDatabase($connector, $db);
+        $results = $connector->ImportSendList();
+        same(1, count($results));
+        same(313, $results[0]->articleId);
+        same(true, $results[0]->success);
+        $assigned = array_values(array_filter($connector->client->writes, static fn (array $w): bool => $w[0] === 'PUT' && isset($w[2]['categories'])));
+        same(1, count($assigned));
+        same([['id' => 101]], $assigned[0][2]['categories']);
+    },
+    'single article sync failure does not abort remaining batch articles' => static function () {
+        $bad = remoteProduct(['artikel' => 316, 'artikelid' => 316, 'nummer' => '1000004', 'name_de' => 'Bad SKU']);
+        $good = remoteProduct(['artikel' => 313, 'artikelid' => 313, 'nummer' => '1000001', 'name_de' => 'Good SKU']);
+        $connector = productConnector([$bad, $good]);
+        $connector->client = new class() extends IntegrationProductApi {
+            public function post($endpoint, $payload)
+            {
+                if ($endpoint === 'products' && ($payload['sku'] ?? '') === '1000004') {
+                    throw new HttpClientException('Error: Ungültige oder doppelte Artikelnummer. [product_invalid_sku]', 400, new Request(), new Response(400));
+                }
+                return parent::post($endpoint, $payload);
+            }
+        };
+        $results = $connector->ImportSendList();
+        same(2, count($results));
+        same(316, $results[0]->articleId);
+        same(false, $results[0]->success);
+        same(true, $results[0]->retryExport);
+        check(str_contains($results[0]->message, '1000004'));
+        check(str_contains($results[0]->message, 'product_invalid_sku'));
+        same(313, $results[1]->articleId);
+        same(true, $results[1]->success);
+        same('1000001', productWrite($connector->client, 'products')['sku']);
+    },
 ]);
