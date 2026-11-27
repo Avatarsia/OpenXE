@@ -158,6 +158,18 @@ class Shopimport {
         if ($invoice['status'] === 'storniert') {
             throw new Exception('order invoice is already cancelled');
         }
+        if (!empty($data->currency) && $data->currency !== $invoice['waehrung']) {
+            throw new Exception('refund currency does not match invoice currency');
+        }
+        $preserveInvoiceStatus = !empty($data->preserveinvoice);
+        $markCreditNote = function ($creditNoteId) use ($data) {
+            if (!empty($data->source)) {
+                $this->app->Container('Database')->perform(
+                    'UPDATE gutschrift SET internebemerkung = CONCAT(COALESCE(internebemerkung, :empty), CHAR(10), :source) WHERE id = :id',
+                    ['empty' => '', 'source' => (string) $data->source, 'id' => (int) $creditNoteId]
+                );
+            }
+        };
         if (!empty($data->positions)) {
             $positions = $this->app->DB->SelectArr(
                     sprintf(
@@ -204,8 +216,12 @@ class Shopimport {
                 }
             }
 
-            $creditNoteId = $this->app->erp->WeiterfuehrenRechnungZuGutschrift($invoice['id']);
-            $this->app->erp->RechnungProtokoll($invoice['id'], 'Rechnung durch Shop-Trigger storniert');
+            $creditNoteId = $preserveInvoiceStatus
+                    ? $this->app->erp->WeiterfuehrenRechnungZuGutschrift($invoice['id'], 'Gutschrift durch Shop-Trigger angelegt', true)
+                    : $this->app->erp->WeiterfuehrenRechnungZuGutschrift($invoice['id']);
+            $markCreditNote($creditNoteId);
+            $this->app->erp->RechnungProtokoll($invoice['id'], $preserveInvoiceStatus
+                    ? 'Gutschrift durch Shop-Trigger angelegt' : 'Rechnung durch Shop-Trigger storniert');
             $this->app->erp->GutschriftProtokoll($creditNoteId, 'Gutschrift durch Shop-Trigger angelegt');
             $this->app->erp->BelegFreigabe('gutschrift', $creditNoteId);
             $this->app->DB->Delete(
@@ -293,8 +309,12 @@ class Shopimport {
 
             return (int) $creditNoteId;
         }
-        $creditNoteId = $this->app->erp->WeiterfuehrenRechnungZuGutschrift($invoice['id']);
-        $this->app->erp->RechnungProtokoll($invoice['id'], 'Rechnung durch Shop-Trigger storniert');
+        $creditNoteId = $preserveInvoiceStatus
+                ? $this->app->erp->WeiterfuehrenRechnungZuGutschrift($invoice['id'], 'Gutschrift durch Shop-Trigger angelegt', true)
+                : $this->app->erp->WeiterfuehrenRechnungZuGutschrift($invoice['id']);
+        $markCreditNote($creditNoteId);
+        $this->app->erp->RechnungProtokoll($invoice['id'], $preserveInvoiceStatus
+                ? 'Gutschrift durch Shop-Trigger angelegt' : 'Rechnung durch Shop-Trigger storniert');
         $this->app->erp->GutschriftProtokoll($creditNoteId, 'Gutschrift durch Shop-Trigger angelegt');
         $this->app->erp->BelegFreigabe('gutschrift', $creditNoteId);
         $this->app->erp->GutschriftNeuberechnen($creditNoteId);

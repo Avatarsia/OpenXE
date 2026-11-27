@@ -17310,6 +17310,10 @@ function CheckShopTabelle($artikel)
     $versandartenmapping = $shopexportArr['versandartenmapping'];
     $zahlungsweisenmapping = $shopexportArr['zahlungsweisenmapping'];
     $positionsteuersaetzeerlauben = $shopexportArr['positionsteuersaetzeerlauben'];
+    if (($shopexportArr['modulename'] ?? '') === 'shopimporter_woocommerce'
+      && !empty($warenkorb['woocommerce_position_taxes'])) {
+      $positionsteuersaetzeerlauben = true;
+    }
     $steuerfreilieferlandexport = $shopexportArr['steuerfreilieferlandexport'];
 
     $fastlane = 0;
@@ -32878,7 +32882,7 @@ function Firmendaten($field,$projekt="")
       }
 
 
-      function WeiterfuehrenRechnungZuGutschrift($id, $grund = "Rechnung storniert")
+      function WeiterfuehrenRechnungZuGutschrift($id, $grund = "Rechnung storniert", $preserveInvoiceStatus = false)
       {
         $adresse = $this->app->DB->Select("SELECT adresse FROM rechnung WHERE id='$id' LIMIT 1");
         $newid = $this->CreateGutschrift($adresse);
@@ -32925,7 +32929,9 @@ function Firmendaten($field,$projekt="")
         $this->CopyBelegZwischenpositionen('rechnung',$id,'gutschrift',$newid);
         $this->app->DB->Update("UPDATE gutschrift SET stornorechnung='$stornorechnung', ohne_briefpapier='".$ohnebriefpapier."' WHERE id='$newid,' LIMIT 1");
 
-        $this->app->DB->Update("UPDATE rechnung SET schreibschutz='1',status='storniert' WHERE id='$id' LIMIT 1");
+        if(!$preserveInvoiceStatus) {
+          $this->app->DB->Update("UPDATE rechnung SET schreibschutz='1',status='storniert' WHERE id='$id' LIMIT 1");
+        }
         $this->RechnungProtokoll($id, $grund);
         $this->SchnellFreigabe("gutschrift",$newid);
         return $newid;
