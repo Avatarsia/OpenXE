@@ -478,6 +478,14 @@ class Shopimport {
     public function importSingleOrder($shopId, $shopOrderNumber, $changeShopOrderStatus, $projectId, $allStati = false) {
         $pageContents = $this->app->remote->RemoteConnection($shopId);
         if ($pageContents === 'success') {
+            if ($this->app->DB->Select("SELECT modulename FROM shopexport WHERE id = '" . (int) $shopId . "' LIMIT 1") === 'shopimporter_woocommerce') {
+                // WooCommerce recovery honours the configured statuses, even for legacy API allStati calls.
+                $result = $this->app->remote->RemoteCommand($shopId, 'singleorder', [
+                    'nummer' => $shopOrderNumber, 'change_status' => (bool) $changeShopOrderStatus,
+                ]);
+                return is_array($result) && isset($result['status']) ? $result
+                    : ['status' => 0, 'error' => 'Nachimport fehlgeschlagen. Bitte Shop-Protokoll pruefen.'];
+            }
             $orderCount = $this->app->remote->RemoteGetAuftraegeAnzahlNummer($shopId, $shopOrderNumber);
 
             if ($orderCount > 0) {
@@ -515,11 +523,28 @@ class Shopimport {
             $nummer = (String) $this->app->Secure->GetPOST('nummer');
         }
         $deleteauftrag = (int) $this->app->Secure->GetPOST('deleteauftrag');
-        if (!empty($id) && !empty($nummer)) {
-            $shoparr = $this->app->DB->SelectRow("SELECT projekt,holealle FROM shopexport WHERE id = '$id' LIMIT 1");
+        $shoparr = $id > 0 ? $this->app->DB->SelectRow("SELECT projekt,holealle,modulename FROM shopexport WHERE id = '$id' LIMIT 1") : [];
+        $isWoocommerce = ($shoparr['modulename'] ?? '') === 'shopimporter_woocommerce';
+        $validToken = false;
+        $this->app->Tpl->Set('SINGLEIMPORTTOKEN', '');
+        $this->app->Tpl->Set('SINGLEIMPORTINFO', '');
+        if ($isWoocommerce) {
+            $session = $this->app->Container->get('Session');
+            $token = $this->app->Secure->GetPOST('csrf_token', '', '', 1);
+            $validToken = is_string($token) && $session->isCsrfTokenValid('woocommerce_single_import', $token);
+            $token = $session->createCsrfToken('woocommerce_single_import');
+            \Xentral\Components\Http\Session\SessionHandler::commitSession($session);
+            $this->app->Tpl->Set('SINGLEIMPORTTOKEN', '<input type="hidden" name="csrf_token" value="' . htmlspecialchars($token, ENT_QUOTES, 'UTF-8') . '" />');
+            $this->app->Tpl->Set('SINGLEIMPORTINFO', '<div class="info">WooCommerce-Bestell-ID aus der Bestell-URL eingeben, nicht eine abweichende angezeigte Bestellnummer. Der Auftrag wird in der Shopauftrag-Liste zur Freigabe erfasst. Der automatische Import-Fortschritt bleibt erhalten.</div>');
+        }
+        if ($isWoocommerce && !$this->app->erp->UserProjektRecht((int) $shoparr['projekt'])) {
+            $this->app->Tpl->Add('MESSAGE', '<div class="error">Keine Berechtigung fuer dieses Shop-Projekt.</div>');
+        } elseif ($isWoocommerce && !empty($nummer) && !$validToken) {
+            $this->app->Tpl->Add('MESSAGE', '<div class="error">Formular abgelaufen. Seite neu laden und erneut absenden.</div>');
+        } elseif (!empty($id) && !empty($nummer)) {
             $projekt = $shoparr['projekt']; //$this->app->DB->Select("SELECT projekt FROM shopexport WHERE id = '$id' LIMIT 1");
             $holealle = $shoparr['holealle']; //$this->app->DB->Select("SELECT holealle FROM shopexport WHERE id = '$id' LIMIT 1");
-            if ($holealle) {
+            if ($holealle || $isWoocommerce) {
 
                 $res = $this->importSingleOrder($id, $nummer, $deleteauftrag, $projekt);
                 if ($res['status'] == 1) {
@@ -1938,8 +1963,8 @@ class Shopimport {
         $username = !empty($this->app->User) ? $this->app->User->GetName() : 'Cronjob';
         $this->app->DB->Insert(
                 sprintf(
-                        "INSERT INTO shopimport_auftraege (extid,sessionid,warenkorb,imported,projekt,bearbeiter,logdatei, jsonencoded, shopid)
-      VALUES('%s','%s','%s',0,%d, '%s',%s, %d, %d)",
+                        "INSERT INTO shopimport_auftraege (extid,sessionid,warenkorb,imported,trash,projekt,bearbeiter,logdatei, jsonencoded, shopid)
+      VALUES('%s','%s','%s',0,0,%d, '%s',%s, %d, %d)",
                         $this->app->DB->real_escape_string($shopExtId),
                         $this->app->DB->real_escape_string($sessionid),
                         $this->app->DB->real_escape_string($warenkorb),

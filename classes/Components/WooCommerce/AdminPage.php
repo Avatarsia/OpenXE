@@ -99,6 +99,7 @@ final class AdminPage
         SessionHandler::commitSession($session);
         $html = '<div class="wc-admin"><nav class="wc-admin-nav" aria-label="WooCommerce-Verwaltung">'
             . '<a' . ($view === 'downloads' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'downloads')) . '">Downloads</a> '
+            . '<a href="index.php?module=shopimport&amp;action=einzelimport&amp;id=' . $this->shopId . '">Auftrag nachholen</a> '
             . '<a' . ($view === 'refunds' ? ' aria-current="page"' : '') . ' href="' . AdminView::e(AdminView::url($this->shopId, 'refunds')) . '">Refund-Status</a></nav>';
         if ($notice !== '') {
             $html .= '<div class="' . $noticeClass . '" role="' . ($noticeClass === 'error' ? 'alert' : 'status') . '">' . $notice . '</div>';
