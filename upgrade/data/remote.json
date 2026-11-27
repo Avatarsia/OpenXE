@@ -1,15 +1,15 @@
 [
     {
-        "name": "1.13",
+        "name": "production",
         "enabled": true,
         "active": true,
         "description": {
-            "en": "OpenXE Version 1.13, requires PHP 8.3 or higher",
-            "de": "OpenXE Version 1.13, benötigt mindestens PHP 8.3"
+            "en": "Avatarsia OpenXE production build (fork with integrated feature branches), based on OpenXE 1.13, requires PHP 8.3 or higher",
+            "de": "Avatarsia OpenXE Production-Build (Fork mit integrierten Feature-Branches), basiert auf OpenXE 1.13, benötigt mindestens PHP 8.3"
         },
-        "host": "https://github.com/openxe-org/openxe.git",
-        "branch": "1.13",
-        "check": "1.13/check.php",
-        "migration": "1.13/migrate.php"
+        "host": "https://github.com/Avatarsia/OpenXE.git",
+        "branch": "production",
+        "check": "",
+        "migration": ""
     }
 ]
