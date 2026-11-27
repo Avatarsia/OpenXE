@@ -15,6 +15,8 @@ class ArticleTreeArticleResource extends AbstractResource
 {
     const TABLE_NAME = 'artikelbaum_artikel';
 
+    private const WRITABLE_COLUMNS = ['artikel', 'kategorie', 'haupt'];
+
     protected function configure()
     {
         $this->setTableName(self::TABLE_NAME);
@@ -90,6 +92,15 @@ class ArticleTreeArticleResource extends AbstractResource
     protected function insertQuery()
     {
         return $this->db->insert()->into(self::TABLE_NAME);
+    }
+
+    protected function mapInputData($inputVars, $inputMapping = null)
+    {
+        // Keep the ID added by AbstractResource::edit() for the WHERE binding.
+        $routeId = array_intersect_key($inputVars, ['id' => true]);
+        $mappedInput = parent::mapInputData($inputVars, $inputMapping);
+
+        return $routeId + array_intersect_key($mappedInput, array_flip(self::WRITABLE_COLUMNS));
     }
 
     /**

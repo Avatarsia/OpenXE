@@ -15,6 +15,11 @@ class ArticleOnlineShopResource extends AbstractResource
 {
     const TABLE_NAME = 'artikel_onlineshops';
 
+    private const WRITABLE_COLUMNS = [
+        'artikel', 'shop', 'aktiv', 'ausartikel', 'lagerkorrekturwert', 'pseudolager',
+        'autolagerlampe', 'restmenge', 'lieferzeitmanuell', 'pseudopreis', 'autoabgeleicherlaubt',
+    ];
+
     protected function configure()
     {
         $this->setTableName(self::TABLE_NAME);
@@ -89,7 +94,20 @@ class ArticleOnlineShopResource extends AbstractResource
      */
     protected function insertQuery()
     {
-        return $this->db->insert()->into(self::TABLE_NAME);
+        return $this->db->insert()
+            ->into(self::TABLE_NAME)
+            ->set('pseudolager', "''")
+            ->set('lieferzeitmanuell', "''")
+            ->set('last_article_hash', "''");
+    }
+
+    protected function mapInputData($inputVars, $inputMapping = null)
+    {
+        // Keep the ID added by AbstractResource::edit() for the WHERE binding.
+        $routeId = array_intersect_key($inputVars, ['id' => true]);
+        $mappedInput = parent::mapInputData($inputVars, $inputMapping);
+
+        return $routeId + array_intersect_key($mappedInput, array_flip(self::WRITABLE_COLUMNS));
     }
 
     /**
