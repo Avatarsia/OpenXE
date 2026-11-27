@@ -162,6 +162,38 @@ $tests = [
         expectDomainError('Bitte eine Menge >= 0 mit hoechstens 4 Nachkommastellen eingeben.',
             fn () => $stock->correct(9, [count_(1, '4.0000', '4'), count_(2, '-2.0000', '-1')]));
     },
+    'concurrent_drop_before_booking_surfaces_erp_message' => function (): void {
+        [$stock, $db, $erp] = stockSetup([[9, 1, '5.0000']]);
+        $erp->beforeBook = fn () => $db->addStock(9, 1, '-3.0000');
+        expectDomainError('Auslagern fehlgeschlagen! (Bestand zu gering)',
+            fn () => $stock->correct(9, [count_(1, '5.0000', '1')]));
+        expect([], $erp->bookings);
+    },
+    'technical_booking_error_is_not_wrapped_as_user_message' => function (): void {
+        [$stock, , $erp] = stockSetup([[9, 1, '5.0000']]);
+        $erp->failAt = 1;
+        $erp->failure = 'SQLSTATE[42S22]: Column not found';
+        try {
+            $stock->correct(9, [count_(1, '5.0000', '4')]);
+            throw new RuntimeException('Expected technical error.');
+        } catch (DomainException $error) {
+            throw new RuntimeException('Technical error exposed as user message: ' . $error->getMessage());
+        } catch (Exception $error) {
+            expect('SQLSTATE[42S22]: Column not found', $error->getMessage());
+        }
+    },
+    'partial_technical_error_hides_details' => function (): void {
+        [$stock, , $erp] = stockSetup([[9, 1, '5.0000'], [9, 2, '3.0000']]);
+        $erp->failAt = 2;
+        $erp->failure = 'SQLSTATE[42S22]: Column not found';
+        try {
+            $stock->correct(9, [count_(1, '5.0000', '4'), count_(2, '3.0000', '1')]);
+            throw new RuntimeException('Expected partial failure.');
+        } catch (StockCorrectionPartialFailure $error) {
+            expect('Teilweise gebucht (A-01). Fehler bei B-01: technischer Fehler. Seite neu laden.', $error->getMessage());
+            expect('SQLSTATE[42S22]: Column not found', $error->getPrevious()->getMessage());
+        }
+    },
     'unknown_place_and_place_zero_with_places_are_rejected' => function (): void {
         [$stock, $db, $erp] = stockSetup([[9, 1, '5.0000']]);
         $db->article['lager_platz'] = '3';

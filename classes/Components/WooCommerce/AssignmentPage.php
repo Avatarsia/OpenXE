@@ -16,6 +16,8 @@ final class AssignmentPage
     private const PAGE_SIZE = 50;
     private const EXPORT_INVALIDATION_WARNING = 'Kategorie gespeichert. Die Aktualisierung der Artikel-Export-Hashes steht noch aus.';
     private $db;
+    /** @var array<int, bool> */
+    private array $projectRights = [];
 
     public function __construct(private $app)
     {
@@ -317,7 +319,7 @@ final class AssignmentPage
         if (StockCorrection::isTracked($row)) {
             return '<td class="wc-col-stock">' . $total . ' <small class="wc-flag-note">Korrektur im Lager-Modul</small></td>';
         }
-        if (!$canBook || !$this->app->erp->UserProjektRecht((int) ($row['projekt'] ?? 0))) {
+        if (!$canBook || !$this->projectRight((int) ($row['projekt'] ?? 0))) {
             return '<td class="wc-col-stock">' . $total . '</td>';
         }
         $number = AdminView::e($row['nummer']);
@@ -347,6 +349,11 @@ final class AssignmentPage
         return '<input name="target" inputmode="decimal" autocomplete="off" data-place="' . (int) $place['id']
             . '" data-expected="' . AdminView::e($place['menge']) . '" value="' . AdminView::e(StockCorrection::format($place['menge']))
             . '" aria-label="' . $label . '">';
+    }
+
+    private function projectRight(int $project): bool
+    {
+        return $this->projectRights[$project] ??= (bool) $this->app->erp->UserProjektRecht($project);
     }
 
     private function canBookStock(): bool
@@ -417,7 +424,15 @@ final class AssignmentPage
         if (!$row || !$this->app->erp->UserProjektRecht((int) $row['projekt'])) {
             throw new DomainException('Artikel nicht vorhanden oder nicht freigegeben.');
         }
-        $result = (new StockCorrection($this->db, $this->app->erp))->correct($id, $counts);
+        try {
+            $result = (new StockCorrection($this->db, $this->app->erp))->correct($id, $counts);
+        } catch (StockCorrectionPartialFailure $error) {
+            // Some places are already booked: keep a trace of the inconsistent state, including the technical cause.
+            $cause = $error->getPrevious();
+            $this->app->Container->get('Logger')->error('WooCommerce-Lagerkorrektur Artikel ' . $id . ': '
+                . RefundStatusService::sanitizeError($error->getMessage() . ($cause ? ' Ursache: ' . $cause->getMessage() : '')));
+            throw $error;
+        }
         return ['article' => $id, 'cell' => $this->stockCell($row, $result['places'], true)];
     }
 
@@ -432,7 +447,8 @@ final class AssignmentPage
         }
         $counts = [];
         foreach ($entries as $entry) {
-            if (!preg_match('/^(\d+):(-?\d+(?:\.\d+)?):(-?[0-9]+(?:[.,][0-9]+)?)$/D', $entry, $match)) {
+            // The target is only delimited here; StockCorrection validates it with a user-facing message.
+            if (!preg_match('/^(\d+):(-?\d+(?:\.\d+)?):([^:]{0,30})$/D', $entry, $match)) {
                 throw new DomainException('Ungueltige Eingabe.');
             }
             $counts[] = ['place' => (int) $match[1], 'expected' => $match[2], 'target' => $match[3]];

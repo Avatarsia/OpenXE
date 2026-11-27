@@ -42,7 +42,8 @@ trait StockFixtureRows
             $rows[] = ['artikel' => (string) $article, 'id' => $place['id'], 'kurzbezeichnung' => $place['kurzbezeichnung'],
                 'lager' => $place['lager'], 'menge' => number_format($sum, 4, '.', '')];
         }
-        usort($rows, static fn (array $a, array $b): int => strcmp($a['kurzbezeichnung'], $b['kurzbezeichnung']));
+        // Same order as the real query: ORDER BY lp.kurzbezeichnung, lp.id
+        usort($rows, static fn (array $a, array $b): int => [$a['kurzbezeichnung'], (int) $a['id']] <=> [$b['kurzbezeichnung'], (int) $b['id']]);
         return $rows;
     }
 
@@ -62,6 +63,8 @@ trait StockFixtureBookings
     public array $bookings = [];
     public ?int $failAt = null;
     public string $failure = 'Auslagern fehlgeschlagen! (Bestand zu gering)';
+    /** Runs before each booking, e.g. to simulate a concurrent stock movement. */
+    public ?Closure $beforeBook = null;
 
     public function LagerEinlagern($artikel, $menge, $regal, $projekt, $grund = '')
     {
@@ -70,6 +73,19 @@ trait StockFixtureBookings
 
     public function LagerAuslagernRegal($artikel, $regal, $menge, $projekt, $grund)
     {
+        if ($this->beforeBook !== null) {
+            ($this->beforeBook)();
+        }
+        // Mirrors erpAPI::LagerAuslagernRegal: abort when the place holds less than requested.
+        $bestand = 0.0;
+        foreach ($this->stockDb()->stock as $row) {
+            if ($row['artikel'] === $artikel && $row['lager_platz'] === $regal) {
+                $bestand += (float) $row['menge'];
+            }
+        }
+        if ($menge > $bestand || $bestand <= 0) {
+            throw new Exception('Auslagern fehlgeschlagen! (Bestand zu gering)');
+        }
         $this->book('aus', $artikel, $regal, $menge, $projekt, $grund, -$menge);
     }
 

@@ -64,9 +64,12 @@
                     if (!response || response.ok !== true) {
                         failed(response && response.error);
                     } else if (cmd === 'stock_set') {
-                        $page.find('tr[data-article="' + response.article + '"] td.wc-col-stock').replaceWith(response.cell);
+                        var $cell = $(response.cell);
+                        $page.find('tr[data-article="' + response.article + '"] td.wc-col-stock').replaceWith($cell);
                         closeStockDialog();
                         $status.text('Gespeichert.').prop('hidden', false);
+                        // The focused control was replaced; keep keyboard users in the same cell.
+                        $cell.find('input[data-place], [data-stock-dialog]').first().trigger('focus');
                     } else if (select && category === '0') {
                         var $row = $control.closest('tr');
                         var articleNumber = $.trim($row.find('th').first().text());

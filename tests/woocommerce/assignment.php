@@ -277,7 +277,7 @@ $tests = [
     'stock_set_rejects_malformed_counts' => function (): void {
         [$page, $db, , $app] = assignmentSetup();
         $db->addStock(9, 1, '7.0000');
-        foreach (['1:7:abc', '', '1:7', '1:7:5;;2:1:1', str_repeat('1:7:5;', 50) . '1:7:5'] as $counts) {
+        foreach (['', '1:7', 'x:7:5', '1:7:5;;2:1:1', '1:7:5:9', str_repeat('1:7:5;', 50) . '1:7:5'] as $counts) {
             $result = assignmentCommand($page, 'stock_set', ['counts' => $counts]);
             expect(false, $result['ok']);
             expect('Ungueltige Eingabe.', $result['error']);
@@ -297,6 +297,44 @@ $tests = [
         $result = assignmentCommand($page, 'stock_set', ['counts' => '1:5.0000:4;2:-2.0000:-2']);
         expect(true, $result['ok']);
         expect([['aus', 9, 1, 1.0, 4, StockCorrection::REASON]], $app->erp->bookings);
+    },
+    'stock_set_explains_empty_or_partial_numbers' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '7.0000');
+        foreach (['1:7.0000:', '1:7.0000:,5', '1:7.0000:abc'] as $counts) {
+            $result = assignmentCommand($page, 'stock_set', ['counts' => $counts]);
+            expect('Bitte eine Menge >= 0 mit hoechstens 4 Nachkommastellen eingeben.', $result['error']);
+        }
+        expect([], $app->erp->bookings);
+    },
+    'stock_set_hides_and_logs_technical_errors' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '7.0000');
+        $app->erp->failAt = 1;
+        $app->erp->failure = 'SQLSTATE[42S22]: Column not found';
+        $result = assignmentCommand($page, 'stock_set', ['counts' => '1:7.0000:5']);
+        expect('Die WooCommerce-Shopzuordnung konnte nicht verarbeitet werden.', $result['error']);
+        expect(1, count($db->logged));
+        expect(true, str_contains($db->logged[0], 'SQLSTATE[42S22]'));
+    },
+    'stock_set_logs_partial_failures' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '5.0000');
+        $db->addStock(9, 2, '3.0000');
+        $app->erp->failAt = 2;
+        $result = assignmentCommand($page, 'stock_set', ['counts' => '1:5.0000:4;2:3.0000:1']);
+        expect(true, str_starts_with($result['error'], 'Teilweise gebucht (A-01).'));
+        expect(1, count($db->logged));
+        expect(true, str_starts_with($db->logged[0], 'WooCommerce-Lagerkorrektur Artikel 9: Teilweise gebucht (A-01).'));
+    },
+    'stock_column_checks_project_right_once_per_project' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        foreach ([21, 22, 23] as $id) {
+            $db->catalog[$id] = array_merge($db->article, ['id' => (string) $id, 'nummer' => 'ERP-' . $id, 'in_shop' => 0]);
+        }
+        $page->render();
+        // One check from the project filter in articles(), one cached check for the stock cells.
+        expect(2, count(array_keys($app->erp->projectChecks, 4, true)));
     },
     'stock_set_reports_partial_failure_text' => function (): void {
         [$page, $db, , $app] = assignmentSetup();

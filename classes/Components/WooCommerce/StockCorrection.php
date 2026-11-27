@@ -14,7 +14,8 @@ final class StockCorrection
 {
     public const REASON = 'Inventur-Korrektur (WooCommerce-Uebersicht)';
     private const STALE = 'Bestand wurde zwischenzeitlich geaendert. Seite neu laden.';
-    private const INVALID_TARGET = 'Bitte eine Menge >= 0 mit hoechstens 4 Nachkommastellen eingeben.';
+    private const ERP_STOCK_ERROR = 'Auslagern fehlgeschlagen!';
+    private const INVALID_TARGET ='Bitte eine Menge >= 0 mit hoechstens 4 Nachkommastellen eingeben.';
     private const EPSILON = 0.00005;
 
     public function __construct(private object $db, private object $erp)
@@ -154,11 +155,16 @@ final class StockCorrection
                     $this->erp->LagerAuslagernRegal($articleId, $place['id'], -$booking['diff'], $project, self::REASON);
                 }
             } catch (Throwable $error) {
+                // Only the erpAPI's own stock messages are meant for users; anything else stays technical.
+                $known = $error instanceof \Exception && str_starts_with($error->getMessage(), self::ERP_STOCK_ERROR);
                 if ($booked === []) {
-                    throw new DomainException($error->getMessage(), 0, $error);
+                    if ($known) {
+                        throw new DomainException($error->getMessage(), 0, $error);
+                    }
+                    throw $error;
                 }
                 throw new StockCorrectionPartialFailure('Teilweise gebucht (' . implode(', ', $booked) . '). Fehler bei '
-                    . $place['name'] . ': ' . $error->getMessage() . '. Seite neu laden.', 0, $error);
+                    . $place['name'] . ': ' . ($known ? $error->getMessage() : 'technischer Fehler') . '. Seite neu laden.', 0, $error);
             }
             $booked[] = $place['name'];
         }

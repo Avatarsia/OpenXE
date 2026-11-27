@@ -21,6 +21,7 @@ final class AssignmentFixtureDatabase
 
     public array $config = [];
     public int $transactions = 0;
+    public array $logged = [];
     public array $shop = ['id' => '7', 'bezeichnung' => 'WooCommerce Testshop', 'projekt' => '3',
         'einstellungen_json' => '{"felder":{"visibilitySync":true,"shopCategoryTree":true}}'];
     public array $article = ['id' => '9', 'nummer' => 'ERP-ARTICLE', 'name_de' => 'Heizblock V1', 'projekt' => '4',
@@ -233,8 +234,9 @@ function assignmentFixtureApp(AssignmentFixtureDatabase $db, array $get = []): o
                         }
                         public function createCsrfToken($tokenKey) { return 'assignment-token'; }
                     },
-                    'Logger' => new class {
-                        public function error(string $message): void { error_log($message); }
+                    'Logger' => new class ($this->db) {
+                        public function __construct(private $db) {}
+                        public function error(string $message): void { $this->db->logged[] = $message; error_log($message); }
                     },
                 };
             }
@@ -251,7 +253,12 @@ function assignmentFixtureApp(AssignmentFixtureDatabase $db, array $get = []): o
                 return ($action === 'edit' && in_array($module, $this->rights, true))
                     || in_array($module . '/' . $action, $this->rights, true);
             }
-            public function UserProjektRecht(int $project): bool { return in_array($project, $this->projects, true); }
+            public array $projectChecks = [];
+            public function UserProjektRecht(int $project): bool
+            {
+                $this->projectChecks[] = $project;
+                return in_array($project, $this->projects, true);
+            }
         },
         'Secure' => new class ($get) {
             public function __construct(private array $get) {}
