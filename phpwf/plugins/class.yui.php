@@ -6908,12 +6908,12 @@ r.land as land, p.abkuerzung as projekt, r.zahlungsweise as zahlungsweise,
         // Fester filter
         $more_data1 = $this->app->Secure->GetGET("more_data1");
         if ($more_data1 == 1) {
-          $subwhere[] = " r.zahlungsstatus='offen' ";
+          $subwhere[] = " r.zahlungsstatus='offen' AND r.status!='storniert' ";
         }
 
         $more_data2 = $this->app->Secure->GetGET("more_data2");
         if ($more_data2 == 1) {
-          $subwhere[] = " r.zahlungsstatus!='bezahlt' AND r.zahlungsstatus!='forderungsverlust' ";
+          $subwhere[] = " r.zahlungsstatus!='bezahlt' AND r.zahlungsstatus!='forderungsverlust' AND r.status!='storniert' ";
         }
 
         $more_data3 = $this->app->Secure->GetGET("more_data3");
