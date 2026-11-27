@@ -107,7 +107,7 @@ final class ResultCollection implements JsonSerializableAlias
     /**
      * @return array
      */
-    public function jsonSerialize()
+    public function jsonSerialize(): mixed
     {
         $results = [];
         $itemCount = 0;

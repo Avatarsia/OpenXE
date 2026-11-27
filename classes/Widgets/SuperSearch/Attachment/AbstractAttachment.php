@@ -17,7 +17,7 @@ abstract class AbstractAttachment implements AttachmentInterface
     /**
      * @return array
      */
-    public function jsonSerialize()
+    public function jsonSerialize(): mixed
     {
         return [
             'type' => $this->getType(),
