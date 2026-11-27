@@ -140,7 +140,7 @@
 
 <style>
 .table_filter_container {
-	border: 1px solid #d7d7d7;
+	border: 1px solid var(--border);
 	margin: 0 5px 10px 0;
 	padding: 5px;
 }

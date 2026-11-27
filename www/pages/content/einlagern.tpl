@@ -35,7 +35,7 @@
                                         </tr>
                                         [ZWISCHENLAGERINFO] [SHOWMHDSTART]
                                         <tr valign="top">
-                                            <td><b style="color:red"><label for="mhd">{|MHD|}:</label></b></td>
+                                            <td><b class="text-error"><label for="mhd">{|MHD|}:</label></b></td>
                                             <td>
                                                 <input type="text" name="mhd" id="mhd" value="[MHDVALUE]" style="width:200px">&nbsp;
                                                 <br><i>({|Mindesthaltbarkeitsdatum|})</i></td>
@@ -47,7 +47,7 @@
                                             <td align="center"></td>
                                         </tr>[SHOWMHDEND] [SHOWCHRSTART]
                                         <tr valign="top">
-                                            <td><b style="color:red"><label for="charge">{|Charge|}:</label></b></td>
+                                            <td><b class="text-error"><label for="charge">{|Charge|}:</label></b></td>
                                             <td>
                                                 <input type="text" name="charge" value="[CHARGEVALUE]" id="charge" style="width:200px">&nbsp;
                                                 <br><i>({|Chargennummer von Hersteller|})</i></td>

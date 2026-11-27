@@ -1,8 +1,8 @@
 :root {
-    --light-grey: #D6D7D9;
-    --middle-grey: #7D7F81;
-    --dark-grey: #646464;
-    --inactive-grey: #F0F0F0;
+    --light-grey: var(--text-muted);
+    --middle-grey: var(--text-muted);
+    --dark-grey: var(--text-body);
+    --inactive-grey: var(--surface-muted);
     --in-progress: #FFA958;
     --brand-violet: #5B64EE;
     --brand-green: #27E7A2;
@@ -17,10 +17,10 @@
     min-width: 300px;
     padding: 0;
     margin: 0;
-    background-color: #FFF;
-    border: 1px solid #F0F0F0;
+    background-color: var(--surface);
+    border: 1px solid var(--border);
     border-radius: 4px;
-    box-shadow: 3px 3px 10px rgba(0, 0, 0, .25);
+    box-shadow: 3px 3px 10px var(--shadow);
     filter: alpha(opacity=0);
     -moz-opacity: 0;
     opacity: 0;
@@ -58,7 +58,7 @@
     width: 60px;
     height: 60px;
     border-radius: 46px;
-    box-shadow: 3px 3px 10px rgba(0, 0, 0, .25);
+    box-shadow: 3px 3px 10px var(--shadow);
     background-image: url('../themes/new/images/consultant.jpg');
     background-size: cover;
     overflow: hidden;
@@ -125,14 +125,14 @@
 
 #wizard-container h3 {
     font-size: 14px;
-    color: #7D7F81;
+    color: var(--text-muted);
     padding: 0;
     margin: 4px 0 8px 0;
     font-weight: normal;
 }
 
 #wizard-container .close-wizard{
-    color: #7D7F81;
+    color: var(--text-muted);
     cursor: pointer;
 }
 
@@ -158,8 +158,8 @@
 #wizard-container .wizard-step-group {
     cursor: default;
     margin: 10px 0;
-    border: 0.4px solid #EAEDF7;
-    box-shadow: 0 2px 10px rgba(28, 41, 90, 0.08);
+    border: 0.4px solid var(--border);
+    box-shadow: 0 2px 10px var(--shadow);
     border-radius: 3px;
 }
 
@@ -237,7 +237,7 @@
     height: 20px;
     border-radius: 20px;
     background-color: var(--inactive-grey);
-    color: white;
+    color: var(--text-inverse);
     transition: all .3s;
 }
 
@@ -279,7 +279,7 @@
 
 #wizard-container .wizard-step-group li {
     display: block;
-    color: #9FA0A4;
+    color: var(--text-muted);
     list-style: none;
     padding-left: 30px;
     padding-right: 20px;
@@ -296,7 +296,7 @@
 }
 
 #wizard-container .wizard-step-group li.checked {
-    color: #606060;
+    color: var(--text-body);
 }
 
 #wizard-container .wizard-step-group li.invisible {
@@ -313,7 +313,7 @@
     position: absolute;
     -webkit-mask-image: url('../themes/new/images/icon-checkmark.svg');
     mask-image: url('../themes/new/images/icon-checkmark.svg');
-    background-color: #606060;
+    background-color: var(--text-body);
 }
 
 #wizard-container .wizard .wizard-steps ul {
@@ -339,7 +339,7 @@
     padding: 3px 0;
 }
 #wizard-container .wizard .wizard-steps li .title span {
-    color: #888;
+    color: var(--text-muted);
 }
 
 #wizard-container .wizard .wizard-steps li .caption {
@@ -372,10 +372,10 @@ hint styles
     padding: 15px 12px 7px 12px;
     width: 215px;
     border-radius: 4px;
-    background-color: white;
+    background-color: var(--surface);
     box-sizing: border-box;
     border: 1px solid var(--brand-violet);
-    box-shadow: 3px 3px 10px rgba(0, 0, 0, .5);
+    box-shadow: 3px 3px 10px var(--shadow);
     transition: opacity ease .3s;
 }
 
@@ -397,7 +397,7 @@ hint styles
 }
 
 #wizard-hint h2{
-    color: black;
+    color: var(--text-strong);
     padding: 0 10px 0 0;
     margin: 0;
     font-size: 14px;
@@ -410,7 +410,7 @@ hint styles
 }
 
 #wizard-hint .wizard-hint-action{
-    background-color: rgba(240, 240, 240, 0.3);
+    background-color: var(--surface-alt);
     text-align: right;
     color: var(--middle-grey);
     border-radius: 3px;

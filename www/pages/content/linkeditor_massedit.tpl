@@ -33,7 +33,7 @@
 <div class="rules">Regeln</div>
 <div>
 	<table width="100%" cellspacing='2' cellpadding='0' border="0" class="linkedit">
-		<tr style="background-color: #e0e0e0; font-weight: 700;">
+		<tr class="bg-surface-muted" style="font-weight: 700;">
 			<td>Regex</td>
 			<td>Ersetzen durch</td>
 			<td>Aktiv</td>
@@ -51,7 +51,7 @@
 <div class="rules">Links</div>
 <div>
 	<table width="100%" cellspacing='2' cellpadding='0' border="0" class="linkedit">
-    <tr style="background-color: #e0e0e0; font-weight: 700;">
+    <tr class="bg-surface-muted" style="font-weight: 700;">
       <td>Bestellnr.</td>
       <td>Link</td>
       <td>Ersetzen durch</td>

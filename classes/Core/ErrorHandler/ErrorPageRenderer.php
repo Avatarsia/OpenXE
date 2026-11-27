@@ -94,6 +94,22 @@ final class ErrorPageRenderer
     span.success { background-color: #9FF781; padding: 0 1px; }
     span.warning { background-color: #F4FA58; padding: 0 1px; }
     span.error { background-color: #FA5858; padding: 0 1px; }
+    @media (prefers-color-scheme: dark) {
+      html { color-scheme: dark; }
+      body { color: #D5D9E2; background-color: #171A23; }
+      table th.head { background-color: #1E2230; border-bottom-color: #3A4152; }
+      table td.trace { background-color: #262B3A; }
+      table.exception { border-top-color: #3A4152; }
+      table.exception td { border-bottom-color: #3A4152; }
+      td.stacktrace { background-color: #1E2230; }
+      #main { background-color: #1E2230; }
+      #side { background-color: #262B3A; }
+      #side h1, #side h2, #side h3, #side h4, #side h5, #side h6 { color: #9AA3B5; }
+      .separator { color: #9AA3B5; }
+      .number { background-color: #3A4152; }
+      code { background-color: #262B3A; }
+      code.success, code.warning, code.error { color: #1E2230; }
+    }
   </style>
 </head>
 <body>

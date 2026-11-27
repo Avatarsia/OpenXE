@@ -1,4 +1,4 @@
-<table align="center" border="0" width="700" height="" bgcolor="#FFFFFF" style="border:1px solid #000000;margin-bottom:20px;">
+<table align="center" border="0" width="700" height="" class="bg-surface border-default" style="margin-bottom:20px;">
 <tr><td width="20">&nbsp;</td><td heigth="50">&nbsp;</td><td></td><td></td><td  width="20">&nbsp;</td></tr>
 <tr><td></td><td colspan="3">Absender:<br><input type="text" size="50"><td></td></tr>
 <tr><td></td><td colspan="3">Empf&auml;nger:<br>

@@ -607,10 +607,13 @@ class Ticket {
         if (empty($messages)) {
         }
 
-        $html_start = "<!DOCTYPE html><html>";
+        $html_start = "<!DOCTYPE html><html data-color-scheme=\"".$this->app->erp->GetUserColorScheme()."\">";
         $head_start = "<head>";
         $security = "";
-        $style = "<link rel=\"stylesheet\" type=\"text/css\" href=\"./themes/new/css/ticket_iframe.css?v=3\"/>";
+        $style = "<meta name=\"color-scheme\" content=\"light dark\">";
+        $style .= "<script src=\"./themes/new/js/colorscheme.js?v=1\"></script>";
+        $style .= "<link rel=\"stylesheet\" type=\"text/css\" href=\"./themes/new/css/color3.css?v=9\"/>";
+        $style .= "<link rel=\"stylesheet\" type=\"text/css\" href=\"./themes/new/css/ticket_iframe.css?v=3\"/>";
         $head_end = "</head>";
         $html_end = "</html>";
         $prepared_text = $messages[0]['text'];
@@ -654,7 +657,13 @@ class Ticket {
         if (empty($messages)) {
         }
 
-        $this->app->Tpl->Set("TEXT",$messages[0]['textausgang']);
+        $html_start = "<!DOCTYPE html><html data-color-scheme=\"".$this->app->erp->GetUserColorScheme()."\">";
+        $head = "<head><meta charset=\"utf-8\"><meta name=\"color-scheme\" content=\"light dark\">"
+            ."<script src=\"./themes/new/js/colorscheme.js?v=1\"></script>"
+            ."<link rel=\"stylesheet\" type=\"text/css\" href=\"./themes/new/css/color3.css?v=9\"/>"
+            ."<link rel=\"stylesheet\" type=\"text/css\" href=\"./themes/new/css/ticket_iframe.css?v=3\"/>"
+            ."</head>";
+        $this->app->Tpl->Set("TEXT",$html_start.$head.$messages[0]['textausgang']."</html>");
         $this->app->Tpl->Output('ticket_text.tpl');
         $this->app->ExitXentral();
     }

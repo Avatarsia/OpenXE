@@ -46,8 +46,8 @@ img.reset {
 }
 
 span.systemhealthnotification.inactive {
-    color:#bbb;
-    border-color: #bbb;
+    color:var(--text-muted);
+    border-color: var(--text-muted);
 }
 
 span.systemhealthnotification.active {

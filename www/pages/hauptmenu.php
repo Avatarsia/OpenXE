@@ -35,7 +35,7 @@ class Hauptmenu {
 
 //this->WFconf[menu][mitarbeiter]
         $menu = $this->app->Conf->WFconf['menu'][$this->app->User->GetType()];
-        $this->app->Tpl->Add('PAGE', "<table border=\"0\" width=\"100%\" style=\"background-color: #ffffff;\"><tr valign=\"top\">");
+        $this->app->Tpl->Add('PAGE', "<table border=\"0\" width=\"100%\" class=\"bg-surface\"><tr valign=\"top\">");
 
         $spalten_anzahl = 5;
 

@@ -152,7 +152,7 @@ class Systemlog {
             'subspalte'=>$subspalte,
           ];
         }
-        $ret['html'][] = '<tr><td>'.$subtabelle.'.'.$subspalte.'</td><td>'.$tabelle.'.'.$spalte.'</td><td>-</td><td style="color:red;">Eintr&auml;ge mit nicht existierender '.$tabelle.'.'.$spalte.' gefunden</td><td>'.$aktion.'</td></tr>';
+        $ret['html'][] = '<tr><td>'.$subtabelle.'.'.$subspalte.'</td><td>'.$tabelle.'.'.$spalte.'</td><td>-</td><td class="text-error">Eintr&auml;ge mit nicht existierender '.$tabelle.'.'.$spalte.' gefunden</td><td>'.$aktion.'</td></tr>';
         $ret['warning'] = true;
       }
       else{

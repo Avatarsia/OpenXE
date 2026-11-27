@@ -4,7 +4,7 @@ img.submenusettingsicon {
 }
 
 fieldset.white{
-    background-color: white;
+    background-color: var(--surface);
 }
 @media (min-width: 768px) {
     fieldset.leftcontent {

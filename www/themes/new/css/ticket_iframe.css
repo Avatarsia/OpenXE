@@ -18,3 +18,10 @@
     animation-duration:2s;
     animation-iteration-count:5;
 }                                                              
+body {
+    background: var(--surface);
+    color: var(--text-body);
+}
+a {
+    color: var(--link-color, #5991FF);
+}

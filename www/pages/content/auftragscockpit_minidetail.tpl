@@ -2,11 +2,11 @@
 <style>
 
 .auftraginfo_cell {
-  color: #636363;border: 1px solid #ccc;padding: 5px; 
+  color: var(--text-body);border: 1px solid var(--border);padding: 5px;
 }
 
 .auftrag_cell {
-  color: #636363;border: 1px solid #fff;padding: 0px; margin:0px;
+  color: var(--text-body);border: 1px solid var(--surface);padding: 0px; margin:0px;
 }
 
 </style>
@@ -20,12 +20,12 @@
     </td>
   <td width="50%">
  <div style="overflow:scroll; height:600px"> 
-  <div style="background-color:white">
-    <div width="100%" style="background-color:#999;"><h2 class="greyh2">Anschrift / Kontakt</h2></div>
+  <div class="bg-surface">
+    <div width="100%" class="bg-muted-strong"><h2 class="greyh2">Anschrift / Kontakt</h2></div>
     <div style="padding:10px">
       <table  width="100%" cellpadding="5">
         <tr valign="top"><td>
-        <table style="font-size: 8pt; background: white; color: #333333; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
+        <table class="bg-surface text-strong" style="font-size: 8pt; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
           <tr><td class="auftraginfo_cell">Stra&szlig;e:</td><td colspan="4" class="auftraginfo_cell">[STRASSE]</td><td class="auftraginfo_cell">Telefon:</td><td colspan="4" class="auftraginfo_cell">[TELEFON]</td></tr>
           <tr><td class="auftraginfo_cell">Ort/PLZ:</td><td colspan="4" class="auftraginfo_cell">[LAND]-[PLZ] [ORT]</td><td class="auftraginfo_cell">Telefax:</td><td colspan="4" class="auftraginfo_cell">[TELEFAX]</td></tr>
           <tr><td class="auftraginfo_cell">Ansprechpartner:</td><td colspan="4" class="auftraginfo_cell">[ANSPRECHPARTNERNAME]</td><td class="auftraginfo_cell">E-Mail:</td><td colspan="4" class="auftraginfo_cell">[EMAIL]</td></tr>
@@ -38,12 +38,12 @@
   </div>
 
 
-  <div style="background-color:white">
-    <div width="100%" style="background-color:#999;"><h2 class="greyh2">Zahlungskonditionen</h2></div>
+  <div class="bg-surface">
+    <div width="100%" class="bg-muted-strong"><h2 class="greyh2">Zahlungskonditionen</h2></div>
     <div style="padding:10px">
       <table  width="100%" cellpadding="5">
         <tr valign="top"><td>
-        <table style="font-size: 8pt; background: white; color: #333333; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
+        <table class="bg-surface text-strong" style="font-size: 8pt; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
         
           <tr><td colspan="5" class="auftraginfo_cell"><b>Zahlungskonditionen des Kunden für Rechnungen</b></td><td colspan="5" class="auftraginfo_cell"><b>Zahlungskonditionen beim Lieferant bei Bestellungen</b></td></tr>
           <tr><td class="auftraginfo_cell"></td><td colspan="4" class="auftraginfo_cell"></td><td class="auftraginfo_cell">Kundennummer bei Lieferant:</td><td colspan="4" class="auftraginfo_cell">[KUNDENNUMMERLIEFERANT]</td></tr>
@@ -60,12 +60,12 @@
     </div>
   </div>
 
-  <div style="background-color:white">
-    <div width="100%" style="background-color:#999;"><h2 class="greyh2">Bankverbindung</h2></div>
+  <div class="bg-surface">
+    <div width="100%" class="bg-muted-strong"><h2 class="greyh2">Bankverbindung</h2></div>
     <div style="padding:10px">
       <table  width="100%" cellpadding="5">
         <tr valign="top"><td>
-        <table style="font-size: 8pt; background: white; color: #333333; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
+        <table class="bg-surface text-strong" style="font-size: 8pt; border-collapse: collapse;" width="100%" cellspacing="10" cellpadding="10">
           <tr><td class="auftraginfo_cell">Inhaber:</td><td colspan="4" class="auftraginfo_cell">[INHABER]</td><td class="auftraginfo_cell">Bank:</td><td colspan="4" class="auftraginfo_cell">[BANK]</td></tr>
           <tr><td class="auftraginfo_cell">BIC:</td><td colspan="4" class="auftraginfo_cell">[SWIFT]</td><td class="auftraginfo_cell">IBAN:</td><td colspan="4" class="auftraginfo_cell">[IBAN]</td></tr>
           <tr><td class="auftraginfo_cell">Mandatsreferenz:</td><td colspan="4" class="auftraginfo_cell">[MANDATREFERENZ]</td><td class="auftraginfo_cell">Lastschriftart:</td><td colspan="4" class="auftraginfo_cell">[MANDATREFERENZART] [MANDATSREFERENZDHART]</td></tr>
@@ -87,14 +87,14 @@
 
     </td><td width="50%">
      <div style="overflow:scroll; height:600px"> 
-      <div style="background-color:white">
-        <div width="100%" style="background-color:#999;"><h2 class="greyh2">Lieferadressen</h2></div>
+      <div class="bg-surface">
+        <div width="100%" class="bg-muted-strong"><h2 class="greyh2">Lieferadressen</h2></div>
           <div style="padding:10px">
           [LIEFERANTEN]
           </div>
         </div>
 
-        <div style="background-color:white">
+        <div class="bg-surface">
           <h2 class="greyh2">Ansprechpartner</h2>
           <div style="padding:10px">
             [ANSPRECHPARTNER]
