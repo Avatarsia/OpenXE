@@ -74,6 +74,10 @@ trait IncludeFeatureTrait
                 ));
             }
 
+            if (empty($items)) {
+                continue;
+            }
+
             // Nur bestimmte Spalten inkludieren?
             $columns = isset($settings['columns']) ? $settings['columns'] : [];
 

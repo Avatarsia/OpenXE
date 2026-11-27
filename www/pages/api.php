@@ -505,6 +505,16 @@ if (!function_exists('getallheaders')) {
           'list_article_categories', // /v1/artikelkategorien - GET
           'view_article_category', // /v1/artikelkategorien/{id:\d+} - GET
           'edit_article_category', // /v1/artikelkategorien/{id:\d+} - PUT
+          'list_article_tree_assignments', // /v1/artikelbaum_artikel - GET
+          'view_article_tree_assignment', // /v1/artikelbaum_artikel/{id:\d+} - GET
+          'create_article_tree_assignment', // /v1/artikelbaum_artikel - POST
+          'edit_article_tree_assignment', // /v1/artikelbaum_artikel/{id:\d+} - PUT
+          'delete_article_tree_assignment', // /v1/artikelbaum_artikel/{id:\d+} - DELETE
+          'list_article_onlineshops', // /v1/artikel_onlineshops - GET
+          'view_article_onlineshop', // /v1/artikel_onlineshops/{id:\d+} - GET
+          'create_article_onlineshop', // /v1/artikel_onlineshops - POST
+          'edit_article_onlineshop', // /v1/artikel_onlineshops/{id:\d+} - PUT
+          'delete_article_onlineshop', // /v1/artikel_onlineshops/{id:\d+} - DELETE
         ],
         'contacts' => [
           'standard_ansprechpartnercreate',
@@ -10969,38 +10979,55 @@ XML;
     $xmldata = $this->XMLPostPlain();
 
     foreach ($xmldata->xml->artikel as $artikel){
-      if($artikel->id > 0)
-        $id = $this->app->DB->Select("SELECT id FROM artikel WHERE id='$artikel->id' LIMIT 1");
-      else if ($artikel->nummer!="")
-        $id = $this->app->DB->Select("SELECT id FROM artikel WHERE nummer='".$artikel->nummer."' LIMIT 1");
+      $id = 0;
+      $artikelId = (int)$artikel->id;
+      $artikelNummer = (string)$artikel->nummer;
+      if($artikelId > 0)
+        $id = (int)$this->app->DB->Select("SELECT id FROM artikel WHERE id='".$artikelId."' LIMIT 1");
+      else if ($artikelNummer !== "")
+        $id = (int)$this->app->DB->Select("SELECT id FROM artikel WHERE nummer='".$this->app->DB->real_escape_string($artikelNummer)."' LIMIT 1");
 
       if($id<=0) continue;
       $this->app->erp->SetzteSperreAPIArtikelPreise($id);
 
       foreach ($artikel->verkaufspreise as $vk) {
         foreach ($vk->staffelpreis as $staffelpreis) {
+          $kundennummer = (string)$staffelpreis->kundennummer;
+          $gruppe       = (int)$staffelpreis->gruppe;
+          $abmenge      = (float)str_replace(',', '.', (string)$staffelpreis->ab_menge);
+          $preis        = (float)str_replace(',', '.', (string)$staffelpreis->preis);
+          $adresse      = (int)$staffelpreis->adresse;
 
-          if($staffelpreis->kundennummer!="")
-            $staffelpreis->adresse = $this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='".$staffelpreis->kundennummer."' LIMIT 1");
-          if($staffelpreis->gruppe > 0)
-            $this->app->erp->AddVerkaufspreisGruppe($id,$staffelpreis->ab_menge,$staffelpreis->gruppe,$staffelpreis->preis);
-          else if($staffelpreis->adresse > 0)
-            $this->app->erp->AddVerkaufspreis($id,$staffelpreis->ab_menge,$staffelpreis->adresse,$staffelpreis->preis);
-          else if($staffelpreis->kundennummer=="" && $staffelpreis->adresse <= 0)
-            $this->app->erp->AddVerkaufspreis($id,$staffelpreis->ab_menge,0,$staffelpreis->preis);
+          if($kundennummer !== "")
+            $adresse = (int)$this->app->DB->Select("SELECT id FROM adresse WHERE kundennummer='".$this->app->DB->real_escape_string($kundennummer)."' LIMIT 1");
+          if($gruppe > 0)
+            $this->app->erp->AddVerkaufspreisGruppe($id, $abmenge, $gruppe, $preis);
+          else if($adresse > 0)
+            $this->app->erp->AddVerkaufspreis($id, $abmenge, $adresse, $preis);
+          else if($kundennummer === "" && $adresse <= 0)
+            $this->app->erp->AddVerkaufspreis($id, $abmenge, 0, $preis);
         }
       }
 
       // test
       foreach ($artikel->einkaufspreise as $ek) {
         foreach ($ek->staffelpreis as $staffelpreis) {
-
-    $lieferantadresse = $this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='".$staffelpreis->lieferantennummer."' AND lieferantennummer!='' LIMIT 1");
-    if($lieferantadresse > 0)
-    {
-            $this->app->erp->AddEinkaufspreis($id,$staffelpreis->ab_menge,$lieferantadresse,$staffelpreis->bestellnummer,$staffelpreis->bezeichnunglieferant,
-    $staffelpreis->preis,$staffelpreis->waehrung);
-    }
+          $lieferantennummer = (string)$staffelpreis->lieferantennummer;
+          $lieferantadresse = (int)$this->app->DB->Select("SELECT id FROM adresse WHERE lieferantennummer='".$this->app->DB->real_escape_string($lieferantennummer)."' AND lieferantennummer!='' LIMIT 1");
+          if($lieferantadresse > 0)
+          {
+            $abmenge = (float)str_replace(',', '.', (string)$staffelpreis->ab_menge);
+            $preis   = (float)str_replace(',', '.', (string)$staffelpreis->preis);
+            $this->app->erp->AddEinkaufspreis(
+              $id,
+              $abmenge,
+              $lieferantadresse,
+              (string)$staffelpreis->bestellnummer,
+              (string)$staffelpreis->bezeichnunglieferant,
+              $preis,
+              (string)$staffelpreis->waehrung
+            );
+          }
         }
       }
 
