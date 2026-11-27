@@ -7,18 +7,33 @@ gives the operator a richer browser-based workflow.
 
 ## Architecture Overview
 
-The Avatarsia upgrader is a thin UI layer on top of the upstream
-upgrade engine. The engine itself (`upgrade/data/upgrade.php` and
-`vendor/mustal/mustal_mysql_upgrade_tool.php`) is intentionally
-left at upstream HEAD; only the page controller and the Smarty
-template are extended. The new UI calls the existing
-`upgrade_main()` function with named arguments, which keeps the
-fork binary compatible with upstream backend bug fixes.
+The Avatarsia upgrader is a modernized UI and diagnostics layer on top of the
+upstream upgrade engine. The page controller (`www/pages/upgrade.php`) calls the
+existing `upgrade_main()` function with named arguments and adds structured log
+parsing, CSRF/admin protection, rollback tags, and detached-HEAD recovery. Two
+targeted patches extend the upstream engine files (`upgrade/data/upgrade.php`
+for post-upgrade schema diff logging and `vendor/mustal/mustal_mysql_upgrade_tool.php`
+for default-value normalization) so remaining schema differences are surfaced
+accurately in the UI.
 
 ## What is New Compared to Upstream
 
-- Responsive CSS layout with status banner, stepper and embedded
-  action cards
+- Responsive CSS layout (Light & Dark Mode) with status banner, structured
+  **Diagnose & Details** card, clarified action cards (**Komplett-Upgrade** vs.
+  **Nur Datenbank**), and loading-state spinner / double-submit guard
+- Structured Diagnostics Panel: parses SQL errors, remaining post-upgrade
+  schema differences, and modified git files from the upgrade log and renders
+  them in tables/lists directly below the status banner (with stale-log hint
+  when the displayed log is older than the current state)
+- Post-upgrade schema diff logging (`upgrade/data/upgrade.php`) and MUSTAL
+  default-value normalization fix (`vendor/mustal/mustal_mysql_upgrade_tool.php`)
+- Security hardening: CSRF token validation and admin-only authorization guard
+  on POST actions as well as the log download endpoint
+- Detached-HEAD recovery before upgrades and confirmation dialogs for both
+  rollback and force mode (`-f`)
+- Enhanced XSS-safe log viewer: quick-filter chips (`Alle`, `Fehler & Warnungen`,
+  `DB-Differenzen`) with live match counts, substring search, syntax highlighting
+  via DOM nodes (no `innerHTML`), one-click copy, and expand/collapse height toggle
 - Rollback via git tags: before every upgrade run the controller
   creates a `pre-upgrade-YYYY-MM-DD-HH-MM-SS` tag in the local
   working tree and stores it in the session. A cleanup pass keeps
@@ -48,27 +63,31 @@ fork binary compatible with upstream backend bug fixes.
 
 The fork-specific files of this module are:
 
-- `www/pages/upgrade.php` (ca. 600 lines)
-  Page controller. Includes the upstream engine via
+- `www/pages/upgrade.php`
+  Page controller. Includes the engine via
   `include("../upgrade/data/upgrade.php")` and dispatches the
-  AJAX endpoint, the rollback action and the upgrade actions.
-- `www/pages/content/upgrade.tpl` (ca. 130 lines)
-  Smarty template for the upgrader page. References the external
-  CSS and JS assets below.
+  AJAX endpoint, CSRF/admin checks, diagnostics parsing, detached-HEAD
+  recovery, rollback action, and upgrade actions.
+- `www/pages/content/upgrade.tpl`
+  Smarty template for the upgrader page (including CSRF hidden field,
+  diagnostics card, clarified step cards, and log toolbar). References the
+  external CSS and JS assets below.
 - `www/css/upgrade.css`
-  Page styles. Follows the OpenXE convention for global pages
-  (other pages link `./css/<page>.css`).
+  Page styles (Light & Dark Mode, diagnostics tables, loading spinner, log
+  toolbar and syntax highlighting). Follows the OpenXE convention for global
+  pages (other pages link `./css/<page>.css`).
 - `www/js/upgrade.js`
-  Page scripts (help-toggle, log-search).
+  Page scripts (submit guard, `-f`/rollback confirmations, loading state,
+  XSS-safe log filtering/highlighting, copy & expand controls).
 - `upgrader-ui-changelog.md`
   Short changelog kept inside the source branch for traceability.
 
-The following files are part of the upstream engine and are NOT
-overridden by this module:
+The following upstream engine files carry minimal targeted fork patches:
 
-- `upgrade/data/upgrade.php`
-- `upgrade/data/db_schema.json`
-- `vendor/mustal/mustal_mysql_upgrade_tool.php`
+- `upgrade/data/upgrade.php` (post-upgrade schema diff logging)
+- `vendor/mustal/mustal_mysql_upgrade_tool.php` (default-value comparison fix)
+
+`upgrade/data/db_schema.json` remains untouched upstream.
 
 ## Non-Standard: No Bootstrap.php
 
@@ -90,10 +109,12 @@ relies on the standard OpenXE controller surface
 
 The page itself is reached through the regular OpenXE module
 router and inherits its login check. In addition the controller
-guards the AJAX download endpoint via `isUpgraderAuthorized()`,
-which requires both a logged-in user (`User->GetID() > 0`) and
-the `admin` user type. Non-admin callers get HTTP 403 before any
-log content is emitted.
+guards both POST upgrade/rollback actions and the AJAX download
+endpoint via `isUpgraderAuthorized()` (requiring a logged-in
+`admin` user) and validates a session-bound CSRF token
+(`[CSRF_TOKEN]`) on all state-changing POST requests. Non-admin
+callers get HTTP 403 before any action runs or log content is
+emitted.
 
 ## Rollback Mechanism
 

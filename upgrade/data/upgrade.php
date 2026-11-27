@@ -215,30 +215,51 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 abort("Invalid remote list in $remote_file_name");
                 return(-1);
             }
-            $config = file_get_contents($mainfolder."/conf/user.inc.php");
-            preg_match("/WFuserdata='(?<path>.*?)';/", $config, $matches);
-            $uhash = file_get_contents($matches['path']."/uhash.txt");
-            $ch = curl_init('https://upgrade.openxe-dev.org/remotes.php');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, array('uhash'=>$uhash));
-            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
-            $response = curl_exec($ch);
-            if (!$response) {
-                $error_msg = "Fetch additional remotes failed.";
-                if (!empty(curl_error($ch))) {
-                    $error_msg .= " ".curl_error($ch);
+            $has_upstream_remote = false;
+            foreach ($remotes as $r) {
+                if (is_array($r) && stripos((string)($r['host'] ?? ''), 'openxe-org') !== false) {
+                    $has_upstream_remote = true;
+                    break;
                 }
-                if (!empty(curl_getinfo($ch)['http_code'])) {
-                    $error_msg .= " (HTTP ".curl_getinfo($ch)['http_code'].")";
-                }
-                echo_out($error_msg."\n");
+            }
+            if (!$has_upstream_remote) {
+                echo_out("Skipping external openxe-dev.org remote lookup (custom upgrade source).\n");
             } else {
-                $additional_remotes = json_decode($response, true);
-                if (!empty($additional_remotes['success'])) {
-                    $remotes = array_merge($remotes, $additional_remotes['remotes']);
-                    echo_out("Fetched additional remotes.\n");
+                $uhash = '';
+                $user_config_file = $mainfolder."/conf/user.inc.php";
+                $config = is_readable($user_config_file) ? @file_get_contents($user_config_file) : false;
+                if ($config !== false && preg_match("/WFuserdata='(?<path>.*?)';/", $config, $matches) && !empty($matches['path'])) {
+                    $uhash_file = $matches['path']."/uhash.txt";
+                    if (is_readable($uhash_file)) {
+                        $uhash_contents = @file_get_contents($uhash_file);
+                        if ($uhash_contents !== false) {
+                            $uhash = $uhash_contents;
+                        }
+                    }
+                }
+                $ch = curl_init('https://upgrade.openxe-dev.org/remotes.php');
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_POSTFIELDS, array('uhash'=>$uhash));
+                curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 3);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+                $response = curl_exec($ch);
+                if (!$response) {
+                    $error_msg = "Fetch additional remotes failed.";
+                    if (!empty(curl_error($ch))) {
+                        $error_msg .= " ".curl_error($ch);
+                    }
+                    if (!empty(curl_getinfo($ch)['http_code'])) {
+                        $error_msg .= " (HTTP ".curl_getinfo($ch)['http_code'].")";
+                    }
+                    echo_out($error_msg."\n");
                 } else {
-                    echo_out("No additional remotes.\n".$additional_remotes['message']."\n");
+                    $additional_remotes = json_decode($response, true);
+                    if (!empty($additional_remotes['success']) && !empty($additional_remotes['remotes']) && is_array($additional_remotes['remotes'])) {
+                        $remotes = array_merge($remotes, $additional_remotes['remotes']);
+                        echo_out("Fetched additional remotes.\n");
+                    } else {
+                        echo_out("No additional remotes.\n".($additional_remotes['message'] ?? '')."\n");
+                    }
                 }
             }
             $remotes = array_values(array_map("unserialize", array_unique(array_map("serialize", $remotes))));
@@ -404,7 +425,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 $migration_result = upgrade_migrate();
                 if ($migration_result['result'] != 0) {
                     echo_out("--------------- Migration failed ---------------\n");
-                    abort($migration_check_result['message'], $verbose?$migration_check_result['dump']:false);
+                    abort($migration_result['message'] ?? 'Migration failed', $verbose ? ($migration_result['dump'] ?? null) : false);
                     return(-1);
                 }
             }
@@ -457,7 +478,26 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 return(-1);
             }
 
-            if ($head_output === $fetch_head_output) {
+            $is_detached_head = false;
+            $target_branch = trim((string)($remote_info['branch'] ?? ''));
+            if ($target_branch !== '') {
+                $retval = git("rev-parse --abbrev-ref HEAD", $branch_output, $verbose, false, "Error while checking git branch!");
+                if ($retval == 0 && isset($branch_output[0]) && trim($branch_output[0]) === 'HEAD') {
+                    $is_detached_head = true;
+                }
+            }
+
+            if ($is_detached_head) {
+                echo_out("Detached HEAD detected, re-attaching to branch '".$target_branch."'...\n");
+                $retval = git("checkout -B ".escapeshellarg($target_branch)." FETCH_HEAD", $output, $verbose, $verbose, "Error while re-attaching git branch!");
+                if ($retval != 0) {
+                    abort("");
+                    return(-1);
+                }
+                if ($head_output === $fetch_head_output) {
+                    echo_out("Already up to date.\n");
+                }
+            } elseif ($head_output === $fetch_head_output) {
                 echo_out("Already up to date.\n");
             } else {
                 $retval = git("reset --hard FETCH_HEAD",$output,$verbose,$verbose,"Error while applying files!");
@@ -496,6 +536,9 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
 
             foreach ($cache_files as $cache_file) {
                 $filename = $udi->WFuserdata."/tmp/".$udi->WFdbname."/".$cache_file;
+                if (!file_exists($filename)) {
+                    continue;
+                }
                 $delete_cache_file_result = @unlink($filename);
                 if (!$delete_cache_file_result) {
                     echo_out("Failed to delete ".$filename."! Please delete manually...\n");
@@ -612,6 +655,11 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
             foreach ($compare_differences as $compare_difference) {
                 $comma = "";
                 foreach ($compare_difference as $key => $value) {
+                    if (is_array($value)) {
+                        $value = implode(',',$value);
+                    } elseif ($value === null) {
+                        $value = 'NULL';
+                    }
                     echo_out($comma."$key => [$value]");
                     $comma = ", ";
                 }
@@ -629,6 +677,8 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 foreach ($compare_difference as $key => $value) {
                     if (is_array($value)) {
                         $value = implode(',',$value);
+                    } elseif ($value === null) {
+                        $value = 'NULL';
                     }
                     echo_out($comma."$key => [$value]");
                     $comma = ", ";
@@ -706,6 +756,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                             } else {
                                 echo_out(" not ok: ". mysqli_error($mysqli)."\n");
                             }
+                            echo_out("Failed SQL: " . preg_replace('/\s+/', ' ', trim($sql)) . "\n");
                             $error_counter++;
                         } else if (!$progress_to_file) {
                             echo_out("ok.\r");
@@ -717,6 +768,7 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                         } else {
                             echo_out(" not ok: ". $e->getMessage()."\n");
                         }
+                        echo_out("Failed SQL: " . preg_replace('/\s+/', ' ', trim($sql)) . "\n");
                         $error_counter++;
                     }
                 }
@@ -744,10 +796,24 @@ function upgrade_main(string $directory,bool $verbose, bool $check_git, bool $do
                 } else {
                     $compare_differences = mustal_compare_table_array($compare_def,"in JSON",$db_def,"in DB",true,true);
                     $remaining_differences = (empty($compare_differences)?0:count($compare_differences));
-                    echo_out($remaining_differences." differences remaining after upgrade.\n");
                     if ($remaining_differences > 0) {
+                        echo_out("--------------- Remaining differences after upgrade ---------------\n");
+                        foreach ($compare_differences as $compare_difference) {
+                            $comma = "";
+                            foreach ($compare_difference as $key => $value) {
+                                if (is_array($value)) {
+                                    $value = implode(',',$value);
+                                } elseif ($value === null) {
+                                    $value = 'NULL';
+                                }
+                                echo_out($comma."$key => [$value]");
+                                $comma = ", ";
+                            }
+                            echo_out("\n");
+                        }
                         $warnings = true;
                     }
+                    echo_out($remaining_differences." differences remaining after upgrade.\n");
                 }
             }
         } // $do_db

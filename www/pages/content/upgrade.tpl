@@ -7,6 +7,7 @@
     <div id="tabs-1">
         [MESSAGE]
         <form action="" method="post">
+            <input type="hidden" name="csrf_token" value="[CSRF_TOKEN]">
 
             <!-- Status-Banner (volle Breite) -->
             <div class="status-banner banner-[STATUS_LEVEL]" role="status">
@@ -20,24 +21,32 @@
                 </div>
             </div>
 
-            <!-- Steps: Dateien + Datenbank -->
+            <!-- Diagnose: Fehler, Restdifferenzen, geänderte Dateien -->
+            <section class="card diagnostics-card" [DIAGNOSTICS_VISIBLE] aria-labelledby="diagnostics-title">
+                <h3 class="card-title" id="diagnostics-title">{|Diagnose &amp; Details|}</h3>
+                <div class="card-body">[DIAGNOSTICS_HTML]</div>
+            </section>
+
+            <!-- Steps: Komplett-Upgrade + Nur Datenbank -->
             <div class="grid grid-2">
                 <section class="card step-card">
                     <div class="step-head">
                         <span class="pill [STEP_FILES_PILL_CLASS]">[STEP_FILES_PILL_TEXT]</span>
-                        <strong>{|Dateien · Code &amp; Repo|}</strong>
+                        <strong>{|Komplett-Upgrade · Dateien &amp; Datenbank|}</strong>
                     </div>
+                    <p class="step-desc">{|Prüft und aktualisiert Code (Git) sowie das Datenbank-Schema in einem Schritt.|}</p>
                     <label class="step-check"><input type="checkbox" name="details_anzeigen" value="1" [DETAILS_ANZEIGEN]> {|Upgrade-Details anzeigen|}</label>
                     <div class="step-actions">
                         <button name="submit" value="[UPGRADE_BUTTON_ACTION]" class="step-btn">[UPGRADE_BUTTON_LABEL]</button>
                     </div>
-                    <div class="force-wrap [FORCE_HIGHLIGHT_CLASS]" [UPGRADE_FORCE_VISIBLE]><label>[FORCE_CHECKBOX] {|Erzwingen (-f)|}</label></div>
+                    <div id="force-wrap" class="force-wrap [FORCE_HIGHLIGHT_CLASS]" [UPGRADE_FORCE_VISIBLE]><label>[FORCE_CHECKBOX] {|Erzwingen (-f)|}</label></div>
                 </section>
                 <section class="card step-card">
                     <div class="step-head">
                         <span class="pill [STEP_DB_PILL_CLASS]">[STEP_DB_PILL_TEXT]</span>
-                        <strong>{|Datenbank · DB-Check &amp; Upgrade|}</strong>
+                        <strong>{|Nur Datenbank · Check &amp; Wartung|}</strong>
                     </div>
+                    <p class="step-desc">{|Prüft oder aktualisiert ausschließlich die Datenbank ohne Git-Änderungen.|}</p>
                     <label class="step-check"><input type="checkbox" name="db_details_anzeigen" value="1" [DB_DETAILS_ANZEIGEN]> {|DB-Details anzeigen|}</label>
                     <div class="step-actions">
                         <button name="submit" value="[UPGRADE_DB_BUTTON_ACTION]" class="step-btn">[UPGRADE_DB_BUTTON_LABEL]</button>
@@ -99,15 +108,16 @@
                         </div>
                     </div>
                     <div class="card-footer">
-                        <button name="submit" value="rollback_to_tag" class="action-btn btn-rollback" onclick="return confirm('Wirklich auf diesen Stand zurücksetzen? Code wird überschrieben!');">&#128281; {|Rollback durchführen|}</button>
+                        <button name="submit" value="rollback_to_tag" class="action-btn btn-rollback">&#128281; {|Rollback durchführen|}</button>
                     </div>
                 </section>
                 <section class="card help-card" aria-labelledby="help-title">
                     <details open>
                         <summary id="help-title">{|Hilfe &amp; Hinweise|}</summary>
                         <div class="help-body">
-                            {|Das Upgrade läuft in zwei Schritten:|} <strong>{|Dateien aktualisieren|}</strong> {|und|} <strong>{|Datenbank auffrischen|}</strong>.
-                            {|Für lange Läufe das Protokoll über das Aktualisieren-Symbol neu laden.|}
+                            <strong>{|Komplett-Upgrade|}</strong> {|aktualisiert Code (Git) und Datenbank-Schema gemeinsam in einem Schritt.|}
+                            <strong>{|Nur Datenbank|}</strong> {|dient für gezielte Datenbank-Prüfungen oder Schema-Reparaturen ohne Git-Änderungen.|}
+                            {|Warnungen, SQL-Fehler und verbleibende Schema-Differenzen werden oben in der Karte|} <strong>{|Diagnose &amp; Details|}</strong> {|übersichtlich zusammengefasst.|}
                             {|Bei hartnäckigen Fehlern hilft der Konsolen-Run:|} <code>./upgrade.sh -do</code> {|im Unterordner|} <code>upgrade</code>.
                             <br><br>
                             <strong>{|Tipp:|}</strong> {|Zweigwechsel: anderen Zweig auswählen und &bdquo;Upgrade starten&ldquo; ausführen. Über die Konsole alternativ im Unterordner|} <code>upgrade</code>: <code>./upgrade.sh -do -m BRANCHNAME</code>
@@ -122,8 +132,17 @@
                 <div class="log-header">
                     <span class="log-title" id="log-title">{|Protokoll|}</span>
                     <span class="hint log-meta">{|Letzte Aktion|}: [LAST_ACTION] &middot; {|Letzter Durchlauf|}: [LAST_RUN]</span>
-                    <input type="text" id="log-search" class="log-search" placeholder="{|Log durchsuchen|}…" aria-label="{|Log durchsuchen|}">
-                    <a href="?module=upgrade&action=list&ajax=download_log" class="log-download" download>&#128229; {|Log herunterladen|}</a>
+                    <div class="log-toolbar">
+                        <div class="log-filters" role="group" aria-label="{|Log-Filter|}">
+                            <button type="button" class="log-filter-btn is-active" data-log-filter="all">{|Alle|}</button>
+                            <button type="button" class="log-filter-btn" data-log-filter="errors">{|Fehler &amp; Warnungen|}</button>
+                            <button type="button" class="log-filter-btn" data-log-filter="diffs">{|DB-Differenzen|}</button>
+                        </div>
+                        <input type="text" id="log-search" class="log-search" placeholder="{|Log durchsuchen|}…" aria-label="{|Log durchsuchen|}">
+                        <button type="button" id="log-copy-btn" class="log-tool-btn" title="{|Vollständiges Protokoll kopieren|}">{|Kopieren|}</button>
+                        <button type="button" id="log-expand-btn" class="log-tool-btn">{|Erweitern|}</button>
+                        <a href="?module=upgrade&action=list&ajax=download_log" class="log-download" download>&#128229; {|Log herunterladen|}</a>
+                    </div>
                 </div>
                 <div class="log-box" id="log-box">[OUTPUT_FROM_CLI]</div>
             </section>

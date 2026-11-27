@@ -34,6 +34,10 @@ class upgrade {
     const RESULT_DIFF_IN_JSON_NOT_DB = '/^(\d+) differences \(in JSON not in DB\)\.$/m';
     const RESULT_DIFF_REMAINING = '/^(\d+) differences remaining after upgrade\.$/m';
     const RESULT_DB_ERRORS = '/^Database upgrade errors: (\d+)$/m';
+    const RESULT_REMAINING_DIFFS_HEADER = '/^-+ Remaining differences after upgrade -+$/';
+    const RESULT_PRECHECK_DIFFS_HEADER = "/^-+ Comparing database '.*?' vs\\. JSON '.*?' -+$/";
+    const RESULT_FAILED_SQL = '/^Upgrade step (\d+) of (\d+) not ok:\s*(.+)$/';
+    const RESULT_FAILED_SQL_QUERY = '/^Failed SQL:\s*(.+)$/';
 
     function __construct($app, $intern = false) {
         $this->app = $app;
@@ -93,6 +97,474 @@ class upgrade {
             return false;
         }
         return $this->app->User->GetType() === 'admin';
+    }
+
+    /**
+     * Liefert das Session-CSRF-Token fuer schreibende/gelockte Upgrader-
+     * Submits oder legt es bei Bedarf neu an. Falls keine Session aktiv
+     * sein kann, wird ein leerer String geliefert (Fail-Closed).
+     */
+    private function getOrCreateCsrfToken(): string
+    {
+        if (session_status() === PHP_SESSION_NONE && !headers_sent()) {
+            @session_start();
+        }
+        if (session_status() === PHP_SESSION_ACTIVE && isset($_SESSION) && is_array($_SESSION)) {
+            if (empty($_SESSION['upgrader_csrf_token']) || !is_string($_SESSION['upgrader_csrf_token'])) {
+                $_SESSION['upgrader_csrf_token'] = bin2hex(random_bytes(32));
+            }
+            return $_SESSION['upgrader_csrf_token'];
+        }
+        return '';
+    }
+
+    /**
+     * Laedt upgrade/data/remote.json und baut die Zweig-Auswahltabelle.
+     * Der erste Eintrag mit active=true ist die aktive Upgrade-Quelle.
+     */
+    private function loadRemoteConfig(string $remote_config_file): array
+    {
+        $config = [
+            'readable' => false,
+            'current_branch' => '',
+            'remote_host' => '',
+            'remote_branch' => '',
+            'branches_html' => '',
+        ];
+        if (!is_readable($remote_config_file)) {
+            return $config;
+        }
+        $config['readable'] = true;
+        $remote_data_raw = file_get_contents($remote_config_file);
+        $remotes = json_decode((string)$remote_data_raw, true);
+        if (!is_array($remotes)) {
+            $remotes = array();
+        }
+        $branch_rows = "";
+        foreach ($remotes as $remote) {
+            if (!is_array($remote) || empty($remote['name'])) {
+                continue;
+            }
+            $is_active = !empty($remote['active']);
+            $is_enabled = !empty($remote['enabled']);
+            if ($is_active && $config['current_branch'] === "") {
+                $config['current_branch'] = (string)$remote['name'];
+                $config['remote_host'] = (string)($remote['host'] ?? "");
+                $config['remote_branch'] = (string)($remote['branch'] ?? "");
+            }
+            $branch_status = $is_active ? "aktiv" : "";
+            if (!$is_enabled) {
+                $branch_status = "gesperrt";
+            }
+            $name_escaped = $this->esc((string)$remote['name']);
+            $branch_rows .= '<tr>'
+                .'<td><input type="radio" name="branch" value="'.$name_escaped.'"'
+                .($is_active ? ' checked' : '').(!$is_enabled ? ' disabled' : '').'></td>'
+                .'<td>'.$name_escaped.'</td>'
+                .'<td>'.$this->esc($branch_status).'</td>'
+                .'<td>'.$this->esc((string)($remote['description']['de'] ?? "")).'</td>'
+                .'</tr>';
+        }
+        if ($branch_rows !== "") {
+            $config['branches_html'] = '<table class="branch-table">'
+                .'<thead><tr><th></th><th>Name</th><th>Status</th><th>Beschreibung</th></tr></thead>'
+                .'<tbody>'.$branch_rows.'</tbody></table>';
+        }
+        return $config;
+    }
+
+    /**
+     * Vergleicht lokalen und Remote-Commit-Hash und liefert die passenden
+     * Status-Texte und Pill-Klassen.
+     */
+    private function compareLocalAndRemoteHashes(string $local_hash, string $remote_hash): array
+    {
+        if ($local_hash === "") {
+            return [
+                'update_status_text' => "Lokaler Stand unbekannt",
+                'update_status_class' => "pill-warning",
+                'step_files_pill_class' => "pill-warning",
+                'step_files_pill_text' => "lokaler Stand unbekannt",
+            ];
+        }
+        if ($local_hash === $remote_hash) {
+            return [
+                'update_status_text' => "Alles aktuell",
+                'update_status_class' => "pill-success",
+                'step_files_pill_class' => "pill-success",
+                'step_files_pill_text' => "aktuell",
+            ];
+        }
+        // Hash-Mismatch heißt nicht zwingend "remote ist neuer" —
+        // lokal kann auch voraus oder divergiert sein. Ohne
+        // zusätzliche git-Aufrufe ist das nicht unterscheidbar.
+        return [
+            'update_status_text' => "Stand weicht ab – Prüfung empfohlen",
+            'update_status_class' => "pill-warning",
+            'step_files_pill_class' => "pill-warning",
+            'step_files_pill_text' => "Stand weicht ab",
+        ];
+    }
+
+    /**
+     * Fragt den aktuellen Commit-Hash des konfigurierten Remote-Branches
+     * per git ls-remote ab (mit Low-Speed-Timeout, damit ein nicht
+     * erreichbarer Remote den Seitenaufruf nicht blockiert).
+     */
+    private function probeRemoteStatus(string $git_root, string $remote_host, string $remote_branch, string $local_hash): array
+    {
+        $status = [
+            'remote_hash' => "",
+            'remote_hash_short' => "",
+            'update_status_text' => "Remote-Stand nicht geprüft.",
+            'update_status_class' => "pill-info",
+            'step_files_pill_class' => "pill-info",
+            'step_files_pill_text' => "nicht geprüft",
+        ];
+
+        if ($git_root === "" || $remote_host === "" || $remote_branch === "") {
+            return $status;
+        }
+
+        $remote_ref = "refs/heads/".$remote_branch;
+        $remote_cmd = 'git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 -C '
+            .escapeshellarg($git_root).' ls-remote '.escapeshellarg($remote_host).' '.escapeshellarg($remote_ref).' 2>&1';
+        $remote_output = [];
+        $remote_exit_code = 0;
+        exec($remote_cmd, $remote_output, $remote_exit_code);
+        $remote_line = trim((string)($remote_output[0] ?? ''));
+
+        if ($remote_exit_code !== 0) {
+            // Remote-Probe fehlgeschlagen: exec liefert genauen Exit-Code,
+            // shell_exec hätte hier nur `null` zurückgegeben.
+            $status['update_status_text'] = "Remote-Probe fehlgeschlagen (Exit-Code ".$remote_exit_code.")";
+            $status['update_status_class'] = "pill-warning";
+            $status['step_files_pill_class'] = "pill-warning";
+            $status['step_files_pill_text'] = "Remote nicht prüfbar";
+        } elseif ($remote_line !== "") {
+            $remote_hash = trim((string)strtok($remote_line, "\t "));
+            $status['remote_hash'] = $remote_hash;
+            $status['remote_hash_short'] = substr($remote_hash, 0, 8);
+            $cmp = $this->compareLocalAndRemoteHashes($local_hash, $remote_hash);
+            $status = array_merge($status, $cmp);
+        } else {
+            $status['update_status_text'] = "Remote nicht erreichbar";
+            $status['update_status_class'] = "pill-warning";
+            $status['step_files_pill_class'] = "pill-warning";
+            $status['step_files_pill_text'] = "Remote nicht erreichbar";
+        }
+
+        return $status;
+    }
+
+    /**
+     * Parst eine einzelne Diff-Zeile im Engine-Format:
+     * `type => [Column definition], table => [adresse], ...`
+     */
+    private function parseDiffLine(string $line): ?array
+    {
+        $trimmed = trim($line);
+        if ($trimmed === '' || strpos($trimmed, ' => [') === false) {
+            return null;
+        }
+        if (preg_match_all('/(?:^|, )([^,\[\]=>]+?) => \[(.*?)\](?=, [^,\[\]=>]+? => \[|$)/', $trimmed, $matches, PREG_SET_ORDER) < 1) {
+            return null;
+        }
+        $entry = [];
+        foreach ($matches as $m) {
+            $entry[trim($m[1])] = $m[2];
+        }
+        return !empty($entry) ? $entry : null;
+    }
+
+    /**
+     * Extrahiert alle Diff-Zeilen zwischen einer Start- und einer
+     * End-Zeile (bricht ab, falls vorher ein anderer Abschnitt beginnt).
+     */
+    private function parseDiffSection(string $log, string $startPattern, string $endPattern): array
+    {
+        if ($log === '') {
+            return [];
+        }
+        $lines = preg_split('/\r?\n/', $log);
+        if (!is_array($lines)) {
+            return [];
+        }
+        $in_section = false;
+        $current = [];
+        $last_completed = [];
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            if (!$in_section) {
+                if (preg_match($startPattern, $trimmed) === 1) {
+                    $in_section = true;
+                    $current = [];
+                }
+                continue;
+            }
+            if (preg_match($endPattern, $trimmed) === 1) {
+                $last_completed = $current;
+                $in_section = false;
+                $current = [];
+            } elseif (preg_match('/^-{5,}/', $trimmed) === 1) {
+                $in_section = false;
+                $current = [];
+            } else {
+                $parsed = $this->parseDiffLine($line);
+                if ($parsed !== null) {
+                    $current[] = $parsed;
+                }
+            }
+        }
+        return $last_completed;
+    }
+
+    /**
+     * Parst die Restdifferenzen nach einem DB-Upgrade.
+     */
+    private function parseRemainingDiffs(string $log): array
+    {
+        return $this->parseDiffSection(
+            $log,
+            self::RESULT_REMAINING_DIFFS_HEADER,
+            '/^\d+ differences remaining after upgrade\.$/'
+        );
+    }
+
+    /**
+     * Parst die erkannten DB-Differenzen aus einem Check-Lauf (in JSON not in DB).
+     */
+    private function parsePrecheckDiffs(string $log): array
+    {
+        return $this->parseDiffSection(
+            $log,
+            self::RESULT_PRECHECK_DIFFS_HEADER,
+            '/^\d+ differences \(in JSON not in DB\)\.$/'
+        );
+    }
+
+    /**
+     * Parst fehlgeschlagene DB-Statements samt optionaler Folgezeile `Failed SQL:`.
+     */
+    private function parseFailedSqls(string $log): array
+    {
+        if ($log === '') {
+            return [];
+        }
+        $lines = preg_split('/\r?\n/', $log);
+        if (!is_array($lines)) {
+            return [];
+        }
+        $failed = [];
+        $count = count($lines);
+        for ($i = 0; $i < $count; $i++) {
+            $line = trim($lines[$i]);
+            if (preg_match(self::RESULT_FAILED_SQL, $line, $m) === 1) {
+                $sql = '';
+                if ($i + 1 < $count && preg_match(self::RESULT_FAILED_SQL_QUERY, trim($lines[$i + 1]), $sm) === 1) {
+                    $sql = trim($sm[1]);
+                    $i++;
+                }
+                $failed[] = [
+                    'step' => $m[1].'/'.$m[2],
+                    'error' => trim($m[3]),
+                    'sql' => $sql,
+                ];
+            }
+        }
+        return $failed;
+    }
+
+    /**
+     * Parst die Liste geaenderter lokaler Dateien nach `There are modified files:`.
+     */
+    private function parseModifiedFiles(string $log): array
+    {
+        if ($log === '') {
+            return [];
+        }
+        $lines = preg_split('/\r?\n/', $log);
+        if (!is_array($lines)) {
+            return [];
+        }
+        $in_modified = false;
+        $files = [];
+        foreach ($lines as $line) {
+            $trimmed = trim($line);
+            if (!$in_modified) {
+                if ($trimmed === 'There are modified files:') {
+                    $in_modified = true;
+                }
+                continue;
+            }
+            if ($trimmed === '' || strpos($trimmed, '---------------') === 0) {
+                break;
+            }
+            $files[] = $trimmed;
+        }
+        return $files;
+    }
+
+    /**
+     * Rendert eine geparste Diff-Liste als strukturierte HTML-Tabelle.
+     */
+    private function renderDiffTableHtml(array $diffs, string $title, string $sectionClass): string
+    {
+        if (empty($diffs)) {
+            return '';
+        }
+        $rows = '';
+        foreach ($diffs as $d) {
+            $type = isset($d['type']) && $d['type'] !== '' ? (string)$d['type'] : '–';
+            $in_json = isset($d['in JSON']) && $d['in JSON'] !== '' ? (string)$d['in JSON'] : null;
+            $in_db = isset($d['in DB']) && $d['in DB'] !== '' ? (string)$d['in DB'] : null;
+
+            $table = isset($d['table']) && $d['table'] !== '' ? (string)$d['table'] : '';
+            if ($table === '' && in_array($type, ['Table existence', 'View existence', 'View definition'], true) && $in_json !== null) {
+                $table = $in_json;
+            }
+            if ($table === '') {
+                $table = '–';
+            }
+
+            $col_or_key = '';
+            if (isset($d['column']) && $d['column'] !== '') {
+                $col_or_key = (string)$d['column'];
+            } elseif (isset($d['key']) && $d['key'] !== '') {
+                $col_or_key = (string)$d['key'];
+            } elseif (in_array($type, ['Column existence', 'Key existence'], true) && $in_json !== null) {
+                $col_or_key = $in_json;
+            }
+            if ($col_or_key === '') {
+                $col_or_key = '–';
+            }
+
+            $property = isset($d['property']) && $d['property'] !== '' ? (string)$d['property'] : '–';
+            $soll = $in_json !== null ? $in_json : '–';
+            if ($in_db !== null) {
+                $ist = $in_db;
+            } elseif (preg_match('/existence$/i', $type) === 1) {
+                $ist = 'fehlt';
+            } else {
+                $ist = '–';
+            }
+
+            $rows .= '<tr>'
+                .'<td>'.$this->esc($type).'</td>'
+                .'<td>'.$this->esc($table).'</td>'
+                .'<td>'.$this->esc($col_or_key).'</td>'
+                .'<td>'.$this->esc($property).'</td>'
+                .'<td>'.$this->esc($soll).'</td>'
+                .'<td>'.$this->esc($ist).'</td>'
+                .'</tr>';
+        }
+
+        return '<div class="diag-section '.$this->esc($sectionClass).'">'
+            .'<h4>'.$this->esc($title).' ('.count($diffs).')</h4>'
+            .'<div class="diag-table-wrap"><table class="diag-table">'
+            .'<thead><tr><th>Typ</th><th>Tabelle</th><th>Spalte / Index</th><th>Eigenschaft</th><th>Soll (JSON)</th><th>Ist (DB)</th></tr></thead>'
+            .'<tbody>'.$rows.'</tbody>'
+            .'</table></div></div>';
+    }
+
+    /**
+     * Erzeugt das strukturierte Diagnose-HTML fuer die Diagnostics-Card.
+     */
+    private function buildDiagnosticsHtml(string $log, bool $engine_ran, string $submit, ?int $obsolete_count, string $last_run): string
+    {
+        if ($log === '' || $submit === 'rollback_to_tag') {
+            return '';
+        }
+
+        $failed_sqls = $this->parseFailedSqls($log);
+        $remaining_diffs = $this->parseRemainingDiffs($log);
+        $precheck_diffs = $this->parsePrecheckDiffs($log);
+        $modified_files = $this->parseModifiedFiles($log);
+
+        $sections = '';
+
+        if (!empty($failed_sqls)) {
+            $rows = '';
+            foreach ($failed_sqls as $item) {
+                $sql_cell = $item['sql'] !== '' ? '<code>'.$this->esc($item['sql']).'</code>' : '–';
+                $rows .= '<tr>'
+                    .'<td>'.$this->esc($item['step']).'</td>'
+                    .'<td>'.$this->esc($item['error']).'</td>'
+                    .'<td>'.$sql_cell.'</td>'
+                    .'</tr>';
+            }
+            $sections .= '<div class="diag-section diag-section-error">'
+                .'<h4>Fehlgeschlagene DB-Statements ('.count($failed_sqls).')</h4>'
+                .'<div class="diag-table-wrap"><table class="diag-table">'
+                .'<thead><tr><th>Schritt</th><th>Fehlermeldung</th><th>SQL-Statement</th></tr></thead>'
+                .'<tbody>'.$rows.'</tbody>'
+                .'</table></div></div>';
+        }
+
+        if ($engine_ran) {
+            if ($submit === 'do_upgrade' || $submit === 'do_db_upgrade') {
+                if (!empty($remaining_diffs)) {
+                    $sections .= $this->renderDiffTableHtml($remaining_diffs, 'Restdifferenzen nach dem Upgrade', 'diag-section-warning');
+                }
+            } else {
+                if (!empty($precheck_diffs)) {
+                    $sections .= $this->renderDiffTableHtml($precheck_diffs, 'Erkannte DB-Differenzen', 'diag-section-info');
+                }
+            }
+        } else {
+            if (!empty($remaining_diffs)) {
+                $sections .= $this->renderDiffTableHtml($remaining_diffs, 'Restdifferenzen nach dem Upgrade', 'diag-section-warning');
+            } elseif (!empty($precheck_diffs) && $this->logNumber(self::RESULT_DIFF_REMAINING, $log) === null) {
+                $sections .= $this->renderDiffTableHtml($precheck_diffs, 'Erkannte DB-Differenzen', 'diag-section-info');
+            }
+        }
+
+        if ($engine_ran && !empty($modified_files)) {
+            $items = '';
+            foreach ($modified_files as $file) {
+                $items .= '<li><code>'.$this->esc($file).'</code></li>';
+            }
+            $sections .= '<div class="diag-section diag-section-warning">'
+                .'<h4>Geänderte lokale Dateien ('.count($modified_files).')</h4>'
+                .'<p class="diag-note">Diese Dateien enthalten lokale Änderungen und werden bei aktivem „Erzwingen (-f)“ zurückgesetzt:</p>'
+                .'<ul class="diag-file-list">'.$items.'</ul>'
+                .'</div>';
+        }
+
+        $is_check_run = $engine_ran && ($submit === 'check_upgrade' || $submit === 'check_db');
+        if ($obsolete_count !== null && $obsolete_count > 0 && ($sections !== '' || $is_check_run)) {
+            $sections .= '<p class="diag-note">Hinweis: '.(int)$obsolete_count.' zusätzliche Einträge existieren nur in der Datenbank (nicht in db_schema.json, z. B. eigene Module) und blockieren kein Upgrade.</p>';
+        }
+
+        if ($sections === '') {
+            return '';
+        }
+
+        if (!$engine_ran && $submit !== 'rollback_to_tag') {
+            $stale_when = ($last_run !== '' && $last_run !== 'Noch kein Durchlauf')
+                ? ' (vom '.$this->esc($last_run).')'
+                : '';
+            $sections = '<p class="diag-note diag-stale-note">Auswertung aus dem letzten gespeicherten Protokoll'.$stale_when.':</p>'.$sections;
+        }
+
+        return $sections;
+    }
+
+    /**
+     * Kuerzt einen String Zeichen-sicher auf maximal $maxLen Zeichen.
+     */
+    private function truncateLabel(string $text, int $maxLen = 50): string
+    {
+        if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+            if (mb_strlen($text, 'UTF-8') > $maxLen) {
+                return rtrim(mb_substr($text, 0, $maxLen - 1, 'UTF-8')).'…';
+            }
+            return $text;
+        }
+        if (strlen($text) > $maxLen) {
+            return rtrim(substr($text, 0, $maxLen - 1)).'…';
+        }
+        return $text;
     }
 
     /**
@@ -280,46 +752,14 @@ class upgrade {
         $remote_hash = "";
         $remote_hash_short = "";
 
-        // remote.json ist seit Upstream branchupgrade eine Liste von
-        // Zweigen (name/enabled/active/description/host/branch/check/
-        // migration). Der erste Eintrag mit active=true ist die aktuelle
-        // Upgrade-Quelle — dieselbe Regel wie in upgrade_main().
-        if (is_readable($remote_config_file)) {
-            $remote_data_raw = file_get_contents($remote_config_file);
-            $remotes = json_decode($remote_data_raw, true);
-            if (!is_array($remotes)) {
-                $remotes = array();
-            }
-            $branch_rows = "";
-            foreach ($remotes as $remote) {
-                if (!is_array($remote) || empty($remote['name'])) {
-                    continue;
-                }
-                $is_active = !empty($remote['active']);
-                $is_enabled = !empty($remote['enabled']);
-                if ($is_active && $current_branch === "") {
-                    $current_branch = (string)$remote['name'];
-                    $remote_host = (string)($remote['host'] ?? "");
-                    $remote_branch = (string)($remote['branch'] ?? "");
-                }
-                $branch_status = $is_active ? "aktiv" : "";
-                if (!$is_enabled) {
-                    $branch_status = "gesperrt";
-                }
-                $name_escaped = $this->esc((string)$remote['name']);
-                $branch_rows .= '<tr>'
-                    .'<td><input type="radio" name="branch" value="'.$name_escaped.'"'
-                    .($is_active ? ' checked' : '').(!$is_enabled ? ' disabled' : '').'></td>'
-                    .'<td>'.$name_escaped.'</td>'
-                    .'<td>'.$this->esc($branch_status).'</td>'
-                    .'<td>'.$this->esc((string)($remote['description']['de'] ?? "")).'</td>'
-                    .'</tr>';
-            }
-            if ($branch_rows !== "") {
-                $branches_html = '<table class="branch-table">'
-                    .'<thead><tr><th></th><th>Name</th><th>Status</th><th>Beschreibung</th></tr></thead>'
-                    .'<tbody>'.$branch_rows.'</tbody></table>';
-            }
+        $csrf_token = $this->getOrCreateCsrfToken();
+
+        $remote_config = $this->loadRemoteConfig($remote_config_file);
+        if ($remote_config['readable']) {
+            $current_branch = $remote_config['current_branch'];
+            $remote_host = $remote_config['remote_host'];
+            $remote_branch = $remote_config['remote_branch'];
+            $branches_html = $remote_config['branches_html'];
             if ($current_branch === "") {
                 $status_headline = "Hinweis";
                 $status_level = "warning";
@@ -331,6 +771,32 @@ class upgrade {
             $status_message = "Konfiguration der Upgrade-Quelle konnte nicht geladen werden.";
         }
 
+        // Berechtigungs- und CSRF-Guard für alle schreibenden/gelockten Submits
+        // VOR Lock-Akquise und Engine-/Rollback-Ausführung.
+        $locked_submits = ['check_upgrade', 'do_upgrade', 'check_db', 'do_db_upgrade', 'rollback_to_tag'];
+        if (in_array($submit, $locked_submits, true)) {
+            if (!$this->isUpgraderAuthorized()) {
+                $status_headline = "Keine Berechtigung";
+                $status_level = "error";
+                $status_message = "Nur Administratoren dürfen Upgrade- und Rollback-Aktionen ausführen.";
+                $guidance_title = "Zugriff verweigert";
+                $guidance_message = "Bitte mit einem Administratorkonto anmelden.";
+                $last_action = "Abgebrochen (Keine Berechtigung)";
+                $submit = '';
+            } else {
+                $posted_token = $this->app->Secure->GetPOST('csrf_token');
+                if (!is_string($posted_token) || $csrf_token === '' || !hash_equals($csrf_token, $posted_token)) {
+                    $status_headline = "Ungültiges Sicherheits-Token";
+                    $status_level = "warning";
+                    $status_message = "Bitte Seite neu laden und Aktion erneut starten.";
+                    $guidance_title = "Hinweis";
+                    $guidance_message = "Das Formular-Token war ungültig oder abgelaufen. Seite neu laden und erneut versuchen.";
+                    $last_action = "Abgebrochen (Ungültiges Sicherheits-Token)";
+                    $submit = '';
+                }
+            }
+        }
+
         // Concurrency-Lock: verhindert parallele Engine-/schreibende Submits
         // (Doppel-Klick, zweiter Browser-Tab). Auch die Check-Submits löschen
         // und schreiben das Logfile und laufen daher unter demselben Lock.
@@ -339,7 +805,6 @@ class upgrade {
         // bereits oben via exit raus, danach gibt es kein exit/die mehr in
         // dieser Funktion, daher reicht ein einfaches Release am Ende
         // (kein try/finally).
-        $locked_submits = ['check_upgrade', 'do_upgrade', 'check_db', 'do_db_upgrade', 'rollback_to_tag'];
         $needs_lock = in_array($submit, $locked_submits, true);
         $lock_handle = null;
         if ($needs_lock && $git_root !== "") {
@@ -353,7 +818,7 @@ class upgrade {
                 $status_level = "error";
                 $status_message = "Die Lock-Datei konnte nicht angelegt werden. Bitte Schreibrechte auf dem upgrade/data-Verzeichnis prüfen.";
                 $last_action = "Abgebrochen (Lock-Datei nicht schreibbar)";
-                $submit = null; // verhindert Submit-Dispatch unten
+                $submit = ''; // verhindert Submit-Dispatch unten
             } elseif (!flock($lock_handle, LOCK_EX | LOCK_NB)) {
                 fclose($lock_handle);
                 $lock_handle = null;
@@ -361,58 +826,18 @@ class upgrade {
                 $status_level = "warning";
                 $status_message = "Anderer Upgrade-Vorgang läuft gerade. Bitte warten und Seite neu laden.";
                 $last_action = "Abgebrochen (Lock belegt)";
-                $submit = null; // verhindert Submit-Dispatch unten
+                $submit = ''; // verhindert Submit-Dispatch unten
             }
         }
 
         // Calculate version alignment (local vs. upgrade source)
-        $step_files_pill_class = "pill-info";
-        $step_files_pill_text = "nicht geprüft";
-        if ($git_root !== "" && $remote_host !== "" && $remote_branch !== "") {
-            $remote_ref = "refs/heads/".$remote_branch;
-            $remote_cmd = 'git -C '.escapeshellarg($git_root).' ls-remote '.escapeshellarg($remote_host).' '.escapeshellarg($remote_ref).' 2>&1';
-            $remote_output = [];
-            $remote_exit_code = 0;
-            exec($remote_cmd, $remote_output, $remote_exit_code);
-            $remote_line = trim((string)($remote_output[0] ?? ''));
-
-            if ($remote_exit_code !== 0) {
-                // Remote-Probe fehlgeschlagen: exec liefert genauen Exit-Code,
-                // shell_exec hätte hier nur `null` zurückgegeben.
-                $update_status_text = "Remote-Probe fehlgeschlagen (Exit-Code ".$remote_exit_code.")";
-                $update_status_class = "pill-warning";
-                $step_files_pill_class = "pill-warning";
-                $step_files_pill_text = "Remote nicht prüfbar";
-            } elseif ($remote_line !== "") {
-                $remote_hash = trim(strtok($remote_line, "\t "));
-                $remote_hash_short = substr($remote_hash, 0, 8);
-
-                if ($local_hash === "") {
-                    $update_status_text = "Lokaler Stand unbekannt";
-                    $update_status_class = "pill-warning";
-                    $step_files_pill_class = "pill-warning";
-                    $step_files_pill_text = "lokaler Stand unbekannt";
-                } elseif ($local_hash === $remote_hash) {
-                    $update_status_text = "Alles aktuell";
-                    $update_status_class = "pill-success";
-                    $step_files_pill_class = "pill-success";
-                    $step_files_pill_text = "aktuell";
-                } else {
-                    // Hash-Mismatch heißt nicht zwingend "remote ist neuer" —
-                    // lokal kann auch voraus oder divergiert sein. Ohne
-                    // zusätzliche git-Aufrufe ist das nicht unterscheidbar.
-                    $update_status_text = "Stand weicht ab – Prüfung empfohlen";
-                    $update_status_class = "pill-warning";
-                    $step_files_pill_class = "pill-warning";
-                    $step_files_pill_text = "Stand weicht ab";
-                }
-            } else {
-                $update_status_text = "Remote nicht erreichbar";
-                $update_status_class = "pill-warning";
-                $step_files_pill_class = "pill-warning";
-                $step_files_pill_text = "Remote nicht erreichbar";
-            }
-        }
+        $remote_status = $this->probeRemoteStatus($git_root, $remote_host, $remote_branch, $local_hash);
+        $remote_hash = $remote_status['remote_hash'];
+        $remote_hash_short = $remote_status['remote_hash_short'];
+        $update_status_text = $remote_status['update_status_text'];
+        $update_status_class = $remote_status['update_status_class'];
+        $step_files_pill_class = $remote_status['step_files_pill_class'];
+        $step_files_pill_text = $remote_status['step_files_pill_text'];
 
         // Engine erwartet als directory das upgrade/-Verzeichnis.
         $directory = $upgrade_dir;
@@ -519,6 +944,8 @@ class upgrade {
             putenv('LC_ALL=C');
             putenv('LANG=C');
 
+            @set_time_limit(300);
+
             try {
                 $result_code = upgrade_main(
                     directory: $directory,
@@ -546,14 +973,39 @@ class upgrade {
                 putenv($prev_lang === false ? 'LANG' : 'LANG='.$prev_lang);
             }
 
-            // Check-Buttons erst nach bekanntem Ergebnis schalten: ein
-            // fehlgeschlagener Check (-1) darf den Button nicht auf
-            // "Upgrade starten" umstellen.
-            if ($cfg['sets_upgrade_visible']) {
-                $upgrade_available = ($result_code === 0 || $result_code === 1);
-            }
-            if ($cfg['sets_upgrade_db_visible']) {
-                $upgrade_db_available = ($result_code === 0 || $result_code === 1);
+            // Nach erfolgreichem do_upgrade lokale Git-Infos (und bei
+            // Zweigwechsel auch remote.json + Remote-Probe) neu laden,
+            // damit Versionsabgleich und Dateien-Pille nicht den alten
+            // Stand vor dem Upgrade zeigen.
+            if ($submit === 'do_upgrade' && ($result_code === 0 || $result_code === 1) && $git_root !== "") {
+                $git_info = $this->readGitInfo($git_root);
+                $git_branch = $git_info['branch'];
+                $git_commit = $git_info['commit'];
+                $local_hash = $git_info['hash'];
+                $local_hash_short = $git_info['hash_short'];
+
+                if ($do_migrate) {
+                    $reloaded_remote = $this->loadRemoteConfig($remote_config_file);
+                    if ($reloaded_remote['readable']) {
+                        $current_branch = $reloaded_remote['current_branch'];
+                        $remote_host = $reloaded_remote['remote_host'];
+                        $remote_branch = $reloaded_remote['remote_branch'];
+                        $branches_html = $reloaded_remote['branches_html'];
+                    }
+                    $remote_status = $this->probeRemoteStatus($git_root, $remote_host, $remote_branch, $local_hash);
+                    $remote_hash = $remote_status['remote_hash'];
+                    $remote_hash_short = $remote_status['remote_hash_short'];
+                    $update_status_text = $remote_status['update_status_text'];
+                    $update_status_class = $remote_status['update_status_class'];
+                    $step_files_pill_class = $remote_status['step_files_pill_class'];
+                    $step_files_pill_text = $remote_status['step_files_pill_text'];
+                } elseif ($remote_hash !== "") {
+                    $cmp = $this->compareLocalAndRemoteHashes($local_hash, $remote_hash);
+                    $update_status_text = $cmp['update_status_text'];
+                    $update_status_class = $cmp['update_status_class'];
+                    $step_files_pill_class = $cmp['step_files_pill_class'];
+                    $step_files_pill_text = $cmp['step_files_pill_text'];
+                }
             }
         } elseif ($submit === 'refresh') {
             $last_action = "Anzeige aktualisiert";
@@ -625,7 +1077,7 @@ class upgrade {
         }
 
         // Read results
-        $result = file_exists($logfile) ? file_get_contents($logfile) : "";
+        $result = file_exists($logfile) ? (string)file_get_contents($logfile) : "";
 
         // Force-Hinweis nur auswerten, wenn in DIESEM Request ein Engine-
         // Lauf stattfand — sonst blendet das alte Log beim bloßen
@@ -644,7 +1096,7 @@ class upgrade {
         //   informativ und triggert nie ein "Upgrade empfohlen".
         // - do_*: zählen die Restdifferenzen nach dem Upgrade.
         $diff_count = null;      // fehlende Teile (in JSON not in DB)
-        $obsolete_count = null;  // überflüssige Teile (in DB not in JSON)
+        $obsolete_count = ($result !== "") ? $this->logNumber(self::RESULT_DIFF_IN_DB_NOT_JSON, $result) : null;
         $remaining_count = null; // Restdifferenzen nach Upgrade
         $db_error_count = null;  // fehlgeschlagene DB-Statements
 
@@ -660,6 +1112,24 @@ class upgrade {
             $has_modified_files = $this->logMatches(self::RESULT_MODIFIED_FILES, $result);
             $up_to_date = $this->logMatches(self::RESULT_UP_TO_DATE, $result)
                 || $this->logMatches(self::RESULT_NO_UPGRADES, $result);
+            $has_code_updates = !$up_to_date;
+            $has_db_diffs = ($diff_count !== null && $diff_count > 0);
+
+            // Button-Zustände erst nach bekanntem Ergebnis und geparsten
+            // Diff-/Update-Zählern schalten.
+            if ($submit === 'check_upgrade') {
+                if ($result_code === 0 || $result_code === 1) {
+                    $upgrade_available = ($has_code_updates || $has_db_diffs || $do_migrate);
+                    $upgrade_db_available = $has_db_diffs;
+                } else {
+                    $upgrade_available = false;
+                    $upgrade_db_available = false;
+                }
+            } elseif ($submit === 'check_db') {
+                $upgrade_db_available = (($result_code === 0 || $result_code === 1) && $has_db_diffs);
+            } elseif ($submit === 'do_db_upgrade') {
+                $upgrade_db_available = (($result_code === 0 || $result_code === 1) && $remaining_count !== null && $remaining_count > 0);
+            }
 
             if ($result_code === 0 && $result === "") {
                 // Return 0 ohne eine einzige Log-Zeile: kein echter
@@ -672,7 +1142,7 @@ class upgrade {
             } elseif ($result_code === 0) {
                 $status_headline = "Aktion erfolgreich";
                 $status_level = "success";
-                if ($up_to_date) {
+                if ($up_to_date && !$has_db_diffs && ($remaining_count === null || $remaining_count === 0)) {
                     $status_message = "Keine neuen Updates verfügbar. System ist aktuell.";
                 } else {
                     $status_message = "Der Durchlauf wurde ohne Fehler abgeschlossen.";
@@ -680,12 +1150,18 @@ class upgrade {
 
                 switch ($submit) {
                     case 'check_upgrade':
-                        if ($diff_count === 0) {
-                            $guidance_title = "Alles aktuell";
-                            $guidance_message = "Keine DB-Differenzen erkannt. Code wurde nicht aktualisiert. Kein Upgrade nötig.";
-                        } elseif ($diff_count !== null && $diff_count > 0) {
+                        if ($has_code_updates || $has_db_diffs) {
                             $guidance_title = "Upgrade empfohlen";
-                            $guidance_message = "Es wurden Unterschiede festgestellt. Starte jetzt \"Upgrade jetzt starten\", um Dateien und DB zu aktualisieren.";
+                            if ($has_code_updates && $has_db_diffs) {
+                                $guidance_message = "Es stehen Code-Updates und ".$diff_count." DB-Differenzen aus. Starte jetzt \"Komplett-Upgrade starten\", um Dateien und Datenbank zu aktualisieren.";
+                            } elseif ($has_code_updates) {
+                                $guidance_message = "Es stehen neue Code-Updates aus (Datenbank ist aktuell). Starte jetzt \"Komplett-Upgrade starten\", um die Dateien zu aktualisieren.";
+                            } else {
+                                $guidance_message = "Es wurden ".$diff_count." DB-Differenzen festgestellt (Code ist aktuell). Starte jetzt \"Komplett-Upgrade starten\" oder \"Nur DB-Upgrade starten\".";
+                            }
+                        } elseif ($diff_count === 0) {
+                            $guidance_title = "Alles aktuell";
+                            $guidance_message = "Weder Code-Updates noch DB-Differenzen erkannt. Kein Upgrade nötig.";
                         } else {
                             $guidance_title = "Prüfung abgeschlossen";
                             $guidance_message = "Protokoll prüfen. Wenn Änderungen gewünscht sind, starte das Upgrade.";
@@ -711,7 +1187,7 @@ class upgrade {
                             $guidance_message = "Keine Differenzen gefunden. Kein DB-Upgrade erforderlich.";
                         } elseif ($diff_count !== null && $diff_count > 0) {
                             $guidance_title = "DB-Upgrade möglich";
-                            $guidance_message = "Es wurden Datenbankunterschiede gefunden. Starte \"Datenbank-Upgrade\".";
+                            $guidance_message = "Es wurden ".$diff_count." Datenbankunterschiede gefunden. Starte \"Nur DB-Upgrade starten\".";
                         } else {
                             $guidance_title = "Prüfung abgeschlossen";
                             $guidance_message = "Protokoll ansehen und bei Bedarf das DB-Upgrade auslösen.";
@@ -742,11 +1218,8 @@ class upgrade {
                 }
                 $status_message = "Der Durchlauf wurde mit Warnungen abgeschlossen"
                     .(!empty($warnings_detail) ? ": ".implode(", ", $warnings_detail)."." : ". Details siehe Protokoll.");
-                $guidance_title = "Protokoll auswerten";
-                $guidance_message = "\"Database upgrade errors: N\" zeigt fehlgeschlagene DB-Statements, \"N differences remaining after upgrade.\" zeigt verbleibende Schema-Differenzen. Ursachen beheben und das Upgrade ggf. erneut starten.";
-                if ($remaining_count !== null && $remaining_count > 0) {
-                    $guidance_message .= " Upgrade unvollständig: ".$remaining_count." Restdifferenzen prüfen.";
-                }
+                $guidance_title = "Diagnose prüfen";
+                $guidance_message = "Siehe „Diagnose & Details“ unten für fehlgeschlagene DB-Statements und Restdifferenzen sowie das Protokoll für den vollständigen Kontext. Ursachen beheben und das Upgrade ggf. erneut starten.";
             } elseif ($result_code === -1) {
                 $status_headline = "Fehlgeschlagen";
                 $status_level = "error";
@@ -766,36 +1239,71 @@ class upgrade {
             $status_message = "Es gibt lokale Änderungen im Repo. Bitte 'Erzwingen (-f)' aktivieren oder Änderungen bereinigen.";
             $guidance_title = "Hinweis";
             $guidance_message = "Aktiviere unten 'Erzwingen (-f)' und starte das Upgrade erneut (oder setze die Änderungen zurück).";
-        }
-
-        // DB-Pill nur nach einem DB-Submit in DIESEM Request bewerten —
-        // sonst bliebe ein veralteter Zustand als "geprüft" stehen.
-        $step_db_pill_class = "pill-info";
-        $step_db_pill_text = "nicht geprüft";
-        if ($engine_ran && ($submit === 'check_db' || $submit === 'do_db_upgrade')) {
-            $db_diff = ($submit === 'check_db') ? $diff_count : $remaining_count;
-            if (($result_code === 0 || $result_code === 1) && $db_diff !== null) {
-                if ($db_diff === 0) {
-                    $step_db_pill_class = "pill-success";
-                    $step_db_pill_text = "aktuell";
-                } else {
-                    $step_db_pill_class = "pill-warning";
-                    $step_db_pill_text = $db_diff." Differenzen";
-                }
-            } elseif ($result_code === -1) {
-                $step_db_pill_class = "pill-warning";
-                $step_db_pill_text = "Prüfung fehlgeschlagen";
+            if ($submit === 'do_upgrade') {
+                $upgrade_available = true;
             }
         }
 
+        // DB-Pill für alle 4 Engine-Aktionen (check_upgrade, do_upgrade,
+        // check_db, do_db_upgrade) aktualisieren — bei Abbruch vor der
+        // DB-Phase (z.B. geänderte Dateien bei do_upgrade) bleibt sie
+        // neutral ("nicht geprüft").
+        $step_db_pill_class = "pill-info";
+        $step_db_pill_text = "nicht geprüft";
+        if ($engine_ran) {
+            if ($submit === 'check_upgrade' || $submit === 'check_db') {
+                if ($result_code === -1) {
+                    $step_db_pill_class = "pill-error";
+                    $step_db_pill_text = "Prüfung fehlgeschlagen";
+                } elseif ($diff_count === 0) {
+                    $step_db_pill_class = "pill-success";
+                    $step_db_pill_text = "aktuell";
+                } elseif ($diff_count !== null && $diff_count > 0) {
+                    $step_db_pill_class = "pill-warning";
+                    $step_db_pill_text = $diff_count." Differenzen";
+                }
+            } elseif ($submit === 'do_upgrade' || $submit === 'do_db_upgrade') {
+                if ($remaining_count !== null || $db_error_count !== null) {
+                    $rem = $remaining_count ?? 0;
+                    $errs = $db_error_count ?? 0;
+                    if ($rem === 0 && $errs === 0) {
+                        $step_db_pill_class = "pill-success";
+                        $step_db_pill_text = "aktuell";
+                    } else {
+                        if ($errs > 0 && $rem > 0) {
+                            $step_db_pill_text = $errs." Fehler, ".$rem." Restdiffs";
+                        } elseif ($errs > 0) {
+                            $step_db_pill_text = $errs." DB-Fehler";
+                        } else {
+                            $step_db_pill_text = $rem." Restdifferenzen";
+                        }
+                        $step_db_pill_class = ($errs > 0 && $result_code === -1) ? "pill-error" : "pill-warning";
+                    }
+                } elseif ($submit === 'do_db_upgrade' && $result_code === -1) {
+                    $step_db_pill_class = "pill-error";
+                    $step_db_pill_text = "Prüfung fehlgeschlagen";
+                }
+            }
+        }
+
+        $raw_log = $result;
         if ($result !== "") {
             // filemtime mit file_exists absichern: ein paralleler Request
             // kann das Logfile zwischen Lesen und mtime gelöscht haben.
             $last_run = file_exists($logfile) ? date('d.m.Y H:i', filemtime($logfile)) : "";
+            if (!$engine_ran && $submit !== 'rollback_to_tag' && $submit !== 'refresh' && $last_action === "Noch keine Aktion ausgeführt") {
+                $last_action = "Letzter gespeicherter Lauf";
+            }
         } else {
             $result = "Noch kein Protokoll vorhanden.";
             $last_run = "Noch kein Durchlauf";
         }
+
+        $diagnostics_html = $this->buildDiagnosticsHtml($raw_log, $engine_ran, (string)$submit, $obsolete_count, $last_run);
+
+        $this->app->Tpl->Set('CSRF_TOKEN', $this->esc($csrf_token));
+        $this->app->Tpl->Set('DIAGNOSTICS_VISIBLE', $diagnostics_html !== "" ? "" : "hidden");
+        $this->app->Tpl->Set('DIAGNOSTICS_HTML', $diagnostics_html);
 
         $this->app->Tpl->Set('STATUS_HEADLINE', $status_headline);
         $this->app->Tpl->Set('STATUS_LEVEL', $status_level);
@@ -805,7 +1313,7 @@ class upgrade {
         $this->app->Tpl->Set('LAST_ACTION', $last_action);
         $this->app->Tpl->Set('LAST_RUN', $last_run);
         $this->app->Tpl->Set('UPGRADE_BUTTON_ACTION', $upgrade_available ? "do_upgrade" : "check_upgrade");
-        $this->app->Tpl->Set('UPGRADE_BUTTON_LABEL', $upgrade_available ? "Upgrade starten" : "Upgrades prüfen");
+        $this->app->Tpl->Set('UPGRADE_BUTTON_LABEL', $upgrade_available ? "Komplett-Upgrade starten" : "System & Updates prüfen");
         // Die Force-Checkbox wird komplett als Platzhalter gerendert: ist
         // sie versteckt, existiert das input-Element gar nicht und der
         // Browser kann kein verstecktes, aber gechecktes "erzwingen"
@@ -818,7 +1326,7 @@ class upgrade {
             ? '<input type="checkbox" name="erzwingen" value="1"'.($force ? ' checked' : '').'>'
             : '');
         $this->app->Tpl->Set('UPGRADE_DB_BUTTON_ACTION', $upgrade_db_available ? "do_db_upgrade" : "check_db");
-        $this->app->Tpl->Set('UPGRADE_DB_BUTTON_LABEL', $upgrade_db_available ? "DB-Upgrade" : "DB prüfen");
+        $this->app->Tpl->Set('UPGRADE_DB_BUTTON_LABEL', $upgrade_db_available ? "Nur DB-Upgrade starten" : "Datenbank prüfen");
 
         $this->app->Tpl->Set('REMOTE_HOST', $this->esc($remote_host));
         $this->app->Tpl->Set('REMOTE_BRANCH', $this->esc($remote_branch));
@@ -840,32 +1348,61 @@ class upgrade {
         $this->app->Tpl->Set('STEP_DB_PILL_CLASS', $step_db_pill_class);
         $this->app->Tpl->Set('STEP_DB_PILL_TEXT', $step_db_pill_text);
 
-        // Rollback-Tags laden. Der OpenXE-Template-Parser kennt nur
-        // [VARIABLE]-Platzhalter (kein Smarty-foreach), daher wird das
-        // <select>-Markup hier gebaut und als String an die Vorlage
-        // übergeben. Inline-Styles werden vermieden — siehe CSS-Klasse
-        // .rollback-tag-select.
+        // Rollback-Tags laden (mit Kurz-Hash & Commit-Betreff via
+        // for-each-ref, Fallback auf git tag -l). Der OpenXE-Template-
+        // Parser kennt nur [VARIABLE]-Platzhalter (kein Smarty-foreach),
+        // daher wird das <select>-Markup hier gebaut.
         $rollback_tags = [];
         $rollback_tags_html = "";
         if ($git_root !== "") {
-            // Konsistent mit createRollbackTag(): exec() + Exit-Code statt
-            // shell_exec()->null-vs-false-Ambiguität.
-            $tag_list_cmd = 'git -C '.escapeshellarg($git_root).' tag -l "pre-upgrade-*" --sort=-creatordate 2>&1';
-            $tags_output = [];
-            $tag_list_exit_code = 0;
-            exec($tag_list_cmd, $tags_output, $tag_list_exit_code);
-            if ($tag_list_exit_code === 0 && !empty($tags_output)) {
-                $tags = array_filter(array_map('trim', $tags_output));
-                $rollback_tags = array_slice($tags, 0, 10); // Nur letzte 10 Tags
+            $tag_entries = [];
+            $for_each_cmd = 'git -C '.escapeshellarg($git_root).' for-each-ref --sort=-creatordate --count=10 --format="%(refname:short)%09%(objectname:short)%09%(contents:subject)" refs/tags/pre-upgrade-* 2>&1';
+            $for_each_output = [];
+            $for_each_exit_code = 0;
+            exec($for_each_cmd, $for_each_output, $for_each_exit_code);
 
-                if (!empty($rollback_tags)) {
-                    $rollback_tags_html .= '<select name="rollback_tag" class="input-inline rollback-tag-select">';
-                    foreach ($rollback_tags as $tag) {
-                        $escaped = $this->esc($tag);
-                        $rollback_tags_html .= '<option value="'.$escaped.'">'.$escaped.'</option>';
+            if ($for_each_exit_code === 0 && !empty($for_each_output)) {
+                foreach ($for_each_output as $line) {
+                    $parts = explode("\t", $line, 3);
+                    $tag = trim($parts[0] ?? '');
+                    if ($tag === '') {
+                        continue;
                     }
-                    $rollback_tags_html .= '</select>';
+                    $short_hash = trim($parts[1] ?? '');
+                    $subject = trim($parts[2] ?? '');
+                    if ($subject !== '') {
+                        $subject = $this->truncateLabel($subject, 50);
+                    }
+                    if ($short_hash !== '' && $subject !== '') {
+                        $label = $tag.' — '.$short_hash.' ('.$subject.')';
+                    } elseif ($short_hash !== '') {
+                        $label = $tag.' — '.$short_hash;
+                    } else {
+                        $label = $tag;
+                    }
+                    $tag_entries[] = ['tag' => $tag, 'label' => $label];
                 }
+            } elseif ($for_each_exit_code !== 0) {
+                // Fallback auf git tag -l
+                $tag_list_cmd = 'git -C '.escapeshellarg($git_root).' tag -l "pre-upgrade-*" --sort=-creatordate 2>&1';
+                $tags_output = [];
+                $tag_list_exit_code = 0;
+                exec($tag_list_cmd, $tags_output, $tag_list_exit_code);
+                if ($tag_list_exit_code === 0 && !empty($tags_output)) {
+                    $tags = array_slice(array_filter(array_map('trim', $tags_output)), 0, 10);
+                    foreach ($tags as $tag) {
+                        $tag_entries[] = ['tag' => $tag, 'label' => $tag];
+                    }
+                }
+            }
+
+            if (!empty($tag_entries)) {
+                $rollback_tags = array_slice($tag_entries, 0, 10);
+                $rollback_tags_html .= '<select name="rollback_tag" class="input-inline rollback-tag-select">';
+                foreach ($rollback_tags as $entry) {
+                    $rollback_tags_html .= '<option value="'.$this->esc($entry['tag']).'">'.$this->esc($entry['label']).'</option>';
+                }
+                $rollback_tags_html .= '</select>';
             }
         }
 

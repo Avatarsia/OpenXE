@@ -41,6 +41,14 @@
     --upg-error-text:    var(--upg-error);
     --upg-info-text:     var(--upg-info);
 
+    /* Diagnose & Log-Syntax */
+    --upg-table-head-bg: #eef2f8;
+    --upg-log-section:   #7dd3fc;
+    --upg-log-error:     #fca5a5;
+    --upg-log-error-bg:  rgba(239, 68, 68, .18);
+    --upg-log-warn:      #fcd34d;
+    --upg-log-success:   #6ee7b7;
+
     --upg-s1: 8px; --upg-s2: 16px; --upg-s3: 24px; --upg-s4: 32px; --upg-s5: 40px; --upg-s6: 48px;
 
     --upg-radius: 8px;
@@ -74,8 +82,9 @@ html.openXeDarkMode {
     --upg-log-text:      #D5D9E2;
 
     --upg-success-text:  #2DCA73;
-    --upg-error-text:    #E0605F;
+    --upg-error-text:    #F28B8B;
     --upg-info-text:     #7FB3E6;
+    --upg-table-head-bg: #2A3042;
 }
 
 /*
@@ -173,10 +182,122 @@ html.openXeDarkMode {
 .grid-2 {grid-template-columns:repeat(2, minmax(0, 1fr));}
 .grid > .card {min-width:0;}
 
+/* ---------- Diagnose & Details ---------- */
+.diagnostics-card {
+    margin-bottom: var(--upg-s3);
+    border-left: 4px solid var(--upg-info);
+}
+.diag-section {
+    padding: 12px var(--upg-s2);
+    border-radius: 6px;
+    border: 1px solid var(--upg-border);
+    border-left: 4px solid var(--upg-info);
+    background: var(--upg-surface-alt);
+    margin-bottom: var(--upg-s2);
+}
+.diag-section:last-child {margin-bottom:0;}
+.diag-section h4 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--upg-info-text);
+}
+.diag-section-error {
+    border-left-color: var(--upg-error);
+    background: var(--upg-error-bg);
+}
+.diag-section-error h4 {color:var(--upg-error-text);}
+.diag-section-warning {
+    border-left-color: var(--upg-warning);
+    background: var(--upg-warning-bg);
+}
+.diag-section-warning h4 {color:var(--upg-warning-text);}
+.diag-section-info {
+    border-left-color: var(--upg-info);
+    background: var(--upg-info-bg);
+}
+.diag-section-info h4 {color:var(--upg-info-text);}
+
+.diag-table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--upg-border);
+    border-radius: 6px;
+    background: var(--upg-surface);
+}
+.diag-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+.diag-table th,
+.diag-table td {
+    text-align: left;
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--upg-divider);
+    vertical-align: top;
+    word-break: break-word;
+    color: var(--upg-text);
+}
+.diag-table thead th {
+    background: var(--upg-table-head-bg);
+    color: var(--upg-text-soft);
+    font-weight: 700;
+    font-size: 11.5px;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    white-space: nowrap;
+}
+.diag-table tbody tr:last-child td {border-bottom:none;}
+.diag-table code {
+    font-family: var(--upg-mono);
+    font-size: 12px;
+    background: var(--upg-code-bg);
+    color: var(--upg-text);
+    padding: 1px 5px;
+    border-radius: 3px;
+    word-break: break-word;
+}
+
+.diag-file-list {
+    margin: 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12.5px;
+    color: var(--upg-text);
+}
+.diag-file-list code {
+    font-family: var(--upg-mono);
+    font-size: 12px;
+    background: var(--upg-code-bg);
+    color: var(--upg-text);
+    padding: 1px 6px;
+    border-radius: 3px;
+    word-break: break-all;
+}
+.diag-note {
+    margin: 10px 0 0;
+    font-size: 12.5px;
+    color: var(--upg-text-muted);
+    line-height: 1.5;
+}
+.diag-stale-note {
+    margin: 0 0 var(--upg-s2);
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--upg-border-strong);
+    background: var(--upg-surface-alt);
+    color: var(--upg-text-soft);
+    font-style: italic;
+}
+
 /* ---------- Steps ---------- */
 .step-card {background:var(--upg-surface-alt);gap:12px;}
 .step-head {display:flex;align-items:center;gap:12px;}
 .step-head strong {font-size:15px;color:var(--upg-info-text);}
+.step-desc {margin:0;font-size:13px;color:var(--upg-text-muted);line-height:1.45;}
 .step-check {
     display: flex;
     align-items: center;
@@ -314,23 +435,75 @@ html.openXeDarkMode {
 .help-body code {background:var(--upg-code-bg);padding:1px 6px;border-radius:3px;font-family:var(--upg-mono);font-size:12px;}
 
 /* ---------- Log ---------- */
-.log-header {display:flex;flex-wrap:wrap;align-items:center;gap:12px;margin-bottom:var(--upg-s2);}
+.log-header {display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;margin-bottom:var(--upg-s2);}
 .log-title {font-weight:700;color:var(--upg-info-text);}
 .log-meta {font-size:12px;color:var(--upg-text-faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1 1 auto;}
+.log-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding-top: 8px;
+    border-top: 1px solid var(--upg-divider);
+}
+.log-filters {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+.log-filter-btn {
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--upg-border-strong);
+    background: var(--upg-surface-alt);
+    color: var(--upg-text-soft);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1.25;
+}
+.log-filter-btn:hover {border-color:var(--upg-info);color:var(--upg-info-text);}
+.log-filter-btn.is-active {
+    background: var(--upg-info);
+    border-color: #0a325a;
+    color: #fff;
+}
 .log-search {
-    flex: 0 1 260px;
-    padding: 7px 12px;
+    flex: 1 1 200px;
+    min-width: 160px;
+    max-width: 280px;
+    margin-left: auto;
+    padding: 6px 12px;
     border: 1px solid var(--upg-border-strong);
     border-radius: 6px;
     font: inherit;
     font-size: 13px;
+    background: var(--upg-surface);
+    color: var(--upg-text);
+    box-sizing: border-box;
 }
+.log-tool-btn {
+    padding: 7px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--upg-border-strong);
+    background: var(--upg-surface-alt);
+    color: var(--upg-text);
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1.25;
+}
+.log-tool-btn:hover {border-color:var(--upg-info);color:var(--upg-info-text);}
 .log-download {
     background: var(--upg-info);
     color: #fff;
     border: 1px solid #0a325a;
     border-radius: 6px;
-    padding: 8px 14px;
+    padding: 7px 14px;
     font-size: 12px;
     font-weight: 700;
     text-decoration: none;
@@ -355,13 +528,44 @@ html.openXeDarkMode {
     white-space: pre-wrap;
     word-break: break-word;
 }
+.log-box.log-box-expanded {max-height:75vh;}
+.log-line {display:inline;}
+.log-line-section {color:var(--upg-log-section);font-weight:700;}
+.log-line-error {color:var(--upg-log-error);background:var(--upg-log-error-bg);font-weight:700;border-radius:3px;}
+.log-line-warn {color:var(--upg-log-warn);}
+.log-line-success {color:var(--upg-log-success);font-weight:700;}
+
+/* ---------- Loading-State & Spinner ---------- */
+@keyframes upg-spin {
+    to {transform:rotate(360deg);}
+}
+.step-btn.is-loading,
+.action-btn.is-loading {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+.step-btn.is-loading::before,
+.action-btn.is-loading::before {
+    content: "";
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    display: inline-block;
+    flex-shrink: 0;
+    animation: upg-spin .75s linear infinite;
+}
 
 /*
  * !important wird hier bewusst genutzt, weil das globale OpenXE-Theme
  * (themes/new/css/style.css) `button` (und teils `a`) mit hoher
  * Spezifitaet blau-violett styled. Ohne !important schlaegt das Theme
  * die Page-spezifischen Farben durch. Betroffen sind .action-btn,
- * .step-btn, .banner-btn und .log-download gleichermassen.
+ * .step-btn, .banner-btn, .log-filter-btn, .log-tool-btn und
+ * .log-download gleichermassen.
  */
 button.action-btn.btn-primary {background:var(--upg-info) !important;background-image:none !important;color:#fff !important;border:1px solid #0a325a !important;}
 button.action-btn.btn-primary:hover {background:#0a325a !important;}
@@ -373,6 +577,14 @@ button.banner-btn {background:rgba(255, 255, 255, .14) !important;background-ima
 button.banner-btn:hover {background:rgba(255, 255, 255, .24) !important;}
 .banner-warning button.banner-btn {background:rgba(0, 0, 0, .08) !important;border-color:rgba(0, 0, 0, .25) !important;}
 .banner-warning button.banner-btn:hover {background:rgba(0, 0, 0, .16) !important;}
+button.log-filter-btn {background:var(--upg-surface-alt) !important;background-image:none !important;color:var(--upg-text-soft) !important;border:1px solid var(--upg-border-strong) !important;}
+button.log-filter-btn:hover {border-color:var(--upg-info) !important;color:var(--upg-info-text) !important;}
+button.log-filter-btn.is-active {background:var(--upg-info) !important;background-image:none !important;color:#fff !important;border:1px solid #0a325a !important;}
+button.log-tool-btn {background:var(--upg-surface-alt) !important;background-image:none !important;color:var(--upg-text) !important;border:1px solid var(--upg-border-strong) !important;}
+button.log-tool-btn:hover {border-color:var(--upg-info) !important;color:var(--upg-info-text) !important;}
+button.step-btn:disabled,
+button.action-btn:disabled,
+button.banner-btn:disabled {opacity:.65 !important;cursor:not-allowed !important;pointer-events:none !important;}
 .log-header a.log-download {background:var(--upg-info) !important;background-image:none !important;color:#fff !important;border:1px solid #0a325a !important;}
 .log-header a.log-download:hover {background:#0a325a !important;}
 .rollback-card {border:2px solid var(--upg-warning) !important;}
@@ -388,4 +600,8 @@ button.banner-btn:hover {background:rgba(255, 255, 255, .24) !important;}
     .grid-2 {grid-template-columns:1fr;}
     .compare-panels {grid-template-columns:1fr;}
     .status-banner {padding-right:calc(var(--upg-s5) + var(--upg-s1));}
+    .log-toolbar {flex-direction:column;align-items:stretch;}
+    .log-filters {width:100%;}
+    .log-search {margin-left:0;max-width:none;width:100%;}
+    .log-tool-btn, .log-download {justify-content:center;text-align:center;}
 }

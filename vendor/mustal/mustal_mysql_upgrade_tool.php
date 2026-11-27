@@ -418,16 +418,25 @@ function mustal_compare_table_array(array $nominal, string $nominal_name, array 
 // Generate SQL to create or modify column
 function mustal_column_sql_definition(string $table_name, array $column, array $reserved_words_without_quote) : string {
 
-    $column_is_string_type = mustal_is_string_type($column['Type']);
+    $raw_type = (string) ($column['Type'] ?? '');
+    $raw_default = $column['Default'] ?? null;
+    $column_is_string_type = mustal_is_string_type($raw_type);
 
     foreach($column as $key => &$value) {
         $value = (string) $value;
         $value = mustal_column_sql_create_property_definition($key,$value,$reserved_words_without_quote,$column_is_string_type);
     }
 
-    // Default handling here
-    if ($column['Default'] == " DEFAULT ''") {
+    // Default handling here: distinguish NULL (no DEFAULT clause) from empty string ''
+    if ($raw_default === null) {
         $column['Default'] = "";
+    } elseif ($raw_default === "" || $raw_default === "''") {
+        // MySQL forbids literal DEFAULT '' on TEXT/BLOB/JSON and non-string types (e.g. int, date)
+        if ($column_is_string_type && !preg_match('/\b(tinytext|text|mediumtext|longtext|tinyblob|blob|mediumblob|longblob|json)\b/i', $raw_type)) {
+            $column['Default'] = " DEFAULT ''";
+        } else {
+            $column['Default'] = "";
+        }
     }
 
     if (str_contains($column['Extra'],'auto_increment') && $column['Key'] == '') {

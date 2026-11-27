@@ -1,5 +1,21 @@
 # Upgrader UI Changelog
 
+## 2026-11-27 (Stage 1 & 2)
+- Diagnose & Details-Karte unterhalb des Status-Banners: strukturierte Darstellung
+  von SQL-Fehlern, verbleibenden Schema-Differenzen, geänderten Git-Dateien und
+  Stale-Log-Hinweisen (Light & Dark Mode)
+- Engine & MUSTAL: Post-Upgrade-Schema-Diff-Logging in `upgrade/data/upgrade.php`
+  sowie Default-Wert-Fix in `vendor/mustal/mustal_mysql_upgrade_tool.php`
+- Sicherheit & Robustheit: CSRF-Token-Prüfung und Admin-Guard für POST-Aktionen,
+  Detached-HEAD-Recovery vor Upgrades
+- Schritt-Karten und Hilfe-Text geschärft (**Komplett-Upgrade · Dateien & Datenbank**
+  vs. **Nur Datenbank · Check & Wartung**)
+- Frontend-UX (`upgrade.js` / `upgrade.css`): Double-Submit-Guard, Bestätigungsdialoge
+  für Rollback und Erzwingen (`-f`), Loading-Spinner auf Aktions-Buttons
+- Erweiterter XSS-sicherer Log-Viewer: Filter-Chips (`Alle`, `Fehler & Warnungen`,
+  `DB-Differenzen`) mit Zählern, Syntax-Highlighting via DOM-Nodes, Kopieren- und
+  Erweitern-Button
+
 ## 2026-09-08
 - Rebase auf upstream/master (`ac294993`, enthält Upstream `branchupgrade`):
   - `remote.json` wird im Upstream-Listenformat gelesen (erster Eintrag mit
