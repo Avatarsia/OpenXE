@@ -139,7 +139,7 @@ class OrderReconciler
             'modified_after' => gmdate('Y-m-d\TH:i:s', max(0, strtotime($timestamp . 'Z') - 1)),
             // Only consume completed timestamp buckets, including during concurrent shop writes.
             'modified_before' => gmdate('Y-m-d\TH:i:s', ($this->clock)() - 2),
-            'dates_are_gmt' => true,
+            'dates_are_gmt' => '1',
             'orderby' => 'modified',
             'order' => 'asc',
             'per_page' => $perPage,

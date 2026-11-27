@@ -66,7 +66,7 @@ class CategorySynchronizer
         }
         $this->remote = [];
         for ($page = 1; ; $page++) {
-            $rows = $this->client->get('products/categories', ['per_page' => 100, 'page' => $page, 'hide_empty' => false]);
+            $rows = $this->client->get('products/categories', ['per_page' => 100, 'page' => $page, 'hide_empty' => '0']);
             if (!is_array($rows)) {
                 throw new RuntimeException('Invalid WooCommerce category response.');
             }

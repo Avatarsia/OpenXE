@@ -153,7 +153,7 @@ runTests([
         same([['DELETE', 'products/categories/11', ['force' => true]]], $client->writes);
         same([
             ['products', ['category' => 11, 'status' => 'any', 'per_page' => 1]],
-            ['products/categories', ['parent' => 11, 'per_page' => 1, 'hide_empty' => false]],
+            ['products/categories', ['parent' => 11, 'per_page' => 1, 'hide_empty' => '0']],
         ], array_slice($client->reads, -2));
         same([], $store->pendingDeletions());
         same([], $store->pendingDeletionReasons());
@@ -361,6 +361,11 @@ runTests([
         $importer->apply($preview);
         $ids = (new ShopCategoryExporter($client, $store))->syncTree();
         same(101, count($ids));
+        $categoryQueries = array_values(array_filter($client->reads, static fn (array $get): bool => $get[0] === 'products/categories'));
+        check(count($categoryQueries) >= 4);
+        foreach ($categoryQueries as [, $query]) {
+            same('0', $query['hide_empty']);
+        }
         same(101, $ids[$store->categoriesOf(101)[0]]);
         same([], $client->writes);
     },

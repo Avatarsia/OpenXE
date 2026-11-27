@@ -19,7 +19,7 @@ final class CategoryImporter
     public function preview(): array
     {
         $siblings = $seenTerms = [];
-        foreach ($this->pages('products/categories', ['hide_empty' => false]) as $term) {
+        foreach ($this->pages('products/categories', ['hide_empty' => '0']) as $term) {
             $id = (int) ($term['id'] ?? 0);
             $parent = (int) ($term['parent'] ?? 0);
             if ($id <= 0 || isset($seenTerms[$id]) || !isset($term['name']) || (string) ($term['slug'] ?? '') === '') {

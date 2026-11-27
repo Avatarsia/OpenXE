@@ -45,101 +45,93 @@ $app->DB->Update(
   WHERE `mutex` = 1 AND (`parameter` = 'artikeluebertragen') AND `aktiv` = 1"
 );
 
-if ($app->DB->Select("SELECT `mutex` FROM `prozessstarter` WHERE (`parameter` = 'artikeluebertragen') LIMIT 1") == 1) {
-    $logger->debug(
-        'Läuft bereits'
-    );
+$app->DB->Update(
+    "UPDATE `prozessstarter`
+    SET `letzteausfuerhung` = NOW(), `mutex` = 1, `mutexcounter` = 0
+    WHERE `parameter` = 'artikeluebertragen' AND `mutex` = 0"
+);
+if ($app->DB->affected_rows() < 1) {
+    $logger->debug('Läuft bereits');
     return;
 }
 
-$articles = $app->DB->SelectArr(
-        'SELECT `id`,`shop`,`artikel` FROM `shopexport_artikeluebertragen_check` ORDER BY `id`'
-);
-if (!empty($articles)) {
-    /** @var Shopexport $objShopexport */
-    $objShopexport = $app->loadModule('shopexport');
-    if ($objShopexport !== null && method_exists($objShopexport, 'addChangedArticles')) {
-        $objShopexport->addChangedArticles();
+try {
+    $articles = $app->DB->SelectArr(
+            'SELECT `id`,`shop`,`artikel` FROM `shopexport_artikeluebertragen_check` ORDER BY `id`'
+    );
+    if (!empty($articles)) {
+        /** @var Shopexport $objShopexport */
+        $objShopexport = $app->loadModule('shopexport');
+        if ($objShopexport !== null && method_exists($objShopexport, 'addChangedArticles')) {
+            $objShopexport->addChangedArticles();
+        }
     }
-}
 
-$logger->debug(
-    'Prepare',
-    [
-        'articles' => $articles
-    ]
-);
+    $logger->debug(
+        'Prepare',
+        [
+            'articles' => $articles
+        ]
+    );
 
-$anzChecked = [];
-$anzChanged = [];
-$lastids = [];
-while (!empty($articles)) {
-    foreach ($articles as $article) {
-        if (empty($anzChanged[$article['shop']])) {
-            $anzChanged[$article['shop']] = 0;
-        }
-        if (empty($anzChecked[$article['shop']])) {
-            $anzChecked[$article['shop']] = 0;
-        }
-        if (!isset($lastids[$article['shop']])) {
-            $lastids[$article['shop']] = (int) $app->erp->GetKonfiguration(
-                            'shopexport_artikeluebertragen_check_lastid_' . $article['shop']
-            );
-        }
-        $changed = $objShopexport->hasArticleHashChanged($article['artikel'], $article['shop']);
-        if ($changed['changed']) {
-            $app->DB->Insert(
+    $anzChecked = [];
+    $anzChanged = [];
+    $lastids = [];
+    while (!empty($articles)) {
+        foreach ($articles as $article) {
+            if (empty($anzChanged[$article['shop']])) {
+                $anzChanged[$article['shop']] = 0;
+            }
+            if (empty($anzChecked[$article['shop']])) {
+                $anzChecked[$article['shop']] = 0;
+            }
+            if (!isset($lastids[$article['shop']])) {
+                $lastids[$article['shop']] = (int) $app->erp->GetKonfiguration(
+                                'shopexport_artikeluebertragen_check_lastid_' . $article['shop']
+                );
+            }
+            $changed = $objShopexport->hasArticleHashChanged($article['artikel'], $article['shop']);
+            if ($changed['changed']) {
+                $app->DB->Insert(
+                        sprintf(
+                                'INSERT INTO `shopexport_artikeluebertragen` (`artikel`, `shop`, `check_nr`) VALUES (%d, %d, %d)',
+                                $article['artikel'], $article['shop'], $lastids[$article['shop']]
+                        )
+                );
+                $anzChanged[$article['shop']]++;
+            }
+            $anzChecked[$article['shop']]++;
+            $app->DB->Delete(
                     sprintf(
-                            'INSERT INTO `shopexport_artikeluebertragen` (`artikel`, `shop`, `check_nr`) VALUES (%d, %d, %d)',
-                            $article['artikel'], $article['shop'], $lastids[$article['shop']]
+                            'DELETE FROM `shopexport_artikeluebertragen_check` WHERE `id` = %d',
+                            $article['id']
                     )
             );
-            $anzChanged[$article['shop']]++;
+            $app->DB->Update(
+                    sprintf(
+                            "UPDATE `shopexport` SET `autosendarticle_last` = NOW() WHERE `id` = %d",
+                            $article['shop']
+                    )
+            );
         }
-        $anzChecked[$article['shop']]++;
-        $app->DB->Delete(
-                sprintf(
-                        'DELETE FROM `shopexport_artikeluebertragen_check` WHERE `id` = %d',
-                        $article['id']
-                )
+        $app->erp->SetKonfigurationValue(
+                'shopexport_artikeluebertragen_check_changed_' . $article['shop'],
+                $anzChanged[$article['shop']]
         );
-        $app->DB->Update(
-                sprintf(
-                        "UPDATE `shopexport` SET `autosendarticle_last` = NOW() WHERE `id` = %d",
-                        $article['shop']
-                )
+        $app->erp->SetKonfigurationValue(
+                'shopexport_artikeluebertragen_check_checked_' . $article['shop'],
+                $anzChecked[$article['shop']]
+        );
+        if (method_exists($app->erp, 'canRunCronjob') && !$app->erp->canRunCronjob([])) {
+            $logger->debug(
+                '!canRunCronjob'
+            );
+            return;
+        }
+        $articles = $app->DB->SelectArr(
+                'SELECT `id`,`shop`,`artikel` FROM `shopexport_artikeluebertragen_check` ORDER BY `id` LIMIT 10'
         );
     }
-    $app->erp->SetKonfigurationValue(
-            'shopexport_artikeluebertragen_check_changed_' . $article['shop'],
-            $anzChanged[$article['shop']]
-    );
-    $app->erp->SetKonfigurationValue(
-            'shopexport_artikeluebertragen_check_checked_' . $article['shop'],
-            $anzChecked[$article['shop']]
-    );
-    if (method_exists($app->erp, 'canRunCronjob') && !$app->erp->canRunCronjob(['artikeluebertragen'])) {
-        $logger->debug(
-            '!canRunCronjob'
-        );
-        return;
-    }
-    $articles = $app->DB->SelectArr(
-            'SELECT `id`,`shop`,`artikel` FROM `shopexport_artikeluebertragen_check` ORDER BY `id` LIMIT 10'
-    );
-    $app->DB->Update(
-            "UPDATE `prozessstarter` 
-    SET `letzteausfuerhung`=NOW(), `mutex` = 1,`mutexcounter`=0 
-    WHERE `parameter` = 'artikeluebertragen'"
-    );
-}
-
-$check = $app->DB->Select('SELECT COUNT(`id`) FROM `shopexport_artikeluebertragen`');
-$app->DB->Update(
-        "UPDATE `prozessstarter` 
-  SET `letzteausfuerhung`=NOW(), `mutex` = 1,`mutexcounter`=0 
-  WHERE `parameter` = 'artikeluebertragen'"
-);
 
 /*
 while ($check > 0) {
@@ -157,7 +149,7 @@ while ($check > 0) {
             try {
                 $app->remote->RemoteSendArticleList($row['shop'], array($row['artikel']));
                 $app->erp->LagerSync($row['artikel'], true);
-            } catch (Execption $exception) {
+            } catch (Throwable $exception) {
                 $app->erp->LogFile($app->DB->real_escape_string($exception->getMessage()));
             }
             $app->DB->Delete(
@@ -189,89 +181,77 @@ while ($check > 0) {
     $check = $app->DB->Select('SELECT COUNT(`id`) FROM `shopexport_artikeluebertragen`');
 }*/
 
-
-$sql = "SELECT DISTINCT `shop`, shopexport.`bezeichnung`,shopexport.`artikelexportbatchsize` FROM `shopexport_artikeluebertragen` INNER JOIN shopexport ON shopexport.id = `shop`";
-$shops_to_transmit = $app->DB->SelectArr($sql);
-
-//$app->erp->LogFile('Cronjob artikeluebertragen '.(!empty($shops_to_transmit)?count($shops_to_transmit):0)." shops", print_r($shops_to_transmit, true));
-$logger->debug(
-  '{count} Shops',
-  [
-    'count' => (!empty($shops_to_transmit)?count($shops_to_transmit):0),
-    'shops_to_transmit' => $shops_to_transmit
-  ]
-);
-
-foreach ($shops_to_transmit as $shop_to_transmit) {
-
-    if (!is_numeric($shop_to_transmit['artikelexportbatchsize'])) {
-        $shop_to_transmit['artikelexportbatchsize'] = 10;
-    }
-
-    $sql = "SELECT `artikel` FROM `shopexport_artikeluebertragen` WHERE `shop` = '".$shop_to_transmit['shop']."' LIMIT ".$shop_to_transmit['artikelexportbatchsize'];
-    $articles_to_transmit = $app->DB->SelectArr($sql);
-    
-    $logger->debug(
-        '{bezeichnung} (Shop {shop_to_transmit}) {count} Artikel',
-        [
-            'shop_to_transmit' => $shop_to_transmit['shop'],
-            'bezeichnung' => $shop_to_transmit['bezeichnung'],
-            'count' => (!empty($articles_to_transmit)?count($articles_to_transmit):0),
-            'articles_to_transmit' => $articles_to_transmit
-        ]
+    $shops = $app->DB->SelectArr(
+        'SELECT DISTINCT `shop`, shopexport.`bezeichnung`, shopexport.`artikelexportbatchsize`
+        FROM `shopexport_artikeluebertragen` INNER JOIN shopexport ON shopexport.id = `shop`'
     );
-    
-    if (!empty($articles_to_transmit)) {   
-    
-        $article_ids_to_transmit = array_column($articles_to_transmit, 'artikel');
-    
-        try {
-            $result = $app->remote->RemoteSendArticleList($shop_to_transmit['shop'], $article_ids_to_transmit); // Expected result is array $articles_to_transmit, field status contains transmission status
-        } catch (Execption $exception) {
-              $logger->error(
-                    'Fehler {bezeichnung} (Shop {shop_to_transmit}) {count} Artikel',
-                    [
-                        'shop_to_transmit' => $shop_to_transmit['shop'],
-                        'bezeichnung' => $shop_to_transmit['bezeichnung'],
-                        'count' => (!empty($articles_to_transmit)?count($articles_to_transmit):0),
-                        'exception' => $exception
-                    ]
-                );    
+    foreach ($shops ?: [] as $shop) {
+        $shopId = (int) $shop['shop'];
+        $batchSize = (int) $shop['artikelexportbatchsize'];
+        if ($batchSize <= 0) {
+            $batchSize = 10;
+        }
+        $cursorKey = 'shopexport_artikeluebertragen_cursor_' . $shopId;
+        $cursor = (int) $app->erp->GetKonfiguration($cursorKey);
+        $selectBatch = static function (int $afterId) use ($app, $shopId, $batchSize) {
+            return $app->DB->SelectArr(
+                "SELECT `id`, `artikel` FROM `shopexport_artikeluebertragen`
+                WHERE `shop` = {$shopId} AND `id` > {$afterId} ORDER BY `id` LIMIT {$batchSize}"
+            );
+        };
+        $batch = $selectBatch($cursor);
+        if (empty($batch) && $cursor > 0) {
+            $batch = $selectBatch(0);
+        }
+        if (empty($batch)) {
+            continue;
         }
 
-        $logger->debug(
-            'Ende {bezeichnung} (Shop {shop_to_transmit}) {count} Artikel',
-            [
-                'shop_to_transmit' => $shop_to_transmit['shop'],
-                'bezeichnung' => $shop_to_transmit['bezeichnung'],
-                'count' => (!empty($articles_to_transmit)?count($articles_to_transmit):0),
-                'result' => $result
-            ]
-        );    
+        $queueIds = [];
+        foreach ($batch as $row) {
+            $queueIds[(int) $row['artikel']][] = (int) $row['id'];
+        }
+        // Advance past retryable rows so that they cannot occupy every slot in the next batch.
+        $app->erp->SetKonfigurationValue($cursorKey, (int) end($batch)['id']);
+        $context = ['shop' => $shopId, 'bezeichnung' => $shop['bezeichnung'], 'count' => count($queueIds)];
+        $logger->debug('{bezeichnung} (Shop {shop}) {count} Artikel', $context);
 
-        // See description of return format in function class.remote.php -> RemoteSendArticleList()
-        /** @var ArticleExportResult $articleResult */
+        $result = [];
+        try {
+            $result = $app->remote->RemoteSendArticleList($shopId, array_keys($queueIds));
+        } catch (Throwable $exception) {
+            $logger->error('Fehler {bezeichnung} (Shop {shop}) {count} Artikel', $context + ['exception' => $exception]);
+        }
+
+        $logger->debug('Ende {bezeichnung} (Shop {shop}) {count} Artikel', $context + ['result' => $result]);
+        if (!is_array($result)) {
+            continue;
+        }
         foreach ($result as $articleResult) {
-            $app->DB->Delete(
-                sprintf(
-                    'DELETE FROM `shopexport_artikeluebertragen` WHERE `artikel`= %d AND `shop` = %d',
-                    $articleResult->articleId,
-                    $shop_to_transmit['shop']
-                )
-            );
-            $app->erp->LagerSync($article['artikel'], true);
-        }                       
-    } else {
-
-    }   
+            if (!$articleResult instanceof ArticleExportResult || $articleResult->articleId <= 0
+                || $articleResult->retryExport || !isset($queueIds[$articleResult->articleId])) {
+                continue;
+            }
+            $ids = implode(',', $queueIds[$articleResult->articleId]);
+            $app->DB->Delete("DELETE FROM `shopexport_artikeluebertragen` WHERE `id` IN ({$ids})");
+            unset($queueIds[$articleResult->articleId]);
+            if ($articleResult->success) {
+                try {
+                    $app->erp->LagerSync($articleResult->articleId, true);
+                } catch (Throwable $exception) {
+                    $logger->error('Lagerabgleich nach Artikelexport fehlgeschlagen.', $context + [
+                        'article' => $articleResult->articleId,
+                        'exception' => $exception,
+                    ]);
+                }
+            }
+        }
+    }
+    $logger->debug('Ende');
+} finally {
+    $app->DB->Update(
+        "UPDATE `prozessstarter`
+        SET `letzteausfuerhung` = NOW(), `mutex` = 0, `mutexcounter` = 0
+        WHERE `parameter` = 'artikeluebertragen'"
+    );
 }
-
-$logger->debug(
-    'Ende'
-);
-
-$app->DB->Update(
-        "UPDATE `prozessstarter` 
-  SET `letzteausfuerhung`= NOW(), `mutex` = 0,`mutexcounter`=0 
-  WHERE `parameter` = 'artikeluebertragen'"
-);

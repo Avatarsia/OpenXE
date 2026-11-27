@@ -413,8 +413,8 @@ runTests([
         $db->article['shop'] = 7;
         same(2, $connector->ImportSendListLager());
         same([
-            ['POST', 'products/batch', ['update' => [['id' => 20, 'manage_stock' => true, 'stock_quantity' => '2', 'status' => 'publish']]]],
-            ['POST', 'products/20/variations/batch', ['update' => [['id' => 21, 'manage_stock' => true, 'stock_quantity' => '3', 'status' => 'publish']]]],
+            ['POST', 'products/batch', ['update' => [['id' => 20, 'manage_stock' => true, 'stock_quantity' => 2]]]],
+            ['POST', 'products/20/variations/batch', ['update' => [['id' => 21, 'manage_stock' => true, 'stock_quantity' => 3]]]],
         ], $connector->client->writes);
     },
     'sold_out_variants_remain_unavailable_with_all_options_disabled' => static function () {
@@ -900,14 +900,23 @@ runTests([
         $directory = sys_get_temp_dir() . '/openxe-smarty-' . bin2hex(random_bytes(5));
         mkdir($directory . '/smarty/templates', 0777, true);
         try {
-            $connector = productConnector([remoteProduct()], ['productsmarty' => '{ "name_de":"{$artikel->nummer} custom","preis":7.5 }', 'metadatasmarty' => '{ "template":"{$artikel->nummer} kept" }']);
+            $invalid = remoteProduct(['artikel' => 6, 'nummer' => 'INVALID', 'template_suffix' => '"']);
+            $valid = remoteProduct(['template_suffix' => ' custom']);
+            $connector = productConnector([$invalid, $valid], [
+                'productsmarty' => '{ "name_de":"{$artikel->nummer}{$artikel->template_suffix}","preis":7.5 }',
+                'metadatasmarty' => '{ "template":"{$artikel->nummer} kept" }',
+            ]);
             $app = (object) ['erp' => new class($directory) {
                 private $directory;
                 public function __construct($directory) { $this->directory = $directory; }
                 public function GetTMP() { return $this->directory; }
             }];
             (new ReflectionProperty(Shopimporter_Woocommerce::class, 'app'))->setValue($connector, $app);
-            $connector->ImportSendList();
+            $results = $connector->ImportSendList();
+            same([false, true], array_column($results, 'success'));
+            same([true, false], array_column($results, 'retryExport'));
+            check(str_contains($results[0]->message, 'Smarty-Ausgabe'));
+            same(1, count($connector->client->writes));
             $payload = productWrite($connector->client, 'products');
             same('PARENT custom', $payload['name']);
             same('7.50', $payload['sale_price']);
@@ -1107,22 +1116,27 @@ runTests([
             }
         }
     },
-    'ignore marker on missing price preserves numeric articleId and shop categories' => static function () {
+    'ignore marker preserves numeric articleId and skips WooCommerce operations' => static function () {
         $db = new AssignmentFixtureDatabase();
         $store = new ShopCategoryStore($db, 7);
         $catId = $store->create('Ersatzteile');
         $store->assign(313, [$catId]);
-        $article = remoteProduct(['artikel' => 'ignore', 'artikelid' => 313, 'nummer' => '1000001', 'preis' => '']);
+        $article = remoteProduct(['artikel' => 'ignore', 'artikelid' => 313, 'nummer' => '1000001']);
+        unset($article['preis']);
         $connector = productConnector([$article], ['shopCategoryTree' => true, 'categorySyncMode' => 'replace']);
         $connector->shopid = 7;
         configureProductDatabase($connector, $db);
+        $connector->client->duringProductLookup = static function (): void {
+            throw new RuntimeException('Unexpected product lookup');
+        };
         $results = $connector->ImportSendList();
         same(1, count($results));
         same(313, $results[0]->articleId);
-        same(true, $results[0]->success);
-        $assigned = array_values(array_filter($connector->client->writes, static fn (array $w): bool => $w[0] === 'PUT' && isset($w[2]['categories'])));
-        same(1, count($assigned));
-        same([['id' => 101]], $assigned[0][2]['categories']);
+        same(false, $results[0]->success);
+        same(false, $results[0]->retryExport);
+        check($results[0]->message !== null);
+        same(1, count($connector->logger->warnings));
+        same([], $connector->client->writes);
     },
     'single article sync failure does not abort remaining batch articles' => static function () {
         $bad = remoteProduct(['artikel' => 316, 'artikelid' => 316, 'nummer' => '1000004', 'name_de' => 'Bad SKU']);
@@ -1141,11 +1155,32 @@ runTests([
         same(2, count($results));
         same(316, $results[0]->articleId);
         same(false, $results[0]->success);
-        same(true, $results[0]->retryExport);
+        same(false, $results[0]->retryExport);
         check(str_contains($results[0]->message, '1000004'));
         check(str_contains($results[0]->message, 'product_invalid_sku'));
         same(313, $results[1]->articleId);
         same(true, $results[1]->success);
         same('1000001', productWrite($connector->client, 'products')['sku']);
+    },
+    'lookup failures are isolated and transient HTTP failures stay retryable' => static function () {
+        $articles = [
+            remoteProduct(['artikel' => 1, 'nummer' => 'UNAVAILABLE']),
+            remoteProduct(['artikel' => 2, 'nummer' => 'RATE-LIMITED']),
+            remoteProduct(['artikel' => 3, 'nummer' => 'NETWORK']),
+            remoteProduct(['artikel' => 4, 'nummer' => 'GOOD']),
+        ];
+        $connector = productConnector($articles);
+        $connector->client->duringProductLookup = static function (array $query): void {
+            $codes = ['UNAVAILABLE' => 503, 'RATE-LIMITED' => 429, 'NETWORK' => 0];
+            if (isset($codes[$query['sku']])) {
+                $code = $codes[$query['sku']];
+                throw new HttpClientException('Unavailable', $code, new Request(), new Response($code));
+            }
+        };
+        $results = $connector->ImportSendList();
+        same([1, 2, 3, 4], array_column($results, 'articleId'));
+        same([false, false, false, true], array_column($results, 'success'));
+        same([true, true, true, false], array_column($results, 'retryExport'));
+        same('GOOD', productWrite($connector->client, 'products')['sku']);
     },
 ]);

@@ -761,27 +761,25 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         $nummer = $tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'];
       }
       $lageranzahl = $tmp[$i]['anzahl_lager'];
-      $pseudolager = trim($tmp[$i]['pseudolager']);
-      $inaktiv = $tmp[$i]['inaktiv'];
-      $status = 'publish';
+      $pseudolager = $tmp[$i]['pseudolager'] ?? '';
 
-      if ($pseudolager !== '') {
+      if (is_numeric($pseudolager) && (float) $pseudolager > 0) {
         $lageranzahl = $pseudolager;
       }
       if ($soldOut) {
         $lageranzahl = 0;
       }
-      if ($inaktiv) {
-        $status = 'private';
-      }
-
       $payload = [
         'manage_stock' => true,
-        'stock_quantity' => $lageranzahl,
-        'status' => $status,
+        'stock_quantity' => max(0, (int) $lageranzahl),
       ];
-      if ($onRequest) {
+      if (!empty($tmp[$i]['inaktiv'])) {
+        $payload['status'] = 'private';
+      }
+      if ($soldOut || ($payload['stock_quantity'] === 0 && ($tmp[$i]['restmenge'] ?? 0) == 1)) {
         $payload['backorders'] = 'no';
+      }
+      if ($onRequest) {
         $payload['stock_status'] = 'outofstock';
       }
       $pendingUpdates[$nummer] = ['article' => (int) $artikel, 'payload' => $payload];
@@ -886,7 +884,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         return 0;
       }
       $response = $this->client->post($endpoint, ['update' => $payloads]);
-      return $this->processBatchResponse($response, $endpoint);
+      return $this->processBatchResponse($response, $endpoint, array_column($payloads, 'id'));
     };
     if (!$this->visibilitySync) {
       return $send(array_column($items, 'payload'));
@@ -910,11 +908,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
    *
    * @param object $response Decoded JSON response from the batch endpoint.
    * @param string $endpoint Endpoint label used in log messages.
-   * @return int Number of items reported as updated without error.
+   * @param array $productIds IDs submitted for this batch.
+   * @return int Number of submitted items reported as updated without error.
    */
-  private function processBatchResponse($response, $endpoint)
+  private function processBatchResponse($response, $endpoint, array $productIds)
   {
     $successCount = 0;
+    $pendingIds = array_fill_keys($productIds, true);
 
     if (!is_object($response) && !is_array($response)) {
       $this->logger->error("WooCommerce Batch-Response ungueltig fuer $endpoint");
@@ -940,7 +940,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         $this->logger->error(
           "WooCommerce Batch-Fehler ($endpoint) fuer ID {$itemId}: [$code] $message"
         );
-      } else {
+      } elseif (isset($pendingIds[$itemId])) {
+        unset($pendingIds[$itemId]);
         $this->logger->info(
           "WooCommerce Lagerzahlenuebertragung (Batch) fuer Artikel-ID {$itemId} erfolgreich",
           ['endpoint' => $endpoint]
@@ -990,7 +991,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $categoryExporter = null;
     $categoryTreeError = null;
     $categoryTreeBusy = false;
-    if ($this->shopCategoryTree) {
+    $exportableArticles = array_filter((array) $tmp, static fn ($article) => ($article['artikel'] ?? null) !== 'ignore');
+    if ($this->shopCategoryTree && ($ctmp === 0 || $exportableArticles !== [])) {
       try {
         $categoryStore ??= $this->newCategoryStore();
         $categoryExporter = $this->syncCategoryTree($categoryStore, false);
@@ -1005,12 +1007,12 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
     // Prepare files
     $alle_dateien = array(); // pfad, dateiname
-    if ($this->dateienuebertragen) {
-        for ($i = 0; $i < $ctmp; $i++) {
+    if ($this->dateienuebertragen && $exportableArticles !== []) {
+        foreach ($exportableArticles as $article) {
             $dateien_artikel = array();
-            if (isset($tmp[$i]['Dateien'])) {
+            if (isset($article['Dateien'])) {
                 // apply naming
-                foreach ($tmp[$i]['Dateien'] as $key => $datei) {
+                foreach ($article['Dateien'] as $datei) {
                     if (!empty($this->filenamesmarty)) {
                         $smarty = new Smarty;
                         $directory = $this->app->erp->GetTMP().'/smarty/templates';
@@ -1019,7 +1021,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
                         $dateidata['dateiname'] = pathinfo($dateidata['filename'] , PATHINFO_FILENAME);
                         $dateidata['endung'] = pathinfo($dateidata['filename'], PATHINFO_EXTENSION);
                         $dateidata['artikel'] = (object) $datei['artikeldata'];
-                        $smarty->assign('artikel', (object) $tmp[$i]);
+                        $smarty->assign('artikel', (object) $article);
                         $smarty->assign('datei', (object) $dateidata);
                         $transformed = $smarty->fetch('string:'.$this->filenamesmarty);
                         if (!empty($transformed)) {
@@ -1069,195 +1071,108 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $return[$i] = new ArticleExportResult();
       $return[$i]->requiresActiveAssignment = $this->visibilitySync;
       $artikel = self::resolveArticleId($tmp[$i]);
-
-        if (!empty($this->productsmarty)) {
-            $smarty = new Smarty;
-            $directory = $this->app->erp->GetTMP().'/smarty/templates';
-            $smarty->setCompileDir($directory);
-            $smarty->assign('artikel', (object) $tmp[$i]);
-            $smarty_array = json_decode($this->productsmarty, true);
-            if (empty($smarty_array)) {
-                throw new Exception("Article smarty template JSON decode error! ".print_r(json_last_error_msg(),true));
-            }
-            $transformed = json_decode($smarty->fetch('string:'.$this->productsmarty),true);
-            $tmp[$i] = array_merge((array) $tmp[$i], $transformed);
-        }
-
       $return[$i]->articleId = $artikel;
-      try {
-        if ($this->extendedFieldMapping) {
-          $categoryStore ??= $this->newCategoryStore();
-        }
-        $availability = $this->loadExportAvailability($tmp[$i], $this->extendedFieldMapping ? $categoryStore : null);
-      } catch (Throwable $error) {
-        $return[$i]->message = $this->reportAvailabilityLookupFailure((int) $artikel, $error);
-        $return[$i]->retryExport = true;
+      $nummer = $tmp[$i]['nummer'] ?? '';
+      if (($tmp[$i]['artikel'] ?? null) === 'ignore') {
+        $return[$i]->message = 'WooCommerce-Artikelexport uebersprungen: Verkaufspreis fehlt.';
+        $this->logger->warning($return[$i]->message, ['article' => $artikel, 'sku' => $nummer]);
         continue;
       }
-      $return[$i]->success = true;
-      $nummer = $tmp[$i]['nummer'];
-      if (!empty($tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'])) {
-        $nummer = $tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'];
-      }
-      $laststock = $tmp[$i]['restmenge'];
-      $inaktiv = $tmp[$i]['inaktiv'];
-      $shippingtime = $tmp[$i]['lieferzeitmanuell'];
 
-      $hersteller = $tmp[$i]['hersteller'];
-      $herstellerlink = $tmp[$i]['herstellerlink'];
-
-      $name_de = html_entity_decode($tmp[$i]['name_de']);
-      $name_en = html_entity_decode($tmp[$i]['name_en']);
-
-//        print_r($tmp[$i]); exit();
-
-      $description = html_entity_decode($tmp[$i]['uebersicht_de']);
-      $description_en = html_entity_decode($tmp[$i]['uebersicht_en']);
-      $preis = $tmp[$i]['preis'];
-
-      $kurzbeschreibung = $tmp[$i]['kurztext_de'];
-
-      $weight_kg = $tmp[$i]['gewicht'];
-      $dim_length = $tmp[$i]['laenge'];
-      $dim_width = $tmp[$i]['breite'];
-      $dim_height = $tmp[$i]['hoehe'];
-
-      // Sanitize dimensions
-      if (self::emptyString($weight_kg))
-        $weight_kg = null;
-
-      if (self::emptyString($dim_length))
-        $dim_length = null;
-
-      if (self::emptyString($dim_width))
-        $dim_width = null;
-
-      if (self::emptyString($dim_height))
-        $dim_height = null;
-
-      $pseudopreis = $tmp[$i]['pseudopreis'];// *1.19;
-      if ($pseudopreis <= $preis)
-        $pseudopreis = $preis;
-      $steuersatz = $tmp[$i]['steuersatz'];
-      if ($steuersatz > 1.10) {
-        $steuersatz = 'normal';
-      } else {
-        $steuersatz = 'ermaessigt';
-      }
-
-      $lageranzahl = $tmp[$i]['anzahl_lager'];
-      $pseudolager = trim($tmp[$i]['pseudolager']);
-
-      if ($pseudolager > 0)
-        $lageranzahl = $pseudolager;
-      if ($tmp[$i]['ausverkauft'] == "1") {
-        $lageranzahl = 0;
-        $laststock = "1";
-      }
-
-      if ($inaktiv)
-        $aktiv = 0;
-      else
-        $aktiv = 1;
-
-      $product_id = 0;
-      if ($laststock != "1")
-        $laststock = 0;
-
-      $remoteIdInformation = $this->getShopIdBySKU($nummer);
-      $product_id = $remoteIdInformation['id'] ?? null;
-      $parent_id = $remoteIdInformation['parent'] ?? null;
-      $isVariant = $remoteIdInformation['isvariant'] ?? false;
-
-      $commonMetaData = array();
-
-        if (!empty($this->metadatasmarty)) {
-            $smarty = new Smarty;
-            $directory = $this->app->erp->GetTMP().'/smarty/templates';
-            $smarty->setCompileDir($directory);
-            $smarty->assign('artikel', (object) $tmp[$i]);
-            $smarty_array = json_decode($this->metadatasmarty, true);
-            if (empty($smarty_array)) {
-                throw new Exception("Metadata smarty template JSON decode error! ".print_r(json_last_error_msg(),true));
-            }
-            $transformed = json_decode($smarty->fetch('string:'.$this->metadatasmarty),true);
-            foreach ($transformed as $key => $value) {
-                $commonMetaData[] = array('key' => $key, 'value' => $value);
-            }
-        }
-
-      $productSync = new ProductSynchronizer($this->client);
-      $productOptions = [
-        'backorders' => $this->backorders,
-        'extendedMapping' => $this->extendedFieldMapping,
-        'yoastMeta' => $this->yoastMeta,
-      ] + $availability;
-      if ($this->extendedFieldMapping) {
-        $productOptions['deliveryTimeIds'] = [$this->deliveryTimeMap(), 'idFor'];
-      }
-      if ($this->visibilitySync) {
-        $productOptions['writeWithVisibility'] = fn (array $payload, callable $write) =>
-          $this->writeProductWithVisibility((int) $artikel, $payload, $write);
-      }
-      $productData = $tmp[$i];
-      if (!$this->extendedFieldMapping) {
-        // The legacy top-level export only sends Smarty and attachment metadata.
-        unset($productData['meta_data']);
-      }
-      if ($this->exportDownloads && $this->downloadSettings !== null) {
-        $productData = $this->downloadSettings->apply($productData);
-      }
-      if (!$this->exportDownloads) {
-        unset($productData['downloadable'], $productData['downloads'], $productData['virtual']);
-        foreach ($productData['artikel_varianten'] ?? [] as $key => $variant) {
-          unset($productData['artikel_varianten'][$key]['downloadable'], $productData['artikel_varianten'][$key]['downloads'], $productData['artikel_varianten'][$key]['virtual']);
-        }
-        foreach ($productData['matrix_varianten']['artikel'] ?? [] as $key => $rows) {
-          unset($productData['matrix_varianten']['artikel'][$key][0]['downloadable'], $productData['matrix_varianten']['artikel'][$key][0]['downloads'], $productData['matrix_varianten']['artikel'][$key][0]['virtual']);
-        }
-      }
-      $commonProductAtts = $productSync->map($productData, $productOptions);
-      $commonMetaData = array_merge($commonProductAtts['meta_data'] ?? [], $commonMetaData);
-
-      if (isset($tmp[$i]['Dateien'])) {
-        if (!empty($uploaded_files['files'])) {
-            $attachments = array();
-
-            foreach ($tmp[$i]['Dateien'] as $datei) {
-                // find file in uploaded_files
-                $key = array_search($datei['dateipfad'], array_column($uploaded_files['files'], 'dateipfad'));
-                if ($key !== false) {
-                    $uploaded_file = $uploaded_files['files'][$key];
-                    if ($uploaded_file['type'] == 'shopbild') {
-                        $commonProductAtts['images'][] = [
-                            'id' => $uploaded_file['wordpressid']
-                        ];
-                    }
-                    else if (in_array(strtolower($uploaded_file['type']),$this->dateienuebertragen)) {
-                        $attachments[] = array('name' => $uploaded_file['name'], 'wp_media_id' => $uploaded_file['wordpressid'], 'typ' => $uploaded_file['type']);
-                    }
-                } else {
-                    $return[$i]->message .= "Datei wurde nicht exportiert: ".$datei['filename'];
-                }
-            }
-
-            array_multisort(
-                array_column($attachments, 'name'),
-                SORT_ASC,
-                SORT_NATURAL,
-                $attachments
-            );
-
-            if (!empty($attachments)) {
-                $commonMetaData[] = array('key' => 'openxe_product_attachments', 'value' => $attachments);
-            }
-        }
-      }
-
-      $commonProductAtts['meta_data'] = array_values(array_column($commonMetaData, null, 'key'));
-      // sync() maps the article again and also maps variations. Log unknown terms only there.
-      $productOptions['logger'] = $this->logger;
       try {
+        $tmp[$i] = array_merge($tmp[$i], $this->renderArticleJson($this->productsmarty ?? null, $tmp[$i], 'Artikel'));
+
+        try {
+          if ($this->extendedFieldMapping) {
+            $categoryStore ??= $this->newCategoryStore();
+          }
+          $availability = $this->loadExportAvailability($tmp[$i], $this->extendedFieldMapping ? $categoryStore : null);
+        } catch (Throwable $error) {
+          $return[$i]->message = $this->reportAvailabilityLookupFailure($artikel, $error);
+          $return[$i]->retryExport = true;
+          continue;
+        }
+
+        $nummer = ($tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'] ?? '') ?: $tmp[$i]['nummer'];
+        $remoteIdInformation = $this->getShopIdBySKU($nummer);
+        $isVariant = $remoteIdInformation['isvariant'] ?? false;
+
+        $commonMetaData = [];
+        foreach ($this->renderArticleJson($this->metadatasmarty ?? null, $tmp[$i], 'Metadaten') as $key => $value) {
+          $commonMetaData[] = ['key' => $key, 'value' => $value];
+        }
+
+        $productSync = new ProductSynchronizer($this->client);
+        $productOptions = [
+          'backorders' => $this->backorders,
+          'extendedMapping' => $this->extendedFieldMapping,
+          'yoastMeta' => $this->yoastMeta,
+        ] + $availability;
+        if ($this->extendedFieldMapping) {
+          $productOptions['deliveryTimeIds'] = [$this->deliveryTimeMap(), 'idFor'];
+        }
+        if ($this->visibilitySync) {
+          $productOptions['writeWithVisibility'] = fn (array $payload, callable $write) =>
+            $this->writeProductWithVisibility((int) $artikel, $payload, $write);
+        }
+        $productData = $tmp[$i];
+        if (!$this->extendedFieldMapping) {
+          // The legacy top-level export only sends Smarty and attachment metadata.
+          unset($productData['meta_data']);
+        }
+        if ($this->exportDownloads && $this->downloadSettings !== null) {
+          $productData = $this->downloadSettings->apply($productData);
+        }
+        if (!$this->exportDownloads) {
+          unset($productData['downloadable'], $productData['downloads'], $productData['virtual']);
+          foreach ($productData['artikel_varianten'] ?? [] as $key => $variant) {
+            unset($productData['artikel_varianten'][$key]['downloadable'], $productData['artikel_varianten'][$key]['downloads'], $productData['artikel_varianten'][$key]['virtual']);
+          }
+          foreach ($productData['matrix_varianten']['artikel'] ?? [] as $key => $rows) {
+            unset($productData['matrix_varianten']['artikel'][$key][0]['downloadable'], $productData['matrix_varianten']['artikel'][$key][0]['downloads'], $productData['matrix_varianten']['artikel'][$key][0]['virtual']);
+          }
+        }
+        $commonProductAtts = $productSync->map($productData, $productOptions);
+        $commonMetaData = array_merge($commonProductAtts['meta_data'] ?? [], $commonMetaData);
+
+        if (isset($tmp[$i]['Dateien'])) {
+          if (!empty($uploaded_files['files'])) {
+              $attachments = array();
+
+              foreach ($tmp[$i]['Dateien'] as $datei) {
+                  // find file in uploaded_files
+                  $key = array_search($datei['dateipfad'], array_column($uploaded_files['files'], 'dateipfad'));
+                  if ($key !== false) {
+                      $uploaded_file = $uploaded_files['files'][$key];
+                      if ($uploaded_file['type'] == 'shopbild') {
+                          $commonProductAtts['images'][] = [
+                              'id' => $uploaded_file['wordpressid']
+                          ];
+                      }
+                      else if (in_array(strtolower($uploaded_file['type']),$this->dateienuebertragen)) {
+                          $attachments[] = array('name' => $uploaded_file['name'], 'wp_media_id' => $uploaded_file['wordpressid'], 'typ' => $uploaded_file['type']);
+                      }
+                  } else {
+                      $return[$i]->message .= "Datei wurde nicht exportiert: ".$datei['filename'];
+                  }
+              }
+
+              array_multisort(
+                  array_column($attachments, 'name'),
+                  SORT_ASC,
+                  SORT_NATURAL,
+                  $attachments
+              );
+
+              if (!empty($attachments)) {
+                  $commonMetaData[] = array('key' => 'openxe_product_attachments', 'value' => $attachments);
+              }
+          }
+        }
+
+        $commonProductAtts['meta_data'] = array_values(array_column($commonMetaData, null, 'key'));
+        // sync() maps the article again and also maps variations. Log unknown terms only there.
+        $productOptions['logger'] = $this->logger;
         $productOptions['variationPayloads'] = (new VariationMedia())->upload(
           $productData,
           array_values(array_filter($this->dateienuebertragen)),
@@ -1265,11 +1180,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         );
         $productResult = $productSync->sync($productData, $commonProductAtts, $productOptions);
         $product_id = $productResult['id'];
+        $return[$i]->success = true;
         $this->logger->info("WooCommerce Artikel synchronisiert: $nummer / $product_id");
       } catch (Throwable $error) {
         $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'Unbekannter Artikelexport-Fehler.';
         $return[$i]->success = false;
-        $return[$i]->retryExport = true;
+        $code = $error instanceof HttpClientException ? (int) $error->getCode() : 0;
+        $return[$i]->retryExport = $code < 400 || $code >= 500 || in_array($code, [401, 403, 408, 429], true);
         $return[$i]->message = trim(($return[$i]->message ?? '') . "\nWooCommerce-Artikelexport ($nummer): " . $reason);
         $this->logger->error("WooCommerce Artikel-Export fehlgeschlagen: $nummer (#$artikel): $reason", [
           'shop' => (int) $this->shopid,
@@ -1314,7 +1231,24 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       }
     }
     return $return;
-    // return array($product_id,$anzahl,$nummer,$steuersatz, $preis);
+  }
+
+  private function renderArticleJson(?string $template, array $article, string $name): array
+  {
+    if ($template === null || $template === '') {
+      return [];
+    }
+    if (!is_array(json_decode($template, true))) {
+      throw new RuntimeException($name . '-Smarty-Template ist kein JSON-Array oder -Objekt.');
+    }
+    $smarty = new Smarty;
+    $smarty->setCompileDir($this->app->erp->GetTMP() . '/smarty/templates');
+    $smarty->assign('artikel', (object) $article);
+    $transformed = json_decode($smarty->fetch('string:' . $template), true);
+    if (!is_array($transformed)) {
+      throw new RuntimeException($name . '-Smarty-Ausgabe ist kein JSON-Array oder -Objekt.');
+    }
+    return $transformed;
   }
 
   private function newCategoryStore(): ShopCategoryStore
@@ -1909,7 +1843,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if (isset($product[0])) {
       return [
         'id' => $product[0]->id,
-        'parent' => $product[0]->parent_id,
+        'parent' => $product[0]->parent_id ?? null,
         'isvariant' => !empty($product[0]->parent_id)
       ];
     }

@@ -86,7 +86,7 @@ final class ShopCategoryExporter
         $terms = $seenSlugs = [];
         for ($page = 1; ; $page++) {
             $rows = $this->request('get', 'products/categories', [
-                'per_page' => 100, 'page' => $page, 'hide_empty' => false, 'orderby' => 'id',
+                'per_page' => 100, 'page' => $page, 'hide_empty' => '0', 'orderby' => 'id',
             ]);
             if (!is_array($rows)) {
                 throw new RuntimeException('Ungueltige WooCommerce-Kategorienliste.');
@@ -118,7 +118,7 @@ final class ShopCategoryExporter
                         throw new RuntimeException('WooCommerce meldet die Kategorie nicht als leer.');
                     }
                     $this->requireEmptyCollection('products', ['category' => $id, 'status' => 'any', 'per_page' => 1], 'Produkte');
-                    $this->requireEmptyCollection('products/categories', ['parent' => $id, 'per_page' => 1, 'hide_empty' => false], 'Unterkategorien');
+                    $this->requireEmptyCollection('products/categories', ['parent' => $id, 'per_page' => 1, 'hide_empty' => '0'], 'Unterkategorien');
                     // The WooCommerce term endpoint requires force for confirmed-empty categories.
                     $this->request('delete', 'products/categories/' . $id, ['force' => true]);
                     unset($terms[$id]);

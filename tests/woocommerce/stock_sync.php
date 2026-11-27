@@ -28,6 +28,7 @@ function stockConnector(array $articles, CategoryStoreDatabase $db, bool $enable
     };
     $connector->client = new class {
         public array $writes = [];
+        public ?object $batchResponse = null;
         public function get(string $endpoint, array $query): array
         {
             same('products', $endpoint);
@@ -43,7 +44,7 @@ function stockConnector(array $articles, CategoryStoreDatabase $db, bool $enable
         public function post(string $endpoint, array $payload): object
         {
             $this->writes[$endpoint] = $payload;
-            return (object) ['update' => array_map(static fn (array $item): object => (object) $item, $payload['update'])];
+            return $this->batchResponse ?? (object) ['update' => array_map(static fn (array $item): object => (object) $item, $payload['update'])];
         }
     };
     return $connector;
@@ -81,13 +82,43 @@ runTests([
         same(2, $connector->ImportSendListLager());
         same([
             'products/batch' => ['update' => [['id' => 33, 'manage_stock' => true, 'stock_quantity' => 0,
-                'status' => 'publish', 'backorders' => 'no', 'stock_status' => 'outofstock']]],
-            'products/91/variations/batch' => ['update' => [['id' => 34, 'manage_stock' => true, 'stock_quantity' => 4,
-                'status' => 'publish']]],
+                'backorders' => 'no', 'stock_status' => 'outofstock']]],
+            'products/91/variations/batch' => ['update' => [['id' => 34, 'manage_stock' => true, 'stock_quantity' => 4]]],
         ], $connector->client->writes);
         same([7, 8], array_column($connector->logger->debug, 'article'));
 
         $disabled = stockConnector($articles, $db, false);
         same(4, $disabled->ImportSendListLager());
+    },
+    'stock updates use real stock for nonpositive overrides and preserve active product status' => static function () {
+        $articles = [
+            array_replace(stockArticle(7, 'REQUESTED-PRODUCT'), ['anzahl_lager' => '79.1', 'pseudolager' => '0']),
+            array_replace(stockArticle(8, 'REQUESTED-VARIATION'), ['anzahl_lager' => 9, 'pseudolager' => 0]),
+            array_replace(stockArticle(9, 'SOLD-OUT'), ['anzahl_lager' => -1, 'pseudolager' => '-4', 'restmenge' => '1', 'inaktiv' => 1]),
+            array_replace(stockArticle(10, 'NORMAL-VARIATION'), ['pseudolager' => '3.9']),
+        ];
+        $connector = stockConnector($articles, new CategoryStoreDatabase(), false);
+        same(4, $connector->ImportSendListLager());
+        same([
+            'products/batch' => ['update' => [
+                ['id' => 31, 'manage_stock' => true, 'stock_quantity' => 79],
+                ['id' => 33, 'manage_stock' => true, 'stock_quantity' => 0, 'status' => 'private', 'backorders' => 'no'],
+            ]],
+            'products/91/variations/batch' => ['update' => [
+                ['id' => 32, 'manage_stock' => true, 'stock_quantity' => 9],
+                ['id' => 34, 'manage_stock' => true, 'stock_quantity' => 3],
+            ]],
+        ], $connector->client->writes);
+    },
+    'stock transfer only confirms IDs requested in the chunk with a successful response' => static function () {
+        $connector = stockConnector([stockArticle(7, 'REQUESTED-PRODUCT')], new CategoryStoreDatabase(), false);
+        $connector->client->batchResponse = (object) ['update' => [
+            (object) ['id' => 999],
+            (object) ['id' => 31, 'error' => (object) ['code' => 'failed']],
+            (object) [],
+        ]];
+        same(0, $connector->ImportSendListLager());
+        $connector->client->batchResponse->update = [(object) ['id' => 31], (object) ['id' => 31]];
+        same(1, $connector->ImportSendListLager());
     },
 ]);

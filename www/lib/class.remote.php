@@ -133,14 +133,14 @@ class Remote
         }
         $data = array();
         $shopexportArr = $this->app->DB->SelectRow(sprintf('SELECT * FROM shopexport WHERE id = %d LIMIT 1', $shopId));
-        $holealle = $shopexportArr['holealle'];
-        $holeallestati = $shopexportArr['holeallestati'];
+        $holealle = $shopexportArr['holealle'] ?? 0;
+        $holeallestati = $shopexportArr['holeallestati'] ?? 0;
         $zeitraum = [
-            'datumvon' => $shopexportArr['datumvon'],
-            'datumbis' => $shopexportArr['datumbis'],
-            'tmpdatumvon' => $shopexportArr['tmpdatumvon'],
-            'tmpdatumbis' => $shopexportArr['tmpdatumbis'],
-            'anzgleichzeitig' => $shopexportArr['anzgleichzeitig'],
+            'datumvon' => $shopexportArr['datumvon'] ?? null,
+            'datumbis' => $shopexportArr['datumbis'] ?? null,
+            'tmpdatumvon' => $shopexportArr['tmpdatumvon'] ?? null,
+            'tmpdatumbis' => $shopexportArr['tmpdatumbis'] ?? null,
+            'anzgleichzeitig' => $shopexportArr['anzgleichzeitig'] ?? null,
         ];
         if (!empty($zeitraum)) {
             $data['datumvon'] = $zeitraum['datumvon'];
@@ -154,7 +154,7 @@ class Remote
                 $data['datumbis'] = date('Y-m-d H:i:s');
                 $data['datumbis_utc'] = $this->app->DB->Select('select date_sub(UTC_TIMESTAMP, INTERVAL 0 MINUTE)');
             }
-            $data['anzgleichzeitig'] = $zeitraum[0]['anzgleichzeitig'];
+            $data['anzgleichzeitig'] = $zeitraum['anzgleichzeitig'];
             if ($holeallestati && $data['anzgleichzeitig'] > 1) {
                 $data['holeallestati'] = 1;
             }
@@ -1189,8 +1189,9 @@ class Remote
             'free_fields' => true,
         ];
 
+        $fullExport = !$nurlager && !empty($artikelexport);
         if (
-            ($nurlager || empty($artikelexport)) && !empty($shopexportarr['modulename']) && !is_file(dirname(__DIR__) . '/pages/' . $shopexportarr['modulename'] . '_custom.php')
+            !$fullExport && !empty($shopexportarr['modulename']) && !is_file(dirname(__DIR__) . '/pages/' . $shopexportarr['modulename'] . '_custom.php')
         ) {
             $elementsNotNeededByModule = ShopimporterBase::storageNotNeededElements($shopexportarr['modulename']);
             foreach ($elementsNotNeededByModule as $element) {
@@ -1208,11 +1209,11 @@ class Remote
         $projekt = (int) $shopexportarr['projekt'];
         $projektlager = $this->app->DB->Select("SELECT id FROM projekt WHERE id = $projekt AND projektlager = 1 LIMIT 1");
         $tmp = new ObjGenArtikel($this->app);
+        $data = [];
         $cartikel_arr = !empty($artikel_arr) ? count($artikel_arr) : 0;
 
         for ($i = 0; $i < $cartikel_arr; $i++) {
             $artikel = $artikel_arr[$i];
-            $lagerexport = $this->app->erp->GetArtikelShopEinstellung('autolagerlampe', $artikel, $shopexportarr);
             $tmp->Select($artikel);
             $data[$i] = ['artikel' => $artikel, 'artikelid' => $artikel];
             $data[$i]['nummer'] = $tmp->GetNummer();
@@ -1248,6 +1249,12 @@ class Remote
                 $parentid = $tmp->GetVariante_Von();
             } else {
                 $parentid = 0;
+            }
+
+            foreach (['kurztext_de', 'kurztext_en', 'beschreibung_de', 'beschreibung_en', 'shop_name_de', 'shop_name_en', 'uebersicht_de', 'uebersicht_en', 'anabregs_text', 'anabregs_text_en'] as $_descKey) {
+                if (!isset($data[$i][$_descKey])) {
+                    $data[$i][$_descKey] = '';
+                }
             }
 
             if (!empty($loadElements['article_descriptions'])) {
@@ -1537,29 +1544,12 @@ class Remote
                 $data[$i]['autolagerlampe'] = $this->app->erp->GetArtikelShopEinstellung('autolagerlampe', $artikel, $shopexportarr);
             }
             if ($data[$i]['autolagerlampe'] != '1') {
+                if (!$fullExport) {
+                    unset($data[$i]);
+                    continue;
+                }
                 $data[$i]['anzahl_lager'] = '';
                 $data[$i]['pseudolager'] = '';
-                $this->app->DB->Update(
-                    sprintf(
-                        'UPDATE `artikel_onlineshops`
-            SET `storage_cache` = NULL, `pseudostorage_cache` = NULL
-            WHERE `artikel` = %d AND `shop` = %d',
-                        $artikel,
-                        $id
-                    )
-                );
-            } else {
-                $this->app->DB->Update(
-                    sprintf(
-                        'UPDATE `artikel_onlineshops`
-            SET `storage_cache` = %d, `pseudostorage_cache` = %s
-            WHERE `artikel` = %d AND `shop` = %d',
-                        $data[$i]['anzahl_lager'],
-                        !isset($data[$i]['pseudolager']) || !is_numeric($data[$i]['pseudolager']) ? 'NULL' : $data[$i]['pseudolager'],
-                        $artikel,
-                        $id
-                    )
-                );
             }
 
             $projekt = $shopexportarr['projekt']; // $this->app->DB->Select("SELECT projekt FROM shopexport WHERE id='$id' LIMIT 1");
@@ -1749,18 +1739,16 @@ class Remote
                      * @deprecated Ende
                      */
                 }
-                $data[$i]['bruttopreis'] = $data[$i]['preis'] * $steuer;
+                if (is_numeric($data[$i]['preis'] ?? null)) {
+                    $data[$i]['bruttopreis'] = $data[$i]['preis'] * $steuer;
+                }
             }
             $data[$i]['checksum'] = $tmp->GetChecksum();
-            if ($data[$i]['preis'] == '' && !empty($artikelexport) && !$nurlager) {
-/*                if ($lagerexport) { Removed, because this makes no sense. If price is missing, provoke an error
-                    $nurlager = true;
-                } else {*/
-                    $this->app->erp->Systemlog(
-                        'Shopexport bei Artikel ' . $data[$i]['nummer'] . ' ' . $data[$i]['name_de'] . ' fehlgeschlagen, da Verkaufspreis fehlt.'
-                    );
-                    $data[$i]['artikel'] = 'ignore';
-/*                }*/
+            if ($fullExport && ($data[$i]['preis'] ?? '') == '') {
+                $this->app->erp->Systemlog(
+                    'Shopexport bei Artikel ' . $data[$i]['nummer'] . ' ' . $data[$i]['name_de'] . ' fehlgeschlagen, da Verkaufspreis fehlt.'
+                );
+                $data[$i]['artikel'] = 'ignore';
             }
 
             $steuerermaessigt = ($this->app->erp->GetStandardSteuersatzErmaessigt($projekt) + 100) / 100.0;
@@ -1782,7 +1770,7 @@ class Remote
                 $db = $this->app->Container->get('Database');
 
                 $offset = 0;
-                $eigenschaftind = 0;
+                $data[$i]['matrix_varianten']['artikel'] = [];
 
                 $gruppenuebersetzung = [];
                 $gruppenwertuebersetzung = [];
@@ -1827,9 +1815,7 @@ class Remote
                 }
 
                 do {
-                    unset($data[$i]['matrix_varianten']['artikel']);
-                    unset($data[$i]['artikel_varianten']);
-                    //if($this->app->DB->Select("SELECT variantenuebertragen FROM shopexport WHERE id = '$id' LIMIT 1")){
+                    $pageCount = 0;
                     $varianten = "SELECT art.pseudolager AS `pseudolager`, art.nummer AS `nummer`, art.inaktiv AS `inaktiv`,
         art.id AS `artikel`, art.gewicht AS `gewicht`, art.zolltarifnummer AS `zolltarifnummer`, art.name_en AS `name_en`,
         $artfreifeld
@@ -1855,12 +1841,12 @@ class Remote
         JOIN `matrixprodukt_eigenschaftengruppen_artikel` AS `mega` ON meoa.gruppe = mega.id
         WHERE art.variante_von = '$artikel' AND art.geloescht <> 1 AND art.nummer <> 'DEL'
         GROUP BY art.id
-        ORDER BY SUM(POW(10,1-mega.sort) * meoa.sort) ASC
+        ORDER BY SUM(POW(10,1-mega.sort) * meoa.sort) ASC, art.id ASC
         LIMIT 5000 OFFSET $offset";
                     $offset += 5000;
 
                     foreach ($db->yieldAll($varianten) as $eigenschaft) {
-                        $eigenschaftind++;
+                        $pageCount++;
                         $steuer = $steuermapping[$eigenschaft['umsatzsteuer']];
                         if (!empty($eigenschaft['steuersatz']) && $eigenschaft['steuersatz'] != -1) {
                             $steuer = ($eigenschaft['steuersatz'] + 100) / 100;
@@ -2051,20 +2037,9 @@ class Remote
                         }
                     }
 
-                    if (empty($data)) {
-                        continue;
-                    }
-                } while (count($data[$i]['matrix_varianten']['artikel'] ?? []) >= 5000);
+                } while ($pageCount === 5000);
 
-                // Bulk transfer (new 2024-06-28)
-                $result = null;
-                if (!empty($artikelexport) && !$nurlager) {
-                    $result = $this->sendlist($id, $data, true);
-                } else if (!empty($lagerexport)) {
-                    $result = $this->sendlistlager($id, $data);
-                }
-                $this->logger->debug('RemoteSendArticleList end');
-                return $result;
+                continue;
             }
 
             if (!empty($loadElements['variants']) && $this->app->DB->Select("SELECT id FROM artikel WHERE variante_von = '$artikel' AND variante = 1 AND geloescht <> 1 AND nummer != 'DEL' LIMIT 1")) {
@@ -2200,15 +2175,16 @@ class Remote
             }
         }
 
-        // Bulk transfer (new 2024-06-28)
-        $result = null;
-        if (!empty($artikelexport) && !$nurlager) {
-            $result = $this->sendlist($id, $data, true);
-        } else if (!empty($lagerexport)) {
-            $result = $this->sendlistlager($id, $data);
+        $allResults = null;
+        if ($data !== []) {
+            if ($fullExport) {
+                $allResults = $this->sendlist($id, $data, true);
+            } else {
+                $allResults = $this->sendlistlager($id, array_values($data));
+            }
         }
         $this->logger->debug('RemoteSendArticleList end');
-        return $result;
+        return $allResults;
     }
 
     /**
@@ -2260,12 +2236,12 @@ class Remote
         // See description of return format in function RemoteSendArticleList()
         $result = $this->RemoteCommand($shop_id, 'sendlist', $data);
 
-        $this->logger->debug('Remote sendlist', $result);
+        $this->logger->debug('Remote sendlist', is_array($result) ? $result : ['result' => $result]);
 
         if (!empty($result) && is_array($result)) {
             /** @var ArticleExportResult $articleResult */
             foreach ($result as $articleResult) {
-                if (!$articleResult instanceof ArticleExportResult || $articleResult->retryExport) {
+                if (!$articleResult instanceof ArticleExportResult || $articleResult->articleId <= 0 || $articleResult->retryExport) {
                     continue;
                 }
                 /** @var Shopexport $objShopexport */
@@ -2308,17 +2284,22 @@ class Remote
                     }
                 }
 
+                $transferTimestamp = $articleResult->success ? 'last_article_transfer = NOW(), ' : '';
                 $this->app->DB->Update(
                     sprintf(
                         "UPDATE artikel_onlineshops
-                  SET last_article_transfer = NOW(), last_article_hash = '%s'
+                  SET %slast_article_hash = '%s'
                   WHERE artikel = %d AND shop = %d",
+                        $transferTimestamp,
                         $this->app->DB->real_escape_string($hash),
                         $articleResult->articleId,
                         $shop_id
                     )
                 );
 
+                if (!$articleResult->success || empty($articleResult->extArticleId)) {
+                    continue;
+                }
                 $artikelnummer = $this->app->DB->Select("SELECT nummer FROM artikel WHERE id = '$articleResult->articleId' LIMIT 1");
                 $artikelfremdnummer = $this->app->DB->Select("SELECT nummer
                     FROM `artikelnummer_fremdnummern`
