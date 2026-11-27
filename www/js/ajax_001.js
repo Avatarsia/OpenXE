@@ -1536,6 +1536,8 @@ function processData( xmlHttp, intID )
 
             document.getElementById('preis').style.background ='';
           }
+          if(typeof preisNachArtikelFill == 'function' && typeof mySplitResult[7] != 'undefined')
+            preisNachArtikelFill(mySplitResult[7], parseInt(mySplitResult[8]));
 
             //document.getElementById('preis').setAttribute("readonly", "readonly");
             if(lastartikelnummer!=mySplitResult[1])
