@@ -355,6 +355,40 @@ class ApiApplication
             ['Version1', 'PropertyValue', 'Generic', 'createAction', 'create_property_value']
         );
 
+        // Artikelbaum-Zuordnungen (Shopkategorien)
+        $collection->addRoute('GET', '/v1/artikelbaum_artikel',
+            ['Version1', 'ArticleTreeArticle', 'Generic', 'listAction', 'list_article_tree_assignments']
+        );
+        $collection->addRoute('GET', '/v1/artikelbaum_artikel/{id:\d+}',
+            ['Version1', 'ArticleTreeArticle', 'Generic', 'readAction', 'view_article_tree_assignment']
+        );
+        $collection->addRoute('POST', '/v1/artikelbaum_artikel',
+            ['Version1', 'ArticleTreeArticle', 'Generic', 'createAction', 'create_article_tree_assignment']
+        );
+        $collection->addRoute('PUT', '/v1/artikelbaum_artikel/{id:\d+}',
+            ['Version1', 'ArticleTreeArticle', 'Generic', 'updateAction', 'edit_article_tree_assignment']
+        );
+        $collection->addRoute('DELETE', '/v1/artikelbaum_artikel/{id:\d+}',
+            ['Version1', 'ArticleTreeArticle', 'Generic', 'deleteAction', 'delete_article_tree_assignment']
+        );
+
+        // Artikel-Onlineshops (Reiter Onlineshop)
+        $collection->addRoute('GET', '/v1/artikel_onlineshops',
+            ['Version1', 'ArticleOnlineShop', 'Generic', 'listAction', 'list_article_onlineshops']
+        );
+        $collection->addRoute('GET', '/v1/artikel_onlineshops/{id:\d+}',
+            ['Version1', 'ArticleOnlineShop', 'Generic', 'readAction', 'view_article_onlineshop']
+        );
+        $collection->addRoute('POST', '/v1/artikel_onlineshops',
+            ['Version1', 'ArticleOnlineShop', 'Generic', 'createAction', 'create_article_onlineshop']
+        );
+        $collection->addRoute('PUT', '/v1/artikel_onlineshops/{id:\d+}',
+            ['Version1', 'ArticleOnlineShop', 'Generic', 'updateAction', 'edit_article_onlineshop']
+        );
+        $collection->addRoute('DELETE', '/v1/artikel_onlineshops/{id:\d+}',
+            ['Version1', 'ArticleOnlineShop', 'Generic', 'deleteAction', 'delete_article_onlineshop']
+        );
+
         //
         // BELEGE
         //
