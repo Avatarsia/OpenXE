@@ -252,15 +252,19 @@ final class ShopCategoryExporter
         if ($match === null && $slugMatch !== null) {
             // Recover a term created in WooCommerce before its ID could be saved locally.
             $match = $slugMatch;
-            if ($node['wcId'] !== 0 || ($match['name'] ?? null) !== $node['name']
+            $matchName = isset($match['name'])
+                ? html_entity_decode((string) $match['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8')
+                : null;
+            if ($node['wcId'] !== 0 || $matchName !== $node['name']
                 || (int) ($match['parent'] ?? -1) !== $parent) {
                 throw new RuntimeException('WooCommerce-Slug bereits belegt: ' . $slug);
             }
         }
         if ($match !== null) {
             $id = (int) $match['id'];
+            $matchName = html_entity_decode((string) ($match['name'] ?? ''), ENT_QUOTES | ENT_HTML5, 'UTF-8');
             $changes = array_diff_assoc($payload, [
-                'name' => (string) ($match['name'] ?? ''), 'parent' => (int) ($match['parent'] ?? -1),
+                'name' => $matchName, 'parent' => (int) ($match['parent'] ?? -1),
             ]);
             if ($changes !== []) {
                 $this->request('put', 'products/categories/' . $id, $changes);

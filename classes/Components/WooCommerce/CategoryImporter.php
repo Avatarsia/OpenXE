@@ -27,7 +27,7 @@ final class CategoryImporter
             }
             $seenTerms[$id] = true;
             $siblings[$parent][$id] = [
-                'name' => (string) $term['name'], 'slug' => (string) $term['slug'],
+                'name' => html_entity_decode((string) $term['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8'), 'slug' => (string) $term['slug'],
                 'parent' => $parent, 'sort' => (int) ($term['menu_order'] ?? 0),
             ];
         }
@@ -44,7 +44,11 @@ final class CategoryImporter
                 continue;
             }
             $sku = trim((string) ($product['sku'] ?? ''));
-            $entry = ['id' => (int) $product['id'], 'name' => (string) $product['name'], 'sku' => $sku];
+            $entry = [
+                'id' => (int) $product['id'],
+                'name' => html_entity_decode((string) $product['name'], ENT_QUOTES | ENT_HTML5, 'UTF-8'),
+                'sku' => $sku,
+            ];
             $article = $sku !== '' ? ($this->articleIdForSku)($sku) : null;
             $articleId = (int) (is_array($article) ? ($article['id'] ?? 0) : $article);
             if ($articleId <= 0) {

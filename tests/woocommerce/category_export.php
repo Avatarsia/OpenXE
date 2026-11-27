@@ -385,4 +385,19 @@ runTests([
         same([], $store->tree());
         same([], $store->categoriesOf(9));
     },
+    'importer_decodes_html_entities_in_category_and_product_names' => static function () {
+        $client = new CategoryExportClient(
+            [categoryTerm(124, 'Druckkopf &amp; D&uuml;sen', 'druckkopf-und-duesen')],
+            [['id' => 4636, 'name' => 'Riemenspannerset f&uuml;r Y&amp;X Achse', 'sku' => 'UNKNOWN', 'categories' => []]]
+        );
+        $store = new ShopCategoryStore(new CategoryStoreDatabase(), 7);
+        $importer = new CategoryImporter($client, $store, static fn (): ?int => null);
+        $preview = $importer->preview();
+        same('Druckkopf & Düsen', $preview['nodes'][124]['name']);
+        same('Riemenspannerset für Y&X Achse', $preview['unmatched'][0]['name']);
+        $importer->apply($preview);
+        same('Druckkopf & Düsen', $store->tree()[0]['name']);
+        same([$store->tree()[0]['id'] => 124], (new ShopCategoryExporter($client, $store))->syncTree());
+        same([], $client->writes);
+    },
 ]);
