@@ -13,6 +13,9 @@ final class ResultDetail implements JsonSerializable
     /** @var string $title */
     private $title = '';
 
+    /** @var string $subtitle */
+    private $subtitle = '';
+
     /** @var ButtonBlockAttachment|null $buttons */
     private $buttons;
 
@@ -48,6 +51,22 @@ final class ResultDetail implements JsonSerializable
         }
 
         $this->title = $title;
+    }
+
+    /**
+     * @return string
+     */
+    public function getSubtitle()
+    {
+        return $this->subtitle;
+    }
+
+    /**
+     * @param string $subtitle
+     */
+    public function setSubtitle($subtitle)
+    {
+        $this->subtitle = (string)$subtitle;
     }
 
     /**
@@ -133,6 +152,7 @@ final class ResultDetail implements JsonSerializable
 
         return [
             'title'       => $this->title,
+            'subtitle'    => $this->subtitle,
             'attachments' => $attachments,
         ];
     }

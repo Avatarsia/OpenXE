@@ -2,6 +2,7 @@
 
 use Xentral\Modules\SuperSearch\Scheduler\SuperSearchFullIndexTask;
 
+$supersearchFullIndexTask = null;
 try {
   /** @var SuperSearchFullIndexTask $supersearchFullIndexTask */
   $supersearchFullIndexTask = $app->Container->get('SuperSearchFullIndexTask');
@@ -9,6 +10,12 @@ try {
   $supersearchFullIndexTask->cleanup();
 
 } catch (\Exception $exception) {
-  $supersearchFullIndexTask->cleanup();
+  if ($supersearchFullIndexTask !== null) {
+    try {
+      $supersearchFullIndexTask->cleanup();
+    } catch (\Throwable $cleanupError) {
+      error_log('SuperSearchFullIndexTask cleanup failed: ' . $cleanupError->getMessage());
+    }
+  }
   throw $exception;
 }
