@@ -103,6 +103,7 @@
 [FORMHANDLEREVENT]
 
 [LEERFELD][MSGLEERFELD]
+[MESSAGE]
 
 <!-- gehort zu tabview -->
 <div id="tabs">
@@ -111,13 +112,13 @@
 [DISABLEOPENTEXTE]<li><a href="#tabs-2">{|Texte und Beschreibungen|}</a></li>[DISABLECLOSETEXTE]
 [DISABLEOPENPARAMETER]<li><a href="#tabs-3">{|Parameter und Freifelder|}</a></li>[DISABLECLOSEPARAMETER]
         [DISABLEOPENSHOP]<li><a href="#tabs-4">{|Online-Shop Optionen|}</a></li>[DISABLECLOSESHOP]
+        [WOOCOMMERCETABOPEN]<li><a href="#tabs-6">WooCommerce</a></li>[WOOCOMMERCETABCLOSE]
         <li><a href="#tabs-5">{|Finanzbuchhaltung|}</a></li>
     </ul>
 
 <!-- ende gehort zu tabview -->
 
 <div id="tabs-1">
-[MESSAGE]
 
 
 
@@ -740,7 +741,6 @@
 [DISABLEOPENSHOP]
 <div id="tabs-4">
 
-   [MESSAGE]
 <div class="row">
 <div class="row-height">
 <div class="col-xs-12 col-md-6 col-md-height">
@@ -855,6 +855,7 @@
 
 [DISABLECLOSESHOP]
 
+[WOOCOMMERCETABOPEN]<div id="tabs-6">[WOOCOMMERCETAB]</div>[WOOCOMMERCETABCLOSE]
 <div id="tabs-5">
 <div class="row">
    <div class="row-height">
@@ -979,6 +980,7 @@ $(document).ready(function() {
                 data: { 
                   "sid":$('#onlinshopspopup_sid').val(),
                   "shop":$('#onlinshopspopup_shop').val(),
+                  "woo_dialog_token":'[WOOCOMMERCEDIALOGTOKEN]',
                   "lagerkorrekturwert":$('#onlinshopspopup_lagerkorrekturwert').val(),
                   "pseudolager":$('#onlinshopspopup_pseudolager').val(),
                   "autolagerlampe":$('#onlinshopspopup_autolagerlampe').prop('checked')?1:0,
@@ -996,6 +998,7 @@ $(document).ready(function() {
                 success: function(data) {
                   if(typeof data.status != 'undefined' && data.status == 1)
                   {
+                    $(document).trigger('woocommerce:article-overrides-saved', [data.articleFields]);
                     $('#onlineshopeditpopup').dialog('close');
                     var oTable = $('#artikel_onlineshops').DataTable( );
                     oTable.ajax.reload();
@@ -1038,7 +1041,7 @@ function deleteonlineshop(id)
         url: 'index.php?module=artikel&action=edit&cmd=deleteonlineshop&id=[ID]',
         type: 'POST',
         dataType: 'json',
-        data: { sid: id},
+        data: { sid: id, woo_dialog_token: '[WOOCOMMERCEDIALOGTOKEN]' },
         success: function(data) {
           var oTable = $('#artikel_onlineshops').DataTable( );
           oTable.ajax.reload();

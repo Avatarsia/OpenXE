@@ -25,10 +25,18 @@ use Xentral\Components\WooCommerce\RefundStateStore;
 use Xentral\Components\WooCommerce\RefundSynchronizer;
 use Xentral\Components\WooCommerce\RefundPreflight;
 use Xentral\Components\WooCommerce\RefundRetryQueue;
+use Xentral\Components\WooCommerce\VisibilityManualActionRequired;
+use Xentral\Components\WooCommerce\VisibilityQueue;
+use Xentral\Components\WooCommerce\WooProductReader;
 use Xentral\Components\WooCommerce\ProductSynchronizer;
 use Xentral\Components\WooCommerce\CategorySynchronizer;
+use Xentral\Components\WooCommerce\ShopCategoryExporter;
+use Xentral\Components\WooCommerce\RefundStatusService;
+use Xentral\Components\WooCommerce\ShopAssignment;
+use Xentral\Components\WooCommerce\ShopCategoryStore;
 use Xentral\Components\WooCommerce\VariationMedia;
 use Xentral\Components\WooCommerce\DownloadSettings;
+use Xentral\Components\WooCommerce\DeliveryTimeMap;
 use Automattic\WooCommerce\HttpClient\HttpClientException;
 
 class Shopimporter_Woocommerce extends ShopimporterBase
@@ -40,6 +48,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public $data;
 
   const TIMEOUT = 30;
+  private const CATEGORY_SYNC_TIMEOUT = 10;
+  private const CATEGORY_SYNC_BUDGET = 20;
 
   /**
    * @var ClientWrapper $client
@@ -55,9 +65,21 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public $statusCompleted;
   public $priceType;
   public $feeArticleNumber = '';
+  public $filenamesmarty;
+  public $productsmarty;
+  public $metadatasmarty;
+  public $fileunique;
+  public $kategorienuebertragen;
+  public $timeout;
+  public $backorders;
   private $refundSync = false;
   private $categorySyncMode = 'additive';
   private $exportDownloads = false;
+  private bool $extendedFieldMapping = false;
+  private bool $yoastMeta = false;
+  private bool $visibilitySync = false;
+  private bool $shopCategoryTree = false;
+  private ?ClientWrapper $categorySyncClient = null;
   private $importModifiedFrom = '';
   private $importCompletedOrders = false;
 
@@ -78,6 +100,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   protected $dump;
 
   private $downloadSettings;
+  private string $deliveryTimeMapping = '';
+  private ?DeliveryTimeMap $cachedDeliveryTimeMap = null;
 
   /*
    * Variables for wordpress API
@@ -122,6 +146,10 @@ class Shopimporter_Woocommerce extends ShopimporterBase
   public function ImportGetAuftraegeAnzahl()
   {
     $this->migrateAbNummerIfNeeded();
+    if ($this->visibilitySync) {
+      $this->drainVisibilityQueue();
+    }
+    $this->drainCategoryChanges();
     $count = $this->getOrderReconciler()->count();
     if ($this->refundSync && $this->getRefundRetryQueue()->hasDue()) {
       $count = max(1, $count);
@@ -703,9 +731,11 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ctmp = (!empty($tmp) ? count($tmp) : 0);
     $this->logger->debug("WooCommerce ImportSendListLager ".$ctmp." entries");
 
+    $categoryStore = null;
+
     // --- Step 1: Collect all SKUs and compute desired stock params ---
 
-    // $pendingUpdates: sku => ['lageranzahl' => int, 'status' => string]
+    // $pendingUpdates: sku => article identity and stock payload
     $pendingUpdates = [];
 
     for ($i = 0; $i < $ctmp; $i++) {
@@ -713,29 +743,53 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       if ($artikel === 'ignore') {
         continue;
       }
+      $soldOut = !empty($tmp[$i]['ausverkauft']);
+      try {
+        $onRequest = $this->extendedFieldMapping && ($categoryStore ??= $this->newCategoryStore())->isOnRequest((int) $artikel);
+      } catch (Throwable $error) {
+        $this->reportAvailabilityLookupFailure((int) $artikel, $error);
+        try {
+          // The legacy sender may have cached stock before our lookup.
+          $this->app->Container->get('Database')->perform(
+            'UPDATE artikel_onlineshops SET storage_cache = -999 WHERE artikel = :article AND shop = :shop',
+            ['article' => (int) $artikel, 'shop' => (int) $this->shopid]
+          );
+        } catch (Throwable $retryError) {
+          $this->reportAvailabilityLookupFailure((int) $artikel, $retryError);
+        }
+        continue;
+      }
+      if ($onRequest && !$soldOut) {
+        $this->logger->debug('WooCommerce-Lagerexport fuer Artikel auf Anfrage uebersprungen.', ['article' => (int) $artikel]);
+        continue;
+      }
       $nummer = $tmp[$i]['nummer'];
       if (!empty($tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'])) {
         $nummer = $tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'];
       }
       $lageranzahl = $tmp[$i]['anzahl_lager'];
-      $pseudolager = trim($tmp[$i]['pseudolager']);
-      $inaktiv = $tmp[$i]['inaktiv'];
-      $status = 'publish';
+      $pseudolager = $tmp[$i]['pseudolager'] ?? '';
 
-      if ($pseudolager !== '') {
+      if (is_numeric($pseudolager) && (float) $pseudolager > 0) {
         $lageranzahl = $pseudolager;
       }
-      if ($tmp[$i]['ausverkauft']) {
+      if ($soldOut) {
         $lageranzahl = 0;
       }
-      if ($inaktiv) {
-        $status = 'private';
-      }
-
-      $pendingUpdates[$nummer] = [
-        'lageranzahl' => $lageranzahl,
-        'status' => $status,
+      $payload = [
+        'manage_stock' => true,
+        'stock_quantity' => max(0, (int) $lageranzahl),
       ];
+      if (!empty($tmp[$i]['inaktiv'])) {
+        $payload['status'] = 'private';
+      }
+      if ($soldOut || ($payload['stock_quantity'] === 0 && ($tmp[$i]['restmenge'] ?? 0) == 1)) {
+        $payload['backorders'] = 'no';
+      }
+      if ($onRequest) {
+        $payload['stock_status'] = 'outofstock';
+      }
+      $pendingUpdates[$nummer] = ['article' => (int) $artikel, 'payload' => $payload];
     }
 
     if (empty($pendingUpdates)) {
@@ -795,12 +849,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       }
 
       $info = $skuMap[$sku];
-      $item = [
-        'id' => $info['id'],
-        'manage_stock' => true,
-        'stock_quantity' => $params['lageranzahl'],
-        'status' => $params['status'],
-      ];
+      $item = ['article' => $params['article'], 'payload' => ['id' => $info['id']] + $params['payload']];
 
       if ($info['isvariant']) {
         $variationItems[$info['parent']][] = $item;
@@ -814,8 +863,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     // Simple products
     foreach (array_chunk($simpleItems, 100) as $chunk) {
       try {
-        $response = $this->client->post('products/batch', ['update' => $chunk]);
-        $anzahl += $this->processBatchResponse($response, 'products/batch');
+        $anzahl += $this->sendStockBatch('products/batch', $chunk);
       } catch (\Throwable $e) {
         $this->logger->error('WooCommerce Batch-Request fehlgeschlagen fuer products/batch: ' . $e->getMessage());
       }
@@ -826,8 +874,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       foreach (array_chunk($items, 100) as $chunk) {
         $endpoint = 'products/' . $parentId . '/variations/batch';
         try {
-          $response = $this->client->post($endpoint, ['update' => $chunk]);
-          $anzahl += $this->processBatchResponse($response, $endpoint);
+          $anzahl += $this->sendStockBatch($endpoint, $chunk);
         } catch (\Throwable $e) {
           $this->logger->error('WooCommerce Batch-Request fehlgeschlagen fuer ' . $endpoint . ': ' . $e->getMessage());
         }
@@ -837,17 +884,44 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     return $anzahl;
   }
 
+  private function sendStockBatch(string $endpoint, array $items): int
+  {
+    $send = function (array $payloads) use ($endpoint): int {
+      if ($payloads === []) {
+        return 0;
+      }
+      $response = $this->client->post($endpoint, ['update' => $payloads]);
+      return $this->processBatchResponse($response, $endpoint, array_column($payloads, 'id'));
+    };
+    if (!$this->visibilitySync) {
+      return $send(array_column($items, 'payload'));
+    }
+
+    return $this->withAssignmentLocks(function ($database) use ($items, $send): int {
+      // Recheck every chunk after the SKU lookup and retain the locks until WooCommerce responds.
+      $payloads = [];
+      foreach ($items as $item) {
+        if (!$this->isShopUnassigned($database, $item['article'])) {
+          $payloads[] = $item['payload'];
+        }
+      }
+      return $send($payloads);
+    });
+  }
+
   /**
    * Evaluates a WC batch response object, logs per-item errors, and returns
    * the count of successfully updated items.
    *
    * @param object $response Decoded JSON response from the batch endpoint.
    * @param string $endpoint Endpoint label used in log messages.
-   * @return int Number of items reported as updated without error.
+   * @param array $productIds IDs submitted for this batch.
+   * @return int Number of submitted items reported as updated without error.
    */
-  private function processBatchResponse($response, $endpoint)
+  private function processBatchResponse($response, $endpoint, array $productIds)
   {
     $successCount = 0;
+    $pendingIds = array_fill_keys($productIds, true);
 
     if (!is_object($response) && !is_array($response)) {
       $this->logger->error("WooCommerce Batch-Response ungueltig fuer $endpoint");
@@ -873,7 +947,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         $this->logger->error(
           "WooCommerce Batch-Fehler ($endpoint) fuer ID {$itemId}: [$code] $message"
         );
-      } else {
+      } elseif (isset($pendingIds[$itemId])) {
+        unset($pendingIds[$itemId]);
         $this->logger->info(
           "WooCommerce Lagerzahlenuebertragung (Batch) fuer Artikel-ID {$itemId} erfolgreich",
           ['endpoint' => $endpoint]
@@ -919,14 +994,32 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ctmp = (!empty($tmp) ? count($tmp) : 0);
     $this->logger->debug("WooCommerce ImportSendList ".$ctmp." entries");
 
+    $categoryStore = null;
+    $categoryExporter = null;
+    $categoryTreeError = null;
+    $categoryTreeBusy = false;
+    $exportableArticles = array_filter((array) $tmp, static fn ($article) => ($article['artikel'] ?? null) !== 'ignore');
+    if ($this->shopCategoryTree && ($ctmp === 0 || $exportableArticles !== [])) {
+      try {
+        $categoryStore ??= $this->newCategoryStore();
+        $categoryExporter = $this->syncCategoryTree($categoryStore, false);
+        if ($categoryExporter === null) {
+          $categoryTreeBusy = true;
+          throw new RuntimeException('WooCommerce-Kategorien werden bereits synchronisiert.');
+        }
+      } catch (Throwable $error) {
+        $categoryTreeError = $error;
+      }
+    }
+
     // Prepare files
     $alle_dateien = array(); // pfad, dateiname
-    if ($this->dateienuebertragen) {
-        for ($i = 0; $i < $ctmp; $i++) {
+    if ($this->dateienuebertragen && $exportableArticles !== []) {
+        foreach ($exportableArticles as $article) {
             $dateien_artikel = array();
-            if (isset($tmp[$i]['Dateien'])) {
+            if (isset($article['Dateien'])) {
                 // apply naming
-                foreach ($tmp[$i]['Dateien'] as $key => $datei) {
+                foreach ($article['Dateien'] as $datei) {
                     if (!empty($this->filenamesmarty)) {
                         $smarty = new Smarty;
                         $directory = $this->app->erp->GetTMP().'/smarty/templates';
@@ -935,7 +1028,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
                         $dateidata['dateiname'] = pathinfo($dateidata['filename'] , PATHINFO_FILENAME);
                         $dateidata['endung'] = pathinfo($dateidata['filename'], PATHINFO_EXTENSION);
                         $dateidata['artikel'] = (object) $datei['artikeldata'];
-                        $smarty->assign('artikel', (object) $tmp[$i]);
+                        $smarty->assign('artikel', (object) $article);
                         $smarty->assign('datei', (object) $dateidata);
                         $transformed = $smarty->fetch('string:'.$this->filenamesmarty);
                         if (!empty($transformed)) {
@@ -983,190 +1076,262 @@ class Shopimporter_Woocommerce extends ShopimporterBase
 
     for ($i = 0; $i < $ctmp; $i++) {
       $return[$i] = new ArticleExportResult();
-      $return[$i]->success = true;
-      $artikel = $tmp[$i]['artikel'];
+      $return[$i]->requiresActiveAssignment = $this->visibilitySync;
+      $artikel = self::resolveArticleId($tmp[$i]);
+      $return[$i]->articleId = $artikel;
+      $nummer = $tmp[$i]['nummer'] ?? '';
+      if (($tmp[$i]['artikel'] ?? null) === 'ignore') {
+        $return[$i]->message = 'WooCommerce-Artikelexport uebersprungen: Verkaufspreis fehlt.';
+        $this->logger->warning($return[$i]->message, ['article' => $artikel, 'sku' => $nummer]);
+        continue;
+      }
 
-        if (!empty($this->productsmarty)) {
-            $smarty = new Smarty;
-            $directory = $this->app->erp->GetTMP().'/smarty/templates';
-            $smarty->setCompileDir($directory);
-            $smarty->assign('artikel', (object) $tmp[$i]);
-            $smarty_array = json_decode($this->productsmarty, true);
-            if (empty($smarty_array)) {
-                throw new Exception("Article smarty template JSON decode error! ".print_r(json_last_error_msg(),true));
+      try {
+        $tmp[$i] = array_merge($tmp[$i], $this->renderArticleJson($this->productsmarty ?? null, $tmp[$i], 'Artikel'));
+
+        try {
+          if ($this->extendedFieldMapping) {
+            $categoryStore ??= $this->newCategoryStore();
+          }
+          $availability = $this->loadExportAvailability($tmp[$i], $this->extendedFieldMapping ? $categoryStore : null);
+        } catch (Throwable $error) {
+          $return[$i]->message = $this->reportAvailabilityLookupFailure($artikel, $error);
+          $return[$i]->retryExport = true;
+          continue;
+        }
+
+        $nummer = ($tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'] ?? '') ?: $tmp[$i]['nummer'];
+        $remoteIdInformation = $this->getShopIdBySKU($nummer);
+        $isVariant = $remoteIdInformation['isvariant'] ?? false;
+
+        $commonMetaData = [];
+        foreach ($this->renderArticleJson($this->metadatasmarty ?? null, $tmp[$i], 'Metadaten') as $key => $value) {
+          $commonMetaData[] = ['key' => $key, 'value' => $value];
+        }
+
+        $productSync = new ProductSynchronizer($this->client);
+        $productOptions = [
+          'backorders' => $this->backorders,
+          'extendedMapping' => $this->extendedFieldMapping,
+          'yoastMeta' => $this->yoastMeta,
+        ] + $availability;
+        if ($this->extendedFieldMapping) {
+          $productOptions['deliveryTimeIds'] = [$this->deliveryTimeMap(), 'idFor'];
+        }
+        if ($this->visibilitySync) {
+          $productOptions['writeWithVisibility'] = fn (array $payload, callable $write) =>
+            $this->writeProductWithVisibility((int) $artikel, $payload, $write);
+        }
+        $productData = $tmp[$i];
+        if (!$this->extendedFieldMapping) {
+          // The legacy top-level export only sends Smarty and attachment metadata.
+          unset($productData['meta_data']);
+        }
+        if ($this->exportDownloads && $this->downloadSettings !== null) {
+          $productData = $this->downloadSettings->apply($productData);
+        }
+        if (!$this->exportDownloads) {
+          unset($productData['downloadable'], $productData['downloads'], $productData['virtual']);
+          foreach ($productData['artikel_varianten'] ?? [] as $key => $variant) {
+            unset($productData['artikel_varianten'][$key]['downloadable'], $productData['artikel_varianten'][$key]['downloads'], $productData['artikel_varianten'][$key]['virtual']);
+          }
+          foreach ($productData['matrix_varianten']['artikel'] ?? [] as $key => $rows) {
+            unset($productData['matrix_varianten']['artikel'][$key][0]['downloadable'], $productData['matrix_varianten']['artikel'][$key][0]['downloads'], $productData['matrix_varianten']['artikel'][$key][0]['virtual']);
+          }
+        }
+        $commonProductAtts = $productSync->map($productData, $productOptions);
+        $commonMetaData = array_merge($commonProductAtts['meta_data'] ?? [], $commonMetaData);
+
+        if (isset($tmp[$i]['Dateien'])) {
+          if (!empty($uploaded_files['files'])) {
+              $attachments = array();
+
+              foreach ($tmp[$i]['Dateien'] as $datei) {
+                  // find file in uploaded_files
+                  $key = array_search($datei['dateipfad'], array_column($uploaded_files['files'], 'dateipfad'));
+                  if ($key !== false) {
+                      $uploaded_file = $uploaded_files['files'][$key];
+                      if ($uploaded_file['type'] == 'shopbild') {
+                          $commonProductAtts['images'][] = [
+                              'id' => $uploaded_file['wordpressid']
+                          ];
+                      }
+                      else if (in_array(strtolower($uploaded_file['type']),$this->dateienuebertragen)) {
+                          $attachments[] = array('name' => $uploaded_file['name'], 'wp_media_id' => $uploaded_file['wordpressid'], 'typ' => $uploaded_file['type']);
+                      }
+                  } else {
+                      $return[$i]->message .= "Datei wurde nicht exportiert: ".$datei['filename'];
+                  }
+              }
+
+              array_multisort(
+                  array_column($attachments, 'name'),
+                  SORT_ASC,
+                  SORT_NATURAL,
+                  $attachments
+              );
+
+              if (!empty($attachments)) {
+                  $commonMetaData[] = array('key' => 'openxe_product_attachments', 'value' => $attachments);
+              }
+          }
+        }
+
+        $commonProductAtts['meta_data'] = array_values(array_column($commonMetaData, null, 'key'));
+        // sync() maps the article again and also maps variations. Log unknown terms only there.
+        $productOptions['logger'] = $this->logger;
+        $productOptions['variationPayloads'] = (new VariationMedia())->upload(
+          $productData,
+          array_values(array_filter($this->dateienuebertragen)),
+          function ($files) { return $this->uploadFiles($files); }
+        );
+        $productResult = $productSync->sync($productData, $commonProductAtts, $productOptions);
+        $product_id = $productResult['id'];
+        $return[$i]->success = true;
+        $this->logger->info("WooCommerce Artikel synchronisiert: $nummer / $product_id");
+      } catch (Throwable $error) {
+        $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'Unbekannter Artikelexport-Fehler.';
+        $return[$i]->success = false;
+        $code = $error instanceof HttpClientException ? (int) $error->getCode() : 0;
+        $return[$i]->retryExport = $code < 400 || $code >= 500 || in_array($code, [401, 403, 408, 429], true);
+        $return[$i]->message = trim(($return[$i]->message ?? '') . "\nWooCommerce-Artikelexport ($nummer): " . $reason);
+        $this->logger->error("WooCommerce Artikel-Export fehlgeschlagen: $nummer (#$artikel): $reason", [
+          'shop' => (int) $this->shopid,
+          'article' => $artikel,
+          'sku' => $nummer,
+        ]);
+        continue;
+      }
+
+      if (!$isVariant && ($this->shopCategoryTree || $this->kategorienuebertragen)) {
+        $categoryIds = [];
+        $skipped = [];
+        try {
+          if ($this->shopCategoryTree) {
+            $categoryIds = $categoryStore?->categoriesOf((int) $artikel) ?? [];
+            if ($categoryTreeError !== null) {
+              throw $categoryTreeError;
             }
-            $transformed = json_decode($smarty->fetch('string:'.$this->productsmarty),true);
-            $tmp[$i] = array_merge((array) $tmp[$i], $transformed);
-        }
-
-      $return[$i]->articleId = intval($artikel);
-      $nummer = $tmp[$i]['nummer'];
-      if (!empty($tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'])) {
-        $nummer = $tmp[$i]['artikelnummer_fremdnummern'][0]['nummer'];
-      }
-      $laststock = $tmp[$i]['restmenge'];
-      $inaktiv = $tmp[$i]['inaktiv'];
-      $shippingtime = $tmp[$i]['lieferzeitmanuell'];
-
-      $hersteller = $tmp[$i]['hersteller'];
-      $herstellerlink = $tmp[$i]['herstellerlink'];
-
-      $name_de = html_entity_decode($tmp[$i]['name_de']);
-      $name_en = html_entity_decode($tmp[$i]['name_en']);
-
-//        print_r($tmp[$i]); exit();
-
-      $description = html_entity_decode($tmp[$i]['uebersicht_de']);
-      $description_en = html_entity_decode($tmp[$i]['uebersicht_en']);
-      $preis = $tmp[$i]['preis'];
-
-      $kurzbeschreibung = $tmp[$i]['kurztext_de'];
-
-      $weight_kg = $tmp[$i]['gewicht'];
-      $dim_length = $tmp[$i]['laenge'];
-      $dim_width = $tmp[$i]['breite'];
-      $dim_height = $tmp[$i]['hoehe'];
-
-      // Sanitize dimensions
-      if (self::emptyString($weight_kg))
-        $weight_kg = null;
-
-      if (self::emptyString($dim_length))
-        $dim_length = null;
-
-      if (self::emptyString($dim_width))
-        $dim_width = null;
-
-      if (self::emptyString($dim_height))
-        $dim_height = null;
-
-      $pseudopreis = $tmp[$i]['pseudopreis'];// *1.19;
-      if ($pseudopreis <= $preis)
-        $pseudopreis = $preis;
-      $steuersatz = $tmp[$i]['steuersatz'];
-      if ($steuersatz > 1.10) {
-        $steuersatz = 'normal';
-      } else {
-        $steuersatz = 'ermaessigt';
-      }
-
-      $lageranzahl = $tmp[$i]['anzahl_lager'];
-      $pseudolager = trim($tmp[$i]['pseudolager']);
-
-      if ($pseudolager > 0)
-        $lageranzahl = $pseudolager;
-      if ($tmp[$i]['ausverkauft'] == "1") {
-        $lageranzahl = 0;
-        $laststock = "1";
-      }
-
-      if ($inaktiv)
-        $aktiv = 0;
-      else
-        $aktiv = 1;
-
-      $product_id = 0;
-      if ($laststock != "1")
-        $laststock = 0;
-
-      $remoteIdInformation = $this->getShopIdBySKU($nummer);
-      $product_id = $remoteIdInformation['id'] ?? null;
-      $parent_id = $remoteIdInformation['parent'] ?? null;
-      $isVariant = $remoteIdInformation['isvariant'] ?? false;
-
-      $commonMetaData = array();
-
-        if (!empty($this->metadatasmarty)) {
-            $smarty = new Smarty;
-            $directory = $this->app->erp->GetTMP().'/smarty/templates';
-            $smarty->setCompileDir($directory);
-            $smarty->assign('artikel', (object) $tmp[$i]);
-            $smarty_array = json_decode($this->metadatasmarty, true);
-            if (empty($smarty_array)) {
-                throw new Exception("Metadata smarty template JSON decode error! ".print_r(json_last_error_msg(),true));
+            $return[$i]->categoryAssignmentDeferred = $categoryExporter->hasTransientSkips($categoryIds);
+            $skipped = $categoryExporter->assign($product_id, $categoryIds, $this->categorySyncMode);
+          } else {
+            $categories = $tmp[$i]['kategorien'] ?? [];
+            if ($this->categorySyncMode !== 'replace' && empty($categories) && !empty($tmp[$i]['kategoriename'])) {
+              $categories = [['name' => $tmp[$i]['kategoriename']]];
             }
-            $transformed = json_decode($smarty->fetch('string:'.$this->metadatasmarty),true);
-            foreach ($transformed as $key => $value) {
-                $commonMetaData[] = array('key' => $key, 'value' => $value);
+            $categoryIds = array_column($categories, 'id');
+            $categorySync = new CategorySynchronizer($this->client, $this->shopid);
+            $termIds = $categorySync->sync($categories, $tmp[$i]['kompletter_kategorienbaum'] ?? []);
+            if ($termIds !== [] || $this->categorySyncMode === 'replace') {
+              $categorySync->assign($product_id, $termIds, $this->categorySyncMode);
             }
+          }
+        } catch (Throwable $error) {
+          $return[$i]->categoryAssignmentDeferred = $return[$i]->categoryAssignmentDeferred
+            || $categoryTreeBusy || ShopCategoryExporter::isTransientFailure($error);
+          $reason = RefundStatusService::sanitizeError($error->getMessage()) ?: 'Unbekannter Kategoriefehler.';
+          $this->logCategoryExportWarning($return[$i], $categoryIds, $reason);
         }
-
-      $productSync = new ProductSynchronizer($this->client);
-      $productOptions = ['backorders' => $this->backorders];
-      $productData = $tmp[$i];
-      if ($this->exportDownloads && $this->downloadSettings !== null) {
-        $productData = $this->downloadSettings->apply($productData);
-      }
-      if (!$this->exportDownloads) {
-        unset($productData['downloadable'], $productData['downloads'], $productData['virtual']);
-        foreach ($productData['artikel_varianten'] ?? [] as $key => $variant) {
-          unset($productData['artikel_varianten'][$key]['downloadable'], $productData['artikel_varianten'][$key]['downloads'], $productData['artikel_varianten'][$key]['virtual']);
-        }
-        foreach ($productData['matrix_varianten']['artikel'] ?? [] as $key => $rows) {
-          unset($productData['matrix_varianten']['artikel'][$key][0]['downloadable'], $productData['matrix_varianten']['artikel'][$key][0]['downloads'], $productData['matrix_varianten']['artikel'][$key][0]['virtual']);
-        }
-      }
-      $commonProductAtts = $productSync->map($productData, $productOptions);
-      $commonProductAtts['meta_data'] = $commonMetaData;
-
-      if (isset($tmp[$i]['Dateien'])) {
-        if (!empty($uploaded_files['files'])) {
-            $attachments = array();
-
-            foreach ($tmp[$i]['Dateien'] as $datei) {
-                // find file in uploaded_files
-                $key = array_search($datei['dateipfad'], array_column($uploaded_files['files'], 'dateipfad'));
-                if ($key !== false) {
-                    $uploaded_file = $uploaded_files['files'][$key];
-                    if ($uploaded_file['type'] == 'shopbild') {
-                        $commonProductAtts['images'][] = [
-                            'id' => $uploaded_file['wordpressid']
-                        ];
-                    }
-                    else if (in_array(strtolower($uploaded_file['type']),$this->dateienuebertragen)) {
-                        $attachments[] = array('name' => $uploaded_file['name'], 'wp_media_id' => $uploaded_file['wordpressid'], 'typ' => $uploaded_file['type']);
-                    }
-                } else {
-                    $return[$i]->message .= "Datei wurde nicht exportiert: ".$datei['filename'];
-                }
-            }
-
-            array_multisort(
-                array_column($attachments, 'name'),
-                SORT_ASC,
-                SORT_NATURAL,
-                $attachments
-            );
-
-            if (!empty($attachments)) {
-                $commonProductAtts['meta_data'][] = array('key' => 'openxe_product_attachments', 'value' => $attachments);
-            }
-        }
-      }
-
-      $productOptions['variationPayloads'] = (new VariationMedia())->upload(
-        $productData,
-        array_values(array_filter($this->dateienuebertragen)),
-        function ($files) { return $this->uploadFiles($files); }
-      );
-      $productResult = $productSync->sync($productData, $commonProductAtts, $productOptions);
-      $product_id = $productResult['id'];
-      $this->logger->info("WooCommerce Artikel synchronisiert: $nummer / $product_id");
-
-      if ($this->kategorienuebertragen && !$isVariant) {
-        $categories = $tmp[$i]['kategorien'] ?? [];
-        if ($this->categorySyncMode !== 'replace' && empty($categories) && !empty($tmp[$i]['kategoriename'])) {
-          $categories = [['name' => $tmp[$i]['kategoriename']]];
-        }
-        $categorySync = new CategorySynchronizer($this->client, $this->shopid);
-        $categoryIds = $categorySync->sync($categories, $tmp[$i]['kompletter_kategorienbaum'] ?? []);
-        if ($categoryIds !== [] || $this->categorySyncMode === 'replace') {
-          $categorySync->assign($product_id, $categoryIds, $this->categorySyncMode);
+        foreach ($skipped as $nodeId => $reason) {
+          $this->logCategoryExportWarning($return[$i], [$nodeId], $reason);
         }
       }
     }
     return $return;
-    // return array($product_id,$anzahl,$nummer,$steuersatz, $preis);
+  }
+
+  private function renderArticleJson(?string $template, array $article, string $name): array
+  {
+    if ($template === null || $template === '') {
+      return [];
+    }
+    $decoded = json_decode($template);
+    if (!is_array($decoded) && !is_object($decoded)) {
+      throw new RuntimeException($name . '-Smarty-Template ist kein JSON-Array oder -Objekt.');
+    }
+    // Whitespace after JSON object braces keeps them literal for Smarty.
+    $template = json_encode(
+      $decoded,
+      JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION | JSON_THROW_ON_ERROR
+    );
+    $smarty = new Smarty;
+    $smarty->setCompileDir($this->app->erp->GetTMP() . '/smarty/templates');
+    $smarty->assign('artikel', (object) $article);
+    $transformed = json_decode($smarty->fetch('string:' . $template), true);
+    if (!is_array($transformed)) {
+      throw new RuntimeException($name . '-Smarty-Ausgabe ist kein JSON-Array oder -Objekt.');
+    }
+    return $transformed;
+  }
+
+  private function newCategoryStore(): ShopCategoryStore
+  {
+    return new ShopCategoryStore($this->app->Container->get('Database'), (int) $this->shopid);
+  }
+
+  private static function resolveArticleId(array $article): int
+  {
+    $raw = $article['artikel'] ?? null;
+    if (is_numeric($raw) && (int) $raw > 0) {
+      return (int) $raw;
+    }
+    $fallback = $article['artikelid'] ?? null;
+    return is_numeric($fallback) && (int) $fallback > 0 ? (int) $fallback : 0;
+  }
+
+  private function loadExportAvailability(array $article, ?ShopCategoryStore $store): array
+  {
+    $onRequest = $store !== null && $store->isOnRequest(self::resolveArticleId($article));
+    $variants = array_unique(array_merge(
+      array_column($article['artikel_varianten'] ?? [], 'artikel'),
+      array_keys($article['matrix_varianten']['artikel'] ?? [])
+    ));
+    $variantRequest = $variantSoldOut = [];
+    foreach ($variants as $id) {
+      $variantRequest[$id] = $store !== null && $store->isOnRequest((int) $id);
+      $soldOut = $this->app->Container->get('Database')->fetchValue(
+        'SELECT ausverkauft FROM artikel WHERE id = :article', ['article' => (int) $id]
+      );
+      if ($soldOut === false) {
+        throw new RuntimeException('Variantenartikel ' . (int) $id . ' wurde nicht gefunden.');
+      }
+      $variantSoldOut[$id] = (bool) $soldOut;
+    }
+    return [
+      'onRequest' => $onRequest,
+      'onRequestForVariant' => static fn (int $id): bool => $variantRequest[$id],
+      'soldOutForVariant' => static fn (int $id): bool => $variantSoldOut[$id],
+    ];
+  }
+
+  private function reportAvailabilityLookupFailure(int $articleId, Throwable $error): string
+  {
+    $message = 'WooCommerce-Lieferstatus nicht lesbar. Export erneut versuchen. '
+      . RefundStatusService::sanitizeError($error->getMessage());
+    try {
+      $this->logger->error($message, ['shop' => (int) $this->shopid, 'article' => $articleId]);
+    } catch (Throwable) {
+      error_log($message);
+    }
+    return $message;
+  }
+
+  private function logCategoryExportWarning(ArticleExportResult $result, array $categoryIds, string $reason): void
+  {
+    $categoryLabel = $categoryIds === [] ? '' : ' (' . implode(', ', $categoryIds) . ')';
+    $message = 'WooCommerce-Kategorieexport' . $categoryLabel . ': ' . $reason;
+    $result->message = trim(($result->message ?? '') . "\n" . $message);
+    try {
+      $this->logger->warning($message, [
+        'shop' => (int) $this->shopid, 'article' => $result->articleId, 'categories' => $categoryIds,
+      ]);
+    } catch (Throwable $error) {
+      try {
+        error_log($message);
+      } catch (Throwable $fallbackError) {
+        // A failing log must not interrupt product export.
+      }
+    }
   }
 
   /**
@@ -1189,6 +1354,13 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         }
     }
     return 'success';
+  }
+
+  public static function clientForShop($app, int $shopId): Shopimporter_Woocommerce
+  {
+    $connector = new self($app);
+    $connector->getKonfig($shopId, []);
+    return $connector;
   }
 
   /**
@@ -1217,8 +1389,8 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $ImportWooCommerceApiKey = $felder['ImportWoocommerceApiKey'] ?? '';
     $ImportWooCommerceApiUrl = $felder['ImportWoocommerceApiUrl'] ?? '';
 
-    $this->ImportWordpressUserName = $felder['ImportWordpressUserName'];
-    $this->ImportWordpressApplicationPassword = $felder['ImportWordpressApplicationPassword'];
+    $this->ImportWordpressUserName = $felder['ImportWordpressUserName'] ?? '';
+    $this->ImportWordpressApplicationPassword = $felder['ImportWordpressApplicationPassword'] ?? '';
 
     $this->filenamesmarty = $felder['filenamesmarty'];
     $this->productsmarty = $felder['productsmarty'];
@@ -1241,6 +1413,10 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $this->feeArticleNumber = trim((string) ($felder['feeArticleNumber'] ?? ''));
     $this->refundSync = !empty($felder['refundSync']);
     $this->categorySyncMode = ($felder['categorySyncMode'] ?? '') === 'replace' ? 'replace' : 'additive';
+    $this->extendedFieldMapping = !empty($felder['extendedFieldMapping']);
+    $this->yoastMeta = !empty($felder['yoastMeta']);
+    $this->visibilitySync = !empty($felder['visibilitySync']);
+    $this->shopCategoryTree = !empty($felder['shopCategoryTree']);
     $this->exportDownloads = !empty($felder['exportDownloads']);
     $this->downloadSettings = $this->exportDownloads
       ? new DownloadSettings($this->app->Container->get('Database'), (int) $this->shopid)
@@ -1249,6 +1425,9 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $this->importCompletedOrders = !empty($felder['importCompletedOrders']);
 
     $this->backorders = $felder['backorders'];
+    $deliveryTimeMapping = $felder['deliveryTimeMapping'] ?? '';
+    $this->deliveryTimeMapping = is_string($deliveryTimeMapping) ? $deliveryTimeMapping : '';
+    $this->cachedDeliveryTimeMap = null;
 
     $this->url = $ImportWooCommerceApiUrl;
     $this->client = new ClientWrapper(
@@ -1262,6 +1441,15 @@ class Shopimporter_Woocommerce extends ShopimporterBase
       $this->logger,
       $this->ssl_ignore
     );
+
+    $this->categorySyncClient = $this->shopCategoryTree ? new ClientWrapper(
+      $ImportWooCommerceApiUrl,
+      $ImportWooCommerceApiKey,
+      $ImportWooCommerceApiSecret,
+      ['query_string_auth' => true, 'timeout' => self::CATEGORY_SYNC_TIMEOUT],
+      $this->logger,
+      $this->ssl_ignore
+    ) : null;
 
     $storedTimestamp = $preferences['felder']['letzter_import_timestamp'] ?? null;
     if (!empty($storedTimestamp)) {
@@ -1308,6 +1496,171 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     });
     foreach ($result['failed'] as $orderId => $message) {
       $this->logger->error('WooCommerce refund deferred', ['shop' => $this->shopid, 'order' => $orderId, 'reason' => $message]);
+    }
+  }
+
+  private function writeProductWithVisibility(int $articleId, array $payload, callable $write): mixed
+  {
+    return $this->withAssignmentLocks(function ($database) use ($articleId, $payload, $write): mixed {
+      if ($this->isShopUnassigned($database, $articleId)) {
+        $payload['status'] = 'private';
+      }
+      return $write($payload);
+    });
+  }
+
+  private function isShopUnassigned($database, int $articleId): bool
+  {
+    return !ShopAssignment::isAssigned($database, $articleId, (int) $this->shopid);
+  }
+
+  private function withAssignmentLocks(callable $write): mixed
+  {
+    $database = $this->app->Container->get('Database');
+    $database->beginTransaction();
+    try {
+      $result = $write($database);
+      $database->commit();
+      return $result;
+    } catch (Throwable $error) {
+      if ($database->inTransaction()) {
+        $database->rollBack();
+      }
+      throw $error;
+    }
+  }
+
+  private function drainCategoryChanges(): void
+  {
+    $shopId = (int) $this->shopid;
+    // Retry hashes even when tree export is disabled or the remote revision has already been synced.
+    try {
+      $store = new ShopCategoryStore($this->app->Container->get('Database'), $shopId);
+      $store->drainExportInvalidations();
+    } catch (Throwable $error) {
+      $this->logVisibility('error', 'WooCommerce category export hash invalidation deferred', [
+        'shop' => $shopId, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
+      ]);
+    }
+    if (!$this->shopCategoryTree || !isset($store)) {
+      return;
+    }
+    try {
+      if ($store->pendingTreeSync() !== null) {
+        $this->syncCategoryTree($store, true);
+      }
+    } catch (Throwable $error) {
+      $this->logVisibility('error', 'WooCommerce category tree sync deferred', [
+        'shop' => $shopId, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
+      ]);
+    }
+  }
+
+  private function syncCategoryTree(ShopCategoryStore $store, bool $pendingOnly): ?ShopCategoryExporter
+  {
+    $database = $this->app->Container->get('Database');
+    $shopId = (int) $this->shopid;
+    $lock = ['name' => 'openxe_wc_category_sync_' . $shopId];
+    $locked = $database->fetchValue('SELECT GET_LOCK(:name, 0)', $lock);
+    if ($locked === null || $locked === false) {
+      throw new RuntimeException('WooCommerce-Kategorie-Sperre konnte nicht abgefragt werden.');
+    }
+    if ((int) $locked !== 1) {
+      return null;
+    }
+    try {
+      $revision = $store->pendingTreeSync();
+      if ($pendingOnly && $revision === null) {
+        return null;
+      }
+
+      // Leave room for the full REST timeout before starting another request in the order drain.
+      $lastRequestStart = $this->categorySyncTime() + (self::CATEGORY_SYNC_BUDGET - self::CATEGORY_SYNC_TIMEOUT) * 1_000_000_000;
+      $mayStartRequest = $pendingOnly ? fn (): bool => $this->categorySyncTime() <= $lastRequestStart : null;
+      $exporter = new ShopCategoryExporter($this->client, $store,
+        fn (string $message, array $context) => $this->logVisibility('warning', $message, ['shop' => $shopId] + $context),
+        $mayStartRequest,
+        $this->categorySyncClient
+      );
+      try {
+        $exporter->syncTree();
+        if ($exporter->completed() && $revision !== null) {
+          $store->acknowledgeTreeSync($revision);
+        }
+        return $exporter;
+      } finally {
+        if ($pendingOnly || $exporter->completed()) {
+          $store->recordTreeSyncBudgetResult($exporter->budgetExhausted());
+        }
+      }
+    } finally {
+      $database->fetchValue('SELECT RELEASE_LOCK(:name)', $lock);
+    }
+  }
+
+  protected function categorySyncTime(): int
+  {
+    return hrtime(true);
+  }
+
+  private function drainVisibilityQueue(): void
+  {
+    try {
+      $database = $this->app->Container->get('Database');
+      $queue = new VisibilityQueue($database, (int) $this->shopid);
+      // Visibility uses the product identity only, so no WordPress term lookup is needed.
+      $reader = new WooProductReader($this->client, new DeliveryTimeMap(static fn () => [], ''));
+      $result = $queue->drain(function (string $sku, callable $mayStartRequest) use ($reader): bool {
+        $product = $reader->resolveSku($sku, $mayStartRequest);
+        if ($product['status'] === 'deferred') {
+          return false;
+        }
+        if ($product['status'] === 'not_found') {
+          $this->logVisibility('debug', 'WooCommerce visibility SKU not found', ['shop' => $this->shopid, 'sku' => $sku]);
+          return true;
+        }
+        if (!empty($product['manualAction'])) {
+          throw new VisibilityManualActionRequired($product['reason']);
+        }
+        if ($product['status'] !== 'unique') {
+          throw new \RuntimeException($product['reason'] ?? 'SKU mehrfach in WooCommerce.');
+        }
+
+        $endpoint = $product['parent_id'] > 0
+          ? 'products/' . $product['parent_id'] . '/variations/' . $product['id']
+          : 'products/' . $product['id'];
+        // The WooCommerce REST v3 variations controller accepts the private post status.
+        if (!$mayStartRequest()) {
+          return false;
+        }
+        $response = $this->client->put($endpoint, ['status' => 'private']);
+        if (($response->status ?? null) !== 'private') {
+          throw new \RuntimeException('WooCommerce hat den Status private nicht bestaetigt.');
+        }
+        return true;
+      });
+      foreach ($result['failed'] as $articleId => $message) {
+        $this->logVisibility('error', 'WooCommerce visibility update deferred', [
+          'shop' => $this->shopid, 'article' => $articleId, 'reason' => $message,
+        ]);
+      }
+    } catch (\Throwable $error) {
+      $this->logVisibility('error', 'WooCommerce visibility queue failed', [
+        'shop' => $this->shopid, 'reason' => RefundStatusService::sanitizeError($error->getMessage()),
+      ]);
+    }
+  }
+
+  private function logVisibility(string $level, string $message, array $context): void
+  {
+    try {
+      $this->logger->$level($message, $context);
+    } catch (\Throwable) {
+      try {
+        error_log($message . (isset($context['reason']) ? ': ' . $context['reason'] : ''));
+      } catch (\Throwable) {
+        // A failing log must not interrupt order import.
+      }
     }
   }
 
@@ -1503,7 +1856,7 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     if (isset($product[0])) {
       return [
         'id' => $product[0]->id,
-        'parent' => $product[0]->parent_id,
+        'parent' => $product[0]->parent_id ?? null,
         'isvariant' => !empty($product[0]->parent_id)
       ];
     }
@@ -1548,6 +1901,17 @@ class Shopimporter_Woocommerce extends ShopimporterBase
         'priceType' => array('typ' => 'select', 'bezeichnung' => '{|Preisberechnungsgrundlage bei Auftragsimport|}', 'optionen' => array('netcalculated' => '{|Nettopreis zurückrechnen (Standard)|}', 'grosscalculated' => '{|Bruttopreis zurückrechnen|}')),
         'timeout' => array('typ' => 'text', 'bezeichnung' => '{|Timeout in Sekunden|}:', 'size' => 40, 'default' => '30', 'info' => ''),
         'backorders' => array('typ' => 'select', 'bezeichnung' => '{|Einstellungen für Backorders|}:', 'optionen' => $this->backorders_array, 'info' => ''),
+        'deliveryTimeMapping' => [
+            'typ' => 'textarea',
+            'cols' => 60,
+            'rows' => 5,
+            'placeholder' => '',
+            'bezeichnung' => '{|Lieferzeit-Zuordnung (Text=ID, nur falls WordPress-API nicht erreichbar)|}',
+        ],
+        'extendedFieldMapping' => ['typ' => 'checkbox', 'bezeichnung' => '{|Erweiterte Feldzuordnung exportieren (SEO, Lieferzeit, Hersteller, Zoll, GTIN)|}', 'info' => 'Erst nach der Rueckholung aus WooCommerce einschalten.'],
+        'yoastMeta' => ['typ' => 'checkbox', 'bezeichnung' => '{|Yoast-Metadaten zusaetzlich senden|}'],
+        'shopCategoryTree' => ['typ' => 'checkbox', 'bezeichnung' => '{|Shop-Kategorienbaum statt Artikelbaum verwenden|}', 'info' => 'Erst nach der Rueckholung aus WooCommerce einschalten.'],
+        'visibilitySync' => ['typ' => 'checkbox', 'bezeichnung' => '{|Produkte bei entfernter Shop-Zuordnung ausblenden|}', 'info' => 'Erst nach der Rueckholung aus WooCommerce einschalten.'],
         'productsmarty' => [
             'typ' => 'textarea',
             'cols' => 80,
@@ -1609,7 +1973,30 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     return (strlen(trim($string)) == 0);
   }
 
-  function wordpress_request(string $endpoint, $postdata = null, $method = null, $getdata = null, string $content_disposition = null, string $content_type = null, $debug = false, $debugurl = null, bool $ssl_ignore = false, int $timeout_seconds = 30) {
+  public function deliveryTimeMap(): DeliveryTimeMap
+  {
+    return $this->cachedDeliveryTimeMap ??= new DeliveryTimeMap(function (): array {
+      if (empty($this->ImportWordpressUserName) || empty($this->ImportWordpressApplicationPassword)) {
+        throw new RuntimeException('WordPress credentials are missing');
+      }
+
+      $result = $this->wordpress_request('product_delivery_times?per_page=100', ssl_ignore: $this->ssl_ignore);
+      if (!$result['status'] || !array_is_list($result['response'])) {
+        throw new RuntimeException('Could not fetch WordPress delivery time terms');
+      }
+
+      $terms = [];
+      foreach ($result['response'] as $term) {
+        if (!is_int($term['id'] ?? null) || $term['id'] <= 0 || !is_string($term['name'] ?? null)) {
+          throw new RuntimeException('Invalid WordPress delivery time term');
+        }
+        $terms[$term['id']] = $term['name'];
+      }
+      return $terms;
+    }, $this->deliveryTimeMapping);
+  }
+
+  function wordpress_request(string $endpoint, $postdata = null, $method = null, $getdata = null, ?string $content_disposition = null, ?string $content_type = null, $debug = false, $debugurl = null, bool $ssl_ignore = false, int $timeout_seconds = 30) {
     $baseUrl = rtrim((string) ($debugurl ?: $this->url), '/');
     $query = !empty($getdata) ? '?' . http_build_query($getdata, '', '&', PHP_QUERY_RFC3986) : '';
     $ch = curl_init($baseUrl . '/' . $this->wordpress_api_path . ltrim($endpoint, '/') . $query);
@@ -1635,7 +2022,6 @@ class Shopimporter_Woocommerce extends ShopimporterBase
     $raw = curl_exec($ch);
     $error = curl_error($ch);
     $information = curl_getinfo($ch);
-    curl_close($ch);
     $response = $raw === false ? null : json_decode($raw, true);
     $result = [
       'status' => $error === '' && $information['http_code'] >= 200 && $information['http_code'] <= 299 && is_array($response),

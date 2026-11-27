@@ -43,6 +43,9 @@ class DownloadSettingsDatabase
     public function fetchValue($sql, $parameters)
     {
         $this->calls[] = [$sql, $parameters];
+        if ($sql === 'SELECT ausverkauft FROM artikel WHERE id = :article') {
+            return $this->articles[$parameters['article']]['ausverkauft'] ?? 0;
+        }
         return $this->rows[$parameters['name']] ?? false;
     }
     public function perform($sql, $parameters)
@@ -100,6 +103,15 @@ function downloadConnector(DownloadSettings $store, $enabled): Shopimporter_Wooc
         'artikel_varianten' => [['artikel' => 8, 'nummer' => 'CHILD', 'preis' => 10]],
         'matrix_varianten' => ['artikel' => [8 => [['artikel' => 8, 'nummer' => 'CHILD', 'name' => 'Color', 'values' => 'Red']]]],
     ], downloadInput())];
+    (new ReflectionProperty(Shopimporter_Woocommerce::class, 'app'))->setValue($connector, (object) [
+        'Container' => new class {
+            public function get(string $name): object
+            {
+                same('Database', $name);
+                return new DownloadSettingsDatabase();
+            }
+        },
+    ]);
     $connector->client = new DownloadExportApi();
     $connector->logger = new class { public function debug(...$args) {} public function info(...$args) {} };
     foreach (['downloadSettings' => $store, 'exportDownloads' => $enabled, 'backorders' => 0, 'metadataprefix' => '', 'productsmarty' => '', 'dateienuebertragen' => [], 'kategorienuebertragen' => false] as $key => $value) {

@@ -4,6 +4,11 @@ use Xentral\Core\ErrorHandler\ErrorHandler;
 use Xentral\Core\LegacyConfig\ConfigLoader;
 use Xentral\Core\LegacyConfig\Exception\MultiDbConfigNotFoundException;
 
+// Keep the request startup warning before a later bootstrap warning can replace it.
+$startupError = error_get_last();
+define('OPENXE_INPUT_VARS_TRUNCATED', str_contains($startupError['message'] ?? '', 'Input variables exceeded'));
+unset($startupError);
+
 $memory_limit = @ini_get('memory_limit');
 if($memory_limit)
 {

@@ -65,3 +65,96 @@ Open a WooCommerce shop, then choose **WooCommerce** in its menu. Both views reu
 - **Refund-Status:** paginated queue/journal state, Woo order/refund IDs, credit-note ID, attempts, sanitized last error and UTC attempt times. **Erneut versuchen** advances only the existing retry schedule; it never clears pending financial markers, creates gateway refunds or triggers restocking. Uncertain pending states require manual recovery.
 
 Local rendering uses the real AdminView with original OpenXE styles and synthetic fixtures; it does not establish live ERP/shop integration.
+
+## Artikelliste > WooCommerce
+
+Unter **Artikel > WooCommerce** pflegst du die Shop-Zuordnung der Hauptartikel, den Shop-Kategorienbaum und die Lieferstatus je Artikel. Varianten folgen bei der Shop-Zuordnung dem Hauptartikel und behalten ihre eigenen Lieferstatus.
+
+Erforderlich sind die Bearbeitungsrechte **artikel/edit** und **onlineshops/edit** sowie Zugriff auf das Projekt des Shops und des Artikels. Nicht-Admins benoetigen zusaetzlich in den OpenXE-Benutzerrechten (userrights) die Freigabe fuer Modul **artikel**, Aktion **woocommerce**. Diese Freigabe schaltet den Menuepunkt und den Zugriff auf die Action frei.
+
+Die folgenden Shop-Einstellungen sind standardmaessig deaktiviert. Pruefe vor der Aktivierung, ob die aktuell angebotenen Hauptartikel eine aktive Zuordnung fuer diesen Shop haben, und uebernimm die vorhandenen WooCommerce-Kategorien in den Shop-Baum.
+
+- **shopCategoryTree** exportiert den separaten Baum. Der Bestellimport synchronisiert vorgemerkte Baumaenderungen auch bei leerer Artikel-Exportqueue. Das Produkt-Kategorieverhalten folgt **categorySyncMode**.
+- **visibilitySync** verarbeitet entfernte Zuordnungen beim Bestellimport ueber die [Sichtbarkeitsqueue](#shop-kategorien-und-lieferstatus). Eine aktive Zuordnung oder eine Legacy-Referenz auf den Shop gilt weiterhin als zugeordnet.
+- **extendedFieldMapping** aktiviert den Export von **auf Nachfrage lieferbar**. Sind beide Lieferstatus gesetzt, hat **nicht mehr lieferbar** Vorrang.
+
+Pruefe die Einstellungen beim Rollout mit einem Testartikel und dessen Varianten, einschliesslich Kategoriezuordnung, Lieferstatus, Ausblenden und erneutem Aktivieren.
+
+## Artikeldaten, Kategorien, Lieferstatus
+
+OpenXE fuehrt die Artikeldaten. Der Tab **WooCommerce** erscheint in den Artikeldetails bei aktiver WooCommerce-Shop-Zuordnung. Er spiegelt gemeinsam genutzte Felder im Artikelformular. **Mit WooCommerce vergleichen** liest das Produkt per SKU. Waehle Werte in der Vorschau aus, uebernimm sie in das Formular und speichere den Artikel. In der Shop-Verwaltung zeigt **Artikeldaten abgleichen** die Unterschiede fuer mehrere Artikel und listet unzuordenbare Produkte getrennt. Jede bestaetigte Rueckholung protokolliert Alt- und Neuwert.
+
+Tab, Rueckholung und CSV nutzen dieselben Artikelfelder. Ist fuer ein Feld eine WooCommerce-Shop-Ueberschreibung aktiv (`artikel_onlineshops.aktiv = 1` und `ausartikel = 0`), werden Artikelwert und Ueberschreibung beim Schreiben synchronisiert. CSV ist artikelbezogen und synchronisiert alle aktiven WooCommerce-Ueberschreibungen fuer die importierten Felder. Den Shop und die Artikelzuordnung verwaltest du unter [Artikelliste > WooCommerce](#artikelliste--woocommerce). Dort sind auch die erforderlichen Rechte beschrieben.
+
+### Feldtabelle
+
+Die Tabelle folgt `ArticleFieldCatalog::fields()`. Die erste Zeile ergaenzt den CSV-Schluessel aus `ArticleFieldCatalog::csvColumns()`.
+
+| Gruppe | Feld | OpenXE | WooCommerce | Rueckholung | Bearbeitbar | CSV-Header |
+|---|---|---|---|---|---|---|
+| Identitaet | Artikelnummer | `artikel.nummer` | Zuordnungsschluessel | - | - | `nummer` |
+| Identitaet | Shop-SKU (Fremdnummer) | `artikelnummer_fremdnummern` | `sku` | - | nein | - |
+| Texte | Shop-Name | `artikel.shop_name_de` | `name` | ja | ja | `shop_name_de` |
+| Texte | Shop-Beschreibung | `artikel.uebersicht_de` | `description` | ja | ja | `uebersicht_de` |
+| Texte | Shop-Kurzbeschreibung | `artikel.kurztext_de` | `short_description` | ja | ja | `kurztext_de` |
+| SEO | SEO-Titel | `artikel.metatitle_de` | `meta:rank_math_title` | ja | ja | `metatitle_de` |
+| SEO | SEO-Beschreibung | `artikel.metadescription_de` | `meta:rank_math_description` | ja | ja | `metadescription_de` |
+| SEO | Fokus-Keyword | `artikel.metakeywords_de` | `meta:rank_math_focus_keyword` | ja | ja | `metakeywords_de` |
+| Preis | Verkaufspreis netto | `verkaufspreise` | `regular_price / sale_price` | ja | bedingt | `standardpreisnetto` |
+| Preis | Streichpreis (Pseudopreis/UVP), netto | `artikel.pseudopreis / Artikel-Shop-Ueberschreibung` | `regular_price` | ja | ja | `pseudopreis` |
+| Status | Artikel inaktiv | `artikel.inaktiv` | `status` | ja | ja | `inaktiv` |
+| Lager-Steuerung | Lagerzahlen Sync. | `artikel.autolagerlampe / Artikel-Shop-Ueberschreibung` | `manage_stock` | - | ja | `autolagerlampe` |
+| Lager-Steuerung | Pseudo-Lagerzahl | `artikel.pseudolager / Artikel-Shop-Ueberschreibung` | `stock_quantity` | - | ja | `pseudolager` |
+| Lager-Steuerung | Restmenge (Abverkauf) | `artikel.restmenge / Artikel-Shop-Ueberschreibung` | `backorders` | - | ja | `restmenge` |
+| Lager-Steuerung | nicht mehr lieferbar | `artikel.ausverkauft` | `stock_quantity` | - | ja | `ausverkauft` |
+| Lieferstatus | auf Nachfrage lieferbar | `konfiguration (je Shop und Artikel)` | `meta:openxe_on_request` | - | ja | - |
+| Lieferung | Lieferzeit | `artikel.lieferzeitmanuell / Artikel-Shop-Ueberschreibung` | `meta:_lieferzeit` | ja | ja | `lieferzeitmanuell` |
+| Logistik | Gewicht | `artikel.gewicht` | `weight` | ja | ja | `gewicht` |
+| Logistik | Laenge | `artikel.laenge` | `dimensions.length` | ja | ja | `laenge` |
+| Logistik | Breite | `artikel.breite` | `dimensions.width` | ja | ja | `breite` |
+| Logistik | Hoehe | `artikel.hoehe` | `dimensions.height` | ja | ja | `hoehe` |
+| Logistik | EAN / GTIN | `artikel.ean` | `global_unique_id` | ja | ja | `ean` |
+| Zoll | Zolltarifnummer | `artikel.zolltarifnummer` | `meta:_dhl_hs_code` | ja | ja | `zolltarifnummer` |
+| Zoll | Herkunftsland | `artikel.herkunftsland` | `meta:_dhl_manufacture_country` | ja | ja | `herkunftsland` |
+| Hersteller | Hersteller / GPSR-Herstellerangabe | `artikel.hersteller` | `meta:_german_market_gpsr_manufacturer` | ja | ja | `hersteller` |
+
+Der Tab zeigt die Shop-SKU lesend an. Kategorien, Bilder, Eigenschaften und Variantenstruktur werden an ihren bestehenden Pflegestellen bearbeitet. Der Lagerbestand wird aus den Lagerbuchungen berechnet. Die erweiterte Zuordnung sendet fuer EAN / GTIN zusaetzlich `_gm_gtin` und `_rank_math_gtin_code`.
+
+Der Netto-Verkaufspreis ist im Tab, bei der Rueckholung und per CSV nur schreibbar, wenn der Shop keine aktive Preisgruppe verwendet und der Artikel genau eine gueltige Standardpreiszeile ab Menge 1 hat. Der CSV-Import setzt mindestens eine aktive WooCommerce-Shop-Zuordnung voraus und prueft die Preisgruppe jedes zugeordneten aktiven WooCommerce-Shops. Der Tab zeigt bei einem gesperrten Preisfeld den Grund an. Der CSV-Import meldet, warum er eine Preisaenderung ueberspringt. Fehlt die Standardpreiszeile, lege sie unter **Verkaufspreise** an. Die WooCommerce-Funktionen aktualisieren nur einen vorhandenen Standardpreis. Variantenpreise pflegst du unter **Verkaufspreise**. Der WooCommerce-Tab zeigt nur die Felder aus dem Variantenexport. Shop-Override-Felder von Varianten sind dort lesbar. Der CSV-Export laesst die gesperrten Variantenfelder leer und der Import ueberspringt sie.
+
+### Shop-Einstellungen und Leerwerte
+
+- `extendedFieldMapping`, `shopCategoryTree`, `visibilitySync` und `yoastMeta` sind je Shop standardmaessig aus. `yoastMeta` steuert separat die zusaetzliche Ausgabe der Yoast-Titel und -Beschreibungen.
+- `deliveryTimeMapping` ist standardmaessig leer. Der Connector liest German-Market-Lieferzeiten aus der WordPress-REST-Taxonomie `product_delivery_times`. Falls die Abfrage fehlschlaegt, kannst du je Zeile `Text=ID` hinterlegen. Unbekannte Lieferzeiten werden protokolliert und beim Export dieses Meta-Feldes uebersprungen.
+- Fuer gemappte Text-Metadaten bedeutet leer in OpenXE auch leer in WordPress. Leere Lieferzeit sendet `_lieferzeit = -1` (Shop-Standard), sofern **nicht mehr lieferbar** keine Lieferzeit vorgibt. Der vorhandene Basisexport kann bei leerem Shop-Namen auf den Artikelnamen und bei leerer Shop-Beschreibung auf den Belegtext zurueckfallen.
+
+### CSV-Vorlagen
+
+In der WooCommerce-Shop-Verwaltung stehen Export- und Importvorlage **WooCommerce Artikeldaten** mit einem festen Layout bereit (UTF-8, Semikolon als Trennzeichen und doppelte Anfuehrungszeichen als Feldbegrenzung). `nummer` ist der Schluessel. Die einzige Preisspalte steht im CSV-Header als `standardpreisnetto` und wird in der Importvorlage dem Feld `woo_preis_netto` zugeordnet. Behalte Header und Spaltenreihenfolge aus dem Export bei. Der Import prueft sie exakt, aktualisiert nur vorhandene Artikel und meldet unbekannte Artikelnummern als uebersprungen. Ein leeres Preisfeld behaelt den bisherigen Preis. Bestaetige die Vorschau im selben Benutzerkonto, auch bei Ausfuehrung per Prozessstarter. Artikel ausserhalb deiner Projekte werden uebersprungen. Shop-Overrides werden nur fuer Shops mit Bearbeitungs- und Projektzugriff aktualisiert und nur, wenn sich der Artikelwert in der CSV-Zeile aendert. Fuer den gemeinsamen Standardpreis brauchst du Zugriff auf alle zugeordneten aktiven WooCommerce-Shops.
+
+### Shop-Kategorien und Lieferstatus
+
+- Uebernimm zuerst WooCommerce-Kategorien und Artikelzuordnungen per Vorschau. Die Erstuebernahme setzt einen leeren Shop-Baum ohne offene Loeschungen voraus und behaelt vorhandene Term-IDs und Slugs bei. `shopCategoryTree` aktiviert den separaten Baum fuer den Export. `categorySyncMode` bestimmt, ob Produktzuordnungen ergaenzt oder ersetzt werden. Umbenennen behaelt den Slug. OpenXE loescht einen WooCommerce-Term erst nach verifizierter Leerpruefung auf Produkte und Unterkategorien.
+- Bestellimport und Artikelexport nutzen denselben Shop-Lock fuer die Kategorie-Synchronisierung. Voruebergehend zurueckgestellte Artikelzuordnungen sind fruehestens nach 30 Minuten wieder fuer einen Versuch faellig. Die Verwaltung zeigt auch dauerhafte Konflikte an.
+- **Nicht mehr lieferbar** schreibt `artikel.ausverkauft` und hat Vorrang vor **auf Nachfrage lieferbar**. WooCommerce erhaelt Bestand 0, `stock_status = outofstock` und `backorders = no`. Mit erweiterter Feldzuordnung wird die gemappte German-Market-Lieferzeit **derzeit nicht lieferbar** gesendet, sofern die Zuordnung bekannt ist.
+- Nach dem Umschalten von `extendedFieldMapping` oder `shopCategoryTree` alle Artikel des Shops neu uebertragen. Dazu unter **Shops > Artikeluebertragung** die Aktion **Artikelcache zuruecksetzen** ausfuehren und den Prozessstarter `artikeluebertragen` laufen lassen.
+- **Auf Nachfrage lieferbar** sendet mit `extendedFieldMapping` `manage_stock = false`, `stock_status = onbackorder`, `backorders = notify` und `openxe_on_request = 1`. Im Normalzustand und bei **nicht mehr lieferbar** ist das Meta-Feld bei aktivem Mapping `0`. Der reine Lagerexport ueberspringt den Anfragezustand. Varianten folgen der Shop-Zuordnung des Hauptartikels und haben eigene Lieferstatus.
+- Ein Hauptartikel ist dem Shop zugeordnet, wenn eine aktive Zeile in `artikel_onlineshops` oder eine passende Referenz in `artikel.shop`, `shop2` oder `shop3` vorhanden ist. Varianten folgen dem Hauptartikel. Bei `visibilitySync` erzeugt der Wechsel zu nicht zugeordnet einen Auftrag zum Ausblenden. Nach Entfernen der Zuordnung setzt die Sichtbarkeitsqueue das Produkt beim Bestellimport auf `private`. Pro Durchlauf gelten 20 Eintraege und ein Zeitbudget von 20 Sekunden. Fehler bleiben mit Backoff in der Queue. SKU `0` erfordert manuelles Ausblenden. Erneutes Zuordnen storniert den Auftrag und der normale Export veroeffentlicht den aktiven Artikel wieder.
+
+### Einfuehrungsreihenfolge
+
+1. Ueber den CI-Production-Build auf Basis `upstream/1.13` deployen. Die Basis liefert `shop_name_de` und dessen Feld im Artikelformular. Die vier neuen Checkboxen bleiben aus, `deliveryTimeMapping` bleibt leer.
+2. Berechtigungen und den Einzelabgleich an einem Testartikel pruefen. Anschliessend Artikeldaten en bloc aus WooCommerce zurueckholen. Erst nach Pruefung der Vorschau uebernehmen.
+3. Bestehende WooCommerce-Kategorien samt Artikelzuordnung per Erstuebernahme in den Shop-Baum uebernehmen und pruefen. Aktive Artikel-Shop-Zuordnungen und etwaige Legacy-Referenzen kontrollieren.
+4. `extendedFieldMapping` einschalten und den Export eines Testartikels in WordPress pruefen. `yoastMeta` bei Bedarf fuer einen Shop mit Yoast getrennt einschalten.
+5. `shopCategoryTree` und `visibilitySync` einschalten und Kategorie, Lieferstatus, Ausblenden und Wiederveroeffentlichen am Testartikel pruefen. Fuer die laufende Artikelpflege den CSV-Kreislauf mit dem Export aus derselben Vorlage beginnen.
+
+## Abnahme
+
+1. Nach dem Deploy `extendedFieldMapping`, `shopCategoryTree`, `visibilitySync` und `yoastMeta` ausgeschaltet lassen, `deliveryTimeMapping` leer lassen. Pruefen, dass der Prozessstarter normal laeuft und das Log keine neuen Fehler zeigt. Mit einem Nicht-Admin mit Artikel-, Shop- und Projektrechten den Menuepunkt **Artikel > WooCommerce** und den Action-Zugriff nach Erteilung des Grants `artikel/woocommerce` in `userrights` pruefen. Ohne diesen Grant muss der Zugriff gesperrt sein.
+2. Am zugeordneten Testprodukt den Tab **WooCommerce** oeffnen. **Mit WooCommerce vergleichen** waehlen, Werte aus der Vorschau uebernehmen und **Speichern** klicken. Die Werte in **Texte** und **Online-Shop Optionen** muessen mit den WooCommerce-Feldern uebereinstimmen.
+3. In der WooCommerce-Shop-Verwaltung **Artikeldaten abgleichen** starten, Vorschau und unzuordenbare Produkte pruefen und die ausgewaehlten Werte uebernehmen. Bei der Kategorien-Erstuebernahme Baum, Term-IDs, Slugs und Artikelzuordnungen in der Vorschau pruefen und anschliessend bestaetigen.
+4. In der WooCommerce-Shop-Verwaltung die Exportvorlage **WooCommerce Artikeldaten** ausfuehren. In einer Datenzeile ein Textfeld mit Umlaut, `%title%`, Semikolon und Zeilenumbruch bearbeiten. CSV-Quoting und Header beibehalten. Lieferzeit und Pseudolager eines Artikels mit aktiven WooCommerce-Shop-Ueberschreibungen aendern und eine zweite Zeile mit unbekannter Artikelnummer hinzufuegen. Import starten, Vorschau und Meldung zum Ueberspringen pruefen. Artikelwert und alle aktiven WooCommerce-Ueberschreibungen muessen nach dem Import uebereinstimmen. Auf einer OpenXE-Testinstanz in einem Shop ohne aktive Preisgruppe den einen gueltigen Standardpreis ab Menge 1 ueber `standardpreisnetto` aendern. Der erneute Export muss genau den neuen Preis ausgeben. Die Preis-Historie getrennt pruefen, da aeltere Legacy-Imports mehrere gleichzeitig gueltige Zeilen hinterlassen koennen.
+5. `extendedFieldMapping` einschalten, Testartikel speichern und exportieren. In WordPress Rank-Math-Titel und -Beschreibung, German-Market-Lieferzeit, GTIN, DHL-Zolldaten und GPSR-Hersteller pruefen.
+6. `shopCategoryTree` und `visibilitySync` einschalten. Testartikel in eine andere Kategorie verschieben. **Nicht mehr lieferbar**, **auf Nachfrage lieferbar** und beide Haken gemeinsam pruefen. Die Zuordnung entfernen und erneut setzen. Nach den jeweiligen Exporten oder Bestellimporten Kategorie, Lieferstatus, Meta-Wert, `private` und erneutes `publish` in WordPress pruefen. Falls eine transiente Kategoriezuordnung zurueckgestellt wird, den erneuten Versuch nach mindestens 30 Minuten und einem weiteren Prozessstarter-Lauf pruefen.
+7. Nach jedem Schritt den Swift-Cache leeren (`rm -rf wp-content/swift-ai/cache/*`) und gegen Live pruefen.

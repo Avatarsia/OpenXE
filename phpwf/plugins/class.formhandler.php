@@ -84,10 +84,10 @@ class FormActionHandler
   private $MandatoryList;
   private $CallbackList;
 
-  function __construct(&$app,$name)
+  function __construct(&$app,$name, private ?Closure $afterEditSave = null, private ?string $editRejection = null, private array $editRedirectQuery = [])
   {
     $this->app = $app;
-    $this->name = base64_encode($name);
+    $this->name = $name;
     $this->HTMLList = array();
     $this->MandatoryList = array();
     $this->CallbackList = array();
@@ -177,7 +177,7 @@ class FormActionHandler
 
 
 
-  function ActionAfterExecute()
+  function ActionAfterExecute(?string $editNotice = null)
   {
     $module = $this->app->Secure->GetGET("module");
     $action = $this->app->Secure->GetGET("action");
@@ -206,21 +206,27 @@ class FormActionHandler
     } 
     else if($action=="edit") 
     { 
-      $msg = base64_encode("<div class=\"error2\">Die Daten wurden gespeichert!</div>");
-      header("Location: index.php?module=$module&action=edit&id=".$id."&msg=".$msg);
+      $msg = base64_encode($editNotice ?? "<div class=\"error2\">Die Daten wurden gespeichert!</div>");
+      $query = $this->editRedirectQuery ? '&'.http_build_query($this->editRedirectQuery) : '';
+      header("Location: index.php?module=$module&action=edit&id=".$id."&msg=".rawurlencode($msg).$query);
       exit;
     } 
 
     $this->PrintForm();
   }
 
+  public static function eventName(string $name): string
+  {
+    return 'phpwf_formhandlerevent_' . base64_encode($name);
+  }
+
   function FormhandlerEvent()
   {
-    // add formhandler action
+    $event = self::eventName($this->name);
     $this->app->Tpl->Set('FORMHANDLEREVENT',
-        "<input type=\"hidden\" name=\"phpwf_formhandlerevent_{$this->name}\" value=\"go\">");
+        "<input type=\"hidden\" name=\"$event\" value=\"go\">");
 
-    if($this->app->Secure->GetPOST("phpwf_formhandlerevent_{$this->name}")=="go") {
+    if($this->app->Secure->GetPOST($event)=="go") {
       return true; 
     } else { 
       // bei false wird das originale formualr angezeigt (also das erste mal)
@@ -303,6 +309,12 @@ class FormActionHandler
   function Edit()
   {
     if($this->FormhandlerEvent()) {
+      if ($this->editRejection !== null) {
+        $this->CallbackAndMandatorycheck();
+        $this->app->Tpl->Add('MESSAGE', $this->editRejection);
+        $this->PrintForm();
+        return;
+      }
       // wenn es fehlerfrei ist dann irgendwo hin sonst wieder das formular anzeigen
       if($this->CallbackAndMandatorycheck() && $this->app->erp->commonreadonly!="1"){
         // hier aenderung an db machen
@@ -326,7 +338,10 @@ class FormActionHandler
         }
         if($this->table != 'shopexport')$this->app->erp->StartChangeLog($this->table);
         $tmp->Update();
+        $editFailed = $this->afterEditSave !== null && $this->app->DB->error();
         $this->app->erp->WriteChangeLog();
+        $editNotice = $editFailed ? '<div class="error">Artikel konnte nicht gespeichert werden.</div>'
+          : ($this->afterEditSave !== null ? ($this->afterEditSave)((int)$tmp->GetId()) : null);
         //     $this->app->Tpl->Add('MESSAGE','<div class="error2">Die Daten wurden erfolgreich gespeichert!</div>');
         // passt und speichern
         //if($this->locafterexe!="")
@@ -336,7 +351,7 @@ class FormActionHandler
           $this->app->erp->RunHook($table . '_update', 1, $tableId);
         }
 
-        $this->ActionAfterExecute();
+        $this->ActionAfterExecute($editNotice);
         //	else
         //  $this->PrintForm();
       } else {
@@ -458,6 +473,9 @@ class FormHandler
 
   var $FormList;
   var $defaultmandatorycss;
+  private array $afterEditSave = [];
+  private array $editRejections = [];
+  private array $editRedirectQueries = [];
 
   /**
    * FormHandler constructor.
@@ -594,9 +612,21 @@ class FormHandler
   }
 
 
+  public function afterEditSave(string $name, Closure $callback, array $redirectQuery = []): void
+  {
+    $this->afterEditSave[$name] = $callback;
+    $this->editRedirectQueries[$name] = $redirectQuery;
+  }
+
+  public function rejectEditSave(string $name, string $notice): void
+  {
+    $this->editRejections[$name] = $notice;
+  }
+
   function CreateNew($name)
   {
-    return new FormActionHandler($this->app,$name);
+    return new FormActionHandler($this->app, $name, $this->afterEditSave[$name] ?? null,
+      $this->editRejections[$name] ?? null, $this->editRedirectQueries[$name] ?? []);
   }
 
   // ********************************************************************** alt 

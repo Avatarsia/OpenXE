@@ -13,6 +13,9 @@
 */
 ?>
 <?php
+use Xentral\Components\WooCommerce\ArticleFieldCatalog;
+use Xentral\Components\WooCommerce\TemplateInstaller;
+
 include '_gen/exportvorlage.php';
 
 class Exportvorlage extends GenExportvorlage {
@@ -329,10 +332,14 @@ ean;';
     $sql_fields_where = ltrim($sql_fields_where,' AND');
 
 
+    $wooCommerceCsv = !$xls && $ziel === 'artikel'
+      && ($exportvorlageArr['bezeichnung'] ?? '') === TemplateInstaller::LABEL
+      && $exportdatenmaskierung === 'gaensefuesschen';
     switch($ziel)
     {
       case "artikel":
-        $sql = "SELECT $sql_fields, art.id as systemid FROM artikel AS art ";
+        $variantSelect = $wooCommerceCsv ? ', (art.variante = 1 OR art.variante_von > 0) AS woo_csv_variant' : '';
+        $sql = "SELECT $sql_fields, art.id as systemid$variantSelect FROM artikel AS art ";
         break;
       case "ansprechpartner":
         $sql = "SELECT $sql_fields FROM ansprechpartner AS anspr ";
@@ -433,7 +440,7 @@ ean;';
     if(class_exists('DevTools')) {
       DevTools::$aktiv = false;
     }
-    return $this->generateExport($xls, $sql, $exporterstezeilenummer, $exportdatenmaskierung,$exporttrennzeichen,$ziel,$internal,$memory_limit,$max_execution_time);
+    return $this->generateExport($xls, $sql, $exporterstezeilenummer, $exportdatenmaskierung,$exporttrennzeichen,$ziel,$internal,$memory_limit,$max_execution_time,$wooCommerceCsv);
   }
 
   public function getFieldSqlCols($fieldsarray, $ziel)
@@ -779,7 +786,7 @@ ean;';
     return [$fields_array, $joins];
   }
 
-  public function generateExport($xls, $sql, $exporterstezeilenummer, $exportdatenmaskierung, $exporttrennzeichen, $ziel, $returnResultByFunction = false, $maxMemory = 0, $maxTime = 0)
+  public function generateExport($xls, $sql, $exporterstezeilenummer, $exportdatenmaskierung, $exporttrennzeichen, $ziel, $returnResultByFunction = false, $maxMemory = 0, $maxTime = 0, bool $wooCommerceCsv = false)
   {
     $returnValue = '';
 
@@ -801,21 +808,42 @@ ean;';
       $query = $this->app->DB->Query($workingQuery);
 
       if(!$firstLinePassed && $exporterstezeilenummer=='1') {
-        foreach($this->app->DB->Fetch_Assoc($query) as $value=>$tmp)
-        {
-          if($xls) {
-            $value = iconv('UTF-8','ISO-8859-1//TRANSLIT', $value);
+        $firstRow = $this->app->DB->Fetch_Assoc($query);
+        if($wooCommerceCsv) {
+          if($firstRow) {
+            unset($firstRow['systemid'], $firstRow['woo_csv_variant']);
+            $returnValue .= $this->quotedCsvRow(array_keys($firstRow), $exporttrennzeichen);
           }
-          $returnValue .= $exportdatenmaskierung.$value.$exportdatenmaskierung.$exporttrennzeichen;
+        } else {
+          foreach($firstRow as $value=>$tmp)
+        {
+            if($xls) {
+              $value = iconv('UTF-8','ISO-8859-1//TRANSLIT', $value);
+            }
+            $returnValue .= $exportdatenmaskierung.$value.$exportdatenmaskierung.$exporttrennzeichen;
+          }
+          $returnValue .= "\r\n";
         }
-        $returnValue .= "\r\n";
-        $query->data_seek(0);
+        if(!$wooCommerceCsv || $firstRow) {
+          $query->data_seek(0);
+        }
       }
 
       while($row = $this->app->DB->Fetch_Assoc($query))
       {
-        $line = $this->Exportinner($row,$exportdatenmaskierung,$exporttrennzeichen, $returnResultByFunction, $ziel, $xls);
-        $returnValue .= $line;
+        if($wooCommerceCsv) {
+          $variant = !empty($row['woo_csv_variant']);
+          unset($row['systemid'], $row['woo_csv_variant']);
+          if($variant) {
+            $editable = ArticleFieldCatalog::editableVariantCsvColumns();
+            foreach(array_diff(array_keys($row), $editable) as $column) {
+              $row[$column] = '';
+            }
+          }
+          $returnValue .= $this->quotedCsvRow($row, $exporttrennzeichen);
+        } else {
+          $returnValue .= $this->Exportinner($row,$exportdatenmaskierung,$exporttrennzeichen, $returnResultByFunction, $ziel, $xls);
+        }
       }
       $firstLinePassed = true;
       $offset += $limit;
@@ -836,6 +864,12 @@ ean;';
     return $returnValue;
   }
 
+
+  private function quotedCsvRow(array $row, string $separator): string
+  {
+    $quoted = array_map(static fn ($value) => '"' . str_replace('"', '""', (string)$value) . '"', $row);
+    return implode($separator, $quoted) . "\r\n";
+  }
 
   function Exportinner($row,&$exportdatenmaskierung,&$exporttrennzeichen, &$internal, &$ziel, &$xls)
   {

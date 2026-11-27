@@ -164,7 +164,7 @@ class Shopimport {
         $preserveInvoiceStatus = !empty($data->preserveinvoice);
         $markCreditNote = function ($creditNoteId) use ($data) {
             if (!empty($data->source)) {
-                $this->app->Container('Database')->perform(
+                $this->app->Container->get('Database')->perform(
                     'UPDATE gutschrift SET internebemerkung = CONCAT(COALESCE(internebemerkung, :empty), CHAR(10), :source) WHERE id = :id',
                     ['empty' => '', 'source' => (string) $data->source, 'id' => (int) $creditNoteId]
                 );

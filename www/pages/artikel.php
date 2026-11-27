@@ -24,6 +24,17 @@
 
 use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
+use Xentral\Components\Http\JsonResponse;
+use Xentral\Components\Http\Session\SessionHandler;
+use Xentral\Components\WooCommerce\ArticleDataRepository;
+use Xentral\Components\WooCommerce\ArticleFieldCatalog;
+use Xentral\Components\WooCommerce\AdminView;
+use Xentral\Components\WooCommerce\ArticleTab;
+use Xentral\Components\WooCommerce\AssignmentPage;
+use Xentral\Components\WooCommerce\RefundStatusService;
+use Xentral\Components\WooCommerce\ShopAssignment;
+use Xentral\Components\WooCommerce\ShopCategoryStore;
+use Xentral\Components\WooCommerce\VisibilityQueue;
 use Xentral\Modules\Onlineshop\Data\ArticleExportResult;
 use Xentral\Widgets\SuperSearch\Result\ResultGroup;
 use Xentral\Widgets\SuperSearch\Result\ResultItem;
@@ -34,6 +45,13 @@ class Artikel extends GenArtikel {
   /** @var Application $app */
   var $app;
   const MODULE_NAME = 'Article';
+
+  public $stylesheet = ['./classes/Modules/Onlineshop/www/css/woocommerce-admin.css'];
+  public $javascript = [
+    './classes/Modules/Onlineshop/www/js/woocommerce-article-tab.js',
+    './classes/Modules/Onlineshop/www/js/woocommerce-assignment.js',
+  ];
+
   protected \Xentral\Modules\Article\Service\ArticleService $service;
 
   public function TableSearch($app, $name, $erlaubtevars)
@@ -1912,6 +1930,7 @@ class Artikel extends GenArtikel {
     $this->app->ActionHandler("demo","ArtikelDemo");
     $this->app->ActionHandler("edit","ArtikelEdit");
     $this->app->ActionHandler("list","ArtikelList");
+    $this->app->ActionHandler("woocommerce","ArtikelWoocommerce");
     $this->app->ActionHandler("newlist","ArtikelNewList");
     $this->app->ActionHandler("stueckliste","ArtikelStueckliste");
     $this->app->ActionHandler("stuecklisteimport","ArtikelStuecklisteImport");
@@ -6875,6 +6894,9 @@ class Artikel extends GenArtikel {
   function ArtikelListMenu()
   {
     $this->app->erp->MenuEintrag('index.php?module=artikel&action=list','&Uuml;bersicht');
+    if ($this->app->erp->RechteVorhanden('artikel', 'edit') && $this->app->erp->RechteVorhanden('onlineshops', 'edit')) {
+      $this->app->erp->MenuEintrag('index.php?module=artikel&action=woocommerce','WooCommerce');
+    }
     $this->app->erp->MenuEintrag('index.php?module=artikel&action=create','Neuen Artikel anlegen');
   }
 
@@ -6890,6 +6912,32 @@ class Artikel extends GenArtikel {
     }
 
     return array_unique($articleListStr);
+  }
+
+  public function ArtikelWoocommerce()
+  {
+    $secure = $this->app->Secure;
+    $page = new AssignmentPage($this->app);
+    $cmd = $secure->GetGET('cmd', '', '', 1);
+    if ($cmd !== '') {
+      if (!is_string($cmd)) {
+        return new JsonResponse(['ok' => false, 'error' => 'Unbekannte Aktion.']);
+      }
+      if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        return new JsonResponse(['ok' => false, 'error' => 'Diese Aktion erfordert POST.']);
+      }
+      $post = [];
+      foreach (['csrf_token', 'shop', 'article', 'category', 'enabled', 'name', 'parent', 'sort', 'number', 'counts'] as $key) {
+        $post[$key] = $secure->GetPOST($key, '', '', 1);
+      }
+      return new JsonResponse($page->handle($cmd, $post));
+    }
+
+    $this->ArtikelListMenu();
+    $this->app->Tpl->Set('UEBERSCHRIFT', 'Artikel: WooCommerce');
+    $this->app->YUI->AutoComplete('wc-assignment-article', 'artikelnummer', 1);
+    $this->app->Tpl->Set('WOOCOMMERCECONTENT', $page->render());
+    $this->app->Tpl->Parse('PAGE', 'onlineshops_woocommerce.tpl');
   }
 
   public function ArtikelList()
@@ -7332,6 +7380,16 @@ class Artikel extends GenArtikel {
     }
     $id = $this->app->Secure->GetGET('id');
     $cmd = $this->app->Secure->GetGET('cmd');
+    if($cmd === 'woocommerce_compare')
+    {
+      $tab = new ArticleTab($this->app);
+      $shopId = (int)$this->app->Secure->GetGET('shop');
+      header('Content-Type: application/json; charset=UTF-8');
+      header('Cache-Control: no-store');
+      echo json_encode($tab->compare((int)$id, $shopId), JSON_INVALID_UTF8_SUBSTITUTE);
+      $this->app->ExitXentral();
+      return;
+    }
     if($id || $cmd === 'getshopbuttons')
     {
       if($cmd === 'getonlineshop')
@@ -7373,7 +7431,7 @@ class Artikel extends GenArtikel {
       }
       if($cmd === 'saveonlineshops')
       {
-        $sid = $this->app->Secure->GetPOST('sid');
+        $sid = (int)$this->app->Secure->GetPOST('sid');
         $felder = array(
         'lagerkorrekturwert',
         'pseudolager',
@@ -7403,33 +7461,21 @@ class Artikel extends GenArtikel {
         }
         if(!$sid)
         {
-          $this->app->DB->Insert("INSERT INTO artikel_onlineshops (artikel,autolagerlampe,ausartikel) VALUES ('$id',0,1)");
+          $this->app->DB->Insert("INSERT INTO artikel_onlineshops (artikel,autolagerlampe,ausartikel,pseudolager,lieferzeitmanuell,last_article_hash) VALUES ('$id',0,1,'','','')");
           $sid = $this->app->DB->GetInsertID();
         }
         if($sid)
         {
-          
-          $this->app->DB->Update("UPDATE artikel_onlineshops SET shop = '$shop' WHERE id = '$sid' LIMIT 1");
-          $inhalt = null;
-          foreach($felder as $feld)
-          {
-            $inhalt[] = " $feld = '".$this->app->Secure->GetPOST($feld)."'";
+          try {
+            $articleFields = $this->saveOnlineShopFields((int)$id, (int)$sid, $shop, $felder);
+          } catch (Throwable $error) {
+            $this->app->Container->get('Logger')->error('Artikel-Shop-Zuordnung nicht gespeichert: '
+              . RefundStatusService::sanitizeError($error->getMessage()));
+            echo json_encode(['status' => 0, 'Error' => 'Die Shop-Zuordnung konnte nicht gespeichert werden.']);
+            $this->app->ExitXentral();
+            return;
           }
-          $this->app->DB->Update('UPDATE artikel_onlineshops SET '.implode(', ', $inhalt)." WHERE id = '$sid' LIMIT 1");
-          if(!$this->app->DB->error())
-          {
-            $shop = $this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
-            if($this->app->DB->Select("SELECT id FROM artikel_onlineshops WHERE artikel = '$id' AND shop = '$shop' AND aktiv = 1 LIMIT 1")){
-              $shop = null;
-            }
-            if($shop)
-            {
-              $this->app->DB->Update("UPDATE artikel SET shop = 0 WHERE id = '$id' AND shop = '$shop' LIMIT 1");
-              $this->app->DB->Update("UPDATE artikel SET shop2 = 0 WHERE id = '$id' AND shop2 = '$shop' LIMIT 1");
-              $this->app->DB->Update("UPDATE artikel SET shop3 = 0 WHERE id = '$id' AND shop3 = '$shop' LIMIT 1");
-            }
-          }
-          echo json_encode(array('status'=>1));
+          echo json_encode(['status' => 1, 'articleFields' => $articleFields], JSON_INVALID_UTF8_SUBSTITUTE);
           $this->app->ExitXentral();
         }
         echo json_encode(array('status'=>0,'Error'=>'Der Eintrag konnte nicht angelegt werden'));
@@ -7437,8 +7483,21 @@ class Artikel extends GenArtikel {
       }
       if($cmd === 'deleteonlineshop')
       {
-        $sid = $this->app->Secure->GetPOST("sid");
-        $shop = $this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
+        $sid = (int)$this->app->Secure->GetPOST("sid");
+        $shop = (int)$this->app->DB->Select("SELECT shop FROM artikel_onlineshops WHERE artikel = '$id' AND id = '$sid' LIMIT 1");
+        try {
+          if ($shop && $this->deleteOnlineShopWithVisibility((int)$id, $sid, $shop)) {
+            echo json_encode(['status' => 1]);
+            $this->app->ExitXentral();
+            return;
+          }
+        } catch (Throwable $error) {
+          $this->app->Container->get('Logger')->error('Artikel-Shop-Zuordnung nicht geloescht: '
+            . RefundStatusService::sanitizeError($error->getMessage()));
+          echo json_encode(['status' => 0, 'Error' => 'Die Shop-Zuordnung konnte nicht geloescht werden.']);
+          $this->app->ExitXentral();
+          return;
+        }
         if($shop)
         {
           $this->app->DB->Update("UPDATE artikel SET shop = 0 WHERE id = '$id' AND shop = '$shop' LIMIT 1");
@@ -7700,6 +7759,7 @@ class Artikel extends GenArtikel {
     $this->app->Tpl->Set('KURZTEXT_DE_ANZEIGE','<textarea readonly rows="2" cols="70" readonly style="background-color:#eee; border-color:#ddd;">'.$kurztext_de_anzeige.'</textarea>');
     $this->app->Tpl->Set('ARTIKELBESCHREIBUNG_DE_ANZEIGE','<textarea style="background-color:#eee; border-color:#ddd;" readonly rows="5" cols="70" style="color:grey" name="artikelbeschreibung_de_anzeige" id="artikelbeschreibung_de_anzeige">'.$artikelbeschreibung_de_anzeige.'</textarea>');
 
+    $wooSubmitted = $this->prepareWooCommerceArticleTab((int)$id);
     parent::ArtikelEdit();
 
     /* anzeige formular */ 
@@ -7739,7 +7799,9 @@ class Artikel extends GenArtikel {
       return;
     }
 
-    $this->app->erp->MessageHandlerStandardForm();
+    if (!$wooSubmitted) {
+      $this->app->erp->MessageHandlerStandardForm();
+    }
 
     /* sperrmeldung */
     $intern_gesperrt = $this->app->DB->Select("SELECT intern_gesperrt FROM artikel WHERE id='$id' LIMIT 1");
@@ -7757,6 +7819,284 @@ class Artikel extends GenArtikel {
 
     $this->app->YUI->AutoComplete('herkunftsland', 'laender', 1);
 
+  }
+
+  private function saveOnlineShopFields(int $articleId, int $assignmentId, int $shopId, array $fields): array
+  {
+    $context = $this->wooDialogAssignmentContext($articleId, $assignmentId, $shopId);
+    $shared = $this->onlineShopOverrideValues($articleId, $shopId, $context['shops']);
+    $db = $this->app->DB;
+    $isWooCommerce = ($context['shops'][$shopId]['modulename'] ?? '') === 'shopimporter_woocommerce';
+    if ($shared === [] && empty($context['visibility'])) {
+      $assignments = ["ao.shop = '$shopId'"];
+      foreach ($fields as $field) {
+        $value = $this->app->Secure->GetPOST($field);
+        if ($isWooCommerce && $field === 'pseudopreis') {
+          $value = $value === '' ? '0' : $this->app->erp->ReplaceBetrag(1, $value, 1);
+        }
+        $assignments[] = "ao.$field = '$value'";
+      }
+      if (!$db->Update('UPDATE artikel_onlineshops ao SET ' . implode(', ', $assignments)
+        . " WHERE ao.id = '$assignmentId' AND ao.artikel = '$articleId'")) {
+        throw new RuntimeException($db->error() ?: 'UPDATE artikel_onlineshops fehlgeschlagen.');
+      }
+      if (!$db->error()
+        && !$db->Select("SELECT id FROM artikel_onlineshops WHERE artikel = '$articleId' AND shop = '$shopId' AND aktiv = 1 LIMIT 1")
+        && $shopId > 0) {
+        $db->Update("UPDATE artikel SET shop = 0 WHERE id = '$articleId' AND shop = '$shopId' LIMIT 1");
+        $db->Update("UPDATE artikel SET shop2 = 0 WHERE id = '$articleId' AND shop2 = '$shopId' LIMIT 1");
+        $db->Update("UPDATE artikel SET shop3 = 0 WHERE id = '$articleId' AND shop3 = '$shopId' LIMIT 1");
+      }
+      return [];
+    }
+
+    $params = ['shop' => $shopId, 'assignment' => $assignmentId, 'article' => $articleId];
+    $set = ['shop = :shop'];
+    foreach ($fields as $field) {
+      $value = $this->app->Secure->GetPOST($field, '', '', 1);
+      if ($isWooCommerce && $field === 'pseudopreis') {
+        $value = $value === '' ? '0' : $this->app->erp->ReplaceBetrag(1, $value, 1);
+      }
+      $params[$field] = $value;
+      $set[] = "$field = :$field";
+    }
+    return $this->mutateWooDialogAssignment($articleId, $assignmentId, $context,
+      function ($database) use ($params, $set, $shared): array {
+        $articleId = $params['article'];
+        $shopId = $params['shop'];
+        $database->perform('UPDATE artikel_onlineshops SET ' . implode(', ', $set)
+          . ' WHERE id = :assignment AND artikel = :article', $params);
+        // Match the legacy cleanup when the target shop has no active assignment row.
+        if (empty($params['aktiv']) && !$database->fetchValue(
+          'SELECT id FROM artikel_onlineshops WHERE artikel = :article AND shop = :shop AND aktiv = 1 LIMIT 1 FOR UPDATE',
+          ['article' => $articleId, 'shop' => $shopId]
+        )) {
+          $this->clearWooDialogLegacyReference($database, $articleId, $shopId);
+        }
+        if ($shared === []) {
+          return [];
+        }
+        (new ArticleDataRepository($this->app, $shopId))->apply(
+          $articleId, array_column($shared, 'value', 'key'), 'online_shop_dialog', $params['assignment']
+        );
+        return $database->fetchRow('SELECT ' . implode(', ', array_keys($shared)) . ' FROM artikel WHERE id = :article',
+          ['article' => $articleId]) ?: [];
+      },
+      $shared !== []
+    );
+  }
+
+  private function deleteOnlineShopWithVisibility(int $articleId, int $assignmentId, int $shopId): bool
+  {
+    $context = $this->wooDialogAssignmentContext($articleId, $assignmentId, $shopId);
+    if (empty($context['visibility'])) {
+      return false;
+    }
+    $this->mutateWooDialogAssignment($articleId, $assignmentId, $context,
+      function ($database) use ($articleId, $assignmentId, $shopId): void {
+        $this->clearWooDialogLegacyReference($database, $articleId, $shopId);
+        $database->perform('DELETE FROM artikel_onlineshops WHERE artikel = :article AND id = :assignment LIMIT 1',
+          ['article' => $articleId, 'assignment' => $assignmentId]);
+      }
+    );
+    return true;
+  }
+
+  private function clearWooDialogLegacyReference($database, int $articleId, int $shopId): void
+  {
+    $database->perform(
+      'UPDATE artikel SET shop = IF(shop = :shop, 0, shop), shop2 = IF(shop2 = :shop, 0, shop2),'
+      . ' shop3 = IF(shop3 = :shop, 0, shop3) WHERE id = :article',
+      ['article' => $articleId, 'shop' => $shopId]
+    );
+  }
+
+  private function mutateWooDialogAssignment(
+    int $articleId, int $assignmentId, array $context, callable $mutate, bool $mirrorsArticle = false
+  ): mixed {
+    $database = $this->app->Container->get('Database');
+    $database->beginTransaction();
+    try {
+      $article = $database->fetchRow('SELECT projekt FROM artikel WHERE id = :article FOR UPDATE', ['article' => $articleId]);
+      $assignment = $database->fetchRow(
+        'SELECT shop FROM artikel_onlineshops WHERE id = :assignment AND artikel = :article FOR UPDATE',
+        ['assignment' => $assignmentId, 'article' => $articleId]
+      );
+      if (!$article || ($mirrorsArticle && !$this->app->erp->UserProjektRecht((int)$article['projekt']))
+        || !$assignment || (int)($assignment['shop'] ?? 0) !== $context['oldShop']) {
+        throw new RuntimeException('Die Shop-Zuordnung hat sich geaendert. Bitte neu laden.');
+      }
+
+      $before = [];
+      foreach ($context['visibility'] as $shopId) {
+        $before[$shopId] = ShopAssignment::isAssigned($database, $articleId, $shopId);
+      }
+      $result = $mutate($database);
+      foreach ($before as $shopId => $wasAssigned) {
+        $assigned = ShopAssignment::isAssigned($database, $articleId, $shopId);
+        $queue = new VisibilityQueue($database, $shopId);
+        if ($wasAssigned && !$assigned) {
+          $sku = $database->fetchValue(
+            'SELECT ' . ArticleDataRepository::SHOP_SKU_SQL . ' FROM artikel AS a WHERE a.id = :article',
+            ['article' => $articleId, 'shop' => $shopId]
+          );
+          $queue->enqueue($articleId, (string)$sku);
+        } elseif (!$wasAssigned && $assigned) {
+          (new ShopCategoryStore($database, $shopId))->invalidateArticleExport($articleId);
+          $queue->cancel($articleId);
+        }
+      }
+      $database->commit();
+      return $result;
+    } catch (Throwable $error) {
+      $database->rollBack();
+      throw $error;
+    }
+  }
+
+  private function wooDialogAssignmentContext(int $articleId, int $assignmentId, int $shopId): array
+  {
+    $db = $this->app->DB;
+    $oldShopId = (int)$db->Select("SELECT shop FROM artikel_onlineshops WHERE id = '$assignmentId'"
+      . " AND artikel = '$articleId' LIMIT 1");
+    $shopIds = array_unique(array_filter([$shopId, $oldShopId]));
+    sort($shopIds, SORT_NUMERIC);
+    $shops = [];
+    $visibility = [];
+    foreach ($shopIds as $id) {
+      $shop = $db->SelectRow("SELECT projekt, modulename, einstellungen_json, geloescht FROM shopexport WHERE id = '$id' LIMIT 1");
+      $shops[$id] = $shop;
+      if (($shop['modulename'] ?? '') !== 'shopimporter_woocommerce' || !empty($shop['geloescht'])) {
+        continue;
+      }
+      $settings = json_decode((string)$shop['einstellungen_json'], true)['felder'] ?? [];
+      if (!empty($settings['visibilitySync'])) {
+        $visibility[] = $id;
+      }
+    }
+    return ['oldShop' => $oldShopId, 'shops' => $shops, 'visibility' => $visibility];
+  }
+
+  private function onlineShopOverrideValues(int $articleId, int $shopId, array $shops): array
+  {
+    $secure = $this->app->Secure;
+    $target = $shops[$shopId] ?? [];
+    if (($target['modulename'] ?? '') !== 'shopimporter_woocommerce' || !empty($target['geloescht'])
+      || $secure->GetPOST('aktiv') !== '1' || $secure->GetPOST('ausartikel') !== '0') {
+      return [];
+    }
+    $token = $secure->GetPOST('woo_dialog_token', '', '', 1);
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !is_string($token) || $token === ''
+      || !$this->app->erp->RechteVorhanden('onlineshops', 'edit')
+      || !$this->app->erp->RechteVorhanden('artikel', 'edit')
+      || !$this->app->Container->get('Session')->isCsrfTokenValid('woocommerce_admin', $token)) {
+      return [];
+    }
+    $article = $this->app->DB->SelectRow("SELECT projekt, variante, variante_von FROM artikel WHERE id = '$articleId' LIMIT 1");
+    if (!$article || ArticleFieldCatalog::isVariant($article)
+      || !$this->app->erp->UserProjektRecht((int)$article['projekt'])) {
+      return [];
+    }
+    foreach ($shops as $shop) {
+      if (!$shop || !$this->app->erp->UserProjektRecht((int)$shop['projekt'])) {
+        return [];
+      }
+    }
+    $values = [];
+    foreach (ArticleFieldCatalog::fields() as $field) {
+      if (str_starts_with($field['storage'], 'shop:')) {
+        $column = substr($field['storage'], 5);
+        $values[$column] = ['key' => $field['key'], 'value' => $secure->GetPOST($column, '', '', 1)];
+      }
+    }
+    try {
+      (new ArticleDataRepository($this->app, $shopId))->validate(array_column($values, 'value', 'key'));
+    } catch (InvalidArgumentException) {
+      return [];
+    }
+    return $values;
+  }
+
+  private function prepareWooCommerceArticleTab(int $articleId): bool
+  {
+    $this->app->Tpl->Set('WOOCOMMERCEDIALOGTOKEN', '');
+    $this->app->Tpl->Set('WOOCOMMERCETABOPEN', '<!--');
+    $this->app->Tpl->Set('WOOCOMMERCETABCLOSE', '-->');
+    $secure = $this->app->Secure;
+    $postedShop = $secure->GetPOST('woo_shop', '', '', 1);
+    $postedToken = $secure->GetPOST('woo_csrf_token', '', '', 1);
+    $draft = $secure->GetPOST('woo', '', '', 1);
+    $submitted = $secure->GetPOST(FormActionHandler::eventName('artikel')) === 'go'
+      && ($postedShop !== '' || $postedToken !== '' || $draft !== '');
+    try {
+      $tab = new ArticleTab($this->app);
+      $shops = $tab->shopsFor($articleId);
+      $shopIds = array_map('intval', array_column($shops, 'id'));
+      $requestedShop = (int)filter_var($secure->GetGET('woo_shop'), FILTER_VALIDATE_INT);
+      $shopId = in_array($requestedShop, $shopIds, true) ? $requestedShop : ($shopIds[0] ?? 0);
+
+      if ($submitted) {
+        $post = ['woo_csrf_token' => $postedToken, 'woo' => $draft];
+        $postedShopId = (int)filter_var($postedShop, FILTER_VALIDATE_INT);
+        if (in_array($postedShopId, $shopIds, true)) {
+          $shopId = $postedShopId;
+        }
+        try {
+          $before = $tab->validateExtras($articleId, $postedShopId, $post);
+          // The form handler redirects immediately after a successful article update.
+          $this->app->FormHandler->afterEditSave('artikel', function (int $savedId) use ($tab, $post, $shopId, $before): ?string {
+            try {
+              $tab->saveExtras($savedId, $shopId, $post, $before);
+              return null;
+            } catch (Throwable $error) {
+              $this->app->Container->get('Logger')->error('WooCommerce-Artikeldaten nicht gespeichert: '
+                . RefundStatusService::sanitizeError($error->getMessage()));
+              return '<div class="error">Artikel gespeichert. WooCommerce-Zusatzdaten konnten nicht gespeichert werden.</div>';
+            }
+          }, ['woo_shop' => $shopId]);
+        } catch (Throwable $error) {
+          $message = RefundStatusService::sanitizeError($error->getMessage());
+          $this->app->Container->get('Logger')->error('WooCommerce-Artikelformular abgelehnt: ' . $message);
+          // WidgetArtikel can allocate an article number before FormActionHandler::Edit().
+          $secure->POST['speichern'] = '';
+          $this->app->FormHandler->rejectEditSave('artikel', '<div class="error">Artikel nicht gespeichert. '
+            . AdminView::e($error instanceof InvalidArgumentException || $error instanceof DomainException
+              ? $message : 'WooCommerce-Artikeldaten konnten nicht validiert werden.') . '</div>');
+        }
+      }
+
+      $token = '';
+      if ($shopId > 0 || ($this->app->erp->RechteVorhanden('artikel', 'edit')
+          && $this->app->erp->RechteVorhanden('onlineshops', 'edit')
+          && $this->app->erp->UserProjektRecht((int)$this->app->DB->Select(
+            "SELECT projekt FROM artikel WHERE id = '$articleId' LIMIT 1")))) {
+        $session = $this->app->Container->get('Session');
+        $token = $postedToken;
+        if (!is_string($token) || !$session->isCsrfTokenValid('woocommerce_admin', $token)) {
+          $token = $session->createCsrfToken('woocommerce_admin');
+          SessionHandler::commitSession($session);
+        }
+        $this->app->Tpl->Set('WOOCOMMERCEDIALOGTOKEN', $token);
+      }
+
+      if ($shopId > 0) {
+        $this->app->Tpl->Set('WOOCOMMERCETAB', $tab->render($articleId, $shopId, $token,
+          $submitted && is_array($draft) ? $draft : []));
+        $this->app->Tpl->Set('WOOCOMMERCETABOPEN', '');
+        $this->app->Tpl->Set('WOOCOMMERCETABCLOSE', '');
+      }
+    } catch (Throwable $error) {
+      $this->app->Container->get('Logger')->error('WooCommerce-Artikelreiter fehlgeschlagen: '
+        . RefundStatusService::sanitizeError($error->getMessage()));
+      $notice = '<div class="error">WooCommerce-Artikeldaten konnten nicht geladen werden.</div>';
+      if ($submitted) {
+        $secure->POST['speichern'] = '';
+        $this->app->FormHandler->rejectEditSave('artikel', $notice);
+      } else {
+        $this->app->Tpl->Add('MESSAGE', $notice);
+      }
+    }
+    return $submitted;
   }
 
   public function ArtikelEtiketten()

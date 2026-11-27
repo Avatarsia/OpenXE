@@ -86,6 +86,206 @@ final class AdminView
         return $html . '</nav>';
     }
 
+    public static function visibility(array $pending): string
+    {
+        $html = '<h2>Vorgemerkte WooCommerce-Ausblendungen</h2>';
+        if ($pending === []) {
+            return $html . '<div class="info">Keine offenen Ausblendungen.</div>';
+        }
+        $html .= '<div class="wc-admin-scroll" tabindex="0" role="region" aria-label="Offene Ausblendungen">'
+            . '<table class="wc-refund-table"><thead><tr><th scope="col">SKU</th><th scope="col">Versuche</th>'
+            . '<th scope="col">Letzter Fehler</th><th scope="col">Vorgemerkt (UTC)</th>'
+            . '<th scope="col">N&auml;chster Versuch (UTC)</th></tr></thead><tbody>';
+        foreach ($pending as $entry) {
+            $nextAttempt = !empty($entry['manualAction']) ? 'Manuell ausblenden'
+                : self::time($entry['nextAttemptAt'] ?? null);
+            $html .= '<tr><td>' . self::e($entry['sku']) . '</td><td>' . self::e($entry['attempts'])
+                . '</td><td>' . self::e($entry['lastError'] ?? '') . '</td><td>' . self::time($entry['queuedAt'])
+                . '</td><td>' . $nextAttempt . '</td></tr>';
+        }
+        return $html . '</tbody></table></div>';
+    }
+
+    public static function pendingCategoryDeletions(array $pending, array $reasons): string
+    {
+        if ($pending === []) {
+            return '';
+        }
+        $html = '<h2>Vorgemerkte WooCommerce-Kategoriel&ouml;schungen</h2><ul class="wc-admin-results">';
+        foreach ($pending as $termId => $slug) {
+            $reason = $reasons[$termId] ?? 'Wartet auf den naechsten Kategorieexport.';
+            $html .= '<li>#' . (int) $termId . ' (' . self::e($slug) . ') &ndash; ' . self::e($reason) . '</li>';
+        }
+        return $html . '</ul>';
+    }
+
+    public static function categorySkipReasons(array $reasons): string
+    {
+        if ($reasons === []) {
+            return '';
+        }
+        $html = '<h2>Im Kategorieexport &uuml;bersprungene OpenXE-Kategorien</h2><ul class="wc-admin-results">';
+        foreach ($reasons as $nodeId => $reason) {
+            $html .= '<li>#' . (int) $nodeId . ' &ndash; ' . self::e($reason) . '</li>';
+        }
+        return $html . '</ul>';
+    }
+
+    public static function categories(int $shopId, string $token, string $nonce, array $preview): string
+    {
+        $html = '<h2>Shop-Kategorien &uuml;bernehmen</h2>'
+            . '<p>Pr&uuml;fen Sie die WooCommerce-Kategorien und Artikelzuordnungen vor der Erst&uuml;bernahme in OpenXE.</p>';
+        if ($preview['nodes'] === []) {
+            $html .= '<p>WooCommerce enth&auml;lt keine Kategorien zur &Uuml;bernahme.</p>';
+        } else {
+            $html .= '<h3>Kategorien (' . count($preview['nodes']) . ')</h3>'
+                . '<div class="wc-admin-scroll" tabindex="0" role="region" aria-label="WooCommerce-Kategorien">'
+                . '<table><thead><tr><th scope="col">Kategorie</th><th scope="col">WooCommerce-ID</th>'
+                . '<th scope="col">Slug</th><th scope="col">Oberkategorie</th></tr></thead><tbody>';
+            foreach ($preview['nodes'] as $termId => $term) {
+                $parent = $preview['nodes'][$term['parent']]['name'] ?? '';
+                $html .= '<tr><th scope="row">' . self::e($term['name']) . '</th><td>' . (int) $termId
+                    . '</td><td>' . self::e($term['slug']) . '</td><td>' . self::e($parent) . '</td></tr>';
+            }
+            $html .= '</tbody></table></div>';
+        }
+
+        $html .= '<h3>Artikelzuordnungen (' . count($preview['assignments']) . ')</h3>';
+        if ($preview['assignments'] !== []) {
+            $html .= '<ul class="wc-admin-results">';
+            foreach ($preview['assignments'] as $articleId => $termIds) {
+                $names = array_map(static fn (int $id): string => $preview['nodes'][$id]['name'], $termIds);
+                $html .= '<li>OpenXE-Artikel #' . (int) $articleId . ' &ndash; ' . self::e(implode(', ', $names)) . '</li>';
+            }
+            $html .= '</ul>';
+        }
+        $html .= '<h3>Nicht zugeordnete WooCommerce-Produkte (' . count($preview['unmatched']) . ')</h3>';
+        if ($preview['unmatched'] !== []) {
+            $html .= '<ul class="wc-admin-results">';
+            foreach ($preview['unmatched'] as $row) {
+                $sku = $row['sku'] === '' ? '' : ' (' . $row['sku'] . ')';
+                $html .= '<li>' . self::e('#' . $row['id'] . ' ' . $row['name'] . $sku)
+                    . ' &ndash; ' . self::e($row['reason']) . '</li>';
+            }
+            $html .= '</ul>';
+        }
+
+        if ($preview['nodes'] !== []) {
+            $html .= '<form method="post" action="' . self::e(self::url($shopId, 'categories')) . '">'
+                . self::hidden('csrf_token', $token) . self::hidden('category_preview', $nonce)
+                . '<p><button class="btnBlueNew" type="submit" name="wc_action" value="apply_categories">'
+                . 'Kategorien und Zuordnungen &uuml;bernehmen</button></p></form>';
+        }
+        return $html;
+    }
+
+    public static function categoryNotice(string $message): string
+    {
+        return '<h2>Shop-Kategorien &uuml;bernehmen</h2><p role="status">' . $message . '</p>';
+    }
+
+    public static function pull(int $shopId, string $token, string $preview, int $page, array $data, array $groups, array $selectedGroups): string
+    {
+        $extra = ['page' => $page, 'filter' => '1', 'groups' => $selectedGroups];
+        $html = '<h2>Artikeldaten abgleichen</h2><p>W&auml;hlen Sie die Felder aus, die OpenXE aus WooCommerce &uuml;bernehmen soll. Beim Speichern werden die aktuellen Shop-Werte geladen.</p>'
+            . '<form method="get" action="index.php"><fieldset><legend>Feldgruppen</legend>';
+        foreach (['module' => 'onlineshops', 'action' => 'edit', 'id' => $shopId, 'cmd' => 'woocommerce',
+            'view' => 'pull', 'page' => $page, 'filter' => '1'] as $name => $value) {
+            $html .= self::hidden($name, $value);
+        }
+        $html .= '<div class="wc-admin-actions">';
+        foreach ($groups as $group) {
+            $html .= '<label><input type="checkbox" name="groups[]" value="' . self::e($group) . '"'
+                . (in_array($group, $selectedGroups, true) ? ' checked' : '') . '> ' . self::e($group) . '</label>';
+        }
+        $html .= '</div><p><button type="submit">Filtern</button></p></fieldset></form>';
+
+        $html .= '<form method="post" id="wc-pull-form" data-max-articles="' . BulkPull::MAX_SELECTION
+            . '" action="' . self::e(self::url($shopId, 'pull', $extra)) . '">'
+            . self::hidden('wc_action', 'apply_pull') . self::hidden('csrf_token', $token)
+            . self::hidden('pull_preview', $preview) . self::hidden('pull_count', '0')
+            . '<div id="wc-pull-selection" hidden></div>';
+        $hasRows = $hasSelection = false;
+        foreach ($data['articles'] as $id => $article) {
+            if ($article['rows'] === []) {
+                continue;
+            }
+            $hasRows = true;
+            $label = $article['nummer'] . ' - ' . $article['name'];
+            $html .= '<fieldset><legend>' . self::e($label) . '</legend>'
+                . '<div class="wc-admin-scroll" tabindex="0" role="region" aria-label="' . self::e('Feldvergleich ' . $label) . '">'
+                . '<table class="wc-pull-table"><thead><tr><th scope="col">Feld</th><th scope="col">OpenXE</th>'
+                . '<th scope="col">WooCommerce</th><th scope="col">&Uuml;bernehmen</th></tr></thead><tbody>';
+            foreach ($article['rows'] as $row) {
+                $html .= '<tr><th scope="row">' . self::e($row['label']) . '</th><td>' . self::pullValue($row['openxe'])
+                    . '</td><td>' . self::pullValue($row['woocommerce']) . '</td><td>';
+                if ($row['pullable']) {
+                    $hasSelection = true;
+                    $html .= '<input type="checkbox" data-pull-article="' . (int) $id . '" value="' . self::e($row['key'])
+                        . '" aria-label="' . self::e($row['label'] . ' uebernehmen: ' . $label) . '">';
+                } else {
+                    $html .= self::e($row['reason']);
+                }
+                $html .= '</td></tr>';
+            }
+            $html .= '</tbody></table></div></fieldset>';
+        }
+        if ($hasSelection) {
+            $html .= '<p>Pro &Uuml;bernahme sind h&ouml;chstens ' . BulkPull::MAX_SELECTION . ' Artikel ausw&auml;hlbar.</p>'
+                . '<p id="wc-pull-limit" role="status" hidden>Auswahllimit erreicht. Entfernen Sie die Auswahl eines Artikels, um weitere Artikel auszuw&auml;hlen.</p>'
+                . '<p class="wc-admin-actions"><button type="submit" class="btnBlueNew" disabled>Ausgew&auml;hlte Werte &uuml;bernehmen</button></p>'
+                . '<noscript><p>Aktivieren Sie JavaScript, um ausgew&auml;hlte Werte zu &uuml;bernehmen.</p></noscript>';
+        }
+        $html .= '</form>';
+        if (!$hasRows) {
+            $html .= '<p>Auf dieser Seite gibt es f&uuml;r die ausgew&auml;hlten Feldgruppen keine Unterschiede.</p>';
+        }
+
+        if ($data['unmatched'] !== []) {
+            $html .= '<h3>Nicht zugeordnete WooCommerce-Produkte</h3><ul class="wc-admin-results">';
+            foreach ($data['unmatched'] as $product) {
+                $html .= '<li>' . self::e('#' . $product['id'] . ' ' . $product['name'] . ' - ' . $product['reason']) . '</li>';
+            }
+            $html .= '</ul>';
+        }
+
+        $html .= '<nav class="wc-admin-pages" aria-label="Artikelseiten">';
+        if ($page > 1) {
+            $html .= '<a href="' . self::e(self::url($shopId, 'pull', ['page' => $page - 1] + $extra)) . '">Zur&uuml;ck</a> ';
+        }
+        $html .= 'Seite ' . $page;
+        if ($data['more']) {
+            $html .= ' <a href="' . self::e(self::url($shopId, 'pull', ['page' => $page + 1] + $extra)) . '">Weiter</a>';
+        }
+        return $html . '</nav>';
+    }
+
+    public static function pullResults(int $shopId, int $page, array $selectedGroups, array $results): string
+    {
+        $html = '<h2>Artikeldaten abgleichen</h2><ul class="wc-admin-results">';
+        foreach ($results as $id => $result) {
+            $html .= '<li>OpenXE-Artikel #' . self::e($id) . ' ';
+            if (isset($result['error'])) {
+                $html .= '<span class="error" role="alert">Fehler beim Speichern. ' . self::e($result['error']) . '</span>';
+            } else {
+                $message = match (count($result)) {
+                    0 => 'Keine &Auml;nderung erforderlich.',
+                    1 => '1 Feld &uuml;bernommen.',
+                    default => count($result) . ' Felder &uuml;bernommen.',
+                };
+                $html .= '<span role="status">' . $message . '</span>';
+            }
+            $html .= '</li>';
+        }
+        return $html . '</ul><p><a href="' . self::e(self::url($shopId, 'pull',
+            ['page' => $page, 'filter' => '1', 'groups' => $selectedGroups])) . '">Vorschau neu laden</a></p>';
+    }
+
+    private static function pullValue(string $value): string
+    {
+        return $value === '' ? '<em>leer</em>' : self::e($value);
+    }
+
     private static function downloadRow(array $download)
     {
         return '<tr><td><input name="download_name[]" aria-label="Downloadname" maxlength="255" value="' . self::e($download['name']) . '"></td><td><input name="download_file[]" type="url" aria-label="Datei-URL" maxlength="2048" value="' . self::e($download['file']) . '"></td><td><button type="button" class="wc-download-remove">Entfernen</button></td></tr>';

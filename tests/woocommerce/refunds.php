@@ -403,7 +403,19 @@ final class RefundAppFake
     public $DB;
     public $erp;
     public $prepared;
-    public function Container($name) { same('Database', $name); return $this->prepared; }
+    public $Container;
+
+    public function __construct()
+    {
+        $this->Container = new class($this) {
+            public function __construct(private RefundAppFake $app) {}
+            public function get(string $name): RefundDatabaseFake
+            {
+                same('Database', $name);
+                return $this->app->prepared;
+            }
+        };
+    }
 }
 
 $tests['real ERP conversion can preserve invoice status while legacy default still cancels'] = static function () {

@@ -20902,6 +20902,8 @@ function ChargenMHDAuslagern($artikel, $menge, $lagerplatztyp, $lpid,$typ,$wert,
       return $message;
     }
 
+    $stockTransferred = false;
+    $stockTransferFailed = false;
     foreach($shops as $shop) {
       if($shop <= 0){
         continue;
@@ -20979,8 +20981,6 @@ function ChargenMHDAuslagern($artikel, $menge, $lagerplatztyp, $lpid,$typ,$wert,
           (int)$shop, (int)$lagerartikel[$ij]['id'], (int)$verkaufbare_menge_korrektur, (int)$pseudolager
         );
 
-      $needUpdateShopStorageCache = $storageCache && !$isArticleCacheDifferent;
-
       $isZeroQuantity = (is_numeric($pseudolager) && $pseudolager == 0) || (int)$verkaufbare_menge_korrektur === 0;
 
       if(
@@ -20989,82 +20989,67 @@ function ChargenMHDAuslagern($artikel, $menge, $lagerplatztyp, $lpid,$typ,$wert,
         && ($storageCache['last_storage_transfer_hours'] === null || $storageCache['last_storage_transfer_hours'] > 48)
       ) {
         $hasToSendStock = true;
-        $needUpdateShopStorageCache = true;
       }
 
       if(!$hasToSendStock) {
         continue;
       }
 
-      if($needUpdateShopStorageCache) {
-        // to prevent loops
-        $this->app->DB->Update(
-          "UPDATE `artikel_onlineshops` 
-          SET `last_storage_transfer` = NOW(), `storage_cache` = {$verkaufbare_menge_korrektur} 
-          WHERE `artikel` = {$lagerartikel[$ij]['id']} AND `shop` = {$shop}"
-        );
-        if(is_numeric($pseudolager)) {
-          $this->app->DB->Update(
-            "UPDATE `artikel_onlineshops` 
-            SET `pseudostorage_cache` = {$pseudolager} 
-            WHERE `artikel` = {$lagerartikel[$ij]['id']} AND `shop` = {$shop}"
-          );
-        }
-      }     
+      try {
+        $result = $this->app->remote->RemoteSendArticleList($shop, [(int) $artikelid], '', true);
+      } catch (Throwable $error) {
+        $stockTransferFailed = true;
+        $this->logger->error('Lagersync fehlgeschlagen.', ['shop' => $shop, 'article' => $artikelid, 'exception' => $error]);
+        continue;
+      }
 
-        $extnummer = null;
-        $anzges = 0;
-        $anzfehler = 0;
+      $message .= 'Artikel: '.$lagerartikel[$ij]['name_de'].' ('.$lagerartikel[$ij]['nummer'].') Neuer Status: '.$neuer_status."\r\n";
+      if ($print_echo) {
+        echo '*** UPDATE ' . $lagerartikel[$ij]['nummer'] . ' ' . $lagerartikel[$ij]['name_de'] . ' Lagernd: ' . $verkaufbare_menge . ' Korrekturwert: ' . round($verkaufbare_menge_korrektur - $verkaufbare_menge, 7) . "\r\n";
+      }
 
-        $result = null; // $result['status'] == 1 on success
+      $this->logger->info('*** UPDATE '.$lagerartikel[$ij]['nummer'].' '.$lagerartikel[$ij]['name_de'].' Shop: '.$shop.' Lagernd: '.$verkaufbare_menge.' Korrektur: '.round((float) ($verkaufbare_menge_korrektur - $verkaufbare_menge),7).' Pseudolager: '.round((float) $pseudolager,8), ['result' => $result]);
+      if (!$this->stockTransferSucceeded($result, (int) $artikelid)) {
+        $stockTransferFailed = true;
+        continue;
+      }
 
-        if(!empty($extnummer) && is_array($extnummer)) {
-          foreach($extnummer as $nummer) {
-            $anzges++;
-            try {
-                $result = $this->app->remote->RemoteSendArticleList($shop, array($lagerartikel[$ij]['id']), array($nummer['nummer']), true);
-            }
-            catch(Exception $e) {
-              $this->logger->error($this->app->DB->real_escape_string('Lagersync Fehler '.$shop.' '.$nummer['nummer'].' '.$e->getMessage()));
-              $anzfehler++;
-            }
-          }
-        }
-        else{
-          $anzges++;
-          try {
-              $result = $this->app->remote->RemoteSendArticleList($shop,array($lagerartikel[$ij]['id']),!empty($extnummer)? array($extnummer):'',true);
-          }
-          catch(Exception $e) {
-            $this->logger->error($this->app->DB->real_escape_string('Lagersync Fehler '.$shop.' '.(!empty($extnummer)? array($extnummer):$lagerartikel[$ij]['nummer']).' '.$e->getMessage()));
-            $anzfehler++;
-          }
-        }
-        $message .= 'Artikel: '.$lagerartikel[$ij]['name_de'].' ('.$lagerartikel[$ij]['nummer'].') Neuer Status: '.$neuer_status."\r\n";
-
-        if($print_echo) {
-          echo '*** UPDATE ' . $lagerartikel[$ij]['nummer'] . ' ' . $lagerartikel[$ij]['name_de'] . ' Lagernd: ' . ($verkaufbare_menge) . ' Korrekturwert: ' . round($verkaufbare_menge_korrektur - $verkaufbare_menge, 7) . "\r\n";
-        }
-
-
-        $this->logger->info('*** UPDATE '.$lagerartikel[$ij]['nummer'].' '.$lagerartikel[$ij]['name_de'].' Shop: '.$shop.' Lagernd: '.$verkaufbare_menge.' Korrektur: '.round((float) ($verkaufbare_menge_korrektur - $verkaufbare_menge),7).' Pseudolager: '.round((float) $pseudolager,8).' Result: '.(is_array($result)?$result['status']:$result), [$result]);
-
-        if ((is_array($result) && $result instanceof ArticleExportResult ? $result->success : false) || $result === 1) {
-            $cacheQuantity = (int) $verkaufbare_menge_korrektur + (int) $pseudolager;
-            $this->app->DB->Update(
-              "UPDATE `artikel` SET `cache_lagerplatzinhaltmenge` = '{$cacheQuantity}'
-              WHERE `id`= '{$lagerartikel[$ij]['id']}' LIMIT 1"
-            );
-        }
-
-
+      $stockTransferred = true;
+      $pseudoStorageCache = is_numeric($pseudolager) ? (float) $pseudolager : 'NULL';
+      $this->app->DB->Update(
+        "UPDATE `artikel_onlineshops`
+        SET `last_storage_transfer` = NOW(), `storage_cache` = {$verkaufbare_menge_korrektur}, `pseudostorage_cache` = {$pseudoStorageCache}
+        WHERE `artikel` = {$artikelid} AND `shop` = {$shop}"
+      );
+      $cacheQuantity = (int) $verkaufbare_menge_korrektur + (int) $pseudolager;
+      $this->app->DB->Update(
+        "UPDATE `artikel` SET `cache_lagerplatzinhaltmenge` = {$cacheQuantity} WHERE `id` = {$artikelid} LIMIT 1"
+      );
     }
 
-    $this->app->DB->Update(
-      "UPDATE `artikel` SET `laststorage_sync` = NOW() WHERE `id` = {$artikelid}"
-    );
+    if ($stockTransferred && !$stockTransferFailed) {
+      $this->app->DB->Update(
+        "UPDATE `artikel` SET `laststorage_sync` = NOW() WHERE `id` = {$artikelid}"
+      );
+    }
 
     return $message;
+  }
+
+  private function stockTransferSucceeded($result, int $articleId): bool
+  {
+    if (!is_array($result)) {
+      $result = [$result];
+    }
+    if (is_numeric($result['status'] ?? null)) {
+      return $result['status'] > 0;
+    }
+    foreach ($result as $item) {
+      if ($item instanceof ArticleExportResult && $item->articleId === $articleId) {
+        return $item->success && !$item->retryExport;
+      }
+    }
+    return count($result) === 1 && is_numeric($result[0] ?? null) && $result[0] > 0;
   }
 
 

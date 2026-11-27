@@ -56,6 +56,7 @@ runTests([
         same(1, $sync->next(['processing'])->id);
         same(null, $state->state['timestamp'] ?? null);
         same('modified', $api->queries[0][1]['orderby']);
+        same('1', $api->queries[0][1]['dates_are_gmt']);
         check(!isset($api->queries[0][1]['after']));
     },
     'unacknowledged pending order is leased rather than delivered twice' => static function () {
