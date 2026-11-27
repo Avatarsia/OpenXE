@@ -97,6 +97,9 @@ feature/netto-brutto-preis
 # Lagerentnahme bei Rechnungsfreigabe
 feature/rechnung-lagerentnahme
 
+# REST v1 API endpoints for Artikelbaum (artikelbaum_artikel), Onlineshops (artikel_onlineshops) and PHP 8 ApiPreiseEdit fix
+feature/api-artikelbaum-onlineshops
+
 # Fork-specific override — MUST stay as the last entry. Sets
 # upgrade/data/remote.json to Avatarsia/OpenXE production so the file
 # matches HEAD after upgrade and the upgrader no longer flags it as
