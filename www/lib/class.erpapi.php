@@ -30,6 +30,8 @@ use Xentral\Modules\SystemMailer\Data\EmailBackupAccount;
 use Xentral\Components\Mailer\Data\EmailRecipient;
 use Xentral\Modules\SuperSearch\Scheduler\SuperSearchFullIndexTask;
 
+class RechnungFehlbestandException extends DomainException {}
+
 class erpAPI
 {
   var $verbrauchslagervorhanden = null;
@@ -2716,10 +2718,159 @@ function LieferscheinEinlagern($id,$grund="Lieferschein Einlagern", $lpiids = nu
   // @refactor LagerBeleg Modul
   // Returns Array:
   // storageMovements => array('lager_platz', 'artikel', 'menge');
+  private function MitBelegLagersperre(callable $operation)
+  {
+    $db = $this->app->DB;
+    $lock = "SHA2(CONCAT(DATABASE(), ':beleg-lagerentnahme'), 256)";
+    if ((int)$db->Select("SELECT GET_LOCK($lock, 10)") !== 1) {
+      throw new DomainException('Lagerbuchung ist gerade belegt. Bitte erneut versuchen.');
+    }
+    try {
+      return $operation();
+    } finally {
+      $db->Select("SELECT RELEASE_LOCK($lock)");
+    }
+  }
+
+  private function MitBelegLagerTransaktion(callable $operation)
+  {
+    $db = $this->app->DB;
+    $inTransaction = (int)$db->Select('SELECT @@in_transaction') === 1;
+    if (!$inTransaction) {
+      $db->Query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
+    }
+    $db->Query($inTransaction ? 'SAVEPOINT beleg_lagerbuchung' : 'START TRANSACTION');
+    try {
+      $result = $operation();
+      $db->Query($inTransaction ? 'RELEASE SAVEPOINT beleg_lagerbuchung' : 'COMMIT');
+      return $result;
+    } catch (Throwable $e) {
+      $db->Query($inTransaction ? 'ROLLBACK TO SAVEPOINT beleg_lagerbuchung' : 'ROLLBACK');
+      throw $e;
+    }
+  }
+
+  public function LieferscheinAusgelagerteMengen(int $lieferschein): array
+  {
+    $positionen = $this->app->DB->SelectArr(
+      "SELECT olp.parameter, SUM(olp.menge) AS menge
+       FROM objekt_lager_platz olp
+       JOIN lieferschein_position p ON p.id = olp.parameter AND p.artikel = olp.artikel
+       WHERE olp.objekt = 'lieferschein' AND p.lieferschein = $lieferschein
+       GROUP BY olp.parameter"
+    );
+    return array_column($positionen ?: [], 'menge', 'parameter');
+  }
+
+  public function LieferscheinRechnungsLagerMengen(int $lieferschein, bool $planen = false): array
+  {
+    if ($planen) {
+      return $this->LieferscheinRechnungsLagerZuteilen($lieferschein, false);
+    }
+
+    $zeilen = $this->app->DB->SelectArr(
+      "SELECT p.id, LEAST(p.menge, SUM(z.menge)) AS menge
+       FROM lieferschein_position p
+       JOIN lager_rechnung_lieferschein z ON z.lieferschein_position = p.id AND z.artikel = p.artikel
+       WHERE p.lieferschein = $lieferschein AND p.menge > 0 GROUP BY p.id, p.menge"
+    );
+    return array_column($zeilen ?: [], 'menge', 'id');
+  }
+
+  private function LieferscheinRechnungsLagerZuteilen(int $lieferschein, bool $buchen): array
+  {
+    $db = $this->app->DB;
+    $verknuepft = "r.id = l.rechnungid OR r.lieferschein = l.id
+         OR (l.auftragid > 0 AND l.auftragid = r.auftragid AND l.adresse = r.adresse)";
+    if ($buchen) {
+      // Wait for a concurrent invoice transaction to commit before reading its stock movements.
+      $db->SelectArr("SELECT r.id FROM lieferschein l JOIN rechnung r ON ($verknuepft)
+        WHERE l.id = $lieferschein ORDER BY r.id FOR UPDATE");
+    }
+    $zugeteilt = $this->LieferscheinRechnungsLagerMengen($lieferschein);
+    $gebucht = $db->SelectArr(
+      "SELECT r.id AS rechnung, m.artikel, SUM(IF(m.eingang = 0, m.menge, -m.menge)) AS menge
+       FROM lieferschein l
+       JOIN rechnung r ON ($verknuepft)
+       JOIN lager_bewegung m ON m.doctype = 'rechnung' AND m.doctypeid = r.id
+       WHERE l.id = $lieferschein AND l.status <> 'storniert' AND EXISTS (
+         SELECT 1 FROM lieferschein_position p WHERE p.lieferschein = l.id AND p.artikel = m.artikel AND p.menge > 0
+       )
+       GROUP BY r.id, m.artikel HAVING menge > 0 ORDER BY r.id"
+    );
+    if (empty($gebucht)) {
+      return $zugeteilt;
+    }
+
+    $rechnungIds = implode(',', array_map('intval', array_unique(array_column($gebucht, 'rechnung'))));
+    $belegt = $db->SelectArr(
+      "SELECT z.rechnung, z.artikel, SUM(z.menge) AS menge
+       FROM lager_rechnung_lieferschein z
+       JOIN lieferschein_position p ON p.id = z.lieferschein_position AND p.artikel = z.artikel
+       JOIN lieferschein l ON l.id = p.lieferschein AND l.status <> 'storniert'
+       WHERE z.rechnung IN ($rechnungIds)
+       GROUP BY z.rechnung, z.artikel"
+    );
+    $verfuegbar = [];
+    foreach ($gebucht as $row) {
+      $verfuegbar[$row['artikel']][$row['rechnung']] = (float)$row['menge'];
+    }
+    foreach ($belegt ?: [] as $row) {
+      if (isset($verfuegbar[$row['artikel']][$row['rechnung']])) {
+        $verfuegbar[$row['artikel']][$row['rechnung']] -= (float)$row['menge'];
+      }
+    }
+
+    $ausgelagert = $this->LieferscheinAusgelagerteMengen($lieferschein);
+    $positionen = $db->SelectArr("SELECT id, artikel, menge, geliefert FROM lieferschein_position
+      WHERE lieferschein = $lieferschein AND menge > 0 ORDER BY sort, id");
+    foreach ($positionen ?: [] as $position) {
+      $pos = (int)$position['id'];
+      $artikel = (int)$position['artikel'];
+      if (!isset($verfuegbar[$artikel])) {
+        continue;
+      }
+      $zugeteilt[$pos] = (float)($zugeteilt[$pos] ?? 0);
+      $geliefert = max((float)$position['geliefert'], (float)($ausgelagert[$pos] ?? 0));
+      $offen = round($position['menge'] - $zugeteilt[$pos] - $geliefert, 4);
+      foreach ($verfuegbar[$artikel] as $rechnung => $rest) {
+        $menge = min($offen, round($rest, 4));
+        if ($menge <= 0) {
+          continue;
+        }
+        if ($buchen) {
+          $db->Query("INSERT INTO lager_rechnung_lieferschein (rechnung, lieferschein_position, artikel, menge)
+            VALUES ($rechnung, $pos, $artikel, $menge)
+            ON DUPLICATE KEY UPDATE menge = menge + VALUES(menge)");
+        }
+        $offen -= $menge;
+        $zugeteilt[$pos] += $menge;
+        $verfuegbar[$artikel][$rechnung] -= $menge;
+      }
+    }
+    return $zugeteilt;
+  }
+
   function LieferscheinAuslagern($lieferschein,$anzeige_lagerplaetze_in_lieferschein=false, $belegtyp = 'lieferschein', $chargenmhdnachprojekt = 0, $forceseriennummerngeliefertsetzen = false,$nurrestmenge = false, $lager_platz_vpe = 0, $lpiid = 0, $simulieren = false, $ziellagerplatz = null,$text = null)
+  {
+    $auslagern = fn() => $this->BelegAuslagern($lieferschein, $anzeige_lagerplaetze_in_lieferschein, $belegtyp, $chargenmhdnachprojekt,
+      $forceseriennummerngeliefertsetzen, $nurrestmenge, $lager_platz_vpe, $lpiid, $simulieren, $ziellagerplatz, $text);
+    if (in_array($belegtyp, ['lieferschein', 'auftrag'], true) && !$simulieren) {
+      return $this->MitBelegLagersperre(fn() => $this->MitBelegLagerTransaktion($auslagern));
+    }
+    return $auslagern();
+  }
+
+  private function BelegAuslagern($lieferschein,$anzeige_lagerplaetze_in_lieferschein=false, $belegtyp = 'lieferschein', $chargenmhdnachprojekt = 0, $forceseriennummerngeliefertsetzen = false,$nurrestmenge = false, $lager_platz_vpe = 0, $lpiid = 0, $simulieren = false, $ziellagerplatz = null,$text = null, array $rechnungMengen = [])
   {
     if($lieferschein <= 0) {
       throw new exception("Kein Beleg angegeben");
+    }
+    if ($belegtyp === 'auftrag' && !$simulieren && $this->app->DB->Select(
+      "SELECT r.id FROM rechnung r JOIN lager_bewegung m ON m.doctype = 'rechnung' AND m.doctypeid = r.id AND m.eingang = 0
+       WHERE r.auftragid = " . (int)$lieferschein . " LIMIT 1 FOR UPDATE"
+    )) {
+      throw new DomainException('Rechnung bereits ausgelagert. Offene Mengen direkt per Lieferschein ausbuchen.');
     }
     if(!$anzeige_lagerplaetze_in_lieferschein) {
       $anzeige_lagerplaetze_in_lieferschein = true;
@@ -2738,6 +2889,9 @@ function LieferscheinEinlagern($id,$grund="Lieferschein Einlagern", $lpiids = nu
       )
     );
     $standardlager = $this->GetBelegStandardlager($lieferschein, $belegtyp);
+    $rechnungsMengen = $belegtyp === 'lieferschein' && $ziellagerplatz === null
+      ? $this->LieferscheinRechnungsLagerZuteilen((int)$lieferschein, !$simulieren) : [];
+    $lieferscheinMengen = $rechnungsMengen ? $this->LieferscheinAusgelagerteMengen((int)$lieferschein) : [];
 
     $kommissionskonsignationslager = 0;
     if($belegtyp === 'lieferschein'){
@@ -2750,6 +2904,7 @@ function LieferscheinEinlagern($id,$grund="Lieferschein Einlagern", $lpiids = nu
     $seriennummernerfassen = 0;
     $kommissionierverfahren = '';
     $projekt = 0;
+    $projektlager = 0;
     $belegnr = '';
     if(!empty($belegarr)) {
       $projekt = (int)$belegarr['projekt'];
@@ -2769,6 +2924,7 @@ function LieferscheinEinlagern($id,$grund="Lieferschein Einlagern", $lpiids = nu
           $seriennummernerfassen = 1;
         }
         $kommissionierverfahren = $projektarr['kommissionierverfahren'];
+        $projektlager = $belegtyp === 'rechnung' ? (int)$projektarr['projektlager'] : 0;
       }
       $belegnr = $belegarr['belegnr'];
     }
@@ -2797,6 +2953,12 @@ function LieferscheinEinlagern($id,$grund="Lieferschein Einlagern", $lpiids = nu
       $beschreibung = $artikelarr[$i]['beschreibung'];
       $artikel = $artikelarr[$i]['artikel'];
       $menge = $artikelarr[$i]['menge'];
+      if ($belegtyp === 'rechnung') {
+        $menge = $rechnungMengen[$artikelarr[$i]['id']] ?? 0;
+        if ($menge <= 0) {
+          continue;
+        }
+      }
       if($nurrestmenge && $belegtyp=='produktion')
       {
         $menge = $artikelarr[$i]['menge'] - $artikelarr[$i]['geliefert_menge'];
@@ -2828,6 +2990,10 @@ function LieferscheinEinlagern($id,$grund="Lieferschein Einlagern", $lpiids = nu
         $regal = 0;
         $timeout=0;
         $restmenge = $menge;
+        if (array_key_exists($subid, $rechnungsMengen)) {
+          $bereitsGeliefert = max((float)$artikelarr[$i]['geliefert'], (float)($lieferscheinMengen[$subid] ?? 0));
+          $restmenge = round($menge - $rechnungsMengen[$subid] - $bereitsGeliefert, 4);
+        }
         $lager_string = '';
         $mindesthaltbarkeitsdatum = $articleRow['mindesthaltbarkeitsdatum'];
         $chargenverwaltung = $articleRow['chargenverwaltung'];
@@ -3129,7 +3295,7 @@ function LieferscheinEinlagern($id,$grund="Lieferschein Einlagern", $lpiids = nu
                 $grund = $text;
               }
 
-              $this->LagerAuslagernRegal($artikel,$lager_max[0]['lager_platz'],$menge_auslagern,$projekt,$grund,"",$belegtyp,$lieferschein, $lager_max[0]['lager_platz_vpe'], $lager_max[0]['id']);
+              $this->LagerAuslagernRegal($artikel,$lager_max[0]['lager_platz'],$menge_auslagern,$projekt,$grund,"",$belegtyp,$lieferschein, $lager_max[0]['lager_platz_vpe'] ?? 0, $lager_max[0]['id']);
               $storageLocations[] = $lager_max[0]['lager_platz'];
               if($anzeige_lagerplaetze_in_lieferschein){
                   $this->LagerAuslagernText($artikel, $subid, $lager_max[0]['lager_platz'], $menge_auslagern, $belegtyp);
@@ -3148,6 +3314,9 @@ function LieferscheinEinlagern($id,$grund="Lieferschein Einlagern", $lpiids = nu
 
           }
           $restmenge = round($restmenge - $menge_auslagern, 8);
+        }
+        if ($belegtyp === 'rechnung' && $restmenge > 0) {
+          throw new RechnungFehlbestandException('Lagerbestand reicht nicht aus. Artikel-ID: ' . (int)$artikel);
         }
       }
 
@@ -5695,6 +5864,7 @@ title: 'Abschicken',
 
     function GetBelegStandardlager(int $doctypeid, string $doctype) : int {
         
+        $beleglager = $doctype === 'rechnung' ? '0' : 'b.standardlager';
         $sql = "
             SELECT
                 l.id standardlager_beleg,
@@ -5702,7 +5872,7 @@ title: 'Abschicken',
             FROM
                 $doctype b
             LEFT JOIN
-                lager l ON (l.id = b.standardlager) AND (IFNULL(l.geloescht,0) = 0)
+                lager l ON (l.id = $beleglager) AND (IFNULL(l.geloescht,0) = 0)
             LEFT JOIN
                 projekt p ON p.id = b.projekt
             WHERE
@@ -27611,7 +27781,7 @@ function Firmendaten($field,$projekt="")
         return ($nummer);
       }
 
-      function GetNextNummer($type,$projekt="",$data="")
+      function GetNextNummer($type,$projekt="",$data="", $nummernsperre = null)
       {
         $doctype = $type;
         if(in_array($doctype,['kundennummer', 'lieferantennummer', 'mitarbeiternummer'])) {
@@ -27619,7 +27789,7 @@ function Firmendaten($field,$projekt="")
         }
         $checkprojekt = $this->app->DB->Select("SELECT id FROM projekt WHERE id='$projekt' LIMIT 1");
 
-        $process_lock = $this->app->erp->ProzessLock("erpapi_getnextnummer");
+        $process_lock = $nummernsperre ?? $this->app->erp->ProzessLock("erpapi_getnextnummer");
 
         $eigenernummernkreis = $this->app->DB->Select("SELECT eigenernummernkreis FROM projekt WHERE id='$projekt' LIMIT 1");
         $belegnr = '';
@@ -27795,7 +27965,9 @@ function Firmendaten($field,$projekt="")
 
           $this->FirmendatenSet("next_$type",$newbelegnr);
         }
-        $this->app->erp->ProzessUnlock($process_lock);
+        if ($nummernsperre === null) {
+          $this->app->erp->ProzessUnlock($process_lock);
+        }
 
         // alle spalten aus Adress als Variable
         $doctypeid = $data;
@@ -29616,6 +29788,13 @@ function Firmendaten($field,$projekt="")
         }
 
         $projekt = $doc['projekt'];
+        if ($beleg === 'rechnung' && $this->RechnungLagerentnahmeAktiv((int)$projekt)) {
+          // An invoice header may be created before its positions are copied or entered.
+          if ($this->app->DB->Select("SELECT id FROM rechnung_position WHERE rechnung = " . (int)$id . " LIMIT 1")) {
+            $this->BelegFreigabe('rechnung', $id);
+          }
+          return;
+        }
         $belegnr = (String)$doc['belegnr'];
         $status = $doc['status'];
         if($belegnr === '' || $belegnr === '0') {
@@ -29660,24 +29839,157 @@ function Firmendaten($field,$projekt="")
         return 0;
       }
 
-      function BelegFreigabe($beleg,$id)
+      private function RechnungLagerentnahmeAktiv(int $projekt): bool
       {
-        if($id <= 0 || empty($beleg)) {
+        return (string)$this->app->DB->Select("SELECT rechnung_lagerentnahme FROM projekt WHERE id = $projekt") !== '0';
+      }
+
+      private function RechnungLagerAuslagern(int $id, array $doc): void
+      {
+        if (!$this->RechnungLagerentnahmeAktiv((int)$doc['projekt'])) {
           return;
         }
-        $doc = $this->app->DB->SelectRow(sprintf('SELECT `projekt`, `status`, `belegnr` FROM `%s` WHERE `id` = %d', $beleg, $id));
+
+        $db = $this->app->DB;
+        $auftrag = (int)$doc['auftragid'];
+        $lieferschein = (int)$doc['lieferschein'];
+        $adresse = (int)$doc['adresse'];
+        if ($auftrag > 0 && $db->Select("SELECT olp.id FROM auftrag_position p
+            JOIN objekt_lager_platz olp ON olp.objekt = 'auftrag' AND olp.parameter = p.id AND olp.menge > 0
+            WHERE p.auftrag = $auftrag LIMIT 1")) {
+          return;
+        }
+        if ($db->Select("SELECT l.id FROM lieferschein l
+            WHERE (l.id = $lieferschein OR l.rechnungid = $id
+              OR ($auftrag > 0 AND l.auftragid = $auftrag AND l.adresse = $adresse))
+              AND (l.status <> 'storniert' OR EXISTS (
+                SELECT 1 FROM lieferschein_position p
+                JOIN objekt_lager_platz olp ON olp.objekt = 'lieferschein' AND olp.parameter = p.id AND olp.menge > 0
+                WHERE p.lieferschein = l.id
+              )) LIMIT 1")) {
+          return;
+        }
+
+        $zeilen = $db->SelectArr("SELECT p.id, p.artikel,
+            GREATEST(0, p.menge - COALESCE(l.menge, 0)) AS menge,
+            a.seriennummern = 'vomprodukteinlagern' AS lager_seriennummern,
+            a.mindesthaltbarkeitsdatum = 1 AS lager_mhd,
+            a.chargenverwaltung IN (1, 2) AS lager_charge
+          FROM rechnung_position p
+          JOIN artikel a ON a.id = p.artikel AND a.lagerartikel = 1
+          LEFT JOIN (
+            SELECT s.rechnung_position_id, SUM(s.menge) AS menge
+            FROM sammelrechnung_position s
+            WHERE s.rechnung = $id AND (s.lieferschein_position_id > 0 OR EXISTS (
+              SELECT 1 FROM lieferschein_position lp JOIN lieferschein ls ON ls.id = lp.lieferschein
+              WHERE lp.auftrag_position_id = s.auftrag_position_id AND lp.auftrag_position_id > 0 AND ls.status <> 'storniert'
+            ))
+            GROUP BY s.rechnung_position_id
+          ) l ON l.rechnung_position_id = p.id
+          WHERE p.rechnung = $id AND p.menge > 0
+          HAVING menge > 0 ORDER BY p.artikel, p.id");
+        if (empty($zeilen)) {
+          return;
+        }
+
+        $positionen = [];
+        foreach ($zeilen as $zeile) {
+          $artikelId = (int)$zeile['artikel'];
+          if (!isset($positionen[$artikelId])) {
+            $positionen[$artikelId] = $zeile;
+          } else {
+            $positionen[$artikelId]['menge'] += $zeile['menge'];
+          }
+        }
+
+        foreach ($positionen as $position) {
+          if ($position['lager_seriennummern']) {
+            throw new DomainException('Im Lager gefuehrte Seriennummern bitte per Lieferschein ausbuchen. Artikel-ID: ' . (int)$position['artikel']);
+          }
+        }
+
+        $artikel = implode(',', array_map('intval', array_column($positionen, 'artikel')));
+        $db->SelectArr("SELECT id FROM lager_platz_inhalt WHERE artikel IN ($artikel) FOR UPDATE");
+        $this->BelegAuslagern($id, belegtyp: 'rechnung', text: "Rechnung ID $id",
+          rechnungMengen: array_column($zeilen, 'menge', 'id'));
+
+        $bewegungen = $db->SelectArr("SELECT artikel, SUM(menge) AS menge FROM lager_bewegung
+          WHERE doctype = 'rechnung' AND doctypeid = $id AND eingang = 0 GROUP BY artikel");
+        $gebucht = array_column($bewegungen ?: [], 'menge', 'artikel');
+        foreach ($positionen as $position) {
+          $artikelId = (int)$position['artikel'];
+          $menge = round((float)$position['menge'], 4);
+          if (round((float)($gebucht[$artikelId] ?? 0), 4) !== $menge) {
+            throw new DomainException('Lagerentnahme unvollstaendig. Artikel-ID: ' . $artikelId);
+          }
+          if ($position['lager_mhd'] || $position['lager_charge']) {
+            $merkmale = $db->SelectRow("SELECT SUM(IF(b.type = 'mhd', b.menge, 0)) AS mhd,
+                SUM(IF(b.type = 'charge' OR b.type2 = 'charge', b.menge, 0)) AS charge
+              FROM beleg_chargesnmhd b JOIN rechnung_position p ON p.id = b.pos
+              WHERE b.doctype = 'rechnung' AND b.doctypeid = $id AND p.rechnung = $id AND p.artikel = $artikelId");
+            if (($position['lager_mhd'] && (float)$merkmale['mhd'] < $menge)
+              || ($position['lager_charge'] && (float)$merkmale['charge'] < $menge)) {
+              throw new RechnungFehlbestandException('Chargen- oder MHD-Bestand reicht nicht aus. Artikel-ID: ' . $artikelId);
+            }
+          }
+        }
+        $db->Update("UPDATE rechnung SET schreibschutz = 1 WHERE id = $id");
+      }
+
+      public function RechnungHatLagerentnahme(int $id): bool
+      {
+        return (bool)$this->app->DB->Select("SELECT id FROM lager_bewegung
+          WHERE doctype = 'rechnung' AND doctypeid = $id AND eingang = 0 LIMIT 1");
+      }
+
+      public function RechnungLagerwarnung(int $id): string
+      {
+        return (string)$this->app->DB->Select("SELECT grund FROM rechnung_protokoll
+          WHERE rechnung = $id AND grund LIKE 'Fehlbestand:%' ORDER BY id DESC LIMIT 1");
+      }
+
+      public function RechnungLagerAenderungenGesperrt(int $id): bool
+      {
+        return $this->RechnungHatLagerentnahme($id) || $this->RechnungLagerwarnung($id) !== '';
+      }
+
+      private function BelegFreigabeSpeichern($beleg, int $id, &$nummernsperre = null): ?string
+      {
+        $doc = $beleg === 'rechnung'
+          ? $this->app->DB->SelectRow("SELECT * FROM rechnung WHERE id = $id FOR UPDATE")
+          : $this->app->DB->SelectRow(sprintf('SELECT `projekt`, `status`, `belegnr` FROM `%s` WHERE `id` = %d', $beleg, $id));
         if(
             empty($doc)
           || ($doc['status'] === 'freigegeben' && (string)$doc['belegnr'] !== '0' && (string)$doc['belegnr'] !=='')
+          || ($beleg === 'rechnung' && in_array($doc['status'], ['storniert', 'versendet', 'abgeschlossen'], true))
         ) {
-          return;
+          return null;
+        }
+
+        if ($beleg === 'rechnung' && in_array((string)$doc['belegnr'], ['', '0'], true)) {
+          $db = $this->app->DB;
+          $db->Query('SAVEPOINT rechnung_lagerentnahme');
+          try {
+            $this->RechnungLagerAuslagern($id, $doc);
+          } catch (RechnungFehlbestandException $e) {
+            $db->Query('ROLLBACK TO SAVEPOINT rechnung_lagerentnahme');
+            $db->Update("UPDATE rechnung SET schreibschutz = 1 WHERE id = $id");
+            $this->RechnungProtokoll($id, 'Fehlbestand: ' . $e->getMessage() . ' Keine Lagerentnahme gebucht.');
+          }
+          $db->Query('RELEASE SAVEPOINT rechnung_lagerentnahme');
         }
 
         $projekt = $doc['projekt'];
         $belegnr = (String)$doc['belegnr'];
         $status = $doc['status'];
         if($belegnr === '' || $belegnr === '0') {
-          $belegnr = $this->app->erp->GetNextNummer($beleg,$projekt,$id);
+          if ($beleg === 'rechnung') {
+            $nummernsperre = $this->ProzessLock('erpapi_getnextnummer');
+            if (!$nummernsperre) {
+              throw new DomainException('Rechnungsnummernkreis ist gerade nicht verfuegbar.');
+            }
+          }
+          $belegnr = $this->app->erp->GetNextNummer($beleg, $projekt, $id, $nummernsperre);
         }
 
         if(!empty($this->app->User) && method_exists($this->app->User, 'GetParameter')
@@ -29690,6 +30002,33 @@ function Firmendaten($field,$projekt="")
 
         // schutzt fals kein Datum gefunden
         $this->app->DB->Update("UPDATE $beleg SET datum=NOW() WHERE id='$id' AND (datum='0000-00-00' OR datum='1970-01-01' OR datum IS NULL OR datum='') LIMIT 1");
+
+        return $status;
+      }
+
+      function BelegFreigabe($beleg,$id)
+      {
+        if ($id <= 0 || empty($beleg)) {
+          return;
+        }
+
+        $id = (int)$id;
+        if ($beleg === 'rechnung') {
+          $nummernsperre = null;
+          $freigeben = function () use ($id, &$nummernsperre) {
+            return $this->BelegFreigabeSpeichern('rechnung', $id, $nummernsperre);
+          };
+          try {
+            $status = $this->MitBelegLagersperre(fn() => $this->MitBelegLagerTransaktion($freigeben));
+          } finally {
+            $this->ProzessUnlock($nummernsperre);
+          }
+        } else {
+          $status = $this->BelegFreigabeSpeichern($beleg, $id);
+        }
+        if ($status === null) {
+          return;
+        }
 
         $methodname = ucfirst($beleg).'Protokoll';
         if(method_exists($this,$methodname) && $status != 'freigegeben') {
@@ -33316,6 +33655,14 @@ function Firmendaten($field,$projekt="")
           // was ist denn bei rechnung bar oder nachnahme wenn ein auftragsguthaben vorhanden ist
 
 
+        try {
+          $this->SchnellFreigabe('rechnung', $newid);
+        } catch (DomainException $e) {
+          $this->RechnungProtokoll($newid, $e->getMessage());
+          $this->ANABREGSNeuberechnen($newid, 'rechnung');
+          return $newid;
+        }
+
         if($this->Firmendaten("auftragabschliessen")!="1")
         {
           $this->app->DB->Update("UPDATE auftrag SET status='abgeschlossen',schreibschutz='1' WHERE id='$id' LIMIT 1");
@@ -33325,9 +33672,6 @@ function Firmendaten($field,$projekt="")
           // erstmal nicht mehr umstellen
           //if($this->app->DB->Select("SELECT id FROM auftrag WHERE art <> 'rechnung' AND id = '$id' LIMIT 1"))$this->app->DB->Update("UPDATE auftrag SET art='lieferung' WHERE id='$id' LIMIT 1");
         }
-
-        // auftrag freigeben!!!
-      $this->SchnellFreigabe("rechnung",$newid);
 
       $this->ANABREGSNeuberechnen($newid,"rechnung");
       return $newid;

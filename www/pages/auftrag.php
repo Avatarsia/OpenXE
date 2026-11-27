@@ -3982,12 +3982,14 @@ class Auftrag extends GenAuftrag
 
       //TODO eventuell wenn es Rechnung schon gibt keine weitere erstellen
       $newid = $this->app->erp->WeiterfuehrenAuftragZuRechnung($id);
-      $belegnr = (string)$this->app->DB->Select("SELECT belegnr FOM rechnung WHERE id='$newid' LIMIT 1");
-      if($belegnr==='' || $belegnr==='0') {
-        $belegnr = $this->app->erp->GetNextNummer('rechnung',$projekt,$newid);
+      try {
+        $this->app->erp->BelegFreigabe('rechnung', $newid);
+      } catch (DomainException $e) {
+        $meldung = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+        $msg = $this->app->erp->base64_url_encode('<div class="error">' . $meldung . '</div>');
+        $this->app->Location->execute("index.php?module=rechnung&action=edit&id=$newid&msg=$msg");
+        return;
       }
-      $this->app->DB->Update("UPDATE rechnung SET belegnr='$belegnr', status='freigegeben' WHERE id='$newid' LIMIT 1");
-      $this->app->erp->RechnungProtokoll($newid,'Rechnung freigegeben');
       $this->app->erp->ANABREGSNeuberechnen($newid,"rechnung");
 
       $Brief = new RechnungPDF($this->app,$projekt);
@@ -5903,28 +5905,53 @@ Die Gesamtsumme stimmt nicht mehr mit urspr&uuml;nglich festgelegten Betrag '.
               $rechnung = $this->app->erp->WeiterfuehrenAuftragZuRechnung($id);
             }
           }
-          $this->app->DB->Update("UPDATE rechnung SET lieferschein='$lieferschein' WHERE id='$rechnung' LIMIT 1");
+          if (!$lieferschein) {
+            try {
+              $this->app->erp->BelegFreigabe('rechnung', $rechnung);
+            } catch (DomainException $e) {
+              $this->app->erp->AuftragProtokoll($id, $e->getMessage());
+              $this->app->erp->ProzessUnlock($fp);
+              if (!$internmodus) {
+                $meldung = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+                $msg = $this->app->erp->base64_url_encode('<div class="error">' . $meldung . '</div>');
+                $this->app->Location->execute("index.php?module=rechnung&action=edit&id=$rechnung&msg=$msg");
+              }
+              return false;
+            }
+          } else {
+            $this->app->DB->Update("UPDATE rechnung SET lieferschein='$lieferschein' WHERE id='$rechnung' LIMIT 1");
 
-          $re_belegnr = (string)$this->app->DB->Select("SELECT belegnr FROM rechnung WHERE id='$rechnung' LIMIT 1");
-          if($re_belegnr==='' || $re_belegnr==='0')
-          {
-            $re_belegnr = $this->app->erp->GetNextNummer('rechnung',$projekt,$rechnung);
+            $re_belegnr = (string)$this->app->DB->Select("SELECT belegnr FROM rechnung WHERE id='$rechnung' LIMIT 1");
+            if($re_belegnr==='' || $re_belegnr==='0')
+            {
+              $re_belegnr = $this->app->erp->GetNextNummer('rechnung',$projekt,$rechnung);
+            }
+
+            $this->app->DB->Update("UPDATE rechnung SET lieferschein='$lieferschein' WHERE id='$rechnung' LIMIT 1");
+
+            $re_belegnr = (string)$this->app->DB->Select("SELECT belegnr FROM rechnung WHERE id='$rechnung' LIMIT 1");
+            if($re_belegnr==='' || $re_belegnr==='0')
+            {
+              $re_belegnr = $this->app->erp->GetNextNummer('rechnung',$projekt,$rechnung);
+            }
+            $this->app->erp->Protokoll("WeiterfuehrenAuftragZuRechnung AB $belegnr (id $id) RE $re_belegnr (id $rechnung)");
+
+            $this->app->DB->Update(
+              sprintf(
+                "UPDATE rechnung SET belegnr = '%s' WHERE id = %d AND (belegnr = '' OR belegnr = '0')",
+                $re_belegnr, $rechnung
+              )
+            );
+            $this->app->DB->Update(
+              sprintf(
+                "UPDATE rechnung SET status = 'freigegeben' WHERE status <> 'storniert' AND status <> 'versendet' AND id = %d",
+                $rechnung
+              )
+            );
+            $this->app->erp->RechnungProtokoll($rechnung, 'Rechnung freigegeben');
           }
+          $re_belegnr = (string)$this->app->DB->Select("SELECT belegnr FROM rechnung WHERE id='$rechnung' LIMIT 1");
           $this->app->erp->Protokoll("WeiterfuehrenAuftragZuRechnung AB $belegnr (id $id) RE $re_belegnr (id $rechnung)");
-
-          $this->app->DB->Update(
-            sprintf(
-              "UPDATE rechnung SET belegnr = '%s' WHERE id = %d AND (belegnr = '' OR belegnr = '0')",
-              $re_belegnr, $rechnung
-            )
-          );
-          $this->app->DB->Update(
-            sprintf(
-              "UPDATE rechnung SET status = 'freigegeben' WHERE status <> 'storniert' AND status <> 'versendet' AND id = %d",
-              $rechnung
-            )
-          );
-          $this->app->erp->RechnungProtokoll($rechnung, 'Rechnung freigegeben');
 
           $this->app->DB->Update(
             sprintf(

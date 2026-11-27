@@ -112,6 +112,9 @@ class WidgetGenprojekt
     $field->AddOption('{|Lagerplatz Reihen Stücklistenunabh&auml;ngig|}','storagelocationrowpartlist');
     $this->form->NewField($field);
 
+    $field = new HTMLCheckbox("rechnung_lagerentnahme", "", "0", "1", "", "0");
+    $this->form->NewField($field);
+
     $field = new HTMLCheckbox("deactivateautoshipping","","","1","0","0");
     $this->form->NewField($field);
 

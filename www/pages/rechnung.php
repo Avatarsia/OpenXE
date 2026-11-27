@@ -332,7 +332,8 @@ class Rechnung extends GenRechnung
     $id = $this->app->Secure->GetGET('id');
     $this->app->erp->RechnungProtokoll($id,'Rechnung Stornierung rückgängig gemacht');
 
-    $this->app->DB->Update("UPDATE rechnung SET status='freigegeben',zahlungsstatus='offen',schreibschutz=0,bezahlt_am = NULL, mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Rechnung Stornierung rückgängig gemacht ".date('d.m.Y')."') WHERE id='$id'");
+    $schreibschutz = (int)$this->app->erp->RechnungLagerAenderungenGesperrt((int)$id);
+    $this->app->DB->Update("UPDATE rechnung SET status='freigegeben',zahlungsstatus='offen',schreibschutz=$schreibschutz,bezahlt_am = NULL, mahnwesen_internebemerkung=CONCAT(mahnwesen_internebemerkung,'\r\n','Rechnung Stornierung rückgängig gemacht ".date('d.m.Y')."') WHERE id='$id'");
 
     $this->app->Location->execute("index.php?module=rechnung&action=edit&id=$id");
   }
@@ -370,7 +371,7 @@ class Rechnung extends GenRechnung
    * @param int $invoiceId
    */
   public function removeWriteProtection($invoiceId) {
-    if($invoiceId <= 0) {
+    if ($invoiceId <= 0 || $this->app->erp->RechnungLagerAenderungenGesperrt((int)$invoiceId)) {
       return;
     }
     $this->app->DB->Update(
@@ -1164,7 +1165,17 @@ class Rechnung extends GenRechnung
 
       if($belegnr=='')
       {	
-        $this->app->erp->BelegFreigabe('rechnung',$id);
+        try {
+          $this->app->erp->BelegFreigabe('rechnung',$id);
+        } catch (DomainException $e) {
+          if (!empty($intern)) {
+            throw $e;
+          }
+          $meldung = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+          $msg = $this->app->erp->base64_url_encode('<div class="error">' . $meldung . '</div>');
+          $this->app->Location->execute("index.php?module=rechnung&action=edit&id=$id&msg=$msg");
+          return;
+        }
         $this->rechnung_zahlstatus_berechnen($id);
         if($intern) {
           return 1;
@@ -1971,7 +1982,15 @@ class Rechnung extends GenRechnung
       $this->app->Tpl->Set('VORKASSE','');
     }
    
-    if($schreibschutz=="1" && $this->app->erp->RechteVorhanden('rechnung','schreibschutz'))
+    $lagerwarnung = $this->app->erp->RechnungLagerwarnung((int)$id);
+    if ($lagerwarnung !== '') {
+      $meldung = htmlspecialchars($lagerwarnung, ENT_QUOTES, 'UTF-8');
+      $this->app->Tpl->Add('MESSAGE', '<div class="warning">' . $meldung . '</div>');
+    }
+    elseif ($schreibschutz == '1' && $this->app->erp->RechnungHatLagerentnahme((int)$id)) {
+      $this->app->Tpl->Set('MESSAGE', '<div class="warning">Die Rechnung ist nach der Lagerentnahme schreibgesch&uuml;tzt.</div>');
+    }
+    elseif($schreibschutz=="1" && $this->app->erp->RechteVorhanden('rechnung','schreibschutz'))
     {
       $this->app->Tpl->Set('MESSAGE',"<div class=\"warning\">Diese Rechnung ist schreibgesch&uuml;tzt und darf daher nicht mehr bearbeitet werden!&nbsp;<input type=\"button\" value=\"Schreibschutz entfernen\" onclick=\"if(!confirm('Soll der Schreibschutz f&uuml;r diese Rechnung wirklich entfernt werden? Die gespeicherte Rechnung wird &uuml;berschrieben!')) return false;else window.location.href='index.php?module=rechnung&action=schreibschutz&id=$id';\"></div>");
     }
