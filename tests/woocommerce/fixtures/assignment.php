@@ -3,6 +3,8 @@
 
 use Xentral\Components\Http\Session\Session;
 
+require_once __DIR__ . '/stock.php';
+
 $root = dirname(__DIR__, 3);
 spl_autoload_register(static function (string $class) use ($root): void {
     if (str_starts_with($class, 'Xentral\\Components\\')) {
@@ -15,11 +17,16 @@ spl_autoload_register(static function (string $class) use ($root): void {
 
 final class AssignmentFixtureDatabase
 {
+    use StockFixtureRows;
+
     public array $config = [];
+    public int $transactions = 0;
     public array $shop = ['id' => '7', 'bezeichnung' => 'WooCommerce Testshop', 'projekt' => '3',
         'einstellungen_json' => '{"felder":{"visibilitySync":true,"shopCategoryTree":true}}'];
     public array $article = ['id' => '9', 'nummer' => 'ERP-ARTICLE', 'name_de' => 'Heizblock V1', 'projekt' => '4',
-        'ausverkauft' => 0, 'variante' => 0, 'variante_von' => 0, 'shop' => 0, 'shop2' => 0, 'shop3' => 0];
+        'ausverkauft' => 0, 'variante' => 0, 'variante_von' => 0, 'shop' => 0, 'shop2' => 0, 'shop3' => 0,
+        'lagerartikel' => '1', 'chargenverwaltung' => '0', 'mindesthaltbarkeitsdatum' => '0', 'seriennummern' => 'keine',
+        'lager_platz' => ''];
     public array $catalog = [];
     public array $batchArticleIds = [];
     public bool $rejectAssignmentWritesAfterTreeLock = false;
@@ -31,7 +38,7 @@ final class AssignmentFixtureDatabase
     private ?array $snapshot = null;
 
     public function inTransaction(): bool { return $this->snapshot !== null; }
-    public function beginTransaction(): void { $this->snapshot = [$this->config, $this->article, $this->assignment]; }
+    public function beginTransaction(): void { $this->transactions++; $this->snapshot = [$this->config, $this->article, $this->assignment]; }
     public function commit(): void { $this->snapshot = null; $this->treeLocked = false; }
     public function rollBack(): void
     {
@@ -43,6 +50,9 @@ final class AssignmentFixtureDatabase
     {
         if (str_contains($sql, 'FROM artikel_onlineshops')) {
             return $this->assignment === null ? false : $this->assignment + ['id' => 10];
+        }
+        if (str_contains($sql, 'FROM lager_platz ')) {
+            return $this->stockPlace($params);
         }
         if (str_contains($sql, 'FROM artikel ')) {
             if (str_contains($sql, 'SELECT CASE WHEN variante')) {
@@ -96,6 +106,9 @@ final class AssignmentFixtureDatabase
     {
         if (str_contains($sql, 'FROM shopexport')) {
             return [$this->shop];
+        }
+        if (str_contains($sql, 'FROM lager_platz_inhalt')) {
+            return $this->stockRows($sql);
         }
         if ($sql === 'SELECT id FROM projekt') {
             return [['id' => 3], ['id' => 4], ['id' => 5]];
@@ -226,12 +239,17 @@ function assignmentFixtureApp(AssignmentFixtureDatabase $db, array $get = []): o
                 };
             }
         },
-        'erp' => new class {
+        'erp' => new class ($db) {
+            use StockFixtureBookings;
+
             public array $projects = [3, 4];
-            public array $rights = ['artikel', 'onlineshops'];
+            public array $rights = ['artikel', 'onlineshops', 'lager/bucheneinlagern', 'lager/buchenauslagern'];
+            public function __construct(private AssignmentFixtureDatabase $db) {}
+            private function stockDb(): AssignmentFixtureDatabase { return $this->db; }
             public function RechteVorhanden(string $module, string $action): bool
             {
-                return $action === 'edit' && in_array($module, $this->rights, true);
+                return ($action === 'edit' && in_array($module, $this->rights, true))
+                    || in_array($module . '/' . $action, $this->rights, true);
             }
             public function UserProjektRecht(int $project): bool { return in_array($project, $this->projects, true); }
         },

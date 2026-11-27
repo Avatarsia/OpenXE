@@ -13,49 +13,21 @@ spl_autoload_register(static function (string $class) use ($root): void {
         }
     }
 });
+require_once __DIR__ . '/fixtures/stock.php';
 
 final class StockFixtureDatabase
 {
+    use StockFixtureRows;
+
     public array $article = ['id' => '9', 'projekt' => '4', 'lagerartikel' => '1', 'chargenverwaltung' => '0',
         'mindesthaltbarkeitsdatum' => '0', 'seriennummern' => 'keine', 'lager_platz' => ''];
-    public array $places = [
-        1 => ['id' => '1', 'kurzbezeichnung' => 'A-01', 'lager' => 'Haupt', 'sperrlager' => '0', 'geloescht' => '0'],
-        2 => ['id' => '2', 'kurzbezeichnung' => 'B-01', 'lager' => 'Haupt', 'sperrlager' => '0', 'geloescht' => '0'],
-        3 => ['id' => '3', 'kurzbezeichnung' => 'C-01', 'lager' => 'Neben', 'sperrlager' => '0', 'geloescht' => '0'],
-    ];
-    /** @var list<array{artikel:int, lager_platz:int, menge:string}> */
-    public array $stock = [];
-    public int $stockQueries = 0;
 
     public function fetchAll(string $sql, array $params = []): array
     {
         if (!str_contains($sql, 'FROM lager_platz_inhalt')) {
             throw new LogicException($sql);
         }
-        $this->stockQueries++;
-        preg_match('/lpi\.artikel IN \(([0-9,]+)\)/', $sql, $ids);
-        $ids = array_map('intval', explode(',', $ids[1]));
-        $sums = [];
-        foreach ($this->stock as $row) {
-            $place = $this->places[$row['lager_platz']] ?? null;
-            if (!in_array($row['artikel'], $ids, true) || $place === null || $place['sperrlager'] === '1') {
-                continue;
-            }
-            $key = $row['artikel'] . ':' . $row['lager_platz'];
-            $sums[$key] = ($sums[$key] ?? 0.0) + (float) $row['menge'];
-        }
-        $rows = [];
-        foreach ($sums as $key => $sum) {
-            [$article, $placeId] = array_map('intval', explode(':', $key));
-            if (abs($sum) < 0.00005) {
-                continue;
-            }
-            $place = $this->places[$placeId];
-            $rows[] = ['artikel' => (string) $article, 'id' => $place['id'], 'kurzbezeichnung' => $place['kurzbezeichnung'],
-                'lager' => $place['lager'], 'menge' => number_format($sum, 4, '.', '')];
-        }
-        usort($rows, static fn (array $a, array $b): int => strcmp($a['kurzbezeichnung'], $b['kurzbezeichnung']));
-        return $rows;
+        return $this->stockRows($sql);
     }
 
     public function fetchRow(string $sql, array $params = []): array|false
@@ -64,11 +36,7 @@ final class StockFixtureDatabase
             return (int) $this->article['id'] === $params['article'] ? $this->article : false;
         }
         if (str_contains($sql, 'FROM lager_platz ')) {
-            $place = $this->places[$params['id']] ?? null;
-            if ($place === null || $place['sperrlager'] === '1' || $place['geloescht'] === '1') {
-                return false;
-            }
-            return ['id' => $place['id'], 'kurzbezeichnung' => $place['kurzbezeichnung']];
+            return $this->stockPlace($params);
         }
         throw new LogicException($sql);
     }
@@ -76,37 +44,18 @@ final class StockFixtureDatabase
 
 final class StockFixtureErp
 {
-    public array $bookings = [];
-    public ?int $failAt = null;
-    public string $failure = 'Auslagern fehlgeschlagen! (Bestand zu gering)';
+    use StockFixtureBookings;
 
     public function __construct(private StockFixtureDatabase $db) {}
 
-    public function LagerEinlagern($artikel, $menge, $regal, $projekt, $grund = '')
-    {
-        $this->book('ein', $artikel, $regal, $menge, $projekt, $grund, $menge);
-    }
-
-    public function LagerAuslagernRegal($artikel, $regal, $menge, $projekt, $grund)
-    {
-        $this->book('aus', $artikel, $regal, $menge, $projekt, $grund, -$menge);
-    }
-
-    private function book(string $type, $artikel, $regal, $menge, $projekt, $grund, $delta): void
-    {
-        if ($this->failAt === count($this->bookings) + 1) {
-            throw new Exception($this->failure);
-        }
-        $this->bookings[] = [$type, $artikel, $regal, $menge, $projekt, $grund];
-        $this->db->stock[] = ['artikel' => $artikel, 'lager_platz' => $regal, 'menge' => (string) $delta];
-    }
+    private function stockDb(): StockFixtureDatabase { return $this->db; }
 }
 
 function stockSetup(array $stock = []): array
 {
     $db = new StockFixtureDatabase();
     foreach ($stock as [$article, $place, $menge]) {
-        $db->stock[] = ['artikel' => $article, 'lager_platz' => $place, 'menge' => $menge];
+        $db->addStock($article, $place, $menge);
     }
     $erp = new StockFixtureErp($db);
     return [new StockCorrection($db, $erp), $db, $erp];

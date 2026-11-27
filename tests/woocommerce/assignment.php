@@ -192,6 +192,58 @@ $tests = [
         expect(true, str_contains($populatedHtml, 'class="wc-assignment-category-select" data-command="cat_assign"'));
         expect(true, str_contains($populatedHtml, '<option value="' . $child . '">&nbsp;&nbsp;Hotends</option>'));
     },
+    'stock_column_shows_inline_form_for_single_place' => function (): void {
+        [$page, $db] = assignmentSetup();
+        $db->addStock(9, 1, '7.0000');
+        $html = $page->render();
+        expect(true, str_contains($html, '<th scope="col" class="wc-col-name">Name</th><th scope="col" class="wc-col-stock">Lagerbestand</th>'));
+        expect(true, str_contains($html, '<form class="wc-stock-inline" data-command="stock_set">'));
+        expect(true, str_contains($html, 'data-place="1" data-expected="7.0000" value="7"'));
+        expect(false, str_contains($html, 'data-stock-dialog'));
+    },
+    'stock_column_without_places_offers_standard_storage_input' => function (): void {
+        [$page] = assignmentSetup();
+        expect(true, str_contains($page->render(), 'data-place="0" data-expected="0" value="0"'));
+    },
+    'stock_column_opens_dialog_for_multiple_places' => function (): void {
+        [$page, $db] = assignmentSetup();
+        $db->addStock(9, 1, '5.0000');
+        $db->addStock(9, 2, '2.5000');
+        $html = $page->render();
+        expect(true, str_contains($html, '<span class="wc-stock-total">7,5</span>'));
+        expect(true, str_contains($html, 'data-stock-dialog'));
+        expect(true, str_contains($html, '<template class="wc-stock-template">'));
+        expect(true, str_contains($html, 'data-place="1" data-expected="5.0000" value="5"'));
+        expect(true, str_contains($html, 'data-place="2" data-expected="2.5000" value="2,5"'));
+        expect(false, str_contains($html, 'wc-stock-inline'));
+    },
+    'stock_column_is_read_only_for_tracked_non_stock_and_missing_rights' => function (): void {
+        [$page, $db, , $app] = assignmentSetup();
+        $db->addStock(9, 1, '4.0000');
+        $db->article['seriennummern'] = 'eigene';
+        $html = $page->render();
+        expect(true, str_contains($html, 'Korrektur im Lager-Modul'));
+        expect(false, str_contains($html, 'data-command="stock_set"'));
+        $db->article['seriennummern'] = 'keine';
+        $db->article['lagerartikel'] = '0';
+        $html = $page->render();
+        expect(true, str_contains($html, '<td class="wc-col-stock">&ndash;</td>'));
+        expect(false, str_contains($html, 'data-command="stock_set"'));
+        $db->article['lagerartikel'] = '1';
+        $app->erp->rights = ['artikel', 'onlineshops', 'lager/bucheneinlagern'];
+        $html = $page->render();
+        expect(true, str_contains($html, '<td class="wc-col-stock"><span class="wc-stock-total">4</span></td>'));
+        expect(false, str_contains($html, 'data-command="stock_set"'));
+    },
+    'stock_query_runs_once_per_page' => function (): void {
+        [$page, $db] = assignmentSetup();
+        foreach ([21, 22, 23] as $id) {
+            $db->catalog[$id] = array_merge($db->article, ['id' => (string) $id, 'nummer' => 'ERP-' . $id, 'in_shop' => 0]);
+        }
+        $html = $page->render();
+        expect(1, $db->stockQueries);
+        expect(3, substr_count($html, 'class="wc-col-stock"><form'));
+    },
 ];
 
 function expect(mixed $expected, mixed $actual): void

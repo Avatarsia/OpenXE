@@ -234,7 +234,8 @@ final class AssignmentPage
         $legacyOnly = $onlyUnassigned ? '0' : '(' . ShopAssignment::legacySql('assignment_owner', ':shop')
             . ' AND NOT ' . ShopAssignment::activeSql('assignment_owner', ':shop') . ')';
         $rows = $this->db->fetchAll(
-            'SELECT a.id, a.nummer, a.name_de, a.ausverkauft, a.variante, a.variante_von, ' . $inShop . ' AS in_shop, '
+            'SELECT a.id, a.nummer, a.name_de, a.ausverkauft, a.variante, a.variante_von, a.projekt, a.lagerartikel,'
+            . ' a.chargenverwaltung, a.mindesthaltbarkeitsdatum, a.seriennummern, ' . $inShop . ' AS in_shop, '
             . $legacyOnly . ' AS legacy_only' . $from . ' ORDER BY a.nummer, a.id LIMIT ' . self::PAGE_SIZE . ' OFFSET ' . (($page - 1) * self::PAGE_SIZE),
             $params + ['shop' => $shopId]
         );
@@ -260,7 +261,8 @@ final class AssignmentPage
             }
         }
         $html = '<div class="wc-admin-scroll" role="region" aria-label="Shop-Artikel" tabindex="0">'
-            . '<table class="wc-assignment-table"><thead><tr><th scope="col" class="wc-col-number">Nr.</th><th scope="col" class="wc-col-name">Name</th>';
+            . '<table class="wc-assignment-table"><thead><tr><th scope="col" class="wc-col-number">Nr.</th><th scope="col" class="wc-col-name">Name</th>'
+            . '<th scope="col" class="wc-col-stock">Lagerbestand</th>';
         foreach ($columns as $label) {
             $html .= '<th scope="col" class="wc-col-flag">' . $label . '</th>';
         }
@@ -270,7 +272,10 @@ final class AssignmentPage
             $html .= '<th scope="col" class="wc-col-category">Kategorie zuordnen</th>';
         }
         $html .= '</tr></thead><tbody>';
-        $states = $store->articleStates(array_map('intval', array_column($rows, 'id')));
+        $articleIds = array_map('intval', array_column($rows, 'id'));
+        $states = $store->articleStates($articleIds);
+        $places = (new StockCorrection($this->db, $this->app->erp))->places($articleIds);
+        $canBook = $this->canBookStock();
         foreach ($rows as $row) {
             $id = (int) $row['id'];
             $checked = [
@@ -279,7 +284,8 @@ final class AssignmentPage
                 'toggle_onrequest' => $states[$id]['onRequest'],
             ];
             $number = AdminView::e($row['nummer']);
-            $html .= '<tr data-article="' . $id . '"><th scope="row" class="wc-col-number">' . $number . '</th><td class="wc-col-name">' . AdminView::e($row['name_de']) . '</td>';
+            $html .= '<tr data-article="' . $id . '"><th scope="row" class="wc-col-number">' . $number . '</th><td class="wc-col-name">' . AdminView::e($row['name_de']) . '</td>'
+                . $this->stockCell($row, $places[$id] ?? [], $canBook);
             foreach ($columns as $cmd => $label) {
                 if ($cmd === 'toggle_shop' && ArticleFieldCatalog::isVariant($row)) {
                     $html .= '<td class="wc-col-flag wc-flag-variant">folgt Hauptartikel</td>';
@@ -302,6 +308,52 @@ final class AssignmentPage
         return $html . '</tbody></table></div>';
     }
 
+    private function stockCell(array $row, array $places, bool $canBook): string
+    {
+        if ((int) ($row['lagerartikel'] ?? 0) !== 1) {
+            return '<td class="wc-col-stock">&ndash;</td>';
+        }
+        $total = '<span class="wc-stock-total">' . AdminView::e(StockCorrection::format(StockCorrection::total($places))) . '</span>';
+        if (StockCorrection::isTracked($row)) {
+            return '<td class="wc-col-stock">' . $total . ' <small class="wc-flag-note">Korrektur im Lager-Modul</small></td>';
+        }
+        if (!$canBook || !$this->app->erp->UserProjektRecht((int) ($row['projekt'] ?? 0))) {
+            return '<td class="wc-col-stock">' . $total . '</td>';
+        }
+        $number = AdminView::e($row['nummer']);
+        if (count($places) <= 1) {
+            return '<td class="wc-col-stock"><form class="wc-stock-inline" data-command="stock_set">'
+                . $this->stockInput($places[0] ?? ['id' => 0, 'menge' => '0'], 'Lagerbestand (' . $number . ')')
+                . '<button type="submit" class="wc-btn wc-btn-secondary wc-btn-sm">Buchen</button></form></td>';
+        }
+        $rows = '';
+        foreach ($places as $place) {
+            $name = AdminView::e($place['name']);
+            $rows .= '<tr><th scope="row">' . $name . '</th><td>' . AdminView::e($place['lager']) . '</td><td>'
+                . AdminView::e(StockCorrection::format($place['menge'])) . '</td><td>'
+                . $this->stockInput($place, 'Ist-Menge ' . $name) . '</td></tr>';
+        }
+        return '<td class="wc-col-stock">' . $total
+            . ' <button type="button" class="wc-btn wc-btn-secondary wc-btn-sm" data-stock-dialog>Korrigieren</button>'
+            . '<template class="wc-stock-template"><form class="wc-stock-places" data-command="stock_set">'
+            . '<h3>Lagerbestand ' . $number . '</h3><table><thead><tr><th scope="col">Lagerplatz</th><th scope="col">Lager</th>'
+            . '<th scope="col">Bestand</th><th scope="col">Ist-Menge</th></tr></thead><tbody>' . $rows . '</tbody></table>'
+            . '<button type="submit" class="wc-btn wc-btn-primary">Buchen</button> '
+            . '<button type="button" class="wc-btn wc-btn-secondary" data-stock-close>Abbrechen</button></form></template></td>';
+    }
+
+    private function stockInput(array $place, string $label): string
+    {
+        return '<input name="target" inputmode="decimal" autocomplete="off" data-place="' . (int) $place['id']
+            . '" data-expected="' . AdminView::e($place['menge']) . '" value="' . AdminView::e(StockCorrection::format($place['menge']))
+            . '" aria-label="' . $label . '">';
+    }
+
+    private function canBookStock(): bool
+    {
+        return $this->app->erp->RechteVorhanden('lager', 'bucheneinlagern')
+            && $this->app->erp->RechteVorhanden('lager', 'buchenauslagern');
+    }
 
     public function handle(string $cmd, array $post): array
     {
