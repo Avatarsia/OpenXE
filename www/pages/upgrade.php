@@ -130,6 +130,7 @@ class upgrade {
             'remote_host' => '',
             'remote_branch' => '',
             'branches_html' => '',
+            'branch_count' => 0,
         ];
         if (!is_readable($remote_config_file)) {
             return $config;
@@ -141,10 +142,12 @@ class upgrade {
             $remotes = array();
         }
         $branch_rows = "";
+        $branch_count = 0;
         foreach ($remotes as $remote) {
             if (!is_array($remote) || empty($remote['name'])) {
                 continue;
             }
+            $branch_count++;
             $is_active = !empty($remote['active']);
             $is_enabled = !empty($remote['enabled']);
             if ($is_active && $config['current_branch'] === "") {
@@ -165,12 +168,29 @@ class upgrade {
                 .'<td>'.$this->esc((string)($remote['description']['de'] ?? "")).'</td>'
                 .'</tr>';
         }
+        $config['branch_count'] = $branch_count;
         if ($branch_rows !== "") {
             $config['branches_html'] = '<table class="branch-table">'
                 .'<thead><tr><th></th><th>Name</th><th>Status</th><th>Beschreibung</th></tr></thead>'
                 .'<tbody>'.$branch_rows.'</tbody></table>';
         }
         return $config;
+    }
+
+    /**
+     * Kuerzt eine Git-Remote-URL fuer die kompakte Seitenleisten-Anzeige
+     * (z.B. https://github.com/Avatarsia/OpenXE.git -> Avatarsia/OpenXE).
+     */
+    private function formatShortRepo(string $url): string
+    {
+        $trimmed = trim($url);
+        if ($trimmed === '') {
+            return '–';
+        }
+        $short = preg_replace('#^https?://[^/]+/#i', '', $trimmed);
+        $short = preg_replace('#^[^@]+@[^:]+:#', '', (string)$short);
+        $short = preg_replace('#\.git$#i', '', (string)$short);
+        return $short !== '' ? (string)$short : $trimmed;
     }
 
     /**
@@ -677,13 +697,12 @@ class upgrade {
             $submit = '';
         }
         $details_post = $this->app->Secure->GetPOST('details_anzeigen');
-        $db_details_post = $this->app->Secure->GetPOST('db_details_anzeigen');
         // GetPOST liefert '' (nie null), wenn ein Feld nicht gesendet wurde.
         // Beim allerersten Aufruf (kein Submit) ist verbose Default an,
-        // danach zählt allein der Checkbox-Zustand.
+        // danach zählt der gemeinsame Details-Schalter für alle Aktionen.
         $no_submit = ($submit === null || $submit === '');
         $verbose = $no_submit ? true : ($details_post === '1');
-        $db_verbose = $no_submit ? true : ($db_details_post === '1');
+        $db_verbose = $verbose;
         $force = $this->app->Secure->GetPOST('erzwingen') === '1';
         // Zweigauswahl (Upstream branchupgrade): Radio-Wert aus der Liste
         // der in remote.json hinterlegten Zweige. Ungueltige Werte werden
@@ -696,9 +715,7 @@ class upgrade {
             $branch_input = '';
         }
 
-        $this->app->Tpl->Set('ERZWINGEN', $force ? "checked" : "");
         $this->app->Tpl->Set('DETAILS_ANZEIGEN', $verbose ? "checked" : "");
-        $this->app->Tpl->Set('DB_DETAILS_ANZEIGEN', $db_verbose ? "checked" : "");
 
         // Pfadstabil relativ zu __DIR__: getcwd() kann sich durch den
         // OpenXE-Frontcontroller ändern, daher ALLE Pfade aus __DIR__
@@ -726,6 +743,7 @@ class upgrade {
         $remote_branch = "";
         $current_branch = "";
         $branches_html = "";
+        $branch_count = 0;
 
         // Sucht ab __DIR__ aufwärts nach dem Repo-Root (.git-Verzeichnis).
         // Bricht ab, wenn dirname() denselben Pfad zurückgibt (Drive-Root).
@@ -760,6 +778,7 @@ class upgrade {
             $remote_host = $remote_config['remote_host'];
             $remote_branch = $remote_config['remote_branch'];
             $branches_html = $remote_config['branches_html'];
+            $branch_count = $remote_config['branch_count'];
             if ($current_branch === "") {
                 $status_headline = "Hinweis";
                 $status_level = "warning";
@@ -991,6 +1010,7 @@ class upgrade {
                         $remote_host = $reloaded_remote['remote_host'];
                         $remote_branch = $reloaded_remote['remote_branch'];
                         $branches_html = $reloaded_remote['branches_html'];
+                        $branch_count = $reloaded_remote['branch_count'];
                     }
                     $remote_status = $this->probeRemoteStatus($git_root, $remote_host, $remote_branch, $local_hash);
                     $remote_hash = $remote_status['remote_hash'];
@@ -1329,14 +1349,14 @@ class upgrade {
         $this->app->Tpl->Set('UPGRADE_DB_BUTTON_LABEL', $upgrade_db_available ? "Nur DB-Upgrade starten" : "Datenbank prüfen");
 
         $this->app->Tpl->Set('REMOTE_HOST', $this->esc($remote_host));
+        $this->app->Tpl->Set('REMOTE_HOST_SHORT', $this->esc($this->formatShortRepo($remote_host)));
         $this->app->Tpl->Set('REMOTE_BRANCH', $this->esc($remote_branch));
         $this->app->Tpl->Set('CURRENTBRANCH', $this->esc($current_branch));
         $this->app->Tpl->Set('BRANCHES', $branches_html !== "" ? $branches_html : '<p class="hint">Keine Zweige in remote.json hinterlegt.</p>');
-        $this->app->Tpl->Set('UPDATE_STATUS', $update_status_text);
-        $this->app->Tpl->Set('UPDATE_STATUS_CLASS', $update_status_class);
-        $this->app->Tpl->Set('LOCAL_HASH_SHORT', $this->esc($local_hash_short));
-        $this->app->Tpl->Set('REMOTE_HASH_SHORT', $this->esc($remote_hash_short));
-        $this->app->Tpl->Set('LOCAL_COMMIT', $this->esc($git_commit));
+        $this->app->Tpl->Set('BRANCH_SWITCH_VISIBLE', $branch_count >= 2 ? "" : "hidden");
+        $this->app->Tpl->Set('LOCAL_HASH_SHORT', $this->esc($local_hash_short !== "" ? $local_hash_short : "–"));
+        $this->app->Tpl->Set('REMOTE_HASH_SHORT', $this->esc($remote_hash_short !== "" ? $remote_hash_short : "–"));
+        $this->app->Tpl->Set('LOCAL_COMMIT', $this->esc($git_commit !== "" ? $git_commit : "–"));
         $this->app->Tpl->Set('LOCAL_BRANCH', $this->esc($git_branch));
         // Lokalen Branch nur anzeigen, wenn er vom Remote-Branch ABWEICHT —
         // genau das ist der warnenswerte Fall (inkl. detached HEAD, der

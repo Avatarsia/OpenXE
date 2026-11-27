@@ -1,5 +1,10 @@
 # Upgrader UI Changelog
 
+## 2026-11-27 (Ein-Seiten-Cockpit)
+- Layout-Verschlankung auf eine einzige Bildschirmseite (`upgrade.tpl`, `upgrade.css`, `upgrade.php`):
+  - Status, Versions-Leiste (`Lokal → Remote`) und Aktionen (`Komplett-Upgrade`, `Nur Datenbank`, DB-Pille, gemeinsamer `Details`-Schalter, bedingtes `-f`) in einer kompakten Cockpit-Leiste gebündelt
+  - 2-Spalten-Arbeitsfläche (`1.75fr / 1fr`, einspaltig `< 900px`): links Diagnose + kompaktes Protokoll (erweiterbar), rechts kompakte Quelle/Zweig (Zweig-Tabelle erst ab ≥ 2 Zweigen), Rollback und standardmäßig eingeklappte Hilfe
+
 ## 2026-11-27 (Stage 1 & 2)
 - Diagnose & Details-Karte unterhalb des Status-Banners: strukturierte Darstellung
   von SQL-Fehlern, verbleibenden Schema-Differenzen, geänderten Git-Dateien und
