@@ -72,6 +72,7 @@ fix/woocommerce-order-import-pagination
 feature/woocommerce-batch-stock-sync
 # #267 Composer-based WC SDK — stacked on #266, must follow it
 refactor/woocommerce-composer-sdk
+php85-upgrade
 # Functional parity and WooCommerce administration UI, based on the Composer SDK
 feature/woocommerce-functional-parity
 # Targeted digital order recovery and completed-status preservation; requires functional parity
