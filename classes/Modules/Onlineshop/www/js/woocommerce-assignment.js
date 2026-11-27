@@ -42,6 +42,12 @@
                     } else if (select) {
                         $control.val('');
                     }
+                    if (cmd === 'stock_set' && $stockDialog[0].open) {
+                        // The page error sits behind the modal dialog, so report inside it.
+                        $stockDialog.find('[data-wc-stock-error]')
+                            .text(message || 'Die \u00c4nderung konnte nicht gespeichert werden.').prop('hidden', false);
+                        return;
+                    }
                     showError(message || 'Die \u00c4nderung konnte nicht gespeichert werden.');
                 }
 
@@ -57,6 +63,10 @@
                 }).done(function (response) {
                     if (!response || response.ok !== true) {
                         failed(response && response.error);
+                    } else if (cmd === 'stock_set') {
+                        $page.find('tr[data-article="' + response.article + '"] td.wc-col-stock').replaceWith(response.cell);
+                        closeStockDialog();
+                        $status.text('Gespeichert.').prop('hidden', false);
                     } else if (select && category === '0') {
                         var $row = $control.closest('tr');
                         var articleNumber = $.trim($row.find('th').first().text());
@@ -90,7 +100,49 @@
                 });
             }
 
-            $page.on('submit', 'form[data-command]', function (event) {
+            var $stockDialog = $('<dialog class="wc-stock-dialog" aria-label="Lagerbestand korrigieren"></dialog>').appendTo($page);
+
+            function closeStockDialog() {
+                if ($stockDialog[0].open) {
+                    $stockDialog[0].close();
+                }
+            }
+
+            $stockDialog.on('close', function () {
+                $stockDialog.empty();
+            });
+
+            $page.on('click', '[data-stock-dialog]', function () {
+                var $row = $(this).closest('[data-article]');
+                var template = $(this).siblings('template.wc-stock-template')[0];
+                if (!template || busy) {
+                    return;
+                }
+                $stockDialog.empty().append(document.importNode(template.content, true));
+                $stockDialog.find('form').attr('data-article', $row.attr('data-article'))
+                    .prepend('<p class="error" role="alert" data-wc-stock-error hidden></p>');
+                $stockDialog[0].showModal();
+                $stockDialog.find('input[data-place]').first().trigger('focus');
+            });
+
+            $page.on('click', '[data-stock-close]', function () {
+                closeStockDialog();
+            });
+
+            $page.on('submit', 'form[data-command="stock_set"]', function (event) {
+                event.preventDefault();
+                var $form = $(this);
+                var counts = $form.find('input[data-place]').map(function () {
+                    var $input = $(this);
+                    return $input.attr('data-place') + ':' + $input.attr('data-expected') + ':' + $.trim($input.val());
+                }).get().join(';');
+                save($form, {
+                    article: $form.closest('[data-article]').attr('data-article'),
+                    counts: counts
+                });
+            });
+
+            $page.on('submit', 'form[data-command]:not([data-command="stock_set"])', function (event) {
                 event.preventDefault();
                 var $form = $(this);
                 var data = {};

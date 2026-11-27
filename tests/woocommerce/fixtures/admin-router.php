@@ -48,6 +48,17 @@ if ($view === 'assignment') {
         $db->article['variante'] = 1;
         $db->article['name_de'] = 'Heizblock V1 - Variante';
     }
+    // Stock layout survives the AJAX POST via cookie: single (one place) or multi (two places).
+    $stock = $_GET['stock'] ?? $_COOKIE['wc_stock'] ?? '';
+    if (isset($_GET['stock'])) {
+        setcookie('wc_stock', (string) $_GET['stock']);
+    }
+    if ($stock === 'single' || $stock === 'multi') {
+        $db->addStock(9, 1, '5.0000');
+    }
+    if ($stock === 'multi') {
+        $db->addStock(9, 2, '2.5000');
+    }
     $store = new \Xentral\Components\WooCommerce\ShopCategoryStore($db, 7);
     $parent = $store->create('Ersatzteile');
     $category = $store->create('Hotends', $parent);
